@@ -1,0 +1,27 @@
+﻿data:
+  condition1:
+    root: "F:/250815_kk/ph_1"
+    pattern: "Pos*/output_phase/aligned_left_center/diff_from_first/*.tif"
+
+  condition2:
+    root: "G:/250328_MM/BF50_GFP500_Bin2_1"
+    pattern: "Pos*/Region*/GFP/*.tif"
+
+  condition3:
+    root: "G:/another_dataset_path"
+    pattern: "Pos*/Region*/GFP/*.tif"
+
+
+output:
+  segmentation: "results/segmentation"
+  training: "results/training"
+  figures: "results/figures"
+
+omnipose:
+  model_type: "omnipose"
+  gpu: true
+  diameter: 0             # 既知ならピクセル値。未知なら0で自動
+  flow_threshold: 0.4
+  cellprob_threshold: 0.0
+  cluster: true
+  tile: true
