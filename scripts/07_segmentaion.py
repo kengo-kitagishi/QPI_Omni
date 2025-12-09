@@ -219,7 +219,7 @@ import os, numpy as np, tifffile, traceback
 
 # ==== 設定（必要に応じて変更） ====
 # 入力ディレクトリ（推論対象画像）
-indir = r"G:\250815_kk\ph_1\Pos3\3_one_channel\subtracted_by_maskmean_float32"
+indir = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted"
 # 出力ディレクトリ（マスク等の保存先）
 outdir = os.path.join(indir, "inference_out")
 os.makedirs(outdir, exist_ok=True)

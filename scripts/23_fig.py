@@ -1,3 +1,4 @@
+# %%
 import matplotlib.pyplot as plt
 import pandas as pd
 import scienceplots  # SciencePlotを使用
@@ -143,3 +144,73 @@ ax2.tick_params(top=False, right=False)
 
 plt.tight_layout()
 plt.show()
+# %%
+import matplotlib.pyplot as plt
+import pandas as pd
+import scienceplots
+
+plt.style.use('science')
+plt.rcParams["font.size"] = 18
+
+filepath = r"C:\Users\QPI\Desktop\Results.csv"
+
+# =========================================
+# === Mean補正関数 ===
+# =========================================
+def get_nearest_slice(df, target):
+    if target in df['Slice'].values:
+        return target
+    prev = df[df['Slice'] < target]['Slice']
+    return prev.max() if len(prev) > 0 else df['Slice'].min()
+
+def correct_mean_discontinuity(df):
+    df = df.copy()
+    # delta値はあなたの指定通りの固定値
+    df.loc[df['Slice'] >= get_nearest_slice(df, 1150), 'Mean'] += 0.11
+    df.loc[df['Slice'] >= get_nearest_slice(df, 1436), 'Mean'] += 0.01
+    df.loc[df['Slice'] >= get_nearest_slice(df, 2014), 'Mean'] += -0.12
+    return df
+
+# =========================================
+# === データ読み込み ===
+# =========================================
+data = pd.read_csv(filepath)
+data = data.sort_values(by="Slice").reset_index(drop=True)
+
+data["Time"] = data["Slice"] / 12           # 時間[h]
+data["Area_um2"] = data["Area"] * (140 / 648)**2   # 面積変換
+
+data = correct_mean_discontinuity(data)
+
+# =========================================
+# === Plot ===
+# =========================================
+fig = plt.figure(figsize=(12, 6))
+
+# --- Area ---
+ax1 = plt.subplot(2, 1, 1)
+ax1.plot(data["Time"], data["Area_um2"], linewidth=1.2)
+ax1.set_xlabel("Time [h]")
+ax1.set_ylabel("Area [$\mu$m$^2$]")
+ax1.axvline(x=1145/12, linestyle="--", color="gray")
+ax1.axvline(x=1435/12, linestyle="--", color="gray")
+ax1.axvline(x=2014/12, linestyle="--", color="gray")
+ax1.set_ylim(0, 30)
+ax1.spines['top'].set_visible(False)
+ax1.spines['right'].set_visible(False)
+
+# --- Mean ---
+ax2 = plt.subplot(2, 1, 2)
+ax2.plot(data["Time"], data["Mean"], linewidth=1.2)
+ax2.set_xlabel("Time [h]")
+ax2.set_ylabel("mean RI [rad]")
+ax2.axvline(x=1145/12, linestyle="--", color="gray")
+ax2.axvline(x=1435/12, linestyle="--", color="gray")
+ax2.axvline(x=2014/12, linestyle="--", color="gray")
+ax2.spines['top'].set_visible(False)
+ax2.spines['right'].set_visible(False)
+
+plt.tight_layout()
+plt.show()
+
+# %%
