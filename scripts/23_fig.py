@@ -147,9 +147,7 @@ plt.show()
 # %%
 import matplotlib.pyplot as plt
 import pandas as pd
-import scienceplots
 
-plt.style.use('science')
 plt.rcParams["font.size"] = 18
 
 filepath = r"C:\Users\QPI\Desktop\Results.csv"
@@ -166,9 +164,9 @@ def get_nearest_slice(df, target):
 def correct_mean_discontinuity(df):
     df = df.copy()
     # delta値はあなたの指定通りの固定値
-    df.loc[df['Slice'] >= get_nearest_slice(df, 1150), 'Mean'] += 0.11
-    df.loc[df['Slice'] >= get_nearest_slice(df, 1436), 'Mean'] += 0.01
-    df.loc[df['Slice'] >= get_nearest_slice(df, 2014), 'Mean'] += -0.12
+    #df.loc[df['Slice'] >= get_nearest_slice(df, 1150), 'Mean'] += 0.11
+    #df.loc[df['Slice'] >= get_nearest_slice(df, 1436), 'Mean'] += 0.1
+    #df.loc[df['Slice'] >= get_nearest_slice(df, 2014), 'Mean'] += -0.12
     return df
 
 # =========================================
@@ -203,10 +201,11 @@ ax1.spines['right'].set_visible(False)
 ax2 = plt.subplot(2, 1, 2)
 ax2.plot(data["Time"], data["Mean"], linewidth=1.2)
 ax2.set_xlabel("Time [h]")
-ax2.set_ylabel("mean RI [rad]")
+ax2.set_ylabel("Phase [rad]")
 ax2.axvline(x=1145/12, linestyle="--", color="gray")
 ax2.axvline(x=1435/12, linestyle="--", color="gray")
 ax2.axvline(x=2014/12, linestyle="--", color="gray")
+ax2.set_ylim(0.8,1.5)
 ax2.spines['top'].set_visible(False)
 ax2.spines['right'].set_visible(False)
 
