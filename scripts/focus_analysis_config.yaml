@@ -1,0 +1,56 @@
+# ==================== Focus Analysis Configuration ====================
+# with-wo焦点解析の設定ファイル（Gaussian背景引き + ECCアライメント対応）
+
+# ベースディレクトリ
+base_dir: "/Volumes/QPI3/251017"
+with_dir: "with_focus_3"  # with画像のディレクトリ名
+wo_dir: "wo_focus_5"      # wo画像のディレクトリ名
+bg_pos: 0                  # BGポジション（通常Pos0）
+
+# ポジション範囲
+pos_start: 1
+pos_end: 91
+
+# ファイル名パターン（デフォルト）
+file_pattern: "img_000000000_Default_000.tif"
+
+# Crop設定
+crop:
+  y_start: 8
+  y_end: 2056
+  x_start: 416
+  x_end: 2464
+  # 例: 
+  # y_start: 8, y_end: 2056, x_start: 0, x_end: 2048
+
+# QPI パラメータ
+qpi:
+  wavelength: 663e-9        # 波長 (m)
+  NA: 0.95                  # 開口数
+  pixelsize: 8.625e-8       # ピクセルサイズ (m) = 3.45e-6 / 40
+  offaxis_center: [1623, 1621]  # オフ軸中心座標 [y, x]
+  
+# Gaussian背景引き設定
+gaussian_backsub:
+  enabled: true             # Gaussian背景引きを使用するか
+  hist_min: -1.1            # ヒストグラムの最小値 (rad)
+  hist_max: 1.5             # ヒストグラムの最大値 (rad)
+  n_bins: 512               # ビン数
+  smooth_window: 20         # スムージングウィンドウサイズ
+  min_phase: -1.1           # ピーク検出の下限 (rad)
+
+# アライメント設定（ECC）
+alignment:
+  method: "ECC"             # Enhanced Correlation Coefficient
+  warp_mode: "AFFINE"       # TRANSLATION, EUCLIDEAN, AFFINE
+  iterations: 5000          # 最大反復回数
+  eps: 1e-5                 # 収束判定の閾値
+
+# 出力設定
+output:
+  diff_range: [-0.5, 2.0]   # 差分画像の表示範囲 [vmin, vmax]
+  colormap: "JET"           # カラーマップ (JET, viridis, RdBu_r など)
+  save_aligned: true        # アライメント済み画像も保存するか
+  save_individual_phase: false  # 個別の位相画像も保存するか（容量注意）
+  save_crop_visualization: true  # Crop領域の可視化を保存するか
+
