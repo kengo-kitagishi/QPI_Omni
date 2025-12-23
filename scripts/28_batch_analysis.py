@@ -99,7 +99,7 @@ def run_analysis(shape_type, subpixel_sampling, results_csv, image_directory,
 # ===== メイン実行 =====
 if __name__ == "__main__":
     # 共通パラメータ
-    RESULTS_CSV = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted\inference_out\Results_enlarge.csv"
+    RESULTS_CSV = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted\inference_out\Results_enlarge_interpolate.csv"
     IMAGE_DIRECTORY = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted"
     
     WAVELENGTH_NM = 663

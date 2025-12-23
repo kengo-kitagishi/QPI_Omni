@@ -1104,12 +1104,45 @@ ROIパラメータと差分画像から、Rod-shaped細胞の3D形状を再構�
 RESULTS_CSV = "/path/to/Results.csv"
 IMAGE_DIRECTORY = "/path/to/subtracted_images"
 
-# 補正係数
-CORRECTION_FACTOR = 0.02  # 培地補正係数（デフォルト: 0.02）
+# QPI実験パラメータ
+WAVELENGTH_NM = 663       # レーザー波長 (nm)
+N_MEDIUM = 1.333          # 培地の屈折率
+PIXEL_SIZE_UM = 0.348     # ピクセルサイズ (µm)
+ALPHA_RI = 0.00018        # 比屈折率増分 (ml/mg)
+
+# 解析パラメータ
+SHAPE_TYPE = 'ellipse'    # 'ellipse' or 'feret' (形状近似方法)
+SUBPIXEL_SAMPLING = 5     # 1, 5, 10 (サブピクセルサンプリング数)
 
 # 処理するROI数（テスト用）
-MAX_ROIS = None  # None で全ROI処理
+MAX_ROIS = None           # None で全ROI処理
 ```
+
+### 新機能（2025-12-23追加）
+
+#### Total Mass計算
+細胞の総質量を時系列で追跡：
+```python
+Total mass [pg] = Σ(concentration [mg/ml] × pixel_volume [µm³])
+# 単位変換: 1 mg/ml = 1 pg/µm³
+```
+
+#### Feret径ベースのマスク生成
+楕円近似（Major/Minor/Angle）に加えて、Feret径（Feret/MinFeret/FeretAngle）による形状近似に対応。より不規則な形状の細胞に適用可能。
+
+#### サブピクセルサンプリング
+マスク端での精度向上のため、ピクセル内でN×Nサブピクセルサンプリングを実施：
+- `1×1`: ピクセル中心のみ（高速）
+- `5×5`: 推奨設定（精度と速度のバランス）
+- `10×10`: 最高精度（計算時間増）
+
+#### 時系列プロット自動生成
+解析完了後、以下の時系列プロットを自動生成：
+- Volume vs Time
+- Mean RI vs Time
+- Total Mass vs Time
+
+出力先: `timeseries_plots_{shape_type}_subpixel{N}/timeseries_volume_ri_mass.png`
 
 ### 処理アルゴリズム
 
@@ -1419,7 +1452,22 @@ QPI解析の基本機能（qpi.pyと連携）
 図の作成ユーティリティ
 
 ### 25_Roiset_from_zstack.py
-Z-stackからROIセットを作成
+Z-stackからROIセットを作成。屈折率（RI）マップと質量濃度マップの可視化にも対応。
+
+### 28_batch_analysis.py
+**バッチ解析スクリプト（2025-12-23追加）**
+
+全パラメータ組み合わせ（`SHAPE_TYPE` × `SUBPIXEL_SAMPLING`）を網羅的に実行：
+- 組み合わせ例: ellipse + subpixel1, ellipse + subpixel5, ..., feret + subpixel10
+- 各組み合わせで`24_elip_volume.py`を自動実行
+- 実行時間と成功/失敗を記録
+- 出力ディレクトリもパラメータごとに自動命名
+
+実行方法：
+```bash
+cd scripts
+python 28_batch_analysis.py
+```
 
 ### arrconv.py, subtract_mean.py
 配列変換・平均値除去ユーティリティ
@@ -1510,6 +1558,23 @@ QPI処理の基本関数群
 
 ---
 
-**更新履歴**:
-- 2025-XX-XX: 初版作成
+## 更新履歴
+
+### 2025-12-23: 時系列解析機能の大幅拡張
+- **Total Mass計算**: 細胞の総質量（pg）を時系列で追跡
+- **Feret径対応**: 楕円近似に加えてFeret径ベースのマスク生成に対応
+- **サブピクセルサンプリング**: マスク端の精度向上（1×1, 5×5, 10×10）
+- **時系列プロット統合**: Volume, RI, Total Massの自動可視化
+- **バッチ解析**: 全パラメータ組み合わせの自動実行（`28_batch_analysis.py`）
+- **ドキュメント整備**: `docs/workflows/`, `docs/notes/` ディレクトリ追加
+
+詳細: [`docs/workflows/2025-12-23_timeseries_total_mass.md`](docs/workflows/2025-12-23_timeseries_total_mass.md)
+
+### 初版
+- パイプライン基本機能の実装
+- ホログラム再構成、アライメント、セグメンテーション、体積・密度解析
+
+---
+
+**最終更新**: 2025-12-23
 
