@@ -1,4 +1,4 @@
-﻿# QPI_Omni: 定量位相イメージング解析パイプライン
+# QPI_Omni: 定量位相イメージング解析パイプライン
 
 ## 概要
 
@@ -11,6 +11,8 @@
 - **画像アライメント**: ECC法による時系列画像の位置合わせ
 - **細胞セグメンテーション**: Omniposeを用いた高精度な細胞領域検出
 - **体積・密度解析**: Rod-shaped細胞の3D形状再構成と密度計算
+- **Total Mass追跡**: 細胞の総質量を時系列で定量（2025-12-23追加）
+- **バッチ解析**: 複数パラメータの網羅的自動実行（2025-12-23追加）
 
 ## 環境構築
 
@@ -47,9 +49,14 @@ QPI_Omni/
 │   ├── 07_segmentaion.py              # セグメンテーション
 │   ├── 12_vertical_flip.py            # 上下反転（Augmentation）
 │   ├── 26_horizontal_flip.py          # 左右反転（Augmentation）
-│   ├── 24_elip_volume.py              # 体積・密度解析
+│   ├── 24_elip_volume.py              # 体積・密度・Total Mass解析
+│   ├── 28_batch_analysis.py           # バッチ解析（全パラメータ組み合わせ）
 │   ├── config.yaml                    # 設定ファイル
 │   └── qpi.py                         # QPIユーティリティ
+├── docs/              # ドキュメント
+│   ├── README.md                      # ドキュメント索引
+│   ├── workflows/                     # 詳細なワークフローログ
+│   └── notes/                         # クイックリファレンス・メモ
 ├── results/           # 解析結果出力
 │   └── inbox/         # 一時ファイル
 ├── env.yml            # conda環境定義
@@ -115,12 +122,30 @@ python 04_diff_from_first.py
 Fijiで作成したROIとResults.csvを用いて解析します：
 
 ```bash
+# 単体実行
 python 24_elip_volume.py
+
+# バッチ実行（全パラメータ組み合わせ）
+python 28_batch_analysis.py
 ```
 
-## 詳細なパイプライン説明
+**新機能（2025-12-23追加）**:
+- Total Mass計算（質量濃度 × 体積）
+- Feret径ベースのマスク生成（楕円近似に加えて）
+- サブピクセルサンプリング（1×1, 5×5, 10×10）で精度向上
+- 時系列プロット自動生成（Volume, RI, Total Mass）
 
+## ドキュメント
+
+### パイプライン詳細
 完全な解析パイプラインの詳細は **[PIPELINE.md](PIPELINE.md)** を参照してください。
+
+### ワークフローログ
+開発・解析作業の詳細ログは **[docs/](docs/)** ディレクトリを参照：
+- **[docs/workflows/](docs/workflows/)**: 日付別の詳細ワークフローログ
+- **[docs/notes/](docs/notes/)**: クイックリファレンス・メモ
+
+**最新ログ**: [2025-12-23: 時系列解析機能の大幅拡張](docs/workflows/2025-12-23_timeseries_total_mass.md)
 
 ## 設定
 
