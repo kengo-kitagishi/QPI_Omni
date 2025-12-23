@@ -49,7 +49,8 @@ docs/
 - [`28_batch_analysis.py`](../scripts/28_batch_analysis.py) - バッチ解析スクリプト
 
 ### 計算式・パラメータ
-- [計算式まとめ](workflows/2025-12-23_timeseries_total_mass.md#計算式まとめ)
+- [物理量計算の原理と計算式](notes/physics_calculations.md) - 完全版（推奨）
+- [計算式まとめ](workflows/2025-12-23_timeseries_total_mass.md#計算式まとめ) - クイック版
 - [パラメータ一覧](workflows/2025-12-23_timeseries_total_mass.md#パラメータ一覧)
 
 ### トラブルシューティング
@@ -109,7 +110,14 @@ code docs/workflows/2025-12-24_gpu_acceleration.md
 
 ---
 
-## 📌 ノート・メモの追加方法
+## 📌 ノート・メモ一覧
+
+`notes/` ディレクトリの主要ファイル：
+
+- **[quick_reference.md](notes/quick_reference.md)**: よく使うコマンド・パラメータの早見表
+- **[physics_calculations.md](notes/physics_calculations.md)**: 物理量計算の原理・仮定・計算式（完全版）
+
+### 新しいメモの追加方法
 
 簡単なメモやTIPSは `notes/` ディレクトリに追加：
 
