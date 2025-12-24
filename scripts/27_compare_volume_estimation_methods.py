@@ -37,9 +37,15 @@ class TimeSeriesDensityMapper:
     pass
 
 def run_analysis(shape_type, subpixel_sampling, results_csv, image_directory, 
-                 wavelength_nm, n_medium, pixel_size_um, alpha_ri, max_rois):
+                 wavelength_nm, n_medium, pixel_size_um, alpha_ri, max_rois, csv_suffix=None):
     """
     指定されたパラメータで解析を実行
+    
+    Parameters:
+    -----------
+    csv_suffix : str, optional
+        出力フォルダ名に追加するサフィックス。デフォルト: None
+        Noneの場合、CSVファイル名から自動抽出
     """
     print(f"\n{'='*80}")
     print(f"Starting analysis:")
@@ -63,6 +69,7 @@ def run_analysis(shape_type, subpixel_sampling, results_csv, image_directory,
             'SHAPE_TYPE': shape_type,
             'SUBPIXEL_SAMPLING': subpixel_sampling,
             'MAX_ROIS': max_rois,
+            'CSV_SUFFIX': csv_suffix,
         }
         
         # 24_elip_volume.pyの内容を読み込んで実行
@@ -99,7 +106,12 @@ def run_analysis(shape_type, subpixel_sampling, results_csv, image_directory,
 # ===== メイン実行 =====
 if __name__ == "__main__":
     # 共通パラメータ
-    RESULTS_CSV = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted\inference_out\Results_enlarge_interpolate.csv"
+    # === 複数のCSVファイルを処理する場合はリストで指定 ===
+    RESULTS_CSVS = [
+        r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted\inference_out\Results_enlarge.csv",
+        r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted\inference_out\Results_enlarge_interpolate.csv"
+    ]
+    
     IMAGE_DIRECTORY = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted"
     
     WAVELENGTH_NM = 663
@@ -109,47 +121,72 @@ if __name__ == "__main__":
     
     MAX_ROIS = 5  # テスト実行（Noneで全ROI）
     
+    # === CSVサフィックス（出力フォルダ名の識別用）===
+    # オプション1: 自動抽出（Noneを指定）
+    #   - CSVファイル名から自動で抽出されます
+    #   - Results_enlarge.csv → 'enlarge'
+    #   - Results_enlarge_interpolate.csv → 'enlarge_interpolate'
+    # オプション2: 手動指定（文字列を指定）
+    #   - 例: CSV_SUFFIX = 'my_custom_name'
+    CSV_SUFFIX = None  # Noneで自動抽出、または手動で文字列を指定
+    
     # パラメータの組み合わせ
     SHAPE_TYPES = ['ellipse', 'feret']
     SUBPIXEL_SAMPLINGS = [1, 5, 10]
     
     # バッチ実行開始
+    total_combos = len(RESULTS_CSVS) * len(SHAPE_TYPES) * len(SUBPIXEL_SAMPLINGS)
+    
     print(f"\n{'#'*80}")
     print(f"# BATCH ANALYSIS START")
     print(f"# Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"# Total combinations: {len(SHAPE_TYPES) * len(SUBPIXEL_SAMPLINGS)}")
+    print(f"# Total combinations: {total_combos}")
+    print(f"#   CSV files: {len(RESULTS_CSVS)}")
+    print(f"#   Shape types: {len(SHAPE_TYPES)}")
+    print(f"#   Subpixel samplings: {len(SUBPIXEL_SAMPLINGS)}")
     print(f"{'#'*80}\n")
     
     total_start_time = time.time()
     results = []
+    combo_num = 0
     
     # 全組み合わせを実行
-    for i, shape_type in enumerate(SHAPE_TYPES, 1):
-        for j, subpixel_sampling in enumerate(SUBPIXEL_SAMPLINGS, 1):
-            combo_num = (i-1) * len(SUBPIXEL_SAMPLINGS) + j
-            total_combos = len(SHAPE_TYPES) * len(SUBPIXEL_SAMPLINGS)
-            
-            print(f"\n{'#'*80}")
-            print(f"# Combination {combo_num}/{total_combos}")
-            print(f"{'#'*80}")
-            
-            success = run_analysis(
-                shape_type=shape_type,
-                subpixel_sampling=subpixel_sampling,
-                results_csv=RESULTS_CSV,
-                image_directory=IMAGE_DIRECTORY,
-                wavelength_nm=WAVELENGTH_NM,
-                n_medium=N_MEDIUM,
-                pixel_size_um=PIXEL_SIZE_UM,
-                alpha_ri=ALPHA_RI,
-                max_rois=MAX_ROIS
-            )
-            
-            results.append({
-                'shape_type': shape_type,
-                'subpixel_sampling': subpixel_sampling,
-                'success': success
-            })
+    for csv_idx, results_csv in enumerate(RESULTS_CSVS, 1):
+        csv_name = os.path.basename(results_csv)
+        print(f"\n{'='*80}")
+        print(f"Processing CSV {csv_idx}/{len(RESULTS_CSVS)}: {csv_name}")
+        print(f"{'='*80}\n")
+        
+        for i, shape_type in enumerate(SHAPE_TYPES, 1):
+            for j, subpixel_sampling in enumerate(SUBPIXEL_SAMPLINGS, 1):
+                combo_num += 1
+                
+                print(f"\n{'#'*80}")
+                print(f"# Combination {combo_num}/{total_combos}")
+                print(f"#   CSV: {csv_name}")
+                print(f"#   Shape: {shape_type}")
+                print(f"#   Subpixel: {subpixel_sampling}×{subpixel_sampling}")
+                print(f"{'#'*80}")
+                
+                success = run_analysis(
+                    shape_type=shape_type,
+                    subpixel_sampling=subpixel_sampling,
+                    results_csv=results_csv,
+                    image_directory=IMAGE_DIRECTORY,
+                    wavelength_nm=WAVELENGTH_NM,
+                    n_medium=N_MEDIUM,
+                    pixel_size_um=PIXEL_SIZE_UM,
+                    alpha_ri=ALPHA_RI,
+                    max_rois=MAX_ROIS,
+                    csv_suffix=CSV_SUFFIX
+                )
+                
+                results.append({
+                    'csv_file': csv_name,
+                    'shape_type': shape_type,
+                    'subpixel_sampling': subpixel_sampling,
+                    'success': success
+                })
     
     # 最終サマリー
     total_elapsed = time.time() - total_start_time
@@ -164,7 +201,8 @@ if __name__ == "__main__":
     print(f"{'='*80}")
     for result in results:
         status = "✅ SUCCESS" if result['success'] else "❌ FAILED"
-        print(f"  {result['shape_type']:8s} + subpixel{result['subpixel_sampling']:2d} : {status}")
+        csv_short = result['csv_file'].replace('Results_', '').replace('.csv', '')
+        print(f"  {csv_short:20s} | {result['shape_type']:8s} | subpixel{result['subpixel_sampling']:2d} : {status}")
     print(f"{'='*80}\n")
     
     success_count = sum(1 for r in results if r['success'])
@@ -173,10 +211,30 @@ if __name__ == "__main__":
     print(f"\n{'#'*80}")
     print(f"# All output directories:")
     print(f"{'#'*80}")
-    for result in results:
-        dir_suffix = f"{result['shape_type']}_subpixel{result['subpixel_sampling']}"
-        print(f"  - timeseries_density_output_{dir_suffix}/")
-        print(f"  - timeseries_plots_{dir_suffix}/")
-    print(f"{'#'*80}\n")
+    
+    # CSVファイルごとにグループ化して表示
+    for results_csv in RESULTS_CSVS:
+        csv_name = os.path.basename(results_csv)
+        csv_short = csv_name.replace('Results_', '').replace('.csv', '')
+        print(f"\n  [{csv_short}]")
+        
+        for result in results:
+            if result['csv_file'] == csv_name:
+                # CSVファイル名から自動抽出されるサフィックスを推定
+                csv_name_without_ext = os.path.splitext(csv_name)[0]
+                if '_' in csv_name_without_ext:
+                    parts = csv_name_without_ext.split('_', 1)
+                    csv_suffix_auto = parts[1] if len(parts) > 1 and parts[1] else None
+                else:
+                    csv_suffix_auto = None
+                
+                if csv_suffix_auto:
+                    dir_suffix = f"{result['shape_type']}_subpixel{result['subpixel_sampling']}_{csv_suffix_auto}"
+                else:
+                    dir_suffix = f"{result['shape_type']}_subpixel{result['subpixel_sampling']}"
+                
+                print(f"    - timeseries_density_output_{dir_suffix}/")
+                print(f"    - timeseries_plots_{dir_suffix}/")
+    print(f"\n{'#'*80}\n")
 
 # %%

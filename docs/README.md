@@ -1,161 +1,235 @@
 # QPI解析 ドキュメント
 
-このディレクトリには、QPI解析プロジェクトに関するドキュメントとログが含まれています。
+このディレクトリには、QPI解析プロジェクトに関するドキュメントが含まれています。
 
-## 📂 ディレクトリ構成
+---
 
+## 📚 ドキュメント構成
+
+### 主要ドキュメント
+
+| ドキュメント | 内容 | 対象読者 |
+|-------------|------|---------|
+| **[USAGE_GUIDE.md](USAGE_GUIDE.md)** | 使い方・クイックスタート・トラブルシューティング | すべてのユーザー |
+| **[METHODS.md](METHODS.md)** | 手法・アルゴリズムの理論と実装 | 詳細を知りたいユーザー |
+| **[EXPERIMENT_LOG.md](EXPERIMENT_LOG.md)** | 時系列での開発・実験記録 | 開発者・履歴を追いたいユーザー |
+
+---
+
+## 🚀 はじめに
+
+### 初めての方
+
+まず **[USAGE_GUIDE.md](USAGE_GUIDE.md)** をご覧ください。
+
+最速でスタート：
+```bash
+cd scripts
+python 24_elip_volume.py
 ```
-docs/
-├── README.md          # このファイル（ドキュメント索引）
-├── workflows/         # 詳細なワークフローログ
-│   └── YYYY-MM-DD_description.md
-└── notes/             # 簡単なメモ・トラブルシューティング
-    └── *.md
+
+### 手法の詳細を知りたい方
+
+**[METHODS.md](METHODS.md)** で各手法の理論と実装を確認してください。
+
+### 開発履歴を知りたい方
+
+**[EXPERIMENT_LOG.md](EXPERIMENT_LOG.md)** で時系列の開発記録を確認してください。
+
+---
+
+## 📋 クイックリンク
+
+### 使い方
+
+- [クイックスタート](USAGE_GUIDE.md#1-クイックスタート)
+- [手法別の使い方](USAGE_GUIDE.md#2-手法別の使い方)
+- [パラメータリファレンス](USAGE_GUIDE.md#3-パラメータリファレンス)
+- [トラブルシューティング](USAGE_GUIDE.md#5-トラブルシューティング)
+
+### 手法・アルゴリズム
+
+- [QPI基礎理論](METHODS.md#1-qpi基礎理論)
+- [体積推定手法の比較](METHODS.md#2-体積推定手法の比較)
+- [Pomegranate 3D再構成](METHODS.md#3-pomegranate-3d再構成アルゴリズム)
+- [回転対称体積推定](METHODS.md#4-回転対称体積推定アルゴリズム)
+
+### 開発ログ
+
+- [2025-12-23: Total Mass計算実装](EXPERIMENT_LOG.md#実験1-total-mass計算と時系列プロット機能の実装)
+- [2025-12-23: Pomegranate実装](EXPERIMENT_LOG.md#実験3-pomegranate-3d再構成アルゴリズムの実装)
+- [2025-12-24: 回転対称実装](EXPERIMENT_LOG.md#実験5-回転対称体積推定アルゴリズムの実装)
+- [2025-12-24: バッチシステム](EXPERIMENT_LOG.md#実験6-体積推定メソッド比較システムの構築)
+
+---
+
+## 🎯 目的別ガイド
+
+### 体積を計算したい
+
+→ [手法別の使い方](USAGE_GUIDE.md#2-手法別の使い方)
+
+推奨手法：
+- **高速**: 楕円近似（24_elip_volume.py）
+- **高精度**: 回転対称（31_roiset_rotational_volume.py）
+- **複雑な形状**: Pomegranate（timeseries_volume_from_roiset.py）
+
+### RIを計算したい
+
+→ [QPI基礎理論](METHODS.md#13-屈折率riの計算)
+
+必要なもの：
+- 位相差画像
+- 厚みマップ
+- 波長、培地屈折率
+
+### Total Massを計算したい
+
+→ [Total Massの計算](METHODS.md#15-total-massの計算)
+
+計算式：
+```
+M_total [pg] = Σ C [mg/ml] × V [µm³]
 ```
 
----
+### 時系列データを解析したい
 
-## 📋 ワークフローログ一覧
+→ [Pomegranate 3D再構成](USAGE_GUIDE.md#22-pomegranate-3d再構成)
 
-### 2025年12月
+入力：ImageJ ROIセット（.zip）  
+出力：体積の時系列データ（CSV）
 
-| 日付 | ファイル | 概要 |
-|------|---------|------|
-| 2025-12-23 | [2025-12-23_timeseries_total_mass.md](workflows/2025-12-23_timeseries_total_mass.md) | Total Mass計算、時系列プロット、Feret径対応、サブピクセルサンプリング、バッチ解析の実装 |
+### 複数のパラメータで比較したい
 
----
+→ [バッチ解析](USAGE_GUIDE.md#24-バッチ解析28_batch_analysispy)
 
-## 🔖 主要トピック別索引
+実行条件：
+- 2 CSVs × 2 shape_types × 3 subpixel_samplings = 12条件
 
-### 時系列解析
-- [2025-12-23: Total Mass時系列プロット実装](workflows/2025-12-23_timeseries_total_mass.md)
+### エラーが出た
 
-### マスク生成・形状近似
-- [2025-12-23: Feret径ベースのマスク生成](workflows/2025-12-23_timeseries_total_mass.md#4-feret径ベースのマスク生成)
-- [2025-12-23: サブピクセルサンプリング](workflows/2025-12-23_timeseries_total_mass.md#5-サブピクセルサンプリング)
+→ [トラブルシューティング](USAGE_GUIDE.md#5-トラブルシューティング)
 
-### バッチ処理
-- [2025-12-23: パラメータ網羅的バッチ解析](workflows/2025-12-23_timeseries_total_mass.md#8-バッチ解析の実装)
-
-### ImageJ連携
-- [2025-12-23: ROI前処理（縮小＋スムージング）](workflows/2025-12-23_timeseries_total_mass.md#9-imagejでのroi処理)
+よくある問題：
+- 実行が遅い
+- メモリ不足
+- ROIが読み込めない
+- 位相差画像が見つからない
 
 ---
 
-## 🎯 クイックリンク
+## 📊 体積推定手法の選び方
 
-### 主要スクリプト
-- [`24_elip_volume.py`](../scripts/24_elip_volume.py) - メイン解析スクリプト
-- [`28_batch_analysis.py`](../scripts/28_batch_analysis.py) - バッチ解析スクリプト
+| 手法 | 特徴 | 精度 | 速度 | 適用場面 |
+|------|------|------|------|---------|
+| **楕円近似** | シンプル | ★★★☆☆ | ★★★★★ | 楕円形に近い細胞、高速処理 |
+| **Feret径近似** | 細長い細胞に強い | ★★★★☆ | ★★★★☆ | 細長い細胞（分裂酵母など） |
+| **Pomegranate** | 複雑な形状に対応 | ★★★★☆ | ★★★☆☆ | 複雑な形状、2D→3D再構成 |
+| **回転対称** | 論文準拠、高精度 | ★★★★★ | ★★☆☆☆ | 高精度が必要、論文準拠 |
 
-### 計算式・パラメータ
-- [物理量計算の原理と計算式](notes/physics_calculations.md) - 完全版（推奨）
-- [計算式まとめ](workflows/2025-12-23_timeseries_total_mass.md#計算式まとめ) - クイック版
-- [パラメータ一覧](workflows/2025-12-23_timeseries_total_mass.md#パラメータ一覧)
-
-### トラブルシューティング
-- [よくある問題と解決策](workflows/2025-12-23_timeseries_total_mass.md#トラブルシューティング)
+詳細：[体積推定手法の比較](METHODS.md#2-体積推定手法の比較)
 
 ---
 
-## 📝 新しいログの追加方法
+## 🛠️ 主要スクリプト
 
-### 1. ワークフローログを追加
+| スクリプト | 説明 | 実行時間 |
+|-----------|------|---------|
+| `24_elip_volume.py` | 楕円・Feret径近似 | 約1-2分 |
+| `28_batch_analysis.py` | バッチ解析（12条件） | 約1-2時間 |
+| `timeseries_volume_from_roiset.py` | Pomegranate 3D再構成 | 約5-10分 |
+| `31_roiset_rotational_volume.py` | 回転対称体積推定 | 約2-3分 |
+| `27_timeseries_plot.py` | 時系列プロット | 約30秒 |
+
+---
+
+## 📖 背景知識
+
+### QPI（定量位相イメージング）とは
+
+光の位相差から細胞の屈折率（RI）を測定し、質量濃度や体積を定量する手法。
+
+詳細：[QPI基礎理論](METHODS.md#1-qpi基礎理論)
+
+### 体積推定の原理
+
+2D画像から3D形状を推定する手法：
+1. 楕円近似・Feret径近似
+2. Distance Transform + 球体展開（Pomegranate）
+3. 反復的中心線・断面線更新（回転対称）
+
+詳細：[体積推定手法の比較](METHODS.md#2-体積推定手法の比較)
+
+---
+
+## 📚 参考文献
+
+### 主要論文
+
+1. **Odermatt et al. (2021)** - 回転対称体積推定  
+   *eLife*, 10, e64901.
+
+2. **Park et al. (2018)** - QPI基礎  
+   *Nature Photonics*, 12, 578–589.
+
+3. **Barer & Joseph (1954)** - 屈折率と質量濃度  
+   *Quarterly Journal of Microscopical Science*, 95, 399-423.
+
+詳細：[参考文献](METHODS.md#-参考文献)
+
+---
+
+## 🔄 更新履歴
+
+| 日付 | 内容 |
+|------|------|
+| 2025-12-24 | ドキュメント統合・整理 |
+| 2025-12-24 | 回転対称体積推定実装 |
+| 2025-12-24 | バッチ解析システム実装 |
+| 2025-12-23 | Total Mass計算実装 |
+| 2025-12-23 | Pomegranate 3D再構成実装 |
+
+詳細：[EXPERIMENT_LOG.md](EXPERIMENT_LOG.md)
+
+---
+
+## 💡 ヒント
+
+### 最初は少ないフレームで試す
+
+```python
+# 最初は10フレームで試して、問題がないか確認
+results_df = analyzer.analyze_timeseries(max_frames=10)
+```
+
+### 可視化で結果を確認
+
+可視化画像で以下を確認：
+- ✅ 中心線が細胞の中央を通っているか
+- ✅ 断面線が中心線に垂直か
+- ✅ 回転対称円が細胞に適合しているか
+
+### 結果のバックアップ
 
 ```bash
-# ファイル作成
-code docs/workflows/YYYY-MM-DD_description.md
-
-# 例
-code docs/workflows/2025-12-24_gpu_acceleration.md
-```
-
-### 2. このREADMEを更新
-
-- 「ワークフローログ一覧」テーブルに行を追加
-- 必要に応じて「主要トピック別索引」を更新
-
-### 3. テンプレート
-
-```markdown
-# タイトル（YYYY-MM-DD）
-
-## 概要
-この日の作業内容を1-2行で説明
-
-## 目次
-1. [セクション1](#1-セクション1)
-2. [セクション2](#2-セクション2)
-
----
-
-## 1. セクション1
-### 要求
-### 実装
-### 結果
-
----
-
-## ファイル一覧
-変更したファイル
-
-## パラメータ
-使用したパラメータ
-
----
-
-**End of Log**
-最終更新: YYYY-MM-DD HH:MM JST
+# 重要な結果をバックアップ
+mkdir backup_2025-12-24
+cp -r *_output/ backup_2025-12-24/
 ```
 
 ---
 
-## 📌 ノート・メモ一覧
+## 📞 サポート
 
-`notes/` ディレクトリの主要ファイル：
-
-- **[quick_reference.md](notes/quick_reference.md)**: よく使うコマンド・パラメータの早見表
-- **[physics_calculations.md](notes/physics_calculations.md)**: 物理量計算の原理・仮定・計算式（完全版）
-
-### 新しいメモの追加方法
-
-簡単なメモやTIPSは `notes/` ディレクトリに追加：
-
-```bash
-# 例：解析のコツをメモ
-code docs/notes/analysis_tips.md
-
-# 例：トラブルシューティング集
-code docs/notes/troubleshooting.md
-```
-
----
-
-## 🔍 ログの検索方法
-
-### ファイル名で検索
-```bash
-ls docs/workflows/*mass*
-ls docs/workflows/2025-12*
-```
-
-### 内容で検索
-```bash
-# Total Massに関する記述を検索
-grep -r "Total Mass" docs/workflows/
-
-# Feretに関する記述を検索
-grep -r "Feret" docs/workflows/
-```
-
----
-
-## 📊 統計情報
-
-- **総ワークフローログ数**: 1
-- **最終更新**: 2025-12-23
-- **主要機能数**: 5 (Total Mass計算、Feret径、サブピクセルサンプリング、スクリプト統合、バッチ解析)
+問題が発生した場合：
+1. [トラブルシューティング](USAGE_GUIDE.md#5-トラブルシューティング)を確認
+2. エラーメッセージで検索
+3. 可視化画像で結果を確認
 
 ---
 
 **プロジェクトルートに戻る**: [../README.md](../README.md)
+
+**最終更新**: 2025-12-24  
+**プロジェクト**: QPI_omni  
+**著者**: AI Assistant

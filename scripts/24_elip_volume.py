@@ -22,7 +22,8 @@ class TimeSeriesDensityMapper:
     
     def __init__(self, results_csv, image_directory, 
                  wavelength_nm=663, n_medium=1.333, pixel_size_um=0.348,
-                 alpha_ri=0.0018, shape_type='ellipse', subpixel_sampling=5):
+                 alpha_ri=0.0018, shape_type='ellipse', subpixel_sampling=5,
+                 csv_suffix=None):
         """
         Parameters:
         -----------
@@ -49,6 +50,10 @@ class TimeSeriesDensityMapper:
             1: ピクセル中心のみ（高速だが端で精度低）
             5: 5×5サブピクセル（推奨、バランス良い）
             10: 10×10サブピクセル（高精度だが遅い）
+        csv_suffix : str, optional
+            出力フォルダ名に追加するサフィックス。デフォルト: None
+            Noneの場合、CSVファイル名から自動抽出（例: Results_enlarge.csv → enlarge）
+            手動で指定する場合: 'enlarge', 'interpolate', 'custom_name'など
         
         Note:
         -----
@@ -72,6 +77,23 @@ class TimeSeriesDensityMapper:
         self.shape_type = shape_type
         self.subpixel_sampling = subpixel_sampling
         
+        # CSVサフィックスを決定（手動指定 or 自動抽出）
+        if csv_suffix is not None:
+            self.csv_suffix = csv_suffix
+        else:
+            # CSVファイル名から自動抽出 (例: Results_enlarge.csv → enlarge)
+            csv_filename = os.path.basename(results_csv)
+            csv_name_without_ext = os.path.splitext(csv_filename)[0]  # Results_enlarge
+            # "Results_"の後の部分を取得（あれば）
+            if '_' in csv_name_without_ext:
+                parts = csv_name_without_ext.split('_', 1)  # ['Results', 'enlarge']
+                if len(parts) > 1 and parts[1]:
+                    self.csv_suffix = parts[1]
+                else:
+                    self.csv_suffix = None
+            else:
+                self.csv_suffix = None
+        
         # 単位変換
         self.wavelength_um = wavelength_nm / 1000.0  # nm → µm
         
@@ -87,8 +109,11 @@ class TimeSeriesDensityMapper:
         self._scan_image_files()
         
         # 出力ディレクトリ（パラメータに応じた名前）
-        dir_suffix = f"{self.shape_type}_subpixel{self.subpixel_sampling}"
-        self.output_dir = f"timeseries_density_output_{dir_suffix}"
+        if self.csv_suffix:
+            self.dir_suffix = f"{self.shape_type}_subpixel{self.subpixel_sampling}_{self.csv_suffix}"
+        else:
+            self.dir_suffix = f"{self.shape_type}_subpixel{self.subpixel_sampling}"
+        self.output_dir = f"timeseries_density_output_{self.dir_suffix}"
         os.makedirs(self.output_dir, exist_ok=True)
         os.makedirs(os.path.join(self.output_dir, "density_tiff"), exist_ok=True)
         os.makedirs(os.path.join(self.output_dir, "visualizations"), exist_ok=True)
@@ -716,36 +741,48 @@ class TimeSeriesDensityMapper:
 # ===== メイン実行 =====
 if __name__ == "__main__":
     # パラメータ設定
-    RESULTS_CSV = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted\inference_out\Results_enlarge.csv"
+    # バッチ実行時はglobals()から、単独実行時はデフォルト値を使用
+    RESULTS_CSV = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted\inference_out\Results_enlarge.csv" if 'RESULTS_CSV' not in globals() else globals()['RESULTS_CSV']
     
     # 画像ディレクトリ（ユーザーの環境に合わせて変更）
     # Windowsパスの例: r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted"
     # Linuxパスの例: "/home/user/images/subtracted"
-    IMAGE_DIRECTORY = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted"  # テスト用
+    IMAGE_DIRECTORY = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted" if 'IMAGE_DIRECTORY' not in globals() else globals()['IMAGE_DIRECTORY']
     
     # QPI実験パラメータ（01_QPI_analysis.pyと同じ値）
-    WAVELENGTH_NM = 663          # レーザー波長（ナノメートル）
+    WAVELENGTH_NM = 663 if 'WAVELENGTH_NM' not in globals() else globals()['WAVELENGTH_NM']
+                                 # レーザー波長（ナノメートル）
                                  # 実験値: 663nm (赤色レーザー)
-    N_MEDIUM = 1.333             # 培地の屈折率
+    N_MEDIUM = 1.333 if 'N_MEDIUM' not in globals() else globals()['N_MEDIUM']
+                                 # 培地の屈折率
                                  # 水: 1.333, PBS: 1.334, DMEM: ~1.335
-    PIXEL_SIZE_UM = 0.348        # ピクセルサイズ（マイクロメートル）
+    PIXEL_SIZE_UM = 0.348 if 'PIXEL_SIZE_UM' not in globals() else globals()['PIXEL_SIZE_UM']
+                                 # ピクセルサイズ（マイクロメートル）
                                  # 507×507の再構成画像用
                                  # 計算: 0.08625 µm × (2048/507) ≈ 0.348 µm/pixel
                                  # ※元のホログラム2048×2048では0.08625 µm/pixel
-    ALPHA_RI = 0.00018            # 比屈折率増分 [ml/mg]
+    ALPHA_RI = 0.00018 if 'ALPHA_RI' not in globals() else globals()['ALPHA_RI']
+                                 # 比屈折率増分 [ml/mg]
                                  # タンパク質の一般的な値: 0.0018 ml/mg
                                  # 参考: RI = RI_medium + α × C [mg/ml]
     
-    SHAPE_TYPE = 'feret'         # ROI形状近似方法
+    SHAPE_TYPE = 'feret' if 'SHAPE_TYPE' not in globals() else globals()['SHAPE_TYPE']
+                                 # ROI形状近似方法
                                  # 'ellipse': Major/Minor/Angle（楕円近似）
                                  # 'feret': Feret/MinFeret/FeretAngle（Feret径近似）
     
-    SUBPIXEL_SAMPLING = 5        # サブピクセルサンプリング数（N×N）
+    SUBPIXEL_SAMPLING = 5 if 'SUBPIXEL_SAMPLING' not in globals() else globals()['SUBPIXEL_SAMPLING']
+                                 # サブピクセルサンプリング数（N×N）
                                  # 1: ピクセル中心のみ（高速、端で精度低）
                                  # 5: 5×5サブピクセル（推奨、バランス良い）
                                  # 10: 10×10サブピクセル（高精度、遅い）
     
-    MAX_ROIS = None  # テスト実行（Noneで全ROI）
+    MAX_ROIS = None if 'MAX_ROIS' not in globals() else globals()['MAX_ROIS']  # テスト実行（Noneで全ROI）
+    
+    # CSVサフィックス（出力フォルダ名の識別用）
+    # None: CSVファイル名から自動抽出（Results_enlarge.csv → 'enlarge'）
+    # 文字列: 手動で指定（例: 'custom_name'）
+    CSV_SUFFIX = None if 'CSV_SUFFIX' not in globals() else globals()['CSV_SUFFIX']
     
     print(f"\n{'='*70}")
     print(f"QPI Analysis Parameters:")
@@ -767,7 +804,8 @@ if __name__ == "__main__":
         pixel_size_um=PIXEL_SIZE_UM,
         alpha_ri=ALPHA_RI,
         shape_type=SHAPE_TYPE,
-        subpixel_sampling=SUBPIXEL_SAMPLING
+        subpixel_sampling=SUBPIXEL_SAMPLING,
+        csv_suffix=CSV_SUFFIX
     )
     
     mapper.process_all_rois(max_rois=MAX_ROIS)
@@ -798,7 +836,7 @@ if __name__ == "__main__":
         print(f"  Number of data points: {len(df_summary)}")
         
         # 時系列プロット用の出力ディレクトリ
-        plot_output_dir = f"timeseries_plots_{dir_suffix}"
+        plot_output_dir = f"timeseries_plots_{mapper.dir_suffix}"
         os.makedirs(plot_output_dir, exist_ok=True)
         
         # 時間ビンを作成
