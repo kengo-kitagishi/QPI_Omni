@@ -15,7 +15,7 @@ Reference:
 Odermatt et al. (2021) eLife 10:e64901
 https://elifesciences.org/articles/64901
 """
-
+# %%
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import ndimage
@@ -547,3 +547,5 @@ if __name__ == "__main__":
     print("  - Spherical cross-sections")
     print("  - Better for irregular shapes")
 
+
+# %%

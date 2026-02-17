@@ -1,9 +1,28 @@
 #!/usr/bin/env python3
 """
-Time-series Volume Tracking from ROI Set
+Time-series Volume Tracking from ROI Set (Pomegranate互換)
 ImageJ ROIセットから時系列の体積変化を追跡
 
-各ROIを2Dマスクに変換 → 3D再構成 → 体積計算
+本家Pomegranateアルゴリズムに準拠:
+- Baybay et al. (2020) Pomegranate: Nuclear and whole-cell segmentation for fission yeast
+- GitHub: https://github.com/erodb/Pomegranate
+
+アルゴリズム:
+1. Distance Transform → 局所半径
+2. Skeleton → 中心線抽出
+3. Medial Axis Transform → Skeleton × Distance Map
+4. Spherical Expansion → Z方向に球体を展開
+   - 各Zスライスで: r(z) = √(R² - z²)
+   - 閾値判定: if r(z) > 2*pixel_size_xy: 描画
+
+離散化方法:
+- 'pomegranate': 閾値ベース（本家準拠）
+  → 各Zスライスで半径が閾値以上なら描画
+- 'round': 四捨五入方式
+  → 厚みを計算してround()で変換
+
+処理フロー:
+各ROIを2Dマスクに変換 → 3D再構成 → 体積計算 → 厚みマップ生成
 """
 # %%
 import numpy as np
@@ -28,7 +47,8 @@ class TimeSeriesVolumeTracker:
     """ROIセットから時系列体積を追跡"""
     
     def __init__(self, roi_zip_path, voxel_xy=0.1, voxel_z=0.3, 
-                 radius_enlarge=1.0, image_width=512, image_height=512):
+                 radius_enlarge=1.0, image_width=512, image_height=512,
+                 min_radius_threshold_px=2, discretization_method='pomegranate'):
         """
         Parameters
         ----------
@@ -39,11 +59,15 @@ class TimeSeriesVolumeTracker:
         voxel_z : float
             Z方向のステップサイズ (um)
         radius_enlarge : float
-            半径の拡張量 (pixels)
+            半径の拡張量 (pixels) - Pomegranate本家は+1
         image_width : int
             画像の幅（pixels）
         image_height : int
             画像の高さ（pixels）
+        min_radius_threshold_px : float
+            最小半径閾値（ピクセル）- 本家Pomegranateは2
+        discretization_method : str
+            離散化方法：'pomegranate'（閾値ベース）または'round'（四捨五入）
         """
         self.roi_zip_path = roi_zip_path
         self.voxel_xy = voxel_xy
@@ -52,13 +76,18 @@ class TimeSeriesVolumeTracker:
         self.elongation_factor = voxel_xy / voxel_z
         self.image_width = image_width
         self.image_height = image_height
+        self.min_radius_threshold_px = min_radius_threshold_px
+        self.discretization_method = discretization_method
         
-        print(f"=== Time-series Volume Tracker ===")
+        print(f"=== Time-series Volume Tracker (Pomegranate) ===")
         print(f"ROI Set: {roi_zip_path}")
         print(f"Voxel XY: {voxel_xy} um")
         print(f"Voxel Z: {voxel_z} um")
         print(f"Elongation Factor: {self.elongation_factor:.4f}")
         print(f"Image Size: {image_width} x {image_height}")
+        print(f"Radius enlarge: {radius_enlarge} px (Pomegranate本家: +1)")
+        print(f"Min radius threshold: {min_radius_threshold_px} px (Pomegranate本家: 2)")
+        print(f"Discretization method: {discretization_method}")
         
         # ROIセットを読み込み
         self.load_roi_set()
@@ -236,16 +265,20 @@ class TimeSeriesVolumeTracker:
         medial_coords = np.argwhere(skeleton)
         
         for y, x in medial_coords:
+            # 本家Pomegranate: rinput (局所半径) + radius_enlarge
             r0 = medial_axis[y, x] + self.radius_enlarge
             
             for z in range(z_slices):
+                # 本家Pomegranate: zinput = (mid - k) / efactor
                 z_distance = (mid_slice - z) / self.elongation_factor
                 r_squared = r0**2 - z_distance**2
                 
                 if r_squared > 0:
+                    # 本家Pomegranate: segmentRadius = √(R² - z²) + 1 ← +1は既にr0に含まれる
                     segment_radius = np.sqrt(r_squared)
                     
-                    if segment_radius > 2 * self.voxel_xy:
+                    # 本家Pomegranate閾値判定: segmentRadius > (2 * nvx)
+                    if segment_radius > self.min_radius_threshold_px:
                         try:
                             from skimage.draw import disk as draw_disk
                             rr, cc = draw_disk((y, x), segment_radius, 
@@ -585,7 +618,7 @@ class TimeSeriesVolumeTracker:
         
         return ri_results
     
-    def save_ri_results(self, output_dir='timeseries_volume_output'):
+    def save_ri_results(self, output_dir='Pomegranate_volume_output'):
         """RI計算結果を保存"""
         if not hasattr(self, 'ri_results') or len(self.ri_results) == 0:
             print("No RI results to save")
@@ -645,26 +678,28 @@ class TimeSeriesVolumeTracker:
 
 
 def demo_with_roiset(roi_zip_path, max_frames=5):
-    """ROIセットでデモ実行"""
+    """ROIセットでデモ実行（Pomegranate本家準拠）"""
     print("\n" + "="*60)
-    print("DEMO: Time-series Volume Tracking from ROI Set")
+    print("DEMO: Time-series Volume Tracking from ROI Set (Pomegranate)")
     print("="*60)
     
-    # Trackerを作成
+    # Trackerを作成（本家Pomegranate準拠のパラメータ）
     tracker = TimeSeriesVolumeTracker(
         roi_zip_path=roi_zip_path,
-        voxel_xy=0.08625,  # 24_elip_volume.pyと同じ
-        voxel_z=0.08625,
-        radius_enlarge=1.0,
+        voxel_xy=0.348,  # 24_elip_volume.pyと同じ
+        voxel_z=0.174,
+        radius_enlarge=1.0,  # 本家Pomegranateは+1
         image_width=512,
-        image_height=512
+        image_height=512,
+        min_radius_threshold_px=2,  # 本家Pomegranateは2ピクセル
+        discretization_method='pomegranate'  # 閾値ベース判定
     )
     
     # 体積を追跡
     results_df = tracker.track_volume_timeseries(max_frames=max_frames)
     
     # プロット
-    tracker.plot_volume_timeseries('timeseries_volume_plot.png')
+    tracker.plot_volume_timeseries('Pomegranate_volume_plot.png')
     
     # 保存
     tracker.save_results()
@@ -674,7 +709,7 @@ def demo_with_roiset(roi_zip_path, max_frames=5):
 
 if __name__ == "__main__":
     # ROIセットのパス
-    roi_zip_path = r"c:\Users\QPI\Documents\QPI_omni\scripts\RoiSet.zip"
+    roi_zip_path = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted\inference_out\Roiset_enlarge_interpolate.zip"
     
     if os.path.exists(roi_zip_path):
         print(f"Found ROI set: {roi_zip_path}")

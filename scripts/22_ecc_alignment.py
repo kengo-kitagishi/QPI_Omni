@@ -18,14 +18,32 @@ def load_tif_image(path):
     img = io.imread(path)
     return img.astype(np.float64)
 
-def to_uint8(img):
-    """uint8に変換（OpenCV用）"""
-    img_min = np.min(img)
-    img_max = np.max(img)
-    if img_max - img_min > 0:
-        normalized = (img - img_min) / (img_max - img_min)
-    else:
-        normalized = img
+def to_uint8(img, vmin=-5.0, vmax=2.0):
+    """
+    固定範囲でuint8に変換（アライメント用）
+    
+    Parameters:
+    -----------
+    vmin, vmax : float
+        クリッピング範囲（位相画像のrad値）
+        デフォルト: -5.0 ~ 2.0 rad（実測値域）
+    
+    Returns:
+    --------
+    uint8 : 0-255の範囲に正規化された画像
+    
+    Note:
+    -----
+    - 全画像で一貫した変換を保証
+    - 外れ値は自動的にクリッピング
+    - ECCアルゴリズムには十分な精度
+    """
+    # クリッピング（外れ値除去）
+    clipped = np.clip(img, vmin, vmax)
+    
+    # 0-255に正規化
+    normalized = (clipped - vmin) / (vmax - vmin)
+    
     return (normalized * 255).astype(np.uint8)
 
 def get_tif_files(folder):
@@ -83,9 +101,19 @@ def create_transform_dict(transforms_list):
     return transform_dict
 
 def step2_apply_by_filename_number(target_folder, json_path, output_folder,
-                                   vmin=-0.1, vmax=1.7, cmap='RdBu_r'):
+                                   vmin=-0.1, vmax=1.7, cmap='RdBu_r',
+                                   save_png=False, png_dpi=150, png_sample_interval=1):
     """
     ステップ2: ファイル名の数字部分でマッチングして変換を適用
+    
+    Parameters:
+    -----------
+    save_png : bool, default=False
+        カラーマップPNG画像を保存するかどうか（False=高速モード）
+    png_dpi : int, default=150
+        PNG保存時の解像度（低いほど高速、300は重い）
+    png_sample_interval : int, default=1
+        N枚ごとにPNG保存（1=全部、10=10枚に1枚）
     """
     print("=" * 80)
     print("ステップ2: ファイル名の数字部分でマッチング（改良版）")
@@ -111,10 +139,14 @@ def step2_apply_by_filename_number(target_folder, json_path, output_folder,
         save_data = json.load(f)
     
     transforms_list = save_data['transforms']
-    reference_index = save_data['reference_index']
+    
+    # 新しいJSONフォーマットから読み込み（後方互換性あり）
+    alignment_reference_index = save_data.get('alignment_reference_index', save_data.get('reference_index', 0))
+    subtraction_reference_index = save_data.get('subtraction_reference_index', save_data.get('reference_index', 0))
     
     print(f"    変換行列数: {len(transforms_list)}個")
-    print(f"    基準インデックス: {reference_index}")
+    print(f"    アライメント基準インデックス: {alignment_reference_index}")
+    print(f"    引き算基準インデックス: {subtraction_reference_index}")
     print(f"    方法: {save_data['method']}")
     
     # 重複チェックと辞書作成
@@ -206,16 +238,14 @@ def step2_apply_by_filename_number(target_folder, json_path, output_folder,
             # 変換行列取得
             warp_matrix = np.array(transform_data['warp_matrix'], dtype=np.float32)
             
-            # 変換適用
+            # 変換適用（元画像を直接移動）
             h, w = img.shape
-            aligned_uint8 = cv2.warpAffine(
-                img_uint8, warp_matrix, (w, h),
+            aligned_img = cv2.warpAffine(
+                img.astype(np.float32),
+                warp_matrix,
+                (w, h),
                 flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP
-            )
-            
-            # float64に戻す
-            aligned_img = aligned_uint8.astype(np.float64) / 255.0
-            aligned_img = aligned_img * (np.max(img) - np.min(img)) + np.min(img)
+            ).astype(np.float64)
             
             # アライメント済み画像を保存
             base_name = target_path.stem
@@ -256,51 +286,86 @@ def step2_apply_by_filename_number(target_folder, json_path, output_folder,
         print("\n❌ エラー: アライメント済み画像がありません")
         return 0
     
-    # 基準画像を探す（数字0001など最初のもの）
-    reference_key = extract_number_from_filename(save_data['reference_filename'])
-    reference_img = None
+    # 引き算基準画像を探す
+    subtraction_transform = transforms_list[subtraction_reference_index]
+    subtraction_key = extract_number_from_filename(subtraction_transform['filename'])
+    subtraction_reference_img = None
+    
+    print(f"\n[6] 差分計算の基準画像を検索中...")
+    print(f"    引き算基準インデックス: {subtraction_reference_index}")
+    print(f"    引き算基準ファイル名: {subtraction_transform['filename']}")
+    print(f"    抽出された数字キー: {subtraction_key}")
     
     for img_data in aligned_images:
-        if img_data['number_key'] == reference_key:
-            reference_img = img_data['aligned_img']
-            print(f"\n[6] 差分計算中（基準: {img_data['filename']}, 数字{reference_key}）...")
+        if img_data['number_key'] == subtraction_key:
+            subtraction_reference_img = img_data['aligned_img']
+            print(f"\n[7] 差分TIF計算・保存中")
+            print(f"    引き算基準: {img_data['filename']} (数字{subtraction_key})")
             break
     
-    if reference_img is None:
-        print(f"\n⚠️  警告: 基準画像（数字{reference_key}）が見つかりません")
+    if subtraction_reference_img is None:
+        print(f"\n⚠️  警告: 引き算基準画像（数字{subtraction_key}）が見つかりません")
         print(f"    最初の画像を基準にします: {aligned_images[0]['filename']}")
-        reference_img = aligned_images[0]['aligned_img']
+        subtraction_reference_img = aligned_images[0]['aligned_img']
     
-    # カラーマップ設定
-    norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+    # 差分データを保存するリスト
+    subtracted_images = []
     
     for idx, img_data in enumerate(aligned_images):
         aligned_img = img_data['aligned_img']
         base_name = img_data['base_name']
         
         # 差分計算
-        subtracted = aligned_img - reference_img
+        subtracted = aligned_img - subtraction_reference_img
         
         # 差分TIF保存
         subtracted_path = os.path.join(subtracted_folder, f"{base_name}_subtracted.tif")
         io.imsave(subtracted_path, subtracted.astype(np.float32))
         
-        # カラーマップ画像保存
-        colored_path = os.path.join(colored_folder, f"{base_name}_colored.png")
-        
-        fig, ax = plt.subplots(figsize=(10, 8))
-        im = ax.imshow(subtracted, cmap=cmap, norm=norm)
-        ax.axis('off')
-        ax.set_title(f'{base_name}\n平均: {np.mean(subtracted):.3f}, 標準偏差: {np.std(subtracted):.3f}')
-        plt.colorbar(im, ax=ax, fraction=0.046, label='差分 (a.u.)')
-        plt.tight_layout()
-        plt.savefig(colored_path, dpi=300, bbox_inches='tight')
-        plt.close()
+        # PNG用にデータを保存
+        subtracted_images.append({
+            'subtracted': subtracted,
+            'base_name': base_name
+        })
         
         if idx % 500 == 0:
-            print(f"    [{idx+1}/{len(aligned_images)}] 差分計算中...")
+            print(f"    [{idx+1}/{len(aligned_images)}] 差分TIF保存中...")
     
-    print(f"    ✅ 差分計算完了: {len(aligned_images)}ファイル")
+    print(f"    ✅ 差分TIF保存完了: {len(aligned_images)}ファイル")
+    
+    # PNG保存（オプション）
+    png_saved_count = 0
+    if save_png:
+        print(f"\n[8] カラーマップPNG保存中...")
+        print(f"    サンプリング間隔: {png_sample_interval}枚ごと")
+        print(f"    解像度: {png_dpi} dpi")
+        
+        # カラーマップ設定
+        norm = TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+        
+        for idx, data in enumerate(subtracted_images):
+            # サンプリング
+            if idx % png_sample_interval == 0:
+                subtracted = data['subtracted']
+                base_name = data['base_name']
+                colored_path = os.path.join(colored_folder, f"{base_name}_colored.png")
+                
+                fig, ax = plt.subplots(figsize=(10, 8))
+                im = ax.imshow(subtracted, cmap=cmap, norm=norm)
+                ax.axis('off')
+                ax.set_title(f'{base_name}\n平均: {np.mean(subtracted):.3f}, 標準偏差: {np.std(subtracted):.3f}')
+                plt.colorbar(im, ax=ax, fraction=0.046, label='差分 (a.u.)')
+                plt.tight_layout()
+                plt.savefig(colored_path, dpi=png_dpi, bbox_inches='tight')
+                plt.close()
+                png_saved_count += 1
+                
+                if png_saved_count % 100 == 0:
+                    print(f"    [{png_saved_count}枚保存] 進行中...")
+        
+        print(f"    ✅ PNG保存完了: {png_saved_count}枚")
+    else:
+        print(f"\n[8] PNG保存: スキップ（高速モード）")
     
     # 最終サマリー
     print("\n" + "=" * 80)
@@ -318,7 +383,10 @@ def step2_apply_by_filename_number(target_folder, json_path, output_folder,
     print(f"\n【出力フォルダ】")
     print(f"  - アライメント済み: {aligned_folder}")
     print(f"  - 差分TIF: {subtracted_folder}")
-    print(f"  - カラーマップPNG: {colored_folder}")
+    if save_png:
+        print(f"  - カラーマップPNG: {colored_folder} ({png_saved_count}枚)")
+    else:
+        print(f"  - カラーマップPNG: スキップ（save_png=Trueで有効化）")
     
     print(f"\n【カラーマップ設定】")
     print(f"  - vmin={vmin}, vmax={vmax}, vcenter=0")
@@ -332,12 +400,15 @@ def step2_apply_by_filename_number(target_folder, json_path, output_folder,
 if __name__ == "__main__":
     
     count = step2_apply_by_filename_number(
-        target_folder=r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr",
-        json_path=r"C:\Users\QPI\Desktop\align_demo\alignment_transforms.json",
-        output_folder=r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr",
+        target_folder=r"F:\251212\ph_2\Pos10\ali_test",
+        json_path=r"F:\251212\ph_1\Pos10\10_7\alignment_transforms.json",
+        output_folder=r"F:\251212\ph_1\Pos10\10_7\bg_corr",
         vmin=-0.1,
         vmax=1.7,
-        cmap='RdBu_r'
+        cmap='RdBu_r',
+        save_png=False,           # PNG保存をスキップして高速化（必要な場合はTrueに変更）
+        png_dpi=150,              # PNG保存時の解像度（150=軽い、300=重い）
+        png_sample_interval=1     # サンプリング間隔（1=全保存、10=10枚に1枚）
     )
     
     if count > 0:

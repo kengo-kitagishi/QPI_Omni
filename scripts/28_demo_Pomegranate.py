@@ -9,7 +9,7 @@ Pomegranateの3D再構成アルゴリズムの詳細解析と実装
 3. Spherical Cross-Section: r(z) = sqrt(R^2 - z^2)
 4. 3D Reconstruction: 各中心軸ピクセルから球体を展開
 """
-
+# %%
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import ndimage
@@ -389,3 +389,5 @@ if __name__ == "__main__":
     print("  - demo_output/medial_axis.tif")
     print("  - demo_algorithm_steps.png")
 
+
+# %%

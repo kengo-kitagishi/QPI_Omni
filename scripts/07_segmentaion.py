@@ -5,7 +5,7 @@ from cellpose_omni import io
 from cellpose_omni.models import CellposeModel
 import os
 
-indir = r"G:\250910_0\Pos4\output_phase\aligned_left_center\diff_from_first\roi_subtracted_only_float32"
+indir = r"F:\251212\ph_1\Pos10\10_7\aligned\subtracted"
 outdir = os.path.join(indir, "inference_out")
 os.makedirs(outdir, exist_ok=True)
 
@@ -54,7 +54,7 @@ from cellpose_omni.models import CellposeModel
 import os, numpy as np, tifffile
 
 #indir = r"G:\250910_0\Pos1\output_phase\aligned_left_center\diff_from_first\roi_subtracted_only_float32"
-indir = r"G:\250815_kk\ph_1\Pos1\1_one_channel\subtracted_by_maskmean_float32"
+indir = r"F:\251212\ph_1\Pos10\10_7\crop"
 outdir = os.path.join(indir, "inference_out")
 os.makedirs(outdir, exist_ok=True)
 
@@ -159,7 +159,7 @@ from cellpose_omni import io
 from cellpose_omni.models import CellposeModel
 import os
 
-indir = r"G:\250910_0\Pos4\output_phase\aligned_left_center\diff_from_first\roi_subtracted_only_float32"
+indir = r"F:\251212\ph_1\Pos10\10_7\crop"
 outdir = os.path.join(indir, "inference_out")
 os.makedirs(outdir, exist_ok=True)
 
@@ -219,7 +219,7 @@ import os, numpy as np, tifffile, traceback
 
 # ==== 設定（必要に応じて変更） ====
 # 入力ディレクトリ（推論対象画像）
-indir = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted"
+indir = r"F:\251212\ph_1\Pos10\10_7\crop"
 # 出力ディレクトリ（マスク等の保存先）
 outdir = os.path.join(indir, "inference_out")
 os.makedirs(outdir, exist_ok=True)
@@ -227,6 +227,7 @@ os.makedirs(outdir, exist_ok=True)
 # 学習済みモデルパス
 model_path = r"C:\Users\QPI\Desktop\verti_flip_train\omni_model\models\cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_2025_11_05_19_14_41.656097"
 model_path = r"C:\Users\QPI\Desktop\verti_flip_train\omni_model\models\cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_2025_11_05_19_14_41.656097"
+model_path = r"C:\Users\QPI\Desktop\archived_train\train_251220\verti_flip_train\omni_model\models\cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_2025_11_05_19_14_41.656097"
 # 推論設定（チューニング可能）
 USE_GPU = True
 NCHAN = 1

@@ -23,7 +23,8 @@ class TimeSeriesDensityMapper:
     def __init__(self, results_csv, image_directory, 
                  wavelength_nm=663, n_medium=1.333, pixel_size_um=0.348,
                  alpha_ri=0.0018, shape_type='ellipse', subpixel_sampling=5,
-                 csv_suffix=None):
+                 thickness_mode='continuous', voxel_z_um=0.3, discretize_method='round',
+                 min_thickness_px=0.0, csv_suffix=None):
         """
         Parameters:
         -----------
@@ -50,6 +51,23 @@ class TimeSeriesDensityMapper:
             1: ピクセル中心のみ（高速だが端で精度低）
             5: 5×5サブピクセル（推奨、バランス良い）
             10: 10×10サブピクセル（高精度だが遅い）
+        thickness_mode : str
+            厚みマップのモード。デフォルト: 'continuous'
+            'continuous': 連続的な厚み値（ピクセル単位）
+            'discrete': 離散的なZ-stackスライス数
+        voxel_z_um : float
+            Z方向のボクセルサイズ（マイクロメートル）。デフォルト: 0.3 µm
+            discrete modeで厚みをスライス数に変換する際に使用
+        discretize_method : str
+            離散化の方法（discrete modeのみ有効）。デフォルト: 'round'
+            'round': 四捨五入
+            'ceil': 切り上げ
+            'floor': 切り捨て
+            'pomegranate': Pomegranate互換の閾値ベース判定
+        min_thickness_px : float
+            最小厚み閾値（ピクセル単位）。デフォルト: 0.0
+            この値未満の厚みを持つピクセルは無視される（0にセット）
+            例: 1.0 → 1ピクセル未満の厚みを無視
         csv_suffix : str, optional
             出力フォルダ名に追加するサフィックス。デフォルト: None
             Noneの場合、CSVファイル名から自動抽出（例: Results_enlarge.csv → enlarge）
@@ -76,6 +94,10 @@ class TimeSeriesDensityMapper:
         self.alpha_ri = alpha_ri
         self.shape_type = shape_type
         self.subpixel_sampling = subpixel_sampling
+        self.thickness_mode = thickness_mode
+        self.voxel_z_um = voxel_z_um
+        self.discretize_method = discretize_method
+        self.min_thickness_px = min_thickness_px
         
         # CSVサフィックスを決定（手動指定 or 自動抽出）
         if csv_suffix is not None:
@@ -110,9 +132,16 @@ class TimeSeriesDensityMapper:
         
         # 出力ディレクトリ（パラメータに応じた名前）
         if self.csv_suffix:
-            self.dir_suffix = f"{self.shape_type}_subpixel{self.subpixel_sampling}_{self.csv_suffix}"
+            base_dir_suffix = f"{self.shape_type}_subpixel{self.subpixel_sampling}_{self.csv_suffix}"
         else:
-            self.dir_suffix = f"{self.shape_type}_subpixel{self.subpixel_sampling}"
+            base_dir_suffix = f"{self.shape_type}_subpixel{self.subpixel_sampling}"
+        
+        # thickness_modeがdiscreteの場合は追加情報を含める
+        if self.thickness_mode == 'discrete':
+            self.dir_suffix = f"{base_dir_suffix}_discrete_{self.discretize_method}"
+        else:
+            self.dir_suffix = base_dir_suffix
+        
         self.output_dir = f"timeseries_density_output_{self.dir_suffix}"
         os.makedirs(self.output_dir, exist_ok=True)
         os.makedirs(os.path.join(self.output_dir, "density_tiff"), exist_ok=True)
@@ -326,6 +355,72 @@ class TimeSeriesDensityMapper:
         
         return zstack_map
     
+    def _discretize_thickness(self, z_continuous_px):
+        """
+        連続的なZ方向の厚み（ピクセル単位）を離散的なスライス数に変換する。
+        
+        Parameters
+        ----------
+        z_continuous_px : float or np.ndarray
+            連続的なZ方向の厚み（ピクセル単位）
+        
+        Returns
+        -------
+        int or np.ndarray
+            離散化されたスライス数
+        """
+        if self.voxel_z_um <= 0:
+            # voxel_z_umが無効な場合は、元の値を返す
+            if isinstance(z_continuous_px, np.ndarray):
+                return z_continuous_px.astype(int)
+            return int(z_continuous_px)
+        
+        # ピクセル単位の厚みをµm単位に変換
+        z_um = z_continuous_px * self.pixel_size_um
+        
+        if self.discretize_method == 'round':
+            z_slices = np.round(z_um / self.voxel_z_um)
+        elif self.discretize_method == 'ceil':
+            z_slices = np.ceil(z_um / self.voxel_z_um)
+        elif self.discretize_method == 'floor':
+            z_slices = np.floor(z_um / self.voxel_z_um)
+        elif self.discretize_method == 'pomegranate':
+            # Pomegranate方式の離散化
+            # 最小半径閾値（ここではピクセルサイズの2倍とする）
+            min_radius_threshold_um = 2.0 * self.pixel_size_um
+            
+            # 配列の場合と単一値の場合で処理を分岐
+            if isinstance(z_um, np.ndarray):
+                num_z_voxels_float = z_um / self.voxel_z_um
+                z_slices = np.zeros_like(num_z_voxels_float)
+                
+                # 閾値を超える要素のみ処理
+                mask = z_um > min_radius_threshold_um
+                z_slices[mask] = np.round(num_z_voxels_float[mask])
+                
+                # 少なくとも1スライスは確保（閾値を超える場合）
+                small_mask = (num_z_voxels_float > 0) & (z_slices == 0) & mask
+                z_slices[small_mask] = 1
+            else:
+                if z_um > min_radius_threshold_um:
+                    num_z_voxels_float = z_um / self.voxel_z_um
+                    z_slices = np.round(num_z_voxels_float)
+                    if z_slices == 0 and num_z_voxels_float > 0:
+                        z_slices = 1
+                else:
+                    z_slices = 0
+        else:
+            # デフォルトはround
+            z_slices = np.round(z_um / self.voxel_z_um)
+        
+        # 負の値を0にクリップ
+        z_slices = np.maximum(0, z_slices)
+        
+        # 整数に変換
+        if isinstance(z_slices, np.ndarray):
+            return z_slices.astype(int)
+        return int(z_slices)
+    
     def process_roi(self, roi_index):
         """
         特定のROIを処理
@@ -378,17 +473,72 @@ class TimeSeriesDensityMapper:
         if self.shape_type == 'feret' and 'Feret' in roi_params:
             print(f"    Feret: {roi_params['Feret']:.2f} pixels")
             print(f"    MinFeret: {roi_params.get('MinFeret', 'N/A'):.2f} pixels" if 'MinFeret' in roi_params else "    MinFeret: N/A")
-            print(f"    FeretAngle: {roi_params.get('FeretAngle', roi_params['Angle']):.2f}°")
+            print(f"    FeretAngle: {roi_params.get('FeretAngle', roi_params['FeretAngle']):.2f}°" if 'FeretAngle' in roi_params else f"    FeretAngle: {roi_params['Angle']:.2f}°")
         else:
             print(f"    Major: {roi_params['Major']:.2f} pixels")
             print(f"    Minor: {roi_params['Minor']:.2f} pixels")
             print(f"    Angle: {roi_params['Angle']:.2f}°")
         
-        # z-stackカウントマップを生成
-        print(f"  Generating z-stack map (shape_type: {self.shape_type}, subpixel: {self.subpixel_sampling}×{self.subpixel_sampling})...")
-        zstack_map = self.create_rod_zstack_map(roi_params, image.shape, 
-                                                 shape_type=self.shape_type,
-                                                 subpixel_sampling=self.subpixel_sampling)
+        # ROI識別子を生成（キャッシュファイル名用）
+        roi_id = f"frame{frame_number:04d}"
+        
+        # z-stackカウントマップを生成または読み込み
+        # キャッシュファイル名を生成
+        cache_dir = os.path.join(self.output_dir, 'thickness_cache')
+        cache_path = os.path.join(cache_dir, f"roi_{roi_index:04d}_{roi_id}.npz")
+        
+        # discreteモードで、キャッシュが存在する場合は読み込む
+        if self.thickness_mode == 'discrete' and os.path.exists(cache_path):
+            print(f"  Loading cached thickness map from: {os.path.basename(cache_path)}")
+            cached_data = np.load(cache_path)
+            zstack_map_continuous = cached_data['thickness_map_continuous']
+            print(f"    Loaded shape: {zstack_map_continuous.shape}")
+        else:
+            # 新規に計算
+            print(f"  Generating z-stack map (shape_type: {self.shape_type}, subpixel: {self.subpixel_sampling}×{self.subpixel_sampling})...")
+            print(f"    Thickness mode: {self.thickness_mode}")
+            if self.thickness_mode == 'discrete':
+                print(f"    Discretize method: {self.discretize_method}")
+                print(f"    Voxel Z size: {self.voxel_z_um} µm")
+            
+            zstack_map_continuous = self.create_rod_zstack_map(roi_params, image.shape, 
+                                                                 shape_type=self.shape_type,
+                                                                 subpixel_sampling=self.subpixel_sampling)
+            
+            # continuousモードの場合はキャッシュに保存
+            if self.thickness_mode == 'continuous':
+                os.makedirs(cache_dir, exist_ok=True)
+                np.savez_compressed(cache_path, 
+                                    thickness_map_continuous=zstack_map_continuous,
+                                    roi_id=roi_id,
+                                    roi_index=roi_index)
+                print(f"    Saved thickness cache: {os.path.basename(cache_path)}")
+        
+        # thickness_modeに応じてzstack_mapを決定
+        if self.thickness_mode == 'discrete':
+            # 離散化されたスライス数
+            zstack_map = self._discretize_thickness(zstack_map_continuous)
+        else:
+            # 連続値（ピクセル単位の厚み）
+            zstack_map = zstack_map_continuous
+        
+        # 最小厚み閾値フィルタリング（ピクセル単位で判定）
+        if self.min_thickness_px > 0:
+            # continuousモードでは直接比較、discreteモードでは換算して比較
+            if self.thickness_mode == 'discrete':
+                # スライス数をピクセル単位に換算して閾値判定
+                thickness_px_for_threshold = zstack_map * (self.voxel_z_um / self.pixel_size_um)
+            else:
+                thickness_px_for_threshold = zstack_map
+            
+            # 閾値未満を0にする
+            pixels_before = np.count_nonzero(zstack_map > 0)
+            zstack_map = np.where(thickness_px_for_threshold >= self.min_thickness_px, zstack_map, 0)
+            pixels_after = np.count_nonzero(zstack_map > 0)
+            
+            if pixels_before > pixels_after:
+                print(f"    Min thickness filter: {self.min_thickness_px:.2f} px")
+                print(f"    Filtered pixels: {pixels_before - pixels_after} ({(pixels_before - pixels_after) / pixels_before * 100:.1f}%)")
         
         mask = zstack_map > 0
         if not np.any(mask):
@@ -405,8 +555,13 @@ class TimeSeriesDensityMapper:
         print(f"    Medium RI: {self.n_medium}")
         print(f"    Pixel size: {self.pixel_size_um} µm")
         
-        # 厚みをµm単位に変換
-        thickness_um = zstack_map * self.pixel_size_um
+        # 厚みをµm単位に変換（thickness_modeに応じて）
+        if self.thickness_mode == 'discrete':
+            # 離散モード：スライス数 × Z方向のボクセルサイズ
+            thickness_um = zstack_map * self.voxel_z_um
+        else:
+            # 連続モード：ピクセル単位の厚み × XY方向のピクセルサイズ
+            thickness_um = zstack_map * self.pixel_size_um
         
         # RIマップを初期化（培地の屈折率で）
         ri_map = np.full_like(image, self.n_medium, dtype=np.float64)
@@ -511,13 +666,20 @@ class TimeSeriesDensityMapper:
         mask = results['zstack_map'] > 0
         y_coords, x_coords = np.where(mask)
         
-        # 厚みをµm単位に変換
-        thickness_um_map = results['zstack_map'][mask] * self.pixel_size_um
+        # 厚みをµm単位に変換（thickness_modeに応じて）
+        if self.thickness_mode == 'discrete':
+            # 離散モード：スライス数 × Z方向のボクセルサイズ
+            thickness_um_map = results['zstack_map'][mask] * self.voxel_z_um
+            z_column_name = 'Z_slice_count'
+        else:
+            # 連続モード：ピクセル単位の厚み × XY方向のピクセルサイズ
+            thickness_um_map = results['zstack_map'][mask] * self.pixel_size_um
+            z_column_name = 'Z_thickness_pixel'
         
         pixel_data = pd.DataFrame({
             'X_pixel': x_coords,
             'Y_pixel': y_coords,
-            'Z_stack_count_pixel': results['zstack_map'][mask],
+            z_column_name: results['zstack_map'][mask],
             'Thickness_um': thickness_um_map,
             'Phase_value': results['image'][mask],
             'Refractive_Index': results['ri_map'][mask],
@@ -777,6 +939,28 @@ if __name__ == "__main__":
                                  # 5: 5×5サブピクセル（推奨、バランス良い）
                                  # 10: 10×10サブピクセル（高精度、遅い）
     
+    THICKNESS_MODE = 'continuous' if 'THICKNESS_MODE' not in globals() else globals()['THICKNESS_MODE']
+                                 # 厚みマップのモード
+                                 # 'continuous': 連続的な厚み値（ピクセル単位）
+                                 # 'discrete': 離散的なZ-stackスライス数
+    
+    VOXEL_Z_UM = 0.3 if 'VOXEL_Z_UM' not in globals() else globals()['VOXEL_Z_UM']
+                                 # Z方向のボクセルサイズ（マイクロメートル）
+                                 # discrete modeで厚みをスライス数に変換する際に使用
+    
+    DISCRETIZE_METHOD = 'round' if 'DISCRETIZE_METHOD' not in globals() else globals()['DISCRETIZE_METHOD']
+                                 # 離散化の方法（discrete modeのみ有効）
+                                 # 'round': 四捨五入
+                                 # 'ceil': 切り上げ
+                                 # 'floor': 切り捨て
+                                 # 'pomegranate': Pomegranate互換の閾値ベース判定
+    
+    MIN_THICKNESS_PX = 0.0 if 'MIN_THICKNESS_PX' not in globals() else globals()['MIN_THICKNESS_PX']
+                                 # 最小厚み閾値（ピクセル単位）
+                                 # 0.0: 閾値なし（すべて含む）
+                                 # 1.0: 1ピクセル未満を無視
+                                 # 2.0: 2ピクセル未満を無視
+    
     MAX_ROIS = None if 'MAX_ROIS' not in globals() else globals()['MAX_ROIS']  # テスト実行（Noneで全ROI）
     
     # CSVサフィックス（出力フォルダ名の識別用）
@@ -792,6 +976,12 @@ if __name__ == "__main__":
     print(f"  Alpha (RI increment): {ALPHA_RI} ml/mg")
     print(f"  Shape type: {SHAPE_TYPE}")
     print(f"  Subpixel sampling: {SUBPIXEL_SAMPLING}×{SUBPIXEL_SAMPLING}")
+    print(f"  Thickness mode: {THICKNESS_MODE}")
+    if THICKNESS_MODE == 'discrete':
+        print(f"  Voxel Z size: {VOXEL_Z_UM} µm")
+        print(f"  Discretize method: {DISCRETIZE_METHOD}")
+    if MIN_THICKNESS_PX > 0:
+        print(f"  Min thickness filter: {MIN_THICKNESS_PX} px")
     print(f"  Note: Concentration (mg/ml) = (RI - {N_MEDIUM}) / {ALPHA_RI}")
     print(f"{'='*70}\n")
     
@@ -805,6 +995,10 @@ if __name__ == "__main__":
         alpha_ri=ALPHA_RI,
         shape_type=SHAPE_TYPE,
         subpixel_sampling=SUBPIXEL_SAMPLING,
+        thickness_mode=THICKNESS_MODE,
+        voxel_z_um=VOXEL_Z_UM,
+        discretize_method=DISCRETIZE_METHOD,
+        min_thickness_px=MIN_THICKNESS_PX,
         csv_suffix=CSV_SUFFIX
     )
     
@@ -935,5 +1129,16 @@ if __name__ == "__main__":
     print(f"# Data output: {mapper.output_dir}")
     print(f"# Plots output: {plot_output_dir if os.path.exists(summary_path) else 'N/A'}")
     print(f"{'#'*80}\n")
+    
+    # 完了フラグファイルを作成（レジューム機能用）
+    flag_file = os.path.join(mapper.output_dir, '.completed')
+    with open(flag_file, 'w') as f:
+        f.write(f"Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"Shape type: {SHAPE_TYPE}\n")
+        f.write(f"Subpixel: {SUBPIXEL_SAMPLING}\n")
+        f.write(f"Thickness mode: {THICKNESS_MODE}\n")
+        if THICKNESS_MODE == 'discrete':
+            f.write(f"Discretize method: {DISCRETIZE_METHOD}\n")
+    print(f"✅ Completion flag created: {flag_file}")
 
 # %%

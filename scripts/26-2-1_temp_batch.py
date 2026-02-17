@@ -1,5 +1,6 @@
 # %%
-#左
+#250604_Pos1~Pos30の位相画像のバッチ処理,250618_amp以外の画像を出力
+#250604_Pos1~Pos30の位相画像のバッチ処理,250618_amp以外の画像を出力のコピー
 import os
 import numpy as np
 import tifffile
@@ -10,18 +11,18 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 # 定数設定
-WAVELENGTH = 663e-9  # 663 nm
+WAVELENGTH = 658e-9  # 663 nm
 NA = 0.95
 PIXELSIZE = 3.45e-6 / 40
-#OFFAXIS_CENTER = (1504,1708) 251017
-OFFAXIS_CENTER = (845,772) # 250910
+OFFAXIS_CENTER = (1664, 485) #250910 1623,1621 251017 1504,1710 251212 (1664, 485)
 
 # ディレクトリ設定
-BASE_DIR = r"F:\250611_kk\ph_1"
+BASE_DIR = r"F:\251212\ph_2"
+
 BG_DIR = os.path.join(BASE_DIR, "Pos0")  # 背景画像があるディレクトリ
 
 # Pos1〜Pos30 をループ
-for pos_idx in range(24,27): #251019 1,46 #250910 1,44 #250611 1,27
+for pos_idx in range(29,47): #251017 46,92 250910 44,91
     pos_name = f"Pos{pos_idx}"
     TARGET_DIR = os.path.join(BASE_DIR, pos_name)
     
@@ -52,6 +53,8 @@ for pos_idx in range(24,27): #251019 1,46 #250910 1,44 #250611 1,27
             bg_img = Image.open(bg_filepath)
             bg_img = np.array(bg_img)
             #bg_img = bg_img[8:2056,416:2464] #250712_crop #250801_crop
+            bg_img = bg_img[0:2048,0:2048] #250815_crop
+            
             
 
             # パラメータ設定
@@ -69,6 +72,8 @@ for pos_idx in range(24,27): #251019 1,46 #250910 1,44 #250611 1,27
             img = Image.open(filepath)
             img = np.array(img)
             #img = img[8:2056,416:2464] #250712_crop #250801_crop
+            img = img[0:2048,0:2048] #250712_crop #250801_crop
+
 
             # QPI再構成
             field = get_field(img, params)
@@ -76,7 +81,7 @@ for pos_idx in range(24,27): #251019 1,46 #250910 1,44 #250611 1,27
 
             # 背景差分と平均0調整
             angle_nobg = angle - angle_bg
-            angle_nobg -= np.mean(angle_nobg[1:507, 1:253])
+            angle_nobg -= np.mean(angle_nobg[1:507, 254:507])
 
             # TIF保存
             outpath = os.path.join(OUTPUT_DIR, filename.replace(".tif", "_phase.tif"))
@@ -94,7 +99,7 @@ for pos_idx in range(24,27): #251019 1,46 #250910 1,44 #250611 1,27
             plt.close()
 
 # %%
-#右
+#250604_Pos1~Pos30の位相画像のバッチ処理,250618_amp以外の画像を出力のコピー
 import os
 import numpy as np
 import tifffile
@@ -105,17 +110,18 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 # 定数設定
-WAVELENGTH = 663e-9  # 663 nm
+WAVELENGTH = 658e-9  # 663 nm
 NA = 0.95
 PIXELSIZE = 3.45e-6 / 40
-OFFAXIS_CENTER = (845,772) #250910 1623,1621 251017 1504,1710 250611 845,772
-
+#OFFAXIS_CENTER = (1504,1708) 251017
+#OFFAXIS_CENTER = (1623,1621) # 250910
+OFFAXIS_CENTER = (1664, 485) #251212
 # ディレクトリ設定
-BASE_DIR = r"F:\250611_kk\ph_1"
+BASE_DIR =r"F:\251212\ph_2"
 BG_DIR = os.path.join(BASE_DIR, "Pos0")  # 背景画像があるディレクトリ
 
 # Pos1〜Pos30 をループ
-for pos_idx in range(27,46): #251017 46,92 250910 44,91 250611 27,46
+for pos_idx in range(14,24): #251212 1,24 #251019 1,46 #250910 1,44
     pos_name = f"Pos{pos_idx}"
     TARGET_DIR = os.path.join(BASE_DIR, pos_name)
     
@@ -145,9 +151,7 @@ for pos_idx in range(27,46): #251017 46,92 250910 44,91 250611 27,46
             # 背景画像読み込み
             bg_img = Image.open(bg_filepath)
             bg_img = np.array(bg_img)
-            #bg_img = bg_img[8:2056,416:2464] #250712_crop #250801_crop
-            #bg_img = bg_img[8:2056,0:2048] #250815_crop
-            
+            bg_img = bg_img[0:2048,416:2464] #250712_crop #250801_crop
             
 
             # パラメータ設定
@@ -164,9 +168,7 @@ for pos_idx in range(27,46): #251017 46,92 250910 44,91 250611 27,46
             # 対象画像読み込み
             img = Image.open(filepath)
             img = np.array(img)
-            #img = img[8:2056,416:2464] #250712_crop #250801_crop
-            #img = img[8:2056,0:2048] #250712_crop #250801_crop
-
+            img = img[0:2048,416:2464] #250712_crop #250801_crop
 
             # QPI再構成
             field = get_field(img, params)
@@ -174,7 +176,7 @@ for pos_idx in range(27,46): #251017 46,92 250910 44,91 250611 27,46
 
             # 背景差分と平均0調整
             angle_nobg = angle - angle_bg
-            angle_nobg -= np.mean(angle_nobg[1:507, 254:507])
+            angle_nobg -= np.mean(angle_nobg[1:507, 1:253])
 
             # TIF保存
             outpath = os.path.join(OUTPUT_DIR, filename.replace(".tif", "_phase.tif"))

@@ -1035,8 +1035,7 @@ class RotationalSymmetryROIAnalyzer:
 
 def main():
     """メイン実行"""
-    roi_zip_path = r"c:\Users\QPI\Documents\QPI_omni\scripts\RoiSet.zip"
-    
+    roi_zip_path = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted\inference_out\Roiset_enlarge.zip"
     if not os.path.exists(roi_zip_path):
         print(f"Error: ROI set not found at {roi_zip_path}")
         return
@@ -1050,7 +1049,7 @@ def main():
         section_interval_um=0.25,  # 250 nm
         image_width=512,
         image_height=512,
-        max_iterations=3,  # 最大3回の反復更新
+        max_iterations=2,  # 最大3回の反復更新
         convergence_tolerance=0.5  # 0.5ピクセル以下で収束
     )
     

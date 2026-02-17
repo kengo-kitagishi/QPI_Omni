@@ -16,14 +16,95 @@ def gaussian(x, amp, mean, std):
     """ガウス関数"""
     return amp * np.exp(-((x - mean)**2) / (2 * std**2))
 
-def process_image(image_path, output_dir, show_plot=False):
-    """画像の背景補正を実行（ラジアン単位で処理）"""
+def save_png_plots(data, output_dir, png_dpi=150):
+    """
+    PNG画像を保存（ヒストグラム + 補正前後の比較）
+    
+    Parameters:
+    -----------
+    data : dict
+        process_image()から返されたデータ
+    output_dir : Path
+        出力ディレクトリ
+    png_dpi : int, default=150
+        PNG解像度
+    """
+    stem = data['stem']
+    image_name = data['image_name']
+    bin_centers = data['bin_centers']
+    smoothed_histo = data['smoothed_histo']
+    smoothed_corrected = data['smoothed_corrected']
+    x_data = data['x_data']
+    y_data = data['y_data']
+    popt = data['popt']
+    mean = data['mean']
+    minPhase = data['minPhase']
+    
+    # ヒストグラムとガウスフィット
+    plt.figure(figsize=(12, 6))
+    plt.plot(bin_centers, smoothed_histo, 'b-', alpha=0.5, label='Smoothed Histogram')
+    plt.plot(x_data, y_data, 'b-', linewidth=2, label='Fit Region')
+    plt.plot(x_data, gaussian(x_data, *popt), 'r-', linewidth=2, label='Gaussian Fit')
+    plt.axvline(0, color='g', linestyle='--', linewidth=2, label='0 rad target')
+    plt.axvline(mean, color='orange', linestyle='--', linewidth=2, label=f'Peak ({mean:.3f} rad)')
+    plt.axvline(minPhase, color='purple', linestyle=':', linewidth=1, label=f'Search limit ({minPhase} rad)')
+    plt.xlabel('Phase (rad)')
+    plt.ylabel('Count')
+    plt.xlim(hist_min, hist_max)
+    plt.legend()
+    plt.title(f'{image_name}')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(output_dir / f"{stem}_histogram.png", dpi=png_dpi, bbox_inches='tight')
+    plt.close()
+    
+    # 補正前後の比較プロット
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    
+    # 補正前
+    axes[0].plot(bin_centers, smoothed_histo, 'b-', linewidth=2, label='Histogram')
+    axes[0].axvline(0, color='g', linestyle='--', linewidth=2, label='0 rad target')
+    axes[0].axvline(mean, color='orange', linestyle='--', linewidth=2, label=f'Peak ({mean:.3f} rad)')
+    axes[0].set_xlabel('Phase (rad)', fontsize=12)
+    axes[0].set_ylabel('Count', fontsize=12)
+    axes[0].set_xlim(hist_min, hist_max)
+    axes[0].set_title('Before Correction', fontsize=14, fontweight='bold')
+    axes[0].legend(fontsize=10)
+    axes[0].grid(True, alpha=0.3)
+    
+    # 補正後
+    axes[1].plot(bin_centers, smoothed_corrected, 'r-', linewidth=2, label='Histogram')
+    axes[1].axvline(0, color='g', linestyle='--', linewidth=2, label='0 rad target')
+    axes[1].set_xlabel('Phase (rad)', fontsize=12)
+    axes[1].set_ylabel('Count', fontsize=12)
+    axes[1].set_xlim(hist_min, hist_max)
+    axes[1].set_title('After Correction', fontsize=14, fontweight='bold')
+    axes[1].legend(fontsize=10)
+    axes[1].grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig(output_dir / f"{stem}_comparison.png", dpi=png_dpi, bbox_inches='tight')
+    plt.close()
+
+def process_image(image_path, output_dir, save_png_data=False):
+    """
+    画像の背景補正を実行してTIF保存（ラジアン単位で処理）
+    
+    Parameters:
+    -----------
+    save_png_data : bool, default=False
+        PNG作成用のデータを返すかどうか
+    
+    Returns:
+    --------
+    dict or bool : 成功時は処理データ（save_png_data=Trueの場合）またはTrue、失敗時はFalse
+    """
     # 画像読み込み（32-bit float、ラジアン単位）
     raw_image = tifffile.imread(str(image_path))
     
     if raw_image is None:
         print(f"画像読み込み失敗: {image_path}")
-        return
+        return False
     
     print(f"\n処理中: {image_path.name}")
     print(f"画像範囲: {raw_image.min():.3f} ~ {raw_image.max():.3f} rad")
@@ -81,25 +162,6 @@ def process_image(image_path, output_dir, show_plot=False):
         print(f"ガウスフィット - 平均: {mean:.4f} rad")
         print(f"              標準偏差: {std:.4f} rad")
         
-        # プロット表示（オプション）
-        if show_plot:
-            plt.figure(figsize=(12, 6))
-            plt.plot(bin_centers, smoothed_histo, 'b-', alpha=0.5, label='Smoothed Histogram')
-            plt.plot(x_data, y_data, 'b-', linewidth=2, label='Fit Region')
-            plt.plot(x_data, gaussian(x_data, *popt), 'r-', linewidth=2, label='Gaussian Fit')
-            plt.axvline(0, color='g', linestyle='--', linewidth=2, label='0 rad target')
-            plt.axvline(mean, color='orange', linestyle='--', linewidth=2, label=f'Peak ({mean:.3f} rad)')
-            plt.axvline(minPhase, color='purple', linestyle=':', linewidth=1, label=f'Search limit ({minPhase} rad)')
-            plt.xlabel('Phase (rad)')
-            plt.ylabel('Count')
-            plt.xlim(hist_min, hist_max)
-            plt.legend()
-            plt.title(f'{image_path.name}')
-            plt.grid(True, alpha=0.3)
-            plt.tight_layout()
-            plt.savefig(output_dir / f"{image_path.stem}_histogram.png", dpi=150, bbox_inches='tight')
-            plt.close()
-        
         # 背景補正（背景ピークを0ラジアンにシフト）
         correction_rad = 0.0 - mean
         final_image_rad = raw_image + correction_rad
@@ -112,39 +174,25 @@ def process_image(image_path, output_dir, show_plot=False):
         tifffile.imwrite(str(output_path), final_image_rad.astype(np.float32))
         print(f"保存完了: {output_path.name}")
         
-        # 補正後のヒストグラムも保存
-        if show_plot:
+        # PNG用のデータを返す（オプション）
+        if save_png_data:
+            # 補正後のヒストグラムを計算
             hist_corrected, _ = np.histogram(final_image_rad.flatten(), bins=bin_edges)
             smoothed_corrected = uniform_filter1d(hist_corrected, size=smooth_window, mode='nearest')
             smoothed_corrected = uniform_filter1d(smoothed_corrected, size=smooth_window, mode='nearest')
             
-            # 補正前後の比較プロット
-            fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-            
-            # 補正前
-            axes[0].plot(bin_centers, smoothed_histo, 'b-', linewidth=2, label='Histogram')
-            axes[0].axvline(0, color='g', linestyle='--', linewidth=2, label='0 rad target')
-            axes[0].axvline(mean, color='orange', linestyle='--', linewidth=2, label=f'Peak ({mean:.3f} rad)')
-            axes[0].set_xlabel('Phase (rad)', fontsize=12)
-            axes[0].set_ylabel('Count', fontsize=12)
-            axes[0].set_xlim(hist_min, hist_max)
-            axes[0].set_title('Before Correction', fontsize=14, fontweight='bold')
-            axes[0].legend(fontsize=10)
-            axes[0].grid(True, alpha=0.3)
-            
-            # 補正後
-            axes[1].plot(bin_centers, smoothed_corrected, 'r-', linewidth=2, label='Histogram')
-            axes[1].axvline(0, color='g', linestyle='--', linewidth=2, label='0 rad target')
-            axes[1].set_xlabel('Phase (rad)', fontsize=12)
-            axes[1].set_ylabel('Count', fontsize=12)
-            axes[1].set_xlim(hist_min, hist_max)
-            axes[1].set_title('After Correction', fontsize=14, fontweight='bold')
-            axes[1].legend(fontsize=10)
-            axes[1].grid(True, alpha=0.3)
-            
-            plt.tight_layout()
-            plt.savefig(output_dir / f"{image_path.stem}_comparison.png", dpi=150, bbox_inches='tight')
-            plt.close()
+            return {
+                'image_name': image_path.name,
+                'stem': image_path.stem,
+                'bin_centers': bin_centers,
+                'smoothed_histo': smoothed_histo,
+                'smoothed_corrected': smoothed_corrected,
+                'x_data': x_data,
+                'y_data': y_data,
+                'popt': popt,
+                'mean': mean,
+                'minPhase': minPhase
+            }
         
         return True
         
@@ -154,9 +202,21 @@ def process_image(image_path, output_dir, show_plot=False):
         traceback.print_exc()
         return False
 
-def main():
+def main(save_png=False, png_dpi=150, png_sample_interval=1):
+    """
+    メイン処理：背景補正とオプションでPNG保存
+    
+    Parameters:
+    -----------
+    save_png : bool, default=False
+        PNG画像を保存するかどうか（False=高速モード）
+    png_dpi : int, default=150
+        PNG保存時の解像度（低いほど高速）
+    png_sample_interval : int, default=1
+        N枚ごとにPNG保存（1=全部、10=10枚に1枚）
+    """
     # 入力フォルダと出力フォルダの設定
-    input_folder = Path(r"C:\Users\QPI\Desktop\align_demo")
+    input_folder = Path(r"F:\t_bucksub")
     output_folder = input_folder / "bg_corr"
     
     # 出力フォルダ作成
@@ -173,20 +233,58 @@ def main():
     print(f"出力フォルダ: {output_folder}")
     print(f"ヒストグラム範囲: {hist_min} ~ {hist_max} rad")
     print(f"ビン数: {n_bins} (ビン幅: {(hist_max-hist_min)/n_bins:.4f} rad)")
-    print(f"ピーク検出範囲: {minPhase} rad以上\n")
+    print(f"ピーク検出範囲: {minPhase} rad以上")
+    if save_png:
+        print(f"PNG保存: 有効 (サンプリング間隔: {png_sample_interval}枚ごと, dpi={png_dpi})")
+    else:
+        print(f"PNG保存: スキップ（高速モード）")
     print("="*60)
     
-    # 各画像を処理
+    # フェーズ1: TIF保存
+    print("\n[フェーズ1] TIF保存中...")
+    print("-"*60)
     success_count = 0
+    png_data_list = []
+    
     for tif_file in tif_files:
-        result = process_image(tif_file, output_folder, show_plot=True)  # show_plot=Trueでグラフ保存
-        if result:
+        result = process_image(tif_file, output_folder, save_png_data=save_png)
+        if result and result is not False:
             success_count += 1
+            if save_png and isinstance(result, dict):
+                png_data_list.append(result)
         print("-"*60)
     
+    print(f"\n✅ TIF保存完了: {success_count}/{len(tif_files)} 個の画像を正常に処理しました")
+    
+    # フェーズ2: PNG保存（オプション）
+    png_saved_count = 0
+    if save_png and len(png_data_list) > 0:
+        print("\n" + "="*60)
+        print(f"[フェーズ2] PNG保存中...")
+        print(f"サンプリング間隔: {png_sample_interval}枚ごと")
+        print("-"*60)
+        
+        for idx, data in enumerate(png_data_list):
+            if idx % png_sample_interval == 0:
+                save_png_plots(data, output_folder, png_dpi)
+                png_saved_count += 1
+                if png_saved_count % 100 == 0:
+                    print(f"  [{png_saved_count}枚保存] 進行中...")
+        
+        print(f"\n✅ PNG保存完了: {png_saved_count}枚")
+    
     print("\n" + "="*60)
-    print(f"処理完了: {success_count}/{len(tif_files)} 個の画像を正常に処理しました")
+    print(f"全体完了:")
+    print(f"  - TIF保存: {success_count}/{len(tif_files)} 個")
+    if save_png:
+        print(f"  - PNG保存: {png_saved_count}枚")
+    else:
+        print(f"  - PNG保存: スキップ")
     print("="*60)
 
 if __name__ == "__main__":
-    main()
+    main(
+        save_png=False,           # PNG保存をスキップして高速化（必要な場合はTrueに変更）
+        png_dpi=150,              # PNG保存時の解像度（150=軽い、300=重い）
+        png_sample_interval=1     # サンプリング間隔（1=全保存、10=10枚に1枚）
+    )

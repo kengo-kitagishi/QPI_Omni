@@ -1,5 +1,5 @@
 # %%
-
+from paths import DATA, RESULTS
 import numpy as np
 import matplotlib.pyplot as plt
 import tifffile
@@ -12,14 +12,15 @@ from CursorVisualizer import CursorVisualizer
 
 #%%
 
-path = "/Volumes/QPI3/250910_kk/ph_1/Pos1/img_000000000_Default_000.tif"
-path_bg = "/Volumes/QPI3/250910_kk/ph_1/Pos1/img_000000000_Default_000.tif"
+path = "/Volumes/QPI_0_.01_r/251212/ph_1/Pos20/img_000000200_ph_000.tif"
+path_bg = "/Volumes/QPI_0_.01_r/251126_kk/ph_6/Pos1/img_000000000_Default_000.tif"
 img = Image.open(path)
 
 img_bg = Image.open(path_bg)
 img = np.array(img)
 #img = img[8:2056,416:2464]
 img = img[8:2056,208:2256]
+
 #img= img[520:1544,512:1536]
 #img = img[0:2048,0:2048]
 #img = img[516:1540,500:1524]
@@ -53,11 +54,11 @@ cb.run()
 
 # %%
 
-WAVELENGTH = 663 * 10 ** (-9)
+WAVELENGTH = 658 * 10 ** (-9)
 NA = 0.95
 IMG_SHAPE = img.shape
 PIXELSIZE = 3.45 * 10 ** (-6) / 40
-offaxis_center = (1504, 1708)
+offaxis_center = (1664, 485)
 
 params = QPIParameters(
     wavelength=WAVELENGTH,
@@ -150,7 +151,7 @@ def visibility(array: np.array, params: QPIParameters) -> np.array:
 
 visibility = visibility(img, params)
 
-plt.imshow(visibility,vmin=0.3,vmax=0.95)
+plt.imshow(visibility,vmin=0.70,vmax=0.95)
 plt.colorbar()
 plt.show()
 
@@ -798,8 +799,8 @@ from matplotlib import cm
 from matplotlib.colors import Normalize
 from PIL import Image
 
-csv_path = r"G:\250910_0\Pos1\Results.csv"
-image_dir = r"G:\250910_0\Pos4\output_phase"
+csv_path = "/Volumes/QPI_2/250910_kk/with_focus_1/Pos15/output_phase/Results.csv"
+image_dir = "/Volumes/QPI_2/250910_kk/with_focus_1/Pos15/output_phase"
 output_dir = os.path.join(image_dir, "aligned_left_center")
 os.makedirs(output_dir, exist_ok=True)
 
@@ -1103,17 +1104,18 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 # 定数設定
-WAVELENGTH = 663e-9  # 663 nm
+WAVELENGTH = 658e-9  # 663 nm
 NA = 0.95
 PIXELSIZE = 3.45e-6 / 40
-OFFAXIS_CENTER = (1623,1621) #250910 1623,1621 251017 1504,1710
+OFFAXIS_CENTER = (1664, 485) #250910 1623,1621 251017 1504,1710 251212 (1664, 485)
 
 # ディレクトリ設定
-BASE_DIR = r"G:\vis_10"
+BASE_DIR = r"F:\251212\wo_cell\ph_2"
+
 BG_DIR = os.path.join(BASE_DIR, "Pos0")  # 背景画像があるディレクトリ
 
 # Pos1〜Pos30 をループ
-for pos_idx in range(44,91): #251017 46,92 250910 44,91
+for pos_idx in range(24,47): #251017 46,92 250910 44,91
     pos_name = f"Pos{pos_idx}"
     TARGET_DIR = os.path.join(BASE_DIR, pos_name)
     
@@ -1144,7 +1146,7 @@ for pos_idx in range(44,91): #251017 46,92 250910 44,91
             bg_img = Image.open(bg_filepath)
             bg_img = np.array(bg_img)
             #bg_img = bg_img[8:2056,416:2464] #250712_crop #250801_crop
-            bg_img = bg_img[8:2056,0:2048] #250815_crop
+            bg_img = bg_img[0:2048,0:2048] #250815_crop
             
             
 
@@ -1163,7 +1165,7 @@ for pos_idx in range(44,91): #251017 46,92 250910 44,91
             img = Image.open(filepath)
             img = np.array(img)
             #img = img[8:2056,416:2464] #250712_crop #250801_crop
-            img = img[8:2056,0:2048] #250712_crop #250801_crop
+            img = img[0:2048,0:2048] #250712_crop #250801_crop
 
 
             # QPI再構成
@@ -1201,18 +1203,18 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 # 定数設定
-WAVELENGTH = 663e-9  # 663 nm
+WAVELENGTH = 658e-9  # 663 nm
 NA = 0.95
 PIXELSIZE = 3.45e-6 / 40
 #OFFAXIS_CENTER = (1504,1708) 251017
-OFFAXIS_CENTER = (1623,1621) # 250910
-
+#OFFAXIS_CENTER = (1623,1621) # 250910
+OFFAXIS_CENTER = (1664, 485) #251212
 # ディレクトリ設定
-BASE_DIR = r"G:\vis_10"
+BASE_DIR =r"F:\251212\wo_cell\ph_2"
 BG_DIR = os.path.join(BASE_DIR, "Pos0")  # 背景画像があるディレクトリ
 
 # Pos1〜Pos30 をループ
-for pos_idx in range(1,44): #251019 1,46 #250910 1,44
+for pos_idx in range(1,24): #251212 1,24 #251019 1,46 #250910 1,44
     pos_name = f"Pos{pos_idx}"
     TARGET_DIR = os.path.join(BASE_DIR, pos_name)
     
@@ -1242,7 +1244,7 @@ for pos_idx in range(1,44): #251019 1,46 #250910 1,44
             # 背景画像読み込み
             bg_img = Image.open(bg_filepath)
             bg_img = np.array(bg_img)
-            bg_img = bg_img[8:2056,416:2464] #250712_crop #250801_crop
+            bg_img = bg_img[0:2048,416:2464] #250712_crop #250801_crop
             
 
             # パラメータ設定
@@ -1259,7 +1261,7 @@ for pos_idx in range(1,44): #251019 1,46 #250910 1,44
             # 対象画像読み込み
             img = Image.open(filepath)
             img = np.array(img)
-            img = img[8:2056,416:2464] #250712_crop #250801_crop
+            img = img[0:2048,416:2464] #250712_crop #250801_crop
 
             # QPI再構成
             field = get_field(img, params)
@@ -1303,11 +1305,11 @@ PIXELSIZE = 3.45e-6 / 40
 OFFAXIS_CENTER = (1619,1621)
 
 # ディレクトリ設定
-BASE_DIR = " F:\250910_kk\vis_10"
+BASE_DIR = "/Volumes/QPI/ph_1"
 BG_DIR = os.path.join(BASE_DIR, "Pos0")  # 背景画像があるディレクトリ
 
 # Pos1〜Pos30 をループ
-for pos_idx in range(77, 80):
+for pos_idx in range(1, 24):
     pos_name = f"Pos{pos_idx}"
     TARGET_DIR = os.path.join(BASE_DIR, pos_name)
     
@@ -1815,5 +1817,40 @@ for pos_idx in range(1, 4):
         tifffile.imwrite(os.path.join(out_cmap, fname.replace(".tif", "_cmap_fixed.tif")), cmap)
 
     print(f"✅ {pos_name}: 完了 ({len(missing)} 枚欠損) → {out_root}")
+
+# %%
+import numpy as np
+import matplotlib.pyplot as plt
+from PIL import Image
+from glob import glob
+import os
+
+#%% フォルダ設定
+FOLDER = r"/Volumes/QPI_2/250815_kk/ph_1/Pos3/3_one_channel/"
+SAVE_FOLDER = os.path.join(FOLDER, "phase_png")
+os.makedirs(SAVE_FOLDER, exist_ok=True)
+
+tif_files = sorted(glob(os.path.join(FOLDER, "*.tif")))
+
+#%% 位相画像を読み込み PNG 保存
+for path in tif_files:
+    print("Processing:", path)
+    
+    # 画像読み込み
+    phase_img = np.array(Image.open(path))
+    
+    # PNG 保存用ファイル名
+    filename = os.path.basename(path).replace(".tif", ".png")
+    save_path = os.path.join(SAVE_FOLDER, filename)
+    
+    # プロットして PNG 保存
+    plt.figure(figsize=(6,6))
+    plt.imshow(phase_img, cmap='viridis',vmin=0,vmax=1.9)
+    plt.colorbar(label='Phase [rad]')
+    plt.title(os.path.basename(path))
+    plt.axis('off')  # 軸は非表示
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=300)
+    plt.close()  # メモリ節約のため閉じる
 
 # %%
