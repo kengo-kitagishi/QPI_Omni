@@ -72,7 +72,7 @@ python 24_ellipse_volume.py
 推奨手法：
 - **高速**: 楕円近似（24_ellipse_volume.py）
 - **高精度**: 回転対称（31_roiset_rotational_volume.py）
-- **複雑な形状**: Pomegranate（timeseries_volume_from_roiset.py）
+- **複雑な形状**: Pomegranate（29_Pomegranate_from_roiset.py）
 
 ### RIを計算したい
 
@@ -101,7 +101,7 @@ M_total [pg] = Σ C [mg/ml] × V [µm³]
 
 ### 複数のパラメータで比較したい
 
-→ [バッチ解析](USAGE_GUIDE.md#24-バッチ解析28_batch_analysispy)
+→ [バッチ解析](USAGE_GUIDE.md#24-バッチ解析27_compare_volume_estimation_methodspy)
 
 実行条件：
 - 2 CSVs × 2 shape_types × 3 subpixel_samplings = 12条件
@@ -136,10 +136,10 @@ M_total [pg] = Σ C [mg/ml] × V [µm³]
 | スクリプト | 説明 | 実行時間 |
 |-----------|------|---------|
 | `24_ellipse_volume.py` | 楕円・Feret径近似 | 約1-2分 |
-| `28_batch_analysis.py` | バッチ解析（12条件） | 約1-2時間 |
-| `timeseries_volume_from_roiset.py` | Pomegranate 3D再構成 | 約5-10分 |
+| `27_compare_volume_estimation_methods.py` | バッチ解析（12条件） | 約1-2時間 |
+| `29_Pomegranate_from_roiset.py` | Pomegranate 3D再構成 | 約5-10分 |
 | `31_roiset_rotational_volume.py` | 回転対称体積推定 | 約2-3分 |
-| `27_timeseries_plot.py` | 時系列プロット | 約30秒 |
+| `30_plot_filtered_conditions.py` | 時系列プロット | 約30秒 |
 
 ---
 

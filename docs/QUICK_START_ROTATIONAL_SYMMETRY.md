@@ -54,7 +54,15 @@ python -c "import numpy, pandas, matplotlib, scipy, skimage, tifffile, cv2; prin
 ### 方法1: デフォルト設定で実行
 
 ```python
-from 31_roiset_rotational_volume import RotationalSymmetryROIAnalyzer
+import importlib.util
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location(
+    "rotational_volume", Path("31_roiset_rotational_volume.py")
+)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+RotationalSymmetryROIAnalyzer = module.RotationalSymmetryROIAnalyzer
 
 # アナライザーを作成
 analyzer = RotationalSymmetryROIAnalyzer(
@@ -434,4 +442,3 @@ https://doi.org/10.7554/eLife.64901
 **作成日**: 2024年12月24日  
 **QPI_omni プロジェクト**  
 **バージョン**: 1.0
-

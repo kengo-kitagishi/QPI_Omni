@@ -50,7 +50,7 @@ QPI_Omni/
 │   ├── 12_vertical_flip.py            # 上下反転（Augmentation）
 │   ├── 26_horizontal_flip.py          # 左右反転（Augmentation）
 │   ├── 24_ellipse_volume.py              # 体積・密度・Total Mass解析
-│   ├── 28_batch_analysis.py           # バッチ解析（全パラメータ組み合わせ）
+│   ├── 27_compare_volume_estimation_methods.py           # バッチ解析（全パラメータ組み合わせ）
 │   ├── config.yaml                    # 設定ファイル
 │   └── qpi.py                         # QPIユーティリティ
 ├── docs/              # ドキュメント
@@ -126,7 +126,7 @@ Fijiで作成したROIとResults.csvを用いて解析します：
 python 24_ellipse_volume.py
 
 # バッチ実行（全パラメータ組み合わせ）
-python 28_batch_analysis.py
+python 27_compare_volume_estimation_methods.py
 ```
 
 **新機能（2025-12-23追加）**:

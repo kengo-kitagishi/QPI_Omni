@@ -1454,7 +1454,7 @@ QPI解析の基本機能（qpi.pyと連携）
 ### 25_roiset_from_zstack.py
 Z-stackからROIセットを作成。屈折率（RI）マップと質量濃度マップの可視化にも対応。
 
-### 28_batch_analysis.py
+### 27_compare_volume_estimation_methods.py
 **バッチ解析スクリプト（2025-12-23追加）**
 
 全パラメータ組み合わせ（`SHAPE_TYPE` × `SUBPIXEL_SAMPLING`）を網羅的に実行：
@@ -1466,7 +1466,7 @@ Z-stackからROIセットを作成。屈折率（RI）マップと質量濃度�
 実行方法：
 ```bash
 cd scripts
-python 28_batch_analysis.py
+python 27_compare_volume_estimation_methods.py
 ```
 
 ### arrconv.py, subtract_mean.py
@@ -1565,7 +1565,7 @@ QPI処理の基本関数群
 - **Feret径対応**: 楕円近似に加えてFeret径ベースのマスク生成に対応
 - **サブピクセルサンプリング**: マスク端の精度向上（1×1, 5×5, 10×10）
 - **時系列プロット統合**: Volume, RI, Total Massの自動可視化
-- **バッチ解析**: 全パラメータ組み合わせの自動実行（`28_batch_analysis.py`）
+- **バッチ解析**: 全パラメータ組み合わせの自動実行（`27_compare_volume_estimation_methods.py`）
 - **ドキュメント整備**: `docs/workflows/`, `docs/notes/` ディレクトリ追加
 
 詳細: [`docs/workflows/2025-12-23_timeseries_total_mass.md`](docs/workflows/2025-12-23_timeseries_total_mass.md)

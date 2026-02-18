@@ -31,7 +31,7 @@ pixel_volumes = thickness_um[mask] * pixel_area_um2  # [µm³]
 total_mass_pg = np.sum(concentration_map[mask] * pixel_volumes)  # [pg]
 ```
 
-**2. 時系列プロット機能** (`27_timeseries_plot.py`)
+**2. 時系列プロット機能** (`30_plot_filtered_conditions.py`)
 
 プロット内容：
 - Volume vs Time
@@ -47,7 +47,7 @@ total_mass_pg = np.sum(concentration_map[mask] * pixel_volumes)  # [pg]
 
 #### 変更ファイル
 - `scripts/24_ellipse_volume.py`: Total Mass計算追加
-- `scripts/27_timeseries_plot.py`: プロット機能追加
+- `scripts/30_plot_filtered_conditions.py`: プロット機能追加
 
 ---
 
@@ -141,26 +141,11 @@ r(z) = √(R² - z²)
 - Z方向のスライス数を自動推定
 - Elongation factor（XY/Z解像度比）で自動補正
 
-**2. Pythonスクリプト** (`scripts/2D_to_3D_reconstruction_analysis.py`)
+**2. Pythonスクリプト** (`scripts/29_Pomegranate_from_roiset.py`)
 
-クラス: `TwoD_to_ThreeD_Reconstructor`
+クラス: `TimeSeriesVolumeTracker`
 
 主要メソッド：
-```python
-reconstructor = TwoD_to_ThreeD_Reconstructor(
-    voxel_xy=0.1,   # 0.1 um/pixel
-    voxel_z=0.3,    # 0.3 um/slice
-    radius_enlarge=1.0
-)
-
-# 3D再構成
-stack_3d = reconstructor.run_full_pipeline('input.tif')
-
-# 体積計算
-volume_um3 = reconstructor.calculate_volume()
-```
-
-**3. ROIセット対応** (`scripts/timeseries_volume_from_roiset.py`)
 
 ```python
 tracker = TimeSeriesVolumeTracker(
@@ -188,8 +173,7 @@ z_slices = 2 * (ceil(max_distance * elongation_factor) + 2)
 
 #### 変更ファイル
 - `scripts/2D_to_3D_reconstruction.ijm`: ImageJマクロ
-- `scripts/2D_to_3D_reconstruction_analysis.py`: Python実装
-- `scripts/timeseries_volume_from_roiset.py`: ROIセット対応
+- `scripts/29_Pomegranate_from_roiset.py`: Python実装・ROIセット対応
 
 ---
 
@@ -245,7 +229,7 @@ output_dir/
 - ✅ 時系列でのRI変化追跡が可能
 
 #### 変更ファイル
-- `scripts/timeseries_volume_from_roiset.py`: 厚みマップとRI計算機能追加
+- `scripts/29_Pomegranate_from_roiset.py`: 厚みマップとRI計算機能追加
 
 ---
 
@@ -858,20 +842,20 @@ Total RI（積分値）は細胞のドライマスと相関。
 
 ---
 
-### 実験9: 楕円近似法（24.py）への離散化メソッド追加とバッチ比較対応
+### 実験9: 楕円近似法（24_ellipse_volume.py）への離散化メソッド追加とバッチ比較対応
 
 #### 背景
-回転対称法（31.py）と同様に、楕円近似法（24.py）にも複数のZ-stack判定方法を追加し、バッチ比較スクリプト（27.py）で様々な条件を網羅的に比較できるようにする。
+回転対称法（31_roiset_rotational_volume.py）と同様に、楕円近似法（24_ellipse_volume.py）にも複数のZ-stack判定方法を追加し、バッチ比較スクリプト（27_compare_volume_estimation_methods.py）で様々な条件を網羅的に比較できるようにする。
 
 #### 目的
 - 楕円近似法でも`thickness_mode`（continuous/discrete）を選択可能に
 - 複数の離散化方法（round, ceil, floor, pomegranate）を実装
-- バッチ実行スクリプト（27.py）で自動比較を可能に
+- バッチ実行スクリプト（27_compare_volume_estimation_methods.py）で自動比較を可能に
 - 異なる手法間での体積・質量推定値の比較を容易に
 
 #### 実装内容
 
-**1. 24.pyへの新パラメータ追加**
+**1. 24_ellipse_volume.pyへの新パラメータ追加**
 
 `TimeSeriesDensityMapper`クラスに以下のパラメータを追加：
 
@@ -891,7 +875,7 @@ def __init__(self, results_csv, image_directory,
 
 **2. 離散化メソッドの実装**
 
-31.pyと同様の`_discretize_thickness`メソッドを実装：
+31_roiset_rotational_volume.pyと同様の`_discretize_thickness`メソッドを実装：
 
 ```python
 def _discretize_thickness(self, z_continuous_px):
@@ -1005,7 +989,7 @@ else:
 self.output_dir = f"timeseries_density_output_{self.dir_suffix}"
 ```
 
-**6. 27.pyのバッチ比較対応**
+**6. 27_compare_volume_estimation_methods.pyのバッチ比較対応**
 
 複数の離散化方法を自動比較：
 
@@ -1060,7 +1044,7 @@ mapper = TimeSeriesDensityMapper(
 )
 ```
 
-**バッチ比較実行（27.py）**:
+**バッチ比較実行（27_compare_volume_estimation_methods.py）**:
 ```python
 # 27_compare_volume_estimation_methods.py
 
@@ -1127,7 +1111,7 @@ Results summary:
 #### 効果
 - ✅ 楕円近似法でも複数のZ-stack判定方法を選択可能に
 - ✅ バッチ実行で全組み合わせを自動比較
-- ✅ 回転対称法（31.py）との一貫性確保
+- ✅ 回転対称法（31_roiset_rotational_volume.py）との一貫性確保
 - ✅ 異なる手法・パラメータでの結果比較が容易に
 
 #### 追加機能：最小厚み閾値フィルタリング
@@ -1136,7 +1120,7 @@ Results summary:
 
 **実装内容**:
 
-すべての体積推定スクリプト（24.py, 31.py）に`min_thickness_px`パラメータを追加：
+すべての体積推定スクリプト（24_ellipse_volume.py, 31_roiset_rotational_volume.py）に`min_thickness_px`パラメータを追加：
 
 ```python
 min_thickness_px : float
@@ -1243,7 +1227,7 @@ def extract_csv_identifier(csv_path):
 - `Results_enlarge.csv` → `enlarge`
 - `Results_enlarge_interpolate.csv` → `enlarge_interpolate`
 
-**2. バッチ実行スクリプト** (`scripts/28_batch_analysis.py`)
+**2. バッチ実行スクリプト** (`scripts/27_compare_volume_estimation_methods.py`)
 
 ```python
 # 実行条件
@@ -1308,7 +1292,7 @@ scripts/
 
 #### 変更ファイル
 - `scripts/24_ellipse_volume.py`: パラメータ管理の改善
-- `scripts/28_batch_analysis.py`: バッチ実行システム
+- `scripts/27_compare_volume_estimation_methods.py`: バッチ実行システム
 
 ---
 
@@ -1680,7 +1664,7 @@ DISCRETIZE_METHODS_FOR_DISCRETE = ['round']  # 1つだけ追加テスト
 |------|-----------|------|------|
 | **楕円近似** | `24_ellipse_volume.py` | シンプル、高速 | ★★★☆☆ |
 | **Feret径近似** | `24_ellipse_volume.py` | 細長い細胞に強い | ★★★★☆ |
-| **Pomegranate** | `timeseries_volume_from_roiset.py` | 複雑な形状に対応 | ★★★★☆ |
+| **Pomegranate** | `29_Pomegranate_from_roiset.py` | 複雑な形状に対応 | ★★★★☆ |
 | **回転対称** | `31_roiset_rotational_volume.py` | 論文準拠、反復更新 | ★★★★★ |
 
 ### 精度向上テクニック
@@ -1844,7 +1828,7 @@ mean_RI = n_medium + (total_phase × λ × pixel_area) / (2π × volume)
 - `scripts/30_simple_mean_ri_analysis.py`: シンプルなmean RI計算スクリプト
 
 **更新**:
-- `scripts/README_comparison.md`: 30.pyの使い方を追加
+- `scripts/README_comparison.md`: 30_simple_mean_ri_analysis.pyの使い方を追加
 
 #### 今後の展開
 
@@ -1941,4 +1925,3 @@ mean_RI = n_medium + (total_phase × λ × pixel_area) / (2π × volume)
 **最終更新**: 2026-01-30  
 **プロジェクト**: QPI_omni  
 **著者**: AI Assistant
-

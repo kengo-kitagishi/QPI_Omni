@@ -33,7 +33,15 @@
 ### ステップ1: 厚みマップを生成
 
 ```python
-from timeseries_volume_from_roiset import TimeSeriesVolumeTracker
+import importlib.util
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location(
+    "pomegranate_volume", Path("29_Pomegranate_from_roiset.py")
+)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+TimeSeriesVolumeTracker = module.TimeSeriesVolumeTracker
 
 # Trackerを作成
 tracker = TimeSeriesVolumeTracker(
@@ -193,12 +201,12 @@ print(f"Total RI: {total_ri:.2f}")
 
 ---
 
-## 📈 batch_analysis.pyとの対応
+## 📈 27_compare_volume_estimation_methods.pyとの対応
 
-### 28_batch_analysis.pyの出力
+### 27_compare_volume_estimation_methods.pyの出力
 
 ```python
-# batch_analysis.pyは以下を計算:
+# 27_compare_volume_estimation_methods.pyは以下を計算:
 - Mean RI: セル内の平均屈折率
 - Total RI: セル全体の積分屈折率
 - RI map: 各ピクセルのRI分布
@@ -207,7 +215,7 @@ print(f"Total RI: {total_ri:.2f}")
 ### 本ツールの出力
 
 ```python
-# timeseries_volume_from_roiset.pyも同じ:
+# 29_Pomegranate_from_roiset.pyも同じ:
 ri_results = tracker.compute_ri_from_phase_images(...)
 
 # 各フレームで:
@@ -424,9 +432,9 @@ phase_radians = phase * (2 * np.pi / 255)
 
 | ファイル | 機能 |
 |---------|------|
-| `timeseries_volume_from_roiset.py` | メインスクリプト |
+| `29_Pomegranate_from_roiset.py` | メインスクリプト |
 | `24_ellipse_volume.py` | 元の楕円体積計算（参考） |
-| `28_batch_analysis.py` | バッチRI解析（参考） |
+| `27_compare_volume_estimation_methods.py` | バッチRI解析（参考） |
 | `25_roiset_from_zstack.py` | Z-stackからROI作成 |
 
 ---
@@ -438,7 +446,7 @@ phase_radians = phase * (2 * np.pi / 255)
 ✅ **ROIセット** → **厚みマップ**（各XY位置のZ占有数）  
 ✅ **厚みマップ** + **位相差画像** → **RI計算**  
 ✅ **Mean RI, Total RI** の時系列追跡  
-✅ **batch_analysis.py互換** の出力形式  
+✅ **27_compare_volume_estimation_methods.py互換** の出力形式  
 
 ### ワークフロー
 
@@ -467,4 +475,3 @@ Mean RI, Total RI, RI map
 **作成日**: 2025-12-23  
 **バージョン**: 1.0  
 **連絡先**: QPI_omni Project
-

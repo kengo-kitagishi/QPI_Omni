@@ -27,13 +27,13 @@ cd c:\Users\QPI\Documents\QPI_omni\scripts
 python 24_ellipse_volume.py
 
 # 3. バッチ実行（12条件）
-python 28_batch_analysis.py
+python 27_compare_volume_estimation_methods.py
 
 # 4. 時系列プロット
-python 27_timeseries_plot.py
+python 30_plot_filtered_conditions.py
 
 # 5. Pomegranate 3D再構成
-python timeseries_volume_from_roiset.py
+python 29_Pomegranate_from_roiset.py
 
 # 6. 回転対称体積推定
 python 31_roiset_rotational_volume.py
@@ -66,24 +66,26 @@ python 31_roiset_rotational_volume.py
 #### 基本的な使い方
 
 ```python
-from elip_volume import QuantitativePhaseImaging
+import importlib.util
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location(
+    "ellipse_volume", Path("24_ellipse_volume.py")
+)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+TimeSeriesDensityMapper = module.TimeSeriesDensityMapper
 
 # アナライザーを作成
-qpi = QuantitativePhaseImaging(
-    csv_path="Results.csv",
+mapper = TimeSeriesDensityMapper(
+    results_csv="Results.csv",
+    image_directory="path/to/phase_images",
     shape_type='ellipse',      # 'ellipse' or 'feret'
-    subpixel_sampling=5,       # 1, 5, 10
-    wavelength_nm=663,
-    n_medium=1.333,
-    pixel_size_um=0.348,
-    alpha_ri=0.00018
+    subpixel_sampling=5        # 1, 5, 10
 )
 
 # 解析実行
-qpi.process_all_rois(max_rois=None)
-
-# 結果を保存
-qpi.save_summary()
+mapper.process_all_rois(max_rois=None)
 ```
 
 #### コマンドライン実行
@@ -124,7 +126,15 @@ scripts/
 #### 基本的な使い方
 
 ```python
-from timeseries_volume_from_roiset import TimeSeriesVolumeTracker
+import importlib.util
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location(
+    "pomegranate_volume", Path("29_Pomegranate_from_roiset.py")
+)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+TimeSeriesVolumeTracker = module.TimeSeriesVolumeTracker
 
 # Trackerを作成
 tracker = TimeSeriesVolumeTracker(
@@ -167,7 +177,7 @@ tracker.save_ri_results('timeseries_volume_output')
 
 ```bash
 cd scripts
-python timeseries_volume_from_roiset.py
+python 29_Pomegranate_from_roiset.py
 ```
 
 #### 出力ディレクトリ
@@ -192,7 +202,15 @@ timeseries_volume_output/
 #### 基本的な使い方
 
 ```python
-from 31_roiset_rotational_volume import RotationalSymmetryROIAnalyzer
+import importlib.util
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location(
+    "rotational_volume", Path("31_roiset_rotational_volume.py")
+)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+RotationalSymmetryROIAnalyzer = module.RotationalSymmetryROIAnalyzer
 
 # アナライザーを作成
 analyzer = RotationalSymmetryROIAnalyzer(
@@ -285,7 +303,7 @@ rotational_volume_output/
 
 ---
 
-### 2.4 バッチ解析（28_batch_analysis.py）
+### 2.4 バッチ解析（27_compare_volume_estimation_methods.py）
 
 #### 基本的な使い方
 
@@ -309,7 +327,7 @@ subpixel_samplings = [1, 5, 10]
 
 ```bash
 cd scripts
-python 28_batch_analysis.py
+python 27_compare_volume_estimation_methods.py
 ```
 
 実行時間: 約1-2時間（12条件、各条件約5-10分）
@@ -409,16 +427,16 @@ cd scripts
 python 24_ellipse_volume.py
 
 # バッチ実行
-python 28_batch_analysis.py
+python 27_compare_volume_estimation_methods.py
 
 # Pomegranate
-python timeseries_volume_from_roiset.py
+python 29_Pomegranate_from_roiset.py
 
 # 回転対称
 python 31_roiset_rotational_volume.py
 
 # 時系列プロット
-python 27_timeseries_plot.py
+python 30_plot_filtered_conditions.py
 ```
 
 ### 4.2 ファイル検索
@@ -849,4 +867,3 @@ cp -r *_output/ backup_2025-12-24/
 **最終更新**: 2025-12-24  
 **プロジェクト**: QPI_omni  
 **著者**: AI Assistant
-

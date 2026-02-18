@@ -347,7 +347,15 @@ python 31_roiset_rotational_volume.py
 #### カスタマイズした使用方法
 
 ```python
-from 31_roiset_rotational_volume import RotationalSymmetryROIAnalyzer
+import importlib.util
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location(
+    "rotational_volume", Path("31_roiset_rotational_volume.py")
+)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+RotationalSymmetryROIAnalyzer = module.RotationalSymmetryROIAnalyzer
 
 analyzer = RotationalSymmetryROIAnalyzer(
     roi_zip_path="RoiSet.zip",
@@ -440,4 +448,3 @@ analyzer.save_ri_results('output')
 **バージョン**: 1.0  
 **作成者**: AI Assistant  
 **プロジェクト**: QPI_omni
-
