@@ -13,7 +13,7 @@
 
 #### 実装内容
 
-**1. Total Mass計算の追加** (`24_elip_volume.py`)
+**1. Total Mass計算の追加** (`24_ellipse_volume.py`)
 
 Total Mass計算式：
 ```python
@@ -46,7 +46,7 @@ total_mass_pg = np.sum(concentration_map[mask] * pixel_volumes)  # [pg]
 - ✅ 典型的な細胞質量範囲（数十〜数百pg）と一致
 
 #### 変更ファイル
-- `scripts/24_elip_volume.py`: Total Mass計算追加
+- `scripts/24_ellipse_volume.py`: Total Mass計算追加
 - `scripts/27_timeseries_plot.py`: プロット機能追加
 
 ---
@@ -111,7 +111,7 @@ SUBPIXEL_SAMPLING = 5   # 1, 5, 10
 ```
 
 #### 変更ファイル
-- `scripts/24_elip_volume.py`: Feret径モードとサブピクセルサンプリング実装
+- `scripts/24_ellipse_volume.py`: Feret径モードとサブピクセルサンプリング実装
 
 ---
 
@@ -206,7 +206,7 @@ Pomegranate再構成で生成された3D stackから厚みマップを抽出し�
 thickness_map[y, x] = Z方向のスライス数（float）
 ```
 
-これは `24_elip_volume.py` の `zstack.tif` と同等の情報。
+これは `24_ellipse_volume.py` の `zstack.tif` と同等の情報。
 
 #### RI計算
 
@@ -1121,7 +1121,7 @@ Results summary:
 - **pomegranate**: floor〜roundの間（閾値に依存）
 
 #### 変更ファイル
-- `scripts/24_elip_volume.py`: thickness_mode, discretize_method追加、_discretize_thicknessメソッド実装
+- `scripts/24_ellipse_volume.py`: thickness_mode, discretize_method追加、_discretize_thicknessメソッド実装
 - `scripts/27_compare_volume_estimation_methods.py`: バッチ実行での離散化方法比較対応
 
 #### 効果
@@ -1307,7 +1307,7 @@ scripts/
 - ✅ 結果の比較が容易
 
 #### 変更ファイル
-- `scripts/24_elip_volume.py`: パラメータ管理の改善
+- `scripts/24_ellipse_volume.py`: パラメータ管理の改善
 - `scripts/28_batch_analysis.py`: バッチ実行システム
 
 ---
@@ -1541,7 +1541,7 @@ discrete[pomegranate] → 全計算（...）← 無駄
 
 #### 実装内容
 
-**1. 厚みマップキャッシュシステム** (`24_elip_volume.py`)
+**1. 厚みマップキャッシュシステム** (`24_ellipse_volume.py`)
 
 ```python
 # キャッシュファイルパス生成
@@ -1667,7 +1667,7 @@ DISCRETIZE_METHODS_FOR_DISCRETE = ['round']  # 1つだけ追加テスト
 - ✅ 離散化方法の追加テストが容易に
 
 #### 変更ファイル
-- `scripts/24_elip_volume.py`: 厚みマップキャッシュシステム実装
+- `scripts/24_ellipse_volume.py`: 厚みマップキャッシュシステム実装
 - `scripts/27_compare_volume_estimation_methods.py`: 実行順序の自動最適化
 
 ---
@@ -1678,8 +1678,8 @@ DISCRETIZE_METHODS_FOR_DISCRETE = ['round']  # 1つだけ追加テスト
 
 | 手法 | スクリプト | 特徴 | 精度 |
 |------|-----------|------|------|
-| **楕円近似** | `24_elip_volume.py` | シンプル、高速 | ★★★☆☆ |
-| **Feret径近似** | `24_elip_volume.py` | 細長い細胞に強い | ★★★★☆ |
+| **楕円近似** | `24_ellipse_volume.py` | シンプル、高速 | ★★★☆☆ |
+| **Feret径近似** | `24_ellipse_volume.py` | 細長い細胞に強い | ★★★★☆ |
 | **Pomegranate** | `timeseries_volume_from_roiset.py` | 複雑な形状に対応 | ★★★★☆ |
 | **回転対称** | `31_roiset_rotational_volume.py` | 論文準拠、反復更新 | ★★★★★ |
 

@@ -24,7 +24,7 @@
   - 例: 値が8.0 = そのピクセル位置で8スライス分の厚み
 ```
 
-これは**24_elip_volume.pyのzstack.tif**と同等の情報です！
+これは**24_ellipse_volume.pyのzstack.tif**と同等の情報です！
 
 ---
 
@@ -425,9 +425,9 @@ phase_radians = phase * (2 * np.pi / 255)
 | ファイル | 機能 |
 |---------|------|
 | `timeseries_volume_from_roiset.py` | メインスクリプト |
-| `24_elip_volume.py` | 元の楕円体積計算（参考） |
+| `24_ellipse_volume.py` | 元の楕円体積計算（参考） |
 | `28_batch_analysis.py` | バッチRI解析（参考） |
-| `25_Roiset_from_zstack.py` | Z-stackからROI作成 |
+| `25_roiset_from_zstack.py` | Z-stackからROI作成 |
 
 ---
 

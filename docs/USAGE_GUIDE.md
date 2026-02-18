@@ -24,7 +24,7 @@
 cd c:\Users\QPI\Documents\QPI_omni\scripts
 
 # 2. 単一条件で実行
-python 24_elip_volume.py
+python 24_ellipse_volume.py
 
 # 3. バッチ実行（12条件）
 python 28_batch_analysis.py
@@ -44,7 +44,7 @@ python 31_roiset_rotational_volume.py
 **楕円近似（最速）**:
 ```bash
 cd scripts
-python 24_elip_volume.py
+python 24_ellipse_volume.py
 ```
 
 実行時間: 約1-2分
@@ -61,7 +61,7 @@ python 31_roiset_rotational_volume.py
 
 ## 2. 手法別の使い方
 
-### 2.1 楕円・Feret径近似（24_elip_volume.py）
+### 2.1 楕円・Feret径近似（24_ellipse_volume.py）
 
 #### 基本的な使い方
 
@@ -90,7 +90,7 @@ qpi.save_summary()
 
 ```bash
 # 楕円近似、サブピクセル5
-python 24_elip_volume.py
+python 24_ellipse_volume.py
 
 # スクリプト内でパラメータを変更:
 # SHAPE_TYPE = 'feret'
@@ -406,7 +406,7 @@ radiusEnlarge = 1.0;
 ```bash
 # 単体実行（楕円近似）
 cd scripts
-python 24_elip_volume.py
+python 24_ellipse_volume.py
 
 # バッチ実行
 python 28_batch_analysis.py

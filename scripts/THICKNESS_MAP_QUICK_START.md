@@ -4,7 +4,7 @@
 
 **ROIセット → 厚みマップ（z-stack数の2D画像）**
 
-これは**24_elip_volume.pyのzstack.tif**と同じ！
+これは**24_ellipse_volume.pyのzstack.tif**と同じ！
 
 - 各XYピクセル位置でのZ方向の占有スライス数
 - 位相差画像と組み合わせてRI計算可能
@@ -320,7 +320,7 @@ voxel_z = 0.3  # XYの約3.5倍
 ### 達成したこと
 
 ✅ **ROIセット** → **厚みマップ**（z-stack数の2D画像）  
-✅ **24_elip_volume.pyのzstack.tif互換**  
+✅ **24_ellipse_volume.pyのzstack.tif互換**  
 ✅ **2000フレーム処理完了**  
 ✅ **batch_analysis.py互換のRI計算機能**  
 

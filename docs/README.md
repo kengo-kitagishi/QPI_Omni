@@ -25,7 +25,7 @@
 最速でスタート：
 ```bash
 cd scripts
-python 24_elip_volume.py
+python 24_ellipse_volume.py
 ```
 
 ### 手法の詳細を知りたい方
@@ -70,7 +70,7 @@ python 24_elip_volume.py
 → [手法別の使い方](USAGE_GUIDE.md#2-手法別の使い方)
 
 推奨手法：
-- **高速**: 楕円近似（24_elip_volume.py）
+- **高速**: 楕円近似（24_ellipse_volume.py）
 - **高精度**: 回転対称（31_roiset_rotational_volume.py）
 - **複雑な形状**: Pomegranate（timeseries_volume_from_roiset.py）
 
@@ -135,7 +135,7 @@ M_total [pg] = Σ C [mg/ml] × V [µm³]
 
 | スクリプト | 説明 | 実行時間 |
 |-----------|------|---------|
-| `24_elip_volume.py` | 楕円・Feret径近似 | 約1-2分 |
+| `24_ellipse_volume.py` | 楕円・Feret径近似 | 約1-2分 |
 | `28_batch_analysis.py` | バッチ解析（12条件） | 約1-2時間 |
 | `timeseries_volume_from_roiset.py` | Pomegranate 3D再構成 | 約5-10分 |
 | `31_roiset_rotational_volume.py` | 回転対称体積推定 | 約2-3分 |

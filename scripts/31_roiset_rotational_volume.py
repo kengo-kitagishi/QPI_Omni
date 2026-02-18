@@ -667,7 +667,7 @@ class RotationalSymmetryROIAnalyzer:
     def compute_ri_from_phase_images(self, phase_image_dir, wavelength_nm=663, n_medium=1.333):
         """
         位相差画像と厚みマップからRI (Refractive Index) を計算
-        24_elip_volume.pyと同様の処理
+        24_ellipse_volume.pyと同様の処理
         
         Parameters
         ----------

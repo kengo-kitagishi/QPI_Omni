@@ -4,7 +4,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import argparse
 
-# ヒストグラムパラメータ（19_gausian_backsub.pyと同じ設定）
+# ヒストグラムパラメータ（19_gaussian_backsub.pyと同じ設定）
 hist_min = -1.1
 hist_max = 1.5
 n_bins = 512
@@ -90,7 +90,7 @@ def main():
     """メイン処理：bg_corrフォルダ内の全補正済み画像を処理"""
     # コマンドライン引数のパーサー設定
     parser = argparse.ArgumentParser(
-        description='19_gausian_backsub.pyで補正された画像の検証図を生成'
+        description='19_gaussian_backsub.pyで補正された画像の検証図を生成'
     )
     parser.add_argument(
         '--input_folder',

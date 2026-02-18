@@ -63,7 +63,7 @@ for center, radius in zip(centerline_points, radii):
 
 #### 4. **RI（屈折率）計算機能**
 - 位相差画像と厚みマップからRI計算
-- 24_elip_volume.pyと同様の処理
+- 24_ellipse_volume.pyと同様の処理
 
 **計算式**:
 ```
@@ -383,7 +383,7 @@ analyzer.save_ri_results('output')
 
 **関連手法**:
 - Pomegranate 3D reconstruction: https://github.com/erodb/Pomegranate
-- 24_elip_volume.py: 楕円体積推定（本プロジェクト）
+- 24_ellipse_volume.py: 楕円体積推定（本プロジェクト）
 
 ### 🔮 今後の予定
 

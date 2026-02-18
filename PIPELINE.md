@@ -46,7 +46,7 @@
                    ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  ステップ3: Background Subtraction (ガウス法)                  │
-│  - スクリプト: 19_gausian_backsub.py                          │
+│  - スクリプト: 19_gaussian_backsub.py                          │
 │  - 出力: *_bg_corr.tif                                        │
 └──────────────────┬───────────────────────────────────────────┘
                    │
@@ -78,7 +78,7 @@
 ┌──────────────────────────────────────────────────────────────┐
 │  ステップ7: Omnipose Training準備                              │
 │  7-1. Omnipose GUIで正解データ作成 (~3000細胞)                  │
-│  7-2. マスク変換 (06_seg.ny_to_masks.py)                      │
+│  7-2. マスク変換 (06_seg_npy_to_masks.py)                      │
 │  7-3. Data Augmentation (12, 26)                             │
 │  7-4. モデルTraining (08_train.py)                            │
 └──────────────────┬───────────────────────────────────────────┘
@@ -86,7 +86,7 @@
                    ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  ステップ8: Segmentation                                      │
-│  - スクリプト: 07_segmentaion.py                              │
+│  - スクリプト: 07_segmentation.py                              │
 │  - 出力: *_masks.tif, *_binary.tif                           │
 └──────────────────┬───────────────────────────────────────────┘
                    │
@@ -100,7 +100,7 @@
                    ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  ステップ10: 体積・密度解析                                     │
-│  - スクリプト: 24_elip_volume.py                              │
+│  - スクリプト: 24_ellipse_volume.py                              │
 │  - 出力: 密度マップ、体積・密度時系列データ                       │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -266,7 +266,7 @@ angle_nobg = angle_nobg[1:507, 254:507]
 ヒストグラムのガウスフィッティングにより、背景（培地）のシグナルを0に合わせ、細胞とデバイスのシグナルのみを取り出します。
 
 ### 使用スクリプト
-`scripts/19_gausian_backsub.py`
+`scripts/19_gaussian_backsub.py`
 
 ### 入力
 - Crop済みの位相再構成画像 (.tif)
@@ -298,7 +298,7 @@ smooth_window = 20    # スムージングのウィンドウサイズ
 
 ```bash
 cd scripts
-python 19_gausian_backsub.py
+python 19_gaussian_backsub.py
 ```
 
 スクリプト内で入力・出力フォルダを指定:
@@ -643,13 +643,13 @@ Omnipose GUI（Cellpose GUIのOmnipose版）
 Omnipose GUIで作成した`*_seg.npy`を、トレーニングに必要な`*_masks.tif`に変換します。
 
 #### 使用スクリプト
-`scripts/06_seg.ny_to_masks.py`
+`scripts/06_seg_npy_to_masks.py`
 
 #### 実行手順
 
 ```bash
 cd scripts
-python 06_seg.ny_to_masks.py
+python 06_seg_npy_to_masks.py
 ```
 
 スクリプト内で設定:
@@ -843,7 +843,7 @@ save_dir/models/
 トレーニングしたOmniposeモデルを使って、差分画像シークエンスから細胞領域を検出します。
 
 ### 使用スクリプト
-`scripts/07_segmentaion.py`
+`scripts/07_segmentation.py`
 
 ### 入力
 - 差分画像シークエンス（Crop済み、細胞のみの位相情報）
@@ -888,7 +888,7 @@ EVAL_PARAMS = dict(
 
 ```bash
 cd scripts
-python 07_segmentaion.py
+python 07_segmentation.py
 ```
 
 ### 処理の流れ
@@ -1083,7 +1083,7 @@ File → Save As → Results... → Results.csv
 ROIパラメータと差分画像から、Rod-shaped細胞の3D形状を再構成し、体積・密度情報を時系列で追跡します。
 
 ### 使用スクリプト
-`scripts/24_elip_volume.py`
+`scripts/24_ellipse_volume.py`
 
 ### 入力
 - **Results.csv**: Fijiから出力されたROIパラメータ
@@ -1209,7 +1209,7 @@ density_map = (image + correction_term) / zstack_map
 
 ```bash
 cd scripts
-python 24_elip_volume.py
+python 24_ellipse_volume.py
 ```
 
 スクリプト内で設定:
@@ -1409,7 +1409,7 @@ experiments:
 以下のスクリプトもリポジトリに含まれていますが、現在のメインパイプラインでは使用していません。
 必要に応じて参照してください。
 
-### 0_contours.py
+### 00_contours.py
 輪郭抽出の代替実装
 
 ### 01_QPI_analysis.py
@@ -1430,7 +1430,7 @@ QPI解析の基本機能（qpi.pyと連携）
 ### 11_delete_mask_seg.py
 不要なマスクファイルの削除ユーティリティ
 
-### 13_file.py
+### 13_collect_files.py
 ファイル操作ユーティリティ
 
 ### 14_medium_diff.py
@@ -1442,16 +1442,16 @@ QPI解析の基本機能（qpi.pyと連携）
 ### 16_phasecor_ali.py, 17_batch_phasecor_ali.py
 位相相関アライメント
 
-### 18_phasetoclrmp.py
+### 18_phase_to_colormap.py
 位相画像をカラーマップに変換
 
 ### 20_test_alignment_methods.py
 アライメント手法のテスト
 
-### 23_fig.py
+### 23_plot_summary.py
 図の作成ユーティリティ
 
-### 25_Roiset_from_zstack.py
+### 25_roiset_from_zstack.py
 Z-stackからROIセットを作成。屈折率（RI）マップと質量濃度マップの可視化にも対応。
 
 ### 28_batch_analysis.py
@@ -1459,7 +1459,7 @@ Z-stackからROIセットを作成。屈折率（RI）マップと質量濃度�
 
 全パラメータ組み合わせ（`SHAPE_TYPE` × `SUBPIXEL_SAMPLING`）を網羅的に実行：
 - 組み合わせ例: ellipse + subpixel1, ellipse + subpixel5, ..., feret + subpixel10
-- 各組み合わせで`24_elip_volume.py`を自動実行
+- 各組み合わせで`24_ellipse_volume.py`を自動実行
 - 実行時間と成功/失敗を記録
 - 出力ディレクトリもパラメータごとに自動命名
 

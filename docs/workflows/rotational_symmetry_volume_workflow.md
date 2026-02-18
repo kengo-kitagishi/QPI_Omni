@@ -183,7 +183,7 @@ if iteration > 0 and len(new_centerline) == len(centerline_points):
 
 #### 3.1 要求事項
 
-24_elip_volume.pyのように、各XYピクセル位置でのZ方向の厚み（スライス数）を計算し、RI計算に使用できるようにする。
+24_ellipse_volume.pyのように、各XYピクセル位置でのZ方向の厚み（スライス数）を計算し、RI計算に使用できるようにする。
 
 #### 3.2 厚みマップ計算アルゴリズム
 
@@ -947,7 +947,7 @@ print(f"Correlation: {correlation:.3f}")
 - `30_demo_rotational_symmetry_volume.py`: デモスクリプト
 - `31_roiset_rotational_volume.py`: ROIセット解析スクリプト（本実装）
 - `29_Pomegranate_from_roiset.py`: Pomegranate法の実装（比較用）
-- `24_elip_volume.py`: 楕円体積推定（参考）
+- `24_ellipse_volume.py`: 楕円体積推定（参考）
 
 ### 関連ドキュメント
 - `docs/workflows/pomegranate_reconstruction_summary.md`: Pomegranate法の説明

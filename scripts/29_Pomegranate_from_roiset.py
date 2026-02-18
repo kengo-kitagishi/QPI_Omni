@@ -686,7 +686,7 @@ def demo_with_roiset(roi_zip_path, max_frames=5):
     # Trackerを作成（本家Pomegranate準拠のパラメータ）
     tracker = TimeSeriesVolumeTracker(
         roi_zip_path=roi_zip_path,
-        voxel_xy=0.348,  # 24_elip_volume.pyと同じ
+        voxel_xy=0.348,  # 24_ellipse_volume.pyと同じ
         voxel_z=0.174,
         radius_enlarge=1.0,  # 本家Pomegranateは+1
         image_width=512,

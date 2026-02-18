@@ -40,16 +40,16 @@ QPI_Omni/
 ├── scripts/           # 解析スクリプト
 │   ├── 09_single_reconstruction.py    # 単一画像の位相再構成
 │   ├── 10_batch_reconstruction.py     # バッチ位相再構成
-│   ├── 19_gausian_backsub.py          # 背景補正
+│   ├── 19_gaussian_backsub.py          # 背景補正
 │   ├── 21_calc_alignment.py           # アライメント計算
 │   ├── 22_ecc_alignment.py            # アライメント適用
 │   ├── 04_diff_from_first.py          # 差分画像生成
-│   ├── 06_seg.ny_to_masks.py          # マスク変換
+│   ├── 06_seg_npy_to_masks.py          # マスク変換
 │   ├── 08_train.py                    # Omniposeトレーニング
-│   ├── 07_segmentaion.py              # セグメンテーション
+│   ├── 07_segmentation.py              # セグメンテーション
 │   ├── 12_vertical_flip.py            # 上下反転（Augmentation）
 │   ├── 26_horizontal_flip.py          # 左右反転（Augmentation）
-│   ├── 24_elip_volume.py              # 体積・密度・Total Mass解析
+│   ├── 24_ellipse_volume.py              # 体積・密度・Total Mass解析
 │   ├── 28_batch_analysis.py           # バッチ解析（全パラメータ組み合わせ）
 │   ├── config.yaml                    # 設定ファイル
 │   └── qpi.py                         # QPIユーティリティ
@@ -95,7 +95,7 @@ python 10_batch_reconstruction.py
 ### 3. 背景補正
 
 ```bash
-python 19_gausian_backsub.py
+python 19_gaussian_backsub.py
 ```
 
 ガウスフィッティングにより背景シグナルを0に合わせます。
@@ -123,7 +123,7 @@ Fijiで作成したROIとResults.csvを用いて解析します：
 
 ```bash
 # 単体実行
-python 24_elip_volume.py
+python 24_ellipse_volume.py
 
 # バッチ実行（全パラメータ組み合わせ）
 python 28_batch_analysis.py

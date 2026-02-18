@@ -45,13 +45,13 @@ import re
 import tifffile
 from scipy import ndimage
 
-# 24_elip_volume.pyからTimeSeriesDensityMapperクラスをコピー
+# 24_ellipse_volume.pyからTimeSeriesDensityMapperクラスをコピー
 # （インポートの問題を避けるため、直接定義）
 
 class TimeSeriesDensityMapper:
     """時系列画像とResults.csvから屈折率（RI）マップを生成"""
     
-    # ... (24_elip_volume.pyのTimeSeriesDensityMapperクラス全体をコピー)
+    # ... (24_ellipse_volume.pyのTimeSeriesDensityMapperクラス全体をコピー)
     # スペースの都合上、exec()を使用してインポート
     pass
 
@@ -144,7 +144,7 @@ def run_analysis(shape_type, subpixel_sampling, results_csv, image_directory,
     start_time = time.time()
     
     try:
-        # 24_elip_volume.pyをexec()で実行
+        # 24_ellipse_volume.pyをexec()で実行
         # グローバル変数として渡す
         globals_dict = {
             '__name__': '__main__',
@@ -164,9 +164,9 @@ def run_analysis(shape_type, subpixel_sampling, results_csv, image_directory,
             'CSV_SUFFIX': csv_suffix,
         }
         
-        # 24_elip_volume.pyの内容を読み込んで実行
+        # 24_ellipse_volume.pyの内容を読み込んで実行
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        script_path = os.path.join(script_dir, '24_elip_volume.py')
+        script_path = os.path.join(script_dir, '24_ellipse_volume.py')
         
         with open(script_path, 'r', encoding='utf-8') as f:
             code = f.read()

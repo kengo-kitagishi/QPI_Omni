@@ -19,7 +19,7 @@
 ## 背景と問題点
 
 ### 初期状態
-- `24_elip_volume.py`: 単一条件でQPI体積推定を実行するスクリプト
+- `24_ellipse_volume.py`: 単一条件でQPI体積推定を実行するスクリプト
 - `28_batch_analysis.py`: 複数条件でバッチ実行するスクリプト（初期バージョン）
 
 ### 発見された問題
@@ -31,7 +31,7 @@ NameError: name 'dir_suffix' is not defined
 ```
 
 **原因**:
-- `24_elip_volume.py`の90行目で`dir_suffix`をローカル変数として定義
+- `24_ellipse_volume.py`の90行目で`dir_suffix`をローカル変数として定義
 - 801行目で再度使用しようとしたが、スコープ外だった
 
 **発生箇所**:
@@ -55,7 +55,7 @@ plot_output_dir = f"timeseries_plots_{dir_suffix}"  # エラー！
 #### 問題4: ハードコードされたパラメータによる上書き
 **原因**:
 ```python
-# 24_elip_volume.py の764-768行目
+# 24_ellipse_volume.py の764-768行目
 SHAPE_TYPE = 'feret'         # 常にferetで上書き！
 SUBPIXEL_SAMPLING = 5        # 常に5で上書き！
 ```
@@ -89,7 +89,7 @@ SUBPIXEL_SAMPLING = 5        # 常に5で上書き！
 
 ### 修正1: `dir_suffix`のスコープ問題を解決
 
-**ファイル**: `24_elip_volume.py`
+**ファイル**: `24_ellipse_volume.py`
 
 **変更箇所**: 90行目
 ```python
@@ -113,7 +113,7 @@ plot_output_dir = f"timeseries_plots_{mapper.dir_suffix}"
 
 ### 修正2: CSVサフィックス機能の実装
 
-**ファイル**: `24_elip_volume.py`
+**ファイル**: `24_ellipse_volume.py`
 
 **変更箇所**: コンストラクタの引数に追加（23-50行目付近）
 ```python
@@ -328,7 +328,7 @@ for results_csv in RESULTS_CSVS:
 
 ### 修正4: ハードコードされたパラメータの条件付き代入
 
-**ファイル**: `24_elip_volume.py`
+**ファイル**: `24_ellipse_volume.py`
 
 **変更箇所**: 全パラメータを条件付き代入に変更（742-773行目）
 
@@ -376,7 +376,7 @@ Move-Item -Path "28_batch_analysis.py" -Destination "compare_volume_estimation_m
 
 ```
 scripts/
-├── 24_elip_volume.py                    # 単一条件での体積推定スクリプト
+├── 24_ellipse_volume.py                    # 単一条件での体積推定スクリプト
 ├── compare_volume_estimation_methods.py # バッチ比較スクリプト（旧28_batch_analysis.py）
 │
 ├── timeseries_density_output_ellipse_subpixel1_enlarge/
@@ -401,12 +401,12 @@ scripts/
 
 ## 使用方法
 
-### 1. 単一条件での実行（24_elip_volume.py）
+### 1. 単一条件での実行（24_ellipse_volume.py）
 
 **直接実行する場合**:
 ```python
-# 24_elip_volume.pyを直接実行
-python 24_elip_volume.py
+# 24_ellipse_volume.pyを直接実行
+python 24_ellipse_volume.py
 ```
 
 スクリプト内のデフォルト値が使用されます：
@@ -429,7 +429,7 @@ globals_dict = {
 }
 
 # スクリプトを読み込んで実行
-loader = SourceFileLoader('module', '24_elip_volume.py')
+loader = SourceFileLoader('module', '24_ellipse_volume.py')
 module = loader.load_module()
 ```
 
@@ -588,8 +588,8 @@ timeseries_plots_[条件]/
 ### 問題: `dir_suffix`が未定義エラー
 
 **確認事項**:
-- `24_elip_volume.py`の90行目が`self.dir_suffix = ...`になっているか
-- `24_elip_volume.py`の801行目が`mapper.dir_suffix`を使っているか
+- `24_ellipse_volume.py`の90行目が`self.dir_suffix = ...`になっているか
+- `24_ellipse_volume.py`の801行目が`mapper.dir_suffix`を使っているか
 
 ### 問題: 出力フォルダが上書きされる
 
@@ -612,7 +612,7 @@ timeseries_plots_[条件]/
 ### ステップ1: dir_suffix問題の修正
 
 ```python
-# 24_elip_volume.py の90行目を編集
+# 24_ellipse_volume.py の90行目を編集
 # 変更前:
 dir_suffix = f"{self.shape_type}_subpixel{self.subpixel_sampling}"
 
@@ -621,7 +621,7 @@ self.dir_suffix = f"{self.shape_type}_subpixel{self.subpixel_sampling}"
 ```
 
 ```python
-# 24_elip_volume.py の801行目を編集
+# 24_ellipse_volume.py の801行目を編集
 # 変更前:
 plot_output_dir = f"timeseries_plots_{dir_suffix}"
 
@@ -632,7 +632,7 @@ plot_output_dir = f"timeseries_plots_{mapper.dir_suffix}"
 ### ステップ2: CSVサフィックス機能の追加
 
 ```python
-# 24_elip_volume.py のコンストラクタに引数を追加（23行目付近）
+# 24_ellipse_volume.py のコンストラクタに引数を追加（23行目付近）
 def __init__(self, results_csv, image_directory, 
              wavelength_nm=663, n_medium=1.333, pixel_size_um=0.348,
              alpha_ri=0.0018, shape_type='ellipse', subpixel_sampling=5,
@@ -640,7 +640,7 @@ def __init__(self, results_csv, image_directory,
 ```
 
 ```python
-# 24_elip_volume.py の__init__内（71-99行目付近）にロジックを追加
+# 24_ellipse_volume.py の__init__内（71-99行目付近）にロジックを追加
 # CSVサフィックスを決定（手動指定 or 自動抽出）
 if csv_suffix is not None:
     self.csv_suffix = csv_suffix
@@ -668,7 +668,7 @@ self.output_dir = f"timeseries_density_output_{self.dir_suffix}"
 ```
 
 ```python
-# 24_elip_volume.py の mapper作成部分にcsv_suffixを追加（792-803行目付近）
+# 24_ellipse_volume.py の mapper作成部分にcsv_suffixを追加（792-803行目付近）
 mapper = TimeSeriesDensityMapper(
     results_csv=RESULTS_CSV,
     image_directory=IMAGE_DIRECTORY,
@@ -732,7 +732,7 @@ for csv_idx, results_csv in enumerate(RESULTS_CSVS, 1):
 ### ステップ4: ハードコードパラメータの修正
 
 ```python
-# 24_elip_volume.py のメイン実行ブロック（742-773行目）を全て条件付き代入に変更
+# 24_ellipse_volume.py のメイン実行ブロック（742-773行目）を全て条件付き代入に変更
 
 RESULTS_CSV = r"C:\...\Results_enlarge.csv" if 'RESULTS_CSV' not in globals() else globals()['RESULTS_CSV']
 IMAGE_DIRECTORY = r"C:\...\subtracted" if 'IMAGE_DIRECTORY' not in globals() else globals()['IMAGE_DIRECTORY']
@@ -785,7 +785,7 @@ python compare_volume_estimation_methods.py
 # アライメント処理の改善
 
 **更新日**: 2026-02-04  
-**対象スクリプト**: `21_calc_alignment.py`, `22_ecc_alignment.py`, `19_gausian_backsub.py`
+**対象スクリプト**: `21_calc_alignment.py`, `22_ecc_alignment.py`, `19_gaussian_backsub.py`
 
 ---
 
@@ -840,7 +840,7 @@ subtraction_reference_index=0,    # 最初のフレームで引き算
   - `png_dpi=150`: 解像度（デフォルト: 150、軽量）
   - `png_sample_interval=1`: サンプリング間隔（1=全保存、10=10枚に1枚）
 
-**19_gausian_backsub.py**:
+**19_gaussian_backsub.py**:
 - 同様の構造に変更
 - `main()`関数にPNG保存パラメータを追加
 
