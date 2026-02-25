@@ -14,6 +14,7 @@ import sys
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
+from pathlib import Path
 
 # =============================================================================
 # 設定
