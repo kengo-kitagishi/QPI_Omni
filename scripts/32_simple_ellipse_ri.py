@@ -10,6 +10,9 @@ import matplotlib.pyplot as plt
 from PIL import Image
 import glob
 import os
+import sys
+sys.path.insert(0, os.path.dirname(__file__))
+from figure_logger import save_figure
 
 # =============================================================================
 # パラメータ設定
@@ -174,12 +177,21 @@ axes[2].set_ylabel('Total Mass (pg)', fontsize=11, fontweight='bold')
 axes[2].grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig(OUTPUT_FILE, dpi=150, bbox_inches='tight')
-print(f"  Saved: {OUTPUT_FILE}")
+save_figure(
+    fig,
+    params={
+        "pixel_size_um": PIXEL_SIZE_UM,
+        "n_medium": N_MEDIUM,
+        "alpha_ri": ALPHA_RI,
+        "n_roi": len(results_df),
+    },
+    description="mean RI計算: ellipse体積でtotal phaseを割った結果（Volume / Mean RI / Total Mass の時系列）",
+)
 
 plt.show()
 
 print("\nDone!")
+
 
 
 

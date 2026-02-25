@@ -394,7 +394,7 @@ def main():
     
     # ベースディレクトリ設定
     WO0_BASE = r"F:\wo_0_EMM_1"
-    WO2_BASE = r"F:\wo_2_EMM_1"
+    WO2_BASE = r"F:\wo_.1_EMM_1"
     
     print(f"\nwo_0: {WO0_BASE}")
     print(f"wo_2: {WO2_BASE}")
@@ -437,7 +437,7 @@ def main():
     SAVE_PNG = True  # PNG保存するか
     PNG_DPI = 150    # PNG解像度
     PNG_SAMPLE_INTERVAL = 1  # N枚ごとにPNG保存
-    VMIN = -0.1  # カラーマップの最小値
+    VMIN = -0.3  # カラーマップの最小値
     VMAX = 1.7   # カラーマップの最大値
     CMAP = 'RdBu_r'  # カラーマップ
     
