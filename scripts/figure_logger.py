@@ -22,8 +22,10 @@ figure_logger.py  -  図の保存ユーティリティ
     変わったパラメータだけをファイル名と EXPERIMENT_LOG に記録する。
 """
 
+import inspect
 import json
 import os
+import re
 import sys
 import traceback
 import urllib.request
@@ -92,6 +94,23 @@ def _save_to_notion(meta: dict, fig_path: Path):
 
         fig_rel = fig_path.relative_to(_REPO_ROOT).as_posix()
 
+        # データ来歴ブロック（検出できた場合のみ）
+        data_info = meta.get("data_info", {})
+        data_info_blocks = []
+        if data_info:
+            parts = []
+            if "source" in data_info:
+                parts.append(f"source={data_info['source']}")
+            if "measured_on" in data_info:
+                parts.append(f"measured_on={data_info['measured_on']}")
+            if "processing" in data_info:
+                parts.append(f"processing={data_info['processing']}")
+            if parts:
+                data_info_blocks = [
+                    {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt("データ情報")}},
+                    {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(" / ".join(parts))}},
+                ]
+
         payload = {
             "parent": {"database_id": NOTION_DB_ID},
             "properties": {
@@ -100,7 +119,7 @@ def _save_to_notion(meta: dict, fig_path: Path):
                 "Script": {"rich_text": rt(meta["script"])},
                 "Description": {"rich_text": rt(meta["description"])},
             },
-            "children": [
+            "children": data_info_blocks + [
                 {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt("パラメータ")}},
                 {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(params_text)}},
                 {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt("前回からの変更点")}},
@@ -132,6 +151,66 @@ def _save_to_notion(meta: dict, fig_path: Path):
 # =============================================================================
 # ユーティリティ
 # =============================================================================
+
+def _detect_data_info() -> dict:
+    """
+    呼び出し元スクリプトのグローバル変数を検査し、データ来歴を自動推定する。
+    - source      : 元データのフォルダ名
+    - measured_on : パスから検出した測定日 (YYYY-MM-DD 形式)
+    - processing  : フォルダ名から推定した処理ステップ列
+    何も検出できなかった場合は空dict を返す（エラーにしない）。
+    """
+    try:
+        caller_globals = {}
+        for frame_info in inspect.stack():
+            if Path(frame_info.filename).resolve() != Path(__file__).resolve():
+                caller_globals = frame_info.frame.f_globals
+                break
+
+        path_keywords = {"DIR", "PATH", "CSV", "FILE", "DATA", "INPUT", "ROOT"}
+        paths = {
+            k: str(v)
+            for k, v in caller_globals.items()
+            if isinstance(v, (str, Path))
+            and any(kw in k.upper() for kw in path_keywords)
+            and ("/" in str(v) or "\\" in str(v))
+        }
+
+        # 測定日: パス文字列から YYYY-MM-DD / YYYYMMDD / YYYY_MM_DD を探す
+        date_pattern = re.compile(r"(\d{4})[-_]?(\d{2})[-_]?(\d{2})")
+        measured_on = None
+        for v in paths.values():
+            m = date_pattern.search(v)
+            if m:
+                measured_on = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+                break
+
+        # 処理ステップ: フォルダ名に含まれるキーワードを収集
+        proc_keywords = [
+            "bg_corr", "subtracted", "aligned", "corrected",
+            "filtered", "registered", "cropped", "denoised",
+        ]
+        processing = []
+        for v in paths.values():
+            for kw in proc_keywords:
+                if kw in v.lower() and kw not in processing:
+                    processing.append(kw)
+
+        # 元データ source: 最も短いパスのフォルダ名を使う
+        source_path = min(paths.values(), key=len, default=None)
+
+        result = {}
+        if source_path:
+            result["source"] = Path(source_path).name
+        if measured_on:
+            result["measured_on"] = measured_on
+        if processing:
+            result["processing"] = " → ".join(processing)
+
+        return result
+    except Exception:
+        return {}
+
 
 def _detect_script_name() -> str:
     """呼び出し元スクリプトのファイル名（拡張子なし）を返す"""
@@ -205,6 +284,7 @@ def _append_experiment_log(
     params: dict,
     diff: dict,
     fig_path: Path,
+    data_info: dict,
 ):
     """docs/EXPERIMENT_LOG.md に追記する"""
     _EXPERIMENT_LOG.parent.mkdir(exist_ok=True)
@@ -219,13 +299,25 @@ def _append_experiment_log(
     else:
         diff_str = "  - (初回実行 / 前回から変更なし)"
 
+    data_info_line = ""
+    if data_info:
+        parts = []
+        if "source" in data_info:
+            parts.append(f"source=`{data_info['source']}`")
+        if "measured_on" in data_info:
+            parts.append(f"measured_on=`{data_info['measured_on']}`")
+        if "processing" in data_info:
+            parts.append(f"processing=`{data_info['processing']}`")
+        if parts:
+            data_info_line = f"\n**データ情報**: {' / '.join(parts)}\n"
+
     entry = f"""
 ---
 
 ## {date_str} | `{script_name}`
 
 **説明**: {description}
-
+{data_info_line}
 **パラメータ**: {params_str}
 
 **前回からの変更点**:
@@ -271,8 +363,22 @@ def save_figure(
     global _call_count
     _call_count += 1
 
+    if _call_count > BATCH_THRESHOLD:
+        # バッチ処理とみなし、ロギング・Notion保存を全てスキップしてシンプル保存のみ
+        if _call_count == BATCH_THRESHOLD + 1:
+            print("[figure_logger] バッチ処理とみなし、以降はシンプル保存のみ（ログ・Notion保存スキップ）")
+        out = Path(output_dir) if output_dir else _DEFAULT_OUTPUT_DIR
+        out.mkdir(parents=True, exist_ok=True)
+        name = script_name or _detect_script_name()
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        p = out / f"batch_{name}_{ts}.{fmt}"
+        fig.savefig(p, dpi=dpi, bbox_inches="tight")
+        return p
+
     if script_name is None:
         script_name = _detect_script_name()
+
+    data_info = _detect_data_info()
 
     output_dir = Path(output_dir) if output_dir else _DEFAULT_OUTPUT_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -309,6 +415,7 @@ def save_figure(
         "params": params,
         "diff_from_last": diff,
         "file": str(fig_path),
+        "data_info": data_info,
     }
     meta_path = fig_path.with_suffix(".json")
     with open(meta_path, "w", encoding="utf-8") as f:
@@ -318,13 +425,9 @@ def save_figure(
     _save_history(script_name, params)
 
     # EXPERIMENT_LOG.md に追記
-    _append_experiment_log(date_str, script_name, description, params, diff, fig_path)
+    _append_experiment_log(date_str, script_name, description, params, diff, fig_path, data_info)
     print(f"[figure_logger] EXPERIMENT_LOG.md に記録しました")
 
-    # Notion 保存（バッチ処理でない場合のみ）
-    if _call_count <= BATCH_THRESHOLD:
-        _save_to_notion(meta, fig_path)
-    elif _call_count == BATCH_THRESHOLD + 1:
-        print("[figure_logger] バッチ処理とみなし、以降Notion保存をスキップします")
+    _save_to_notion(meta, fig_path)
 
     return fig_path
