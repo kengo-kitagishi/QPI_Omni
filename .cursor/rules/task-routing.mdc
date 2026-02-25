@@ -92,6 +92,20 @@ Issue作成: #番号「タイトル」→ URL
 
 ---
 
+## プランファイルの保存ルール
+
+Planモードで作成したプランを実行し終わったタイミングで、以下を行う：
+
+```powershell
+Copy-Item "C:\Users\QPI\.cursor\plans\<planfile>.plan.md" "docs\plans\"
+git add docs/plans/
+```
+
+その後の `git commit` に `docs/plans/` の変更を含めて一緒にコミットする。
+（別途コミットは不要。実装のコミットに同梱する）
+
+---
+
 ## 図の保存ルール
 
 スクリプトで図を生成・保存する際は `scripts/figure_logger.py` の `save_figure()` を使うこと。
