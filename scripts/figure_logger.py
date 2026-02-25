@@ -152,6 +152,30 @@ def _save_to_notion(meta: dict, fig_path: Path):
 # ユーティリティ
 # =============================================================================
 
+def _append_session_log(date_str: str, script_name: str, description: str):
+    """
+    .figure_history/session_YYYY-MM-DD.json にスクリプト実行を記録する。
+    同一日に同じスクリプトが複数回呼ばれた場合は最新エントリで上書き（重複しない）。
+    """
+    try:
+        _HISTORY_DIR.mkdir(exist_ok=True)
+        session_file = _HISTORY_DIR / f"session_{date_str}.json"
+        entries = []
+        if session_file.exists():
+            with open(session_file, encoding="utf-8") as f:
+                entries = json.load(f)
+        entries = [e for e in entries if e.get("script") != script_name]
+        entries.append({
+            "time": datetime.now().strftime("%H:%M"),
+            "script": script_name,
+            "description": description,
+        })
+        with open(session_file, "w", encoding="utf-8") as f:
+            json.dump(entries, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass  # セッションログ失敗はメイン処理に影響させない
+
+
 def _detect_data_info() -> dict:
     """
     呼び出し元スクリプトのグローバル変数を検査し、データ来歴を自動推定する。
@@ -427,6 +451,9 @@ def save_figure(
     # EXPERIMENT_LOG.md に追記
     _append_experiment_log(date_str, script_name, description, params, diff, fig_path, data_info)
     print(f"[figure_logger] EXPERIMENT_LOG.md に記録しました")
+
+    # セッションログに追記
+    _append_session_log(date_str, script_name, description)
 
     _save_to_notion(meta, fig_path)
 
