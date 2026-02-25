@@ -26,6 +26,7 @@ import json
 import os
 import sys
 import traceback
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -38,6 +39,94 @@ _REPO_ROOT = _THIS_DIR.parent
 _DEFAULT_OUTPUT_DIR = _REPO_ROOT / "results" / "figures"
 _HISTORY_DIR = _REPO_ROOT / ".figure_history"
 _EXPERIMENT_LOG = _REPO_ROOT / "docs" / "EXPERIMENT_LOG.md"
+
+# =============================================================================
+# バッチ判定カウンタ
+# =============================================================================
+_call_count = 0
+BATCH_THRESHOLD = 5  # この回数を超えたらバッチとみなしNotion保存をスキップ
+
+NOTION_DB_ID = "312eda96228e81659726cd75b221357a"
+
+
+# =============================================================================
+# Notion 連携
+# =============================================================================
+
+def _load_notion_token() -> str:
+    mcp_path = _REPO_ROOT / ".cursor" / "mcp.json"
+    if mcp_path.exists():
+        with open(mcp_path, encoding="utf-8") as f:
+            config = json.load(f)
+        headers_str = (
+            config.get("mcpServers", {})
+            .get("notionApi", {})
+            .get("env", {})
+            .get("OPENAPI_MCP_HEADERS", "{}")
+        )
+        headers = json.loads(headers_str)
+        token = headers.get("Authorization", "").replace("Bearer ", "").strip()
+        if token:
+            return token
+    return ""
+
+
+def _save_to_notion(meta: dict, fig_path: Path):
+    """図のメタデータを Notion QPI Research Notes データベースに保存する。失敗しても無視。"""
+    try:
+        token = _load_notion_token()
+        if not token:
+            return
+
+        def rt(s):
+            return [{"type": "text", "text": {"content": str(s)[:2000]}}]
+
+        params_text = ", ".join(f"{k}={v}" for k, v in meta.get("params", {}).items())
+        diff = meta.get("diff_from_last", {})
+        if diff:
+            diff_text = ", ".join(
+                f"{k}: {v.get('from')} -> {v.get('to')}" for k, v in diff.items()
+            )
+        else:
+            diff_text = "初回実行 / 前回から変更なし"
+
+        fig_rel = fig_path.relative_to(_REPO_ROOT).as_posix()
+
+        payload = {
+            "parent": {"database_id": NOTION_DB_ID},
+            "properties": {
+                "title": {"title": rt(meta["script"])},
+                "Date": {"date": {"start": meta["date"]}},
+                "Script": {"rich_text": rt(meta["script"])},
+                "Description": {"rich_text": rt(meta["description"])},
+            },
+            "children": [
+                {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt("パラメータ")}},
+                {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(params_text)}},
+                {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt("前回からの変更点")}},
+                {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(diff_text)}},
+                {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt("図ファイル")}},
+                {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(fig_rel)}},
+            ],
+        }
+
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            "https://api.notion.com/v1/pages",
+            data=data,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "Notion-Version": "2022-06-28",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result = json.loads(resp.read().decode())
+        page_url = result.get("url", "")
+        print(f"[figure_logger] Notion保存: {page_url}")
+    except Exception as e:
+        print(f"[figure_logger] Notion保存スキップ ({e})")
 
 
 # =============================================================================
@@ -179,6 +268,9 @@ def save_figure(
     -------
     Path : 保存されたファイルのパス
     """
+    global _call_count
+    _call_count += 1
+
     if script_name is None:
         script_name = _detect_script_name()
 
@@ -228,5 +320,11 @@ def save_figure(
     # EXPERIMENT_LOG.md に追記
     _append_experiment_log(date_str, script_name, description, params, diff, fig_path)
     print(f"[figure_logger] EXPERIMENT_LOG.md に記録しました")
+
+    # Notion 保存（バッチ処理でない場合のみ）
+    if _call_count <= BATCH_THRESHOLD:
+        _save_to_notion(meta, fig_path)
+    elif _call_count == BATCH_THRESHOLD + 1:
+        print("[figure_logger] バッチ処理とみなし、以降Notion保存をスキップします")
 
     return fig_path
