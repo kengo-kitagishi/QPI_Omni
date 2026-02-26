@@ -73,8 +73,43 @@ def _load_notion_token() -> str:
     return ""
 
 
+def _find_today_figure_page(token: str, date_str: str) -> str | None:
+    """その日の [図] ページを検索。見つかれば page_id を返す。"""
+    try:
+        url = f"https://api.notion.com/v1/databases/{NOTION_DB_ID}/query"
+        payload = {
+            "filter": {
+                "property": "Date",
+                "date": {"equals": date_str},
+            },
+        }
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "Notion-Version": "2022-06-28",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result = json.loads(resp.read().decode())
+        for page in result.get("results", []):
+            props = page.get("properties", {})
+            title_prop = props.get("Name", props.get("title", {}))
+            title_list = title_prop.get("title", [])
+            page_title = "".join(t.get("plain_text", "") for t in title_list)
+            if page_title.startswith("[図]"):
+                return page["id"]
+    except Exception:
+        pass
+    return None
+
+
 def _save_to_notion(meta: dict, fig_path: Path):
-    """図のメタデータを Notion QPI Research Notes データベースに保存する。失敗しても無視。"""
+    """図のメタデータを Notion QPI Research Notes に保存。1日1ページにまとめる。"""
     try:
         token = _load_notion_token()
         if not token:
@@ -93,6 +128,7 @@ def _save_to_notion(meta: dict, fig_path: Path):
             diff_text = "初回実行 / 前回から変更なし"
 
         fig_rel = fig_path.relative_to(_REPO_ROOT).as_posix()
+        date_str = meta["date"]
 
         # データ来歴ブロック（検出できた場合のみ）
         data_info = meta.get("data_info", {})
@@ -111,39 +147,61 @@ def _save_to_notion(meta: dict, fig_path: Path):
                     {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(" / ".join(parts))}},
                 ]
 
-        payload = {
-            "parent": {"database_id": NOTION_DB_ID},
-            "properties": {
-                "title": {"title": rt(meta["script"])},
-                "Date": {"date": {"start": meta["date"]}},
-                "Script": {"rich_text": rt(meta["script"])},
-                "Description": {"rich_text": rt(meta["description"])},
-            },
-            "children": data_info_blocks + [
-                {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt("パラメータ")}},
-                {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(params_text)}},
-                {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt("前回からの変更点")}},
-                {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(diff_text)}},
-                {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt("図ファイル")}},
-                {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(fig_rel)}},
-            ],
+        figure_blocks = data_info_blocks + [
+            {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt(meta["script"])}},
+            {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt("パラメータ")}},
+            {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(params_text)}},
+            {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt("前回からの変更点")}},
+            {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(diff_text)}},
+            {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt("図ファイル")}},
+            {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(fig_rel)}},
+        ]
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Notion-Version": "2022-06-28",
         }
 
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            "https://api.notion.com/v1/pages",
-            data=data,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-                "Notion-Version": "2022-06-28",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            result = json.loads(resp.read().decode())
-        page_url = result.get("url", "")
-        print(f"[figure_logger] Notion保存: {page_url}")
+        # 1日1ページ: その日の [図] ページを検索
+        existing_id = _find_today_figure_page(token, date_str)
+
+        if existing_id:
+            # 既存ページに追記（区切り線 + 新規図ブロック）
+            append_blocks = [
+                {"object": "block", "type": "divider", "divider": {}},
+            ] + figure_blocks
+            url = f"https://api.notion.com/v1/blocks/{existing_id}/children"
+            data = json.dumps({"children": append_blocks}).encode("utf-8")
+            req = urllib.request.Request(url, data=data, headers=headers, method="PATCH")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                json.loads(resp.read().decode())
+            page_url = f"https://www.notion.so/{existing_id.replace('-', '')}"
+            print(f"[figure_logger] Notion追記: {page_url}")
+        else:
+            # 新規ページ作成（Type=図 で自動振り分け）
+            payload = {
+                "parent": {"database_id": NOTION_DB_ID},
+                "properties": {
+                    "Name": {"title": rt(f"[図] {date_str}")},
+                    "Date": {"date": {"start": date_str}},
+                    "Script": {"rich_text": rt(meta["script"])},
+                    "Description": {"rich_text": rt(meta["description"])},
+                    "Type": {"select": {"name": "図"}},
+                },
+                "children": figure_blocks,
+            }
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                "https://api.notion.com/v1/pages",
+                data=data,
+                headers=headers,
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                result = json.loads(resp.read().decode())
+            page_url = result.get("url", "")
+            print(f"[figure_logger] Notion保存: {page_url}")
     except Exception as e:
         print(f"[figure_logger] Notion保存スキップ ({e})")
 
