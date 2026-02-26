@@ -8,7 +8,7 @@ wo_dir: "wo_focus_5"      # wo画像のディレクトリ名
 bg_pos: 0                  # BGポジション（通常Pos0）
 
 # ポジション範囲
-pos_start: 1
+pos_start: 1s
 pos_end: 91
 
 # ファイル名パターン（デフォルト）
@@ -53,4 +53,5 @@ output:
   save_aligned: true        # アライメント済み画像も保存するか
   save_individual_phase: false  # 個別の位相画像も保存するか（容量注意）
   save_crop_visualization: true  # Crop領域の可視化を保存するか
+
 
