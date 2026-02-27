@@ -1,285 +1,269 @@
 """
-figure_logger.py  -  図の保存ユーティリティ
+figure_logger.py - QPI figure save utility (inbox-first).
 
-使い方:
+Design goals:
+- Save every generated figure at execution time into an inbox-style archive.
+- Keep reproducible metadata (params, git snapshot, run_id, caller context).
+- Keep backwards compatibility for existing scripts using save_figure().
+- Separate "save everything" from "adopt into figure-hub".
+
+Typical usage:
     from figure_logger import save_figure
 
     save_figure(
         fig,
         params={"pixel_size_um": 0.348, "n_medium": 1.333},
-        description="mean RI計算: ellipse体積でtotal phaseを割った結果",
-        script_name="32_simple_ellipse_ri",   # 省略可（自動検出）
-        output_dir=None,                       # 省略時は results/figures/
+        description="mean RI calculation",
     )
 
-保存されるもの:
-    results/figures/QPI_2026-02-26_32_simple_ellipse_ri_v3.png
-    results/figures/QPI_2026-02-26_32_simple_ellipse_ri_v3.json  (メタデータ)
-    docs/EXPERIMENT_LOG.md  (自動追記)
+What gets written for each call:
+- inbox image:
+    <inbox_root>/YYYY-MM-DD/<script>/<run_id>/<script>__<run_id>__fNNN.<fmt>
+- inbox metadata json (same basename + .json)
+- append-only shared manifest:
+    <inbox_root>/_manifest/figure_inbox_manifest.jsonl
+- session trace (local machine):
+    .figure_history/session_YYYY-MM-DD.json
+- experiment log entry:
+    docs/EXPERIMENT_LOG.md
+- optional legacy publish copy (default enabled):
+    results/figures/QPI_<date>_<script>_vN.<fmt>
 
-前回実行時との差分:
-    同じスクリプト名の最後の実行記録 (.figure_history/<script>.json) と比較し、
-    変わったパラメータだけをファイル名と EXPERIMENT_LOG に記録する。
+Environment knobs:
+- QPI_FIGURE_INBOX_ROOT: override inbox root path.
+- QPI_FIGURE_LOGGER_PUBLISH=0: disable legacy publish copy by default.
+- QPI_FIGURE_LOGGER_NOTION=1: enable Notion logging per save.
 """
+
+from __future__ import annotations
 
 import inspect
 import json
 import os
 import re
+import shutil
+import socket
+import subprocess
 import sys
 import traceback
 import urllib.request
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 
 # =============================================================================
-# パス設定
+# Paths / constants
 # =============================================================================
 _THIS_DIR = Path(__file__).parent
 _REPO_ROOT = _THIS_DIR.parent
-_DEFAULT_OUTPUT_DIR = _REPO_ROOT / "results" / "figures"
 _HISTORY_DIR = _REPO_ROOT / ".figure_history"
 _EXPERIMENT_LOG = _REPO_ROOT / "docs" / "EXPERIMENT_LOG.md"
+_DEFAULT_PUBLISH_DIR = _REPO_ROOT / "results" / "figures"
 
-# =============================================================================
-# バッチ判定カウンタ
-# =============================================================================
-_call_count = 0
-BATCH_THRESHOLD = 5  # この回数を超えたらバッチとみなしNotion保存をスキップ
+# Shared inbox candidates (priority: env > Drive shared > Desktop mirror > local fallback).
+_DEFAULT_DRIVE_HUB_INBOX = Path(
+    "/Users/kitak/Library/CloudStorage/GoogleDrive-kengo_kitagishi@cell.c.u-tokyo.ac.jp/共有ドライブ/wakamotolab_meeting/kitagishi/figure-hub/inbox"
+)
+_DEFAULT_DESKTOP_HUB_INBOX = Path("/Users/kitak/Desktop/figure-hub/inbox")
+_FALLBACK_LOCAL_INBOX = _REPO_ROOT / "results" / "figure_inbox"
+_SHARED_MANIFEST_BASENAME = "figure_inbox_manifest.jsonl"
 
 NOTION_DB_ID = "312eda96228e81659726cd75b221357a"
 
+_RUN_CONTEXT = {
+    "script": None,
+    "run_id": None,
+    "count": 0,
+}
+
 
 # =============================================================================
-# Notion 連携
+# Utilities
 # =============================================================================
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
-def _load_notion_token() -> str:
-    mcp_path = _REPO_ROOT / ".cursor" / "mcp.json"
-    if mcp_path.exists():
-        with open(mcp_path, encoding="utf-8") as f:
-            config = json.load(f)
-        headers_str = (
-            config.get("mcpServers", {})
-            .get("notionApi", {})
-            .get("env", {})
-            .get("OPENAPI_MCP_HEADERS", "{}")
-        )
-        headers = json.loads(headers_str)
-        token = headers.get("Authorization", "").replace("Bearer ", "").strip()
-        if token:
-            return token
+
+def _sanitize_token(value: str) -> str:
+    out = re.sub(r"[^A-Za-z0-9._-]+", "_", value.strip())
+    return out.strip("_") or "unknown"
+
+
+def _resolve_inbox_root() -> Path:
+    env = os.environ.get("QPI_FIGURE_INBOX_ROOT", "").strip()
+    if env:
+        return Path(env).expanduser().resolve()
+
+    candidates = [
+        _DEFAULT_DRIVE_HUB_INBOX,
+        _DEFAULT_DESKTOP_HUB_INBOX,
+    ]
+    for c in candidates:
+        if c.exists() or c.parent.exists():
+            return c
+    return _FALLBACK_LOCAL_INBOX
+
+
+def _manifest_path(inbox_root: Path) -> Path:
+    return inbox_root / "_manifest" / _SHARED_MANIFEST_BASENAME
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _detect_script_name() -> str:
+    """Return caller script stem (without extension)."""
+    for frame in traceback.extract_stack():
+        path = Path(frame.filename)
+        stem = path.stem
+        if stem not in {"figure_logger", "<string>", "runpy"}:
+            return _sanitize_token(stem)
+    return "unknown"
+
+
+def _detect_caller_file() -> str:
+    for frame in inspect.stack():
+        p = Path(frame.filename).resolve()
+        if p != Path(__file__).resolve():
+            return str(p)
     return ""
 
 
-def _find_today_figure_page(token: str, date_str: str) -> str | None:
-    """その日の [図] ページを検索。見つかれば page_id を返す。"""
+def _new_run_id(script_name: str) -> str:
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    suffix = uuid.uuid4().hex[:6]
+    return f"{_sanitize_token(script_name)}_{ts}_{suffix}"
+
+
+def _ensure_run_context(script_name: str) -> tuple[str, int]:
+    """
+    Keep a process-local run_id per script invocation session.
+    Returns (run_id, figure_index starting from 1).
+    """
+    if _RUN_CONTEXT["script"] != script_name or _RUN_CONTEXT["run_id"] is None:
+        _RUN_CONTEXT["script"] = script_name
+        _RUN_CONTEXT["run_id"] = _new_run_id(script_name)
+        _RUN_CONTEXT["count"] = 0
+
+    _RUN_CONTEXT["count"] += 1
+    return _RUN_CONTEXT["run_id"], int(_RUN_CONTEXT["count"])
+
+
+def _load_history(script_name: str) -> dict:
+    _HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    p = _HISTORY_DIR / f"{script_name}.json"
+    if p.exists():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_history(script_name: str, params: dict) -> None:
+    _HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    p = _HISTORY_DIR / f"{script_name}.json"
+    p.write_text(json.dumps(params, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _compute_diff(prev: dict, curr: dict) -> dict:
+    diff = {}
+    all_keys = set(prev.keys()) | set(curr.keys())
+    for key in sorted(all_keys):
+        if key not in prev:
+            diff[key] = {"from": "(new)", "to": curr[key]}
+        elif key not in curr:
+            diff[key] = {"from": prev[key], "to": "(deleted)"}
+        elif prev[key] != curr[key]:
+            diff[key] = {"from": prev[key], "to": curr[key]}
+    return diff
+
+
+def _git_snapshot() -> dict:
     try:
-        url = f"https://api.notion.com/v1/databases/{NOTION_DB_ID}/query"
-        payload = {
-            "filter": {
-                "property": "Date",
-                "date": {"equals": date_str},
-            },
-        }
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=data,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-                "Notion-Version": "2022-06-28",
-            },
-            method="POST",
+        commit = (
+            subprocess.check_output(
+                ["git", "-C", str(_REPO_ROOT), "rev-parse", "HEAD"],
+                stderr=subprocess.DEVNULL,
+                text=True,
+            )
+            .strip()
         )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            result = json.loads(resp.read().decode())
-        for page in result.get("results", []):
-            props = page.get("properties", {})
-            title_prop = props.get("Name", props.get("title", {}))
-            title_list = title_prop.get("title", [])
-            page_title = "".join(t.get("plain_text", "") for t in title_list)
-            if page_title.startswith("[図]"):
-                return page["id"]
     except Exception:
-        pass
-    return None
+        commit = ""
 
-
-def _save_to_notion(meta: dict, fig_path: Path):
-    """図のメタデータを Notion QPI Research Notes に保存。1日1ページにまとめる。"""
     try:
-        token = _load_notion_token()
-        if not token:
-            return
-
-        def rt(s):
-            return [{"type": "text", "text": {"content": str(s)[:2000]}}]
-
-        params_text = ", ".join(f"{k}={v}" for k, v in meta.get("params", {}).items())
-        diff = meta.get("diff_from_last", {})
-        if diff:
-            diff_text = ", ".join(
-                f"{k}: {v.get('from')} -> {v.get('to')}" for k, v in diff.items()
-            )
-        else:
-            diff_text = "初回実行 / 前回から変更なし"
-
-        fig_rel = fig_path.relative_to(_REPO_ROOT).as_posix()
-        date_str = meta["date"]
-
-        # データ来歴ブロック（検出できた場合のみ）
-        data_info = meta.get("data_info", {})
-        data_info_blocks = []
-        if data_info:
-            parts = []
-            if "source" in data_info:
-                parts.append(f"source={data_info['source']}")
-            if "measured_on" in data_info:
-                parts.append(f"measured_on={data_info['measured_on']}")
-            if "processing" in data_info:
-                parts.append(f"processing={data_info['processing']}")
-            if parts:
-                data_info_blocks = [
-                    {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt("データ情報")}},
-                    {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(" / ".join(parts))}},
-                ]
-
-        figure_blocks = data_info_blocks + [
-            {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt(meta["script"])}},
-            {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt("パラメータ")}},
-            {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(params_text)}},
-            {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt("前回からの変更点")}},
-            {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(diff_text)}},
-            {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt("図ファイル")}},
-            {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(fig_rel)}},
-        ]
-
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "Notion-Version": "2022-06-28",
-        }
-
-        # 1日1ページ: その日の [図] ページを検索
-        existing_id = _find_today_figure_page(token, date_str)
-
-        if existing_id:
-            # 既存ページに追記（区切り線 + 新規図ブロック）
-            append_blocks = [
-                {"object": "block", "type": "divider", "divider": {}},
-            ] + figure_blocks
-            url = f"https://api.notion.com/v1/blocks/{existing_id}/children"
-            data = json.dumps({"children": append_blocks}).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers=headers, method="PATCH")
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                json.loads(resp.read().decode())
-            page_url = f"https://www.notion.so/{existing_id.replace('-', '')}"
-            print(f"[figure_logger] Notion追記: {page_url}")
-        else:
-            # 新規ページ作成（Type=図 で自動振り分け）
-            payload = {
-                "parent": {"database_id": NOTION_DB_ID},
-                "properties": {
-                    "Name": {"title": rt(f"[図] {date_str}")},
-                    "Date": {"date": {"start": date_str}},
-                    "Script": {"rich_text": rt(meta["script"])},
-                    "Description": {"rich_text": rt(meta["description"])},
-                    "Type": {"select": {"name": "図"}},
-                },
-                "children": figure_blocks,
-            }
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(
-                "https://api.notion.com/v1/pages",
-                data=data,
-                headers=headers,
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                result = json.loads(resp.read().decode())
-            page_url = result.get("url", "")
-            print(f"[figure_logger] Notion保存: {page_url}")
-    except Exception as e:
-        print(f"[figure_logger] Notion保存スキップ ({e})")
-
-
-# =============================================================================
-# ユーティリティ
-# =============================================================================
-
-def _append_session_log(date_str: str, script_name: str, description: str):
-    """
-    .figure_history/session_YYYY-MM-DD.json にスクリプト実行を記録する。
-    同一日に同じスクリプトが複数回呼ばれた場合は最新エントリで上書き（重複しない）。
-    """
-    try:
-        _HISTORY_DIR.mkdir(exist_ok=True)
-        session_file = _HISTORY_DIR / f"session_{date_str}.json"
-        entries = []
-        if session_file.exists():
-            with open(session_file, encoding="utf-8") as f:
-                entries = json.load(f)
-        entries = [e for e in entries if e.get("script") != script_name]
-        entries.append({
-            "time": datetime.now().strftime("%H:%M"),
-            "script": script_name,
-            "description": description,
-        })
-        with open(session_file, "w", encoding="utf-8") as f:
-            json.dump(entries, f, ensure_ascii=False, indent=2)
+        status = subprocess.check_output(
+            ["git", "-C", str(_REPO_ROOT), "status", "--porcelain"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        dirty = bool(status.strip())
+        changed_files = [line[3:] for line in status.splitlines() if len(line) >= 4][:50]
     except Exception:
-        pass  # セッションログ失敗はメイン処理に影響させない
+        dirty = False
+        changed_files = []
+
+    return {
+        "commit": commit,
+        "dirty": dirty,
+        "changed_files": changed_files,
+    }
 
 
 def _detect_data_info() -> dict:
     """
-    呼び出し元スクリプトのグローバル変数を検査し、データ来歴を自動推定する。
-    - source      : 元データのフォルダ名
-    - measured_on : パスから検出した測定日 (YYYY-MM-DD 形式)
-    - processing  : フォルダ名から推定した処理ステップ列
-    何も検出できなかった場合は空dict を返す（エラーにしない）。
+    Try to infer data lineage from caller globals.
+    Non-fatal: returns {} on failure.
     """
     try:
-        caller_globals = {}
+        caller_globals: dict[str, Any] = {}
         for frame_info in inspect.stack():
             if Path(frame_info.filename).resolve() != Path(__file__).resolve():
                 caller_globals = frame_info.frame.f_globals
                 break
 
         path_keywords = {"DIR", "PATH", "CSV", "FILE", "DATA", "INPUT", "ROOT"}
-        paths = {
-            k: str(v)
-            for k, v in caller_globals.items()
-            if isinstance(v, (str, Path))
-            and any(kw in k.upper() for kw in path_keywords)
-            and ("/" in str(v) or "\\" in str(v))
+        candidate_paths = {
+            key: str(value)
+            for key, value in caller_globals.items()
+            if isinstance(value, (str, Path))
+            and any(kw in key.upper() for kw in path_keywords)
+            and ("/" in str(value) or "\\" in str(value))
         }
 
-        # 測定日: パス文字列から YYYY-MM-DD / YYYYMMDD / YYYY_MM_DD を探す
-        date_pattern = re.compile(r"(\d{4})[-_]?(\d{2})[-_]?(\d{2})")
+        date_pat = re.compile(r"(\d{4})[-_]?(\d{2})[-_]?(\d{2})")
         measured_on = None
-        for v in paths.values():
-            m = date_pattern.search(v)
+        for value in candidate_paths.values():
+            m = date_pat.search(value)
             if m:
                 measured_on = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
                 break
 
-        # 処理ステップ: フォルダ名に含まれるキーワードを収集
         proc_keywords = [
-            "bg_corr", "subtracted", "aligned", "corrected",
-            "filtered", "registered", "cropped", "denoised",
+            "bg_corr",
+            "subtracted",
+            "aligned",
+            "corrected",
+            "filtered",
+            "registered",
+            "cropped",
+            "denoised",
         ]
         processing = []
-        for v in paths.values():
+        for value in candidate_paths.values():
+            low = value.lower()
             for kw in proc_keywords:
-                if kw in v.lower() and kw not in processing:
+                if kw in low and kw not in processing:
                     processing.append(kw)
 
-        # 元データ source: 最も短いパスのフォルダ名を使う
-        source_path = min(paths.values(), key=len, default=None)
+        source_path = min(candidate_paths.values(), key=len, default="")
 
         result = {}
         if source_path:
@@ -287,100 +271,81 @@ def _detect_data_info() -> dict:
         if measured_on:
             result["measured_on"] = measured_on
         if processing:
-            result["processing"] = " → ".join(processing)
-
+            result["processing"] = " -> ".join(processing)
         return result
     except Exception:
         return {}
 
 
-def _detect_script_name() -> str:
-    """呼び出し元スクリプトのファイル名（拡張子なし）を返す"""
-    for frame in traceback.extract_stack():
-        path = Path(frame.filename)
-        if path.stem not in ("figure_logger", "<string>", "runpy"):
-            return path.stem
-    return "unknown"
+def _json_dump(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _load_history(script_name: str) -> dict:
-    """前回のパラメータ履歴を読み込む"""
-    _HISTORY_DIR.mkdir(exist_ok=True)
-    history_file = _HISTORY_DIR / f"{script_name}.json"
-    if history_file.exists():
-        with open(history_file, encoding="utf-8") as f:
-            return json.load(f)
-    return {}
+def _append_manifest(record: dict, manifest_path: Path) -> None:
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    with manifest_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def _save_history(script_name: str, params: dict):
-    """今回のパラメータを履歴として保存する"""
-    _HISTORY_DIR.mkdir(exist_ok=True)
-    history_file = _HISTORY_DIR / f"{script_name}.json"
-    with open(history_file, "w", encoding="utf-8") as f:
-        json.dump(params, f, ensure_ascii=False, indent=2)
+def _append_session_log(record: dict) -> None:
+    _HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    date_str = record.get("date_local", datetime.now().strftime("%Y-%m-%d"))
+    session_file = _HISTORY_DIR / f"session_{date_str}.json"
+    if session_file.exists():
+        try:
+            entries = json.loads(session_file.read_text(encoding="utf-8"))
+            if not isinstance(entries, list):
+                entries = []
+        except Exception:
+            entries = []
+    else:
+        entries = []
+
+    entries.append(
+        {
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "script": record.get("script", "unknown"),
+            "run_id": record.get("run_id", ""),
+            "figure_index": record.get("figure_index", 0),
+            "description": record.get("description", ""),
+            "inbox_file": record.get("inbox_file", ""),
+            "published_file": record.get("published_file", ""),
+        }
+    )
+    session_file.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _compute_diff(prev: dict, curr: dict) -> dict:
-    """前回から変わったパラメータだけを返す"""
-    diff = {}
-    all_keys = set(prev.keys()) | set(curr.keys())
-    for k in all_keys:
-        if k not in prev:
-            diff[k] = {"from": "(新規)", "to": curr[k]}
-        elif k not in curr:
-            diff[k] = {"from": prev[k], "to": "(削除)"}
-        elif prev[k] != curr[k]:
-            diff[k] = {"from": prev[k], "to": curr[k]}
-    return diff
+def _next_publish_version(output_dir: Path, date_str: str, script_name: str, fmt: str) -> int:
+    prefix = f"QPI_{date_str}_{script_name}_v"
+    max_v = 0
+    for p in output_dir.glob(f"QPI_{date_str}_{script_name}_v*.{fmt}"):
+        stem = p.stem
+        if not stem.startswith(prefix):
+            continue
+        tail = stem[len(prefix) :]
+        if tail.isdigit():
+            max_v = max(max_v, int(tail))
+    return max_v + 1
 
 
-def _make_filename(date_str: str, script_name: str, diff: dict, version: int) -> str:
-    """
-    ファイル名を生成する。
-    差分があればそのキーと新値をファイル名に入れる（長くなりすぎないよう最大2項目）。
-    差分なし / 初回はバージョン番号のみ。
-    """
-    parts = [f"QPI_{date_str}_{script_name}"]
+def _append_experiment_log(record: dict) -> None:
+    _EXPERIMENT_LOG.parent.mkdir(parents=True, exist_ok=True)
 
-    diff_items = [(k, v["to"]) for k, v in diff.items() if v.get("to") != "(削除)"]
-    for k, v in diff_items[:2]:
-        safe_k = k.replace(" ", "_")
-        safe_v = str(v).replace(" ", "_").replace("/", "-")
-        parts.append(f"{safe_k}={safe_v}")
+    params = record.get("params", {})
+    params_str = ", ".join(f"`{k}={v}`" for k, v in params.items()) or "(none)"
 
-    parts.append(f"v{version}")
-    return "_".join(parts)
-
-
-def _next_version(output_dir: Path, base_name: str) -> int:
-    """同日・同スクリプト名のファイルが既に何枚あるか数えてバージョンを決める"""
-    existing = list(output_dir.glob(f"{base_name}_v*.png"))
-    return len(existing) + 1
-
-
-def _append_experiment_log(
-    date_str: str,
-    script_name: str,
-    description: str,
-    params: dict,
-    diff: dict,
-    fig_path: Path,
-    data_info: dict,
-):
-    """docs/EXPERIMENT_LOG.md に追記する"""
-    _EXPERIMENT_LOG.parent.mkdir(exist_ok=True)
-
-    params_str = ", ".join(f"`{k}={v}`" for k, v in params.items())
-
+    diff = record.get("diff_from_last", {})
     if diff:
-        diff_lines = []
-        for k, v in diff.items():
-            diff_lines.append(f"  - `{k}`: {v.get('from')} → **{v.get('to')}**")
+        diff_lines = [
+            f"  - `{k}`: {v.get('from')} -> **{v.get('to')}**"
+            for k, v in sorted(diff.items())
+        ]
         diff_str = "\n".join(diff_lines)
     else:
-        diff_str = "  - (初回実行 / 前回から変更なし)"
+        diff_str = "  - (first run / no change)"
 
+    data_info = record.get("data_info", {})
     data_info_line = ""
     if data_info:
         parts = []
@@ -393,126 +358,296 @@ def _append_experiment_log(
         if parts:
             data_info_line = f"\n**データ情報**: {' / '.join(parts)}\n"
 
+    inbox_rel = _to_rel_or_abs(Path(record["inbox_file"]))
+    published_file = record.get("published_file", "")
+    if published_file:
+        published_rel = _to_rel_or_abs(Path(published_file))
+    else:
+        published_rel = "(disabled)"
+
     entry = f"""
 ---
 
-## {date_str} | `{script_name}`
+## {record['date_local']} | `{record['script']}` | run `{record['run_id']}`
 
-**説明**: {description}
+**説明**: {record.get('description', '')}
 {data_info_line}
 **パラメータ**: {params_str}
 
 **前回からの変更点**:
 {diff_str}
 
-**図ファイル**: `{fig_path.relative_to(_REPO_ROOT).as_posix()}`
+**Inbox**: `{inbox_rel}`
+**Published**: `{published_rel}`
 """
 
-    with open(_EXPERIMENT_LOG, "a", encoding="utf-8") as f:
+    with _EXPERIMENT_LOG.open("a", encoding="utf-8") as f:
         f.write(entry)
 
 
-# =============================================================================
-# メイン関数
-# =============================================================================
+def _to_rel_or_abs(path: Path) -> str:
+    try:
+        return path.resolve().relative_to(_REPO_ROOT.resolve()).as_posix()
+    except Exception:
+        return str(path.resolve())
 
+
+# =============================================================================
+# Optional Notion logging
+# =============================================================================
+def _load_notion_token() -> str:
+    mcp_path = _REPO_ROOT / ".cursor" / "mcp.json"
+    if not mcp_path.exists():
+        return ""
+    try:
+        config = json.loads(mcp_path.read_text(encoding="utf-8"))
+        headers_str = (
+            config.get("mcpServers", {})
+            .get("notionApi", {})
+            .get("env", {})
+            .get("OPENAPI_MCP_HEADERS", "{}")
+        )
+        headers = json.loads(headers_str)
+        return headers.get("Authorization", "").replace("Bearer ", "").strip()
+    except Exception:
+        return ""
+
+
+def _find_today_figure_page(token: str, date_str: str) -> Optional[str]:
+    try:
+        url = f"https://api.notion.com/v1/databases/{NOTION_DB_ID}/query"
+        payload = {
+            "filter": {
+                "property": "Date",
+                "date": {"equals": date_str},
+            },
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "Notion-Version": "2022-06-28",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result = json.loads(resp.read().decode())
+
+        for page in result.get("results", []):
+            props = page.get("properties", {})
+            title_prop = props.get("Name", props.get("title", {}))
+            title_list = title_prop.get("title", [])
+            page_title = "".join(t.get("plain_text", "") for t in title_list)
+            if page_title.startswith("[図]"):
+                return page["id"]
+    except Exception:
+        return None
+    return None
+
+
+def _save_to_notion(record: dict) -> None:
+    token = _load_notion_token()
+    if not token:
+        return
+
+    def rt(text: str):
+        return [{"type": "text", "text": {"content": str(text)[:2000]}}]
+
+    try:
+        date_str = record["date_local"]
+        params_text = ", ".join(f"{k}={v}" for k, v in record.get("params", {}).items())
+        diff = record.get("diff_from_last", {})
+        if diff:
+            diff_text = ", ".join(
+                f"{k}: {v.get('from')} -> {v.get('to')}" for k, v in diff.items()
+            )
+        else:
+            diff_text = "first run / no change"
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Notion-Version": "2022-06-28",
+        }
+
+        figure_blocks = [
+            {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt(record["script"])}},
+            {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(f"run_id={record['run_id']} idx={record['figure_index']}")}},
+            {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(f"description: {record.get('description', '')}")}},
+            {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(f"params: {params_text}")}},
+            {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(f"diff: {diff_text}")}},
+            {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(f"inbox: {record.get('inbox_file', '')}")}},
+        ]
+
+        existing_id = _find_today_figure_page(token, date_str)
+        if existing_id:
+            payload = {"children": [{"object": "block", "type": "divider", "divider": {}}] + figure_blocks}
+            req = urllib.request.Request(
+                f"https://api.notion.com/v1/blocks/{existing_id}/children",
+                data=json.dumps(payload).encode("utf-8"),
+                headers=headers,
+                method="PATCH",
+            )
+            with urllib.request.urlopen(req, timeout=10):
+                pass
+            print(f"[figure_logger] Notion追記: https://www.notion.so/{existing_id.replace('-', '')}")
+            return
+
+        payload = {
+            "parent": {"database_id": NOTION_DB_ID},
+            "properties": {
+                "Name": {"title": rt(f"[図] {date_str}")},
+                "Date": {"date": {"start": date_str}},
+                "Script": {"rich_text": rt(record["script"])},
+                "Description": {"rich_text": rt(record.get("description", ""))},
+                "Type": {"select": {"name": "図"}},
+            },
+            "children": figure_blocks,
+        }
+        req = urllib.request.Request(
+            "https://api.notion.com/v1/pages",
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result = json.loads(resp.read().decode())
+        print(f"[figure_logger] Notion保存: {result.get('url', '')}")
+    except Exception as e:
+        print(f"[figure_logger] Notion保存スキップ ({e})")
+
+
+# =============================================================================
+# Public API
+# =============================================================================
 def save_figure(
     fig,
-    params: dict,
-    description: str,
-    script_name: str = None,
-    output_dir=None,
+    params: Optional[dict] = None,
+    description: str = "",
+    script_name: Optional[str] = None,
+    output_dir: Optional[os.PathLike | str] = None,
     dpi: int = 150,
     fmt: str = "png",
+    publish: Optional[bool] = None,
+    save_to_notion: Optional[bool] = None,
+    extra_meta: Optional[dict] = None,
 ) -> Path:
     """
-    matplotlib Figure を保存し、EXPERIMENT_LOG.md に記録する。
+    Save a matplotlib Figure with inbox-first workflow.
 
     Parameters
     ----------
-    fig         : matplotlib.figure.Figure
-    params      : このスクリプトの主要パラメータ dict
-    description : この図が何を示しているかの日本語説明
-    script_name : 省略時は呼び出し元ファイル名を自動検出
-    output_dir  : 省略時は results/figures/
-    dpi         : 解像度（デフォルト150）
-    fmt         : 保存フォーマット（デフォルト"png"）
+    fig : matplotlib.figure.Figure
+        Figure object.
+    params : dict, optional
+        Key parameters for reproducibility.
+    description : str
+        Human-readable description.
+    script_name : str, optional
+        Caller script name. Auto-detected if omitted.
+    output_dir : path-like, optional
+        Legacy publish directory. Default: results/figures.
+    dpi : int
+        Render dpi.
+    fmt : str
+        Image format extension (png/pdf/svg ...).
+    publish : bool, optional
+        Save legacy published copy. If None, reads env QPI_FIGURE_LOGGER_PUBLISH (default True).
+    save_to_notion : bool, optional
+        Whether to append to Notion [図] page. If None, reads env QPI_FIGURE_LOGGER_NOTION (default False).
+    extra_meta : dict, optional
+        Additional metadata to include in per-figure JSON.
 
     Returns
     -------
-    Path : 保存されたファイルのパス
+    pathlib.Path
+        Published file path when publish=True, else inbox file path.
     """
-    global _call_count
-    _call_count += 1
+    params = params or {}
+    if not isinstance(params, dict):
+        raise TypeError("params must be a dict")
 
-    if _call_count > BATCH_THRESHOLD:
-        # バッチ処理とみなし、ロギング・Notion保存を全てスキップしてシンプル保存のみ
-        if _call_count == BATCH_THRESHOLD + 1:
-            print("[figure_logger] バッチ処理とみなし、以降はシンプル保存のみ（ログ・Notion保存スキップ）")
-        out = Path(output_dir) if output_dir else _DEFAULT_OUTPUT_DIR
+    if publish is None:
+        publish = _env_bool("QPI_FIGURE_LOGGER_PUBLISH", True)
+    if save_to_notion is None:
+        save_to_notion = _env_bool("QPI_FIGURE_LOGGER_NOTION", False)
+
+    script = _sanitize_token(script_name or _detect_script_name())
+    caller_file = _detect_caller_file()
+    run_id, fig_index = _ensure_run_context(script)
+
+    now_local = datetime.now()
+    date_local = now_local.strftime("%Y-%m-%d")
+    fmt = fmt.lower().lstrip(".")
+
+    prev = _load_history(script)
+    diff = _compute_diff(prev, params)
+
+    inbox_root = _resolve_inbox_root()
+    manifest_path = _manifest_path(inbox_root)
+    inbox_dir = inbox_root / date_local / script / run_id
+    inbox_dir.mkdir(parents=True, exist_ok=True)
+
+    base = f"{script}__{run_id}__f{fig_index:03d}"
+    inbox_file = inbox_dir / f"{base}.{fmt}"
+    fig.savefig(inbox_file, dpi=dpi, bbox_inches="tight")
+
+    published_file = ""
+    if publish:
+        out = Path(output_dir).expanduser().resolve() if output_dir else _DEFAULT_PUBLISH_DIR
         out.mkdir(parents=True, exist_ok=True)
-        name = script_name or _detect_script_name()
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        p = out / f"batch_{name}_{ts}.{fmt}"
-        fig.savefig(p, dpi=dpi, bbox_inches="tight")
-        return p
+        version = _next_publish_version(out, date_local, script, fmt)
+        pub_name = f"QPI_{date_local}_{script}_v{version}.{fmt}"
+        pub_path = out / pub_name
+        shutil.copy2(inbox_file, pub_path)
+        published_file = str(pub_path)
+    else:
+        pub_path = None
 
-    if script_name is None:
-        script_name = _detect_script_name()
-
-    data_info = _detect_data_info()
-
-    output_dir = Path(output_dir) if output_dir else _DEFAULT_OUTPUT_DIR
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    date_str = datetime.now().strftime("%Y-%m-%d")
-
-    # 前回との差分を計算
-    prev_params = _load_history(script_name)
-    diff = _compute_diff(prev_params, params)
-
-    # ファイル名のベース部分（バージョン番号なし）
-    base_name_no_ver = "_".join(
-        [f"QPI_{date_str}_{script_name}"]
-        + [
-            f"{k.replace(' ', '_')}={str(v['to']).replace(' ', '_').replace('/', '-')}"
-            for k, v in list(diff.items())[:2]
-            if v.get("to") != "(削除)"
-        ]
-    )
-
-    version = _next_version(output_dir, base_name_no_ver)
-    filename = f"{base_name_no_ver}_v{version}.{fmt}"
-    fig_path = output_dir / filename
-
-    # 図を保存
-    fig.savefig(fig_path, dpi=dpi, bbox_inches="tight")
-    print(f"[figure_logger] 保存: {fig_path}")
-
-    # メタデータJSON
     meta = {
-        "date": date_str,
-        "script": script_name,
+        "created_at_utc": _utc_now_iso(),
+        "date_local": date_local,
+        "script": script,
+        "caller_file": caller_file,
+        "run_id": run_id,
+        "figure_index": fig_index,
         "description": description,
         "params": params,
         "diff_from_last": diff,
-        "file": str(fig_path),
-        "data_info": data_info,
+        "format": fmt,
+        "dpi": dpi,
+        "inbox_file": str(inbox_file.resolve()),
+        "published_file": published_file,
+        "manifest_file": str(manifest_path.resolve()),
+        "data_info": _detect_data_info(),
+        "git": _git_snapshot(),
+        "runtime": {
+            "python": sys.version.split()[0],
+            "platform": sys.platform,
+            "hostname": socket.gethostname(),
+            "cwd": str(Path.cwd().resolve()),
+            "repo_root": str(_REPO_ROOT.resolve()),
+        },
     }
-    meta_path = fig_path.with_suffix(".json")
-    with open(meta_path, "w", encoding="utf-8") as f:
-        json.dump(meta, f, ensure_ascii=False, indent=2)
+    if extra_meta:
+        meta["extra_meta"] = extra_meta
 
-    # 履歴を更新
-    _save_history(script_name, params)
+    meta_path = inbox_file.with_suffix(".json")
+    _json_dump(meta_path, meta)
 
-    # EXPERIMENT_LOG.md に追記
-    _append_experiment_log(date_str, script_name, description, params, diff, fig_path, data_info)
-    print(f"[figure_logger] EXPERIMENT_LOG.md に記録しました")
+    _save_history(script, params)
+    _append_manifest(meta, manifest_path)
+    _append_session_log(meta)
+    _append_experiment_log(meta)
 
-    # セッションログに追記
-    _append_session_log(date_str, script_name, description)
+    if save_to_notion:
+        _save_to_notion(meta)
 
-    _save_to_notion(meta, fig_path)
+    print(f"[figure_logger] inbox saved: {inbox_file}")
+    if published_file:
+        print(f"[figure_logger] published copy: {published_file}")
+    print(f"[figure_logger] manifest: {manifest_path}")
 
-    return fig_path
+    return Path(published_file) if published_file else inbox_file

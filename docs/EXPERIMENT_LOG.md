@@ -1925,3 +1925,33 @@ mean_RI = n_medium + (total_phase × λ × pixel_area) / (2π × volume)
 **最終更新**: 2026-01-30  
 **プロジェクト**: QPI_omni  
 **著者**: AI Assistant
+
+---
+
+## 2026-02-27 | `figure_logger_smoke` | run `figure_logger_smoke_20260227T094003Z_0a108e`
+
+**説明**: figure_logger smoke test
+
+**パラメータ**: `test_case=smoke`, `alpha=1`
+
+**前回からの変更点**:
+  - `alpha`: (new) -> **1**
+  - `test_case`: (new) -> **smoke**
+
+**Inbox**: `/Users/kitak/Desktop/figure-hub/inbox/2026-02-27/figure_logger_smoke/figure_logger_smoke_20260227T094003Z_0a108e/figure_logger_smoke__figure_logger_smoke_20260227T094003Z_0a108e__f001.png`
+**Published**: `results/figures/QPI_2026-02-27_figure_logger_smoke_v1.png`
+
+---
+
+## 2026-02-27 | `figure_logger_smoke_drive` | run `figure_logger_smoke_drive_20260227T094541Z_550bce`
+
+**説明**: drive inbox smoke test
+
+**パラメータ**: `test_case=drive_smoke`, `beta=2`
+
+**前回からの変更点**:
+  - `beta`: (new) -> **2**
+  - `test_case`: (new) -> **drive_smoke**
+
+**Inbox**: `/Users/kitak/Library/CloudStorage/GoogleDrive-kengo_kitagishi@cell.c.u-tokyo.ac.jp/共有ドライブ/wakamotolab_meeting/kitagishi/figure-hub/inbox/2026-02-27/figure_logger_smoke_drive/figure_logger_smoke_drive_20260227T094541Z_550bce/figure_logger_smoke_drive__figure_logger_smoke_drive_20260227T094541Z_550bce__f001.png`
+**Published**: `results/figures/QPI_2026-02-27_figure_logger_smoke_drive_v1.png`

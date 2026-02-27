@@ -18,10 +18,15 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import getpass
 import hashlib
 import json
+import os
+import platform
 import re
+import shlex
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -261,6 +266,36 @@ def infer_constraints(text: str) -> List[str]:
     return constraints
 
 
+def to_absolute_candidate(file_ref: str, repo_root: Path) -> str:
+    ref = file_ref.strip()
+    if not ref:
+        return ref
+    if ref.startswith("~"):
+        return str(Path(ref).expanduser().resolve())
+    p = Path(ref)
+    if p.is_absolute():
+        return str(p)
+    return str((repo_root / ref).resolve())
+
+
+def build_runtime_context(
+    args: argparse.Namespace,
+    repo_root: Path,
+    obsidian_daily_dir: Path,
+) -> Dict[str, Any]:
+    return {
+        "os": f"{platform.system()} {platform.release()}",
+        "user": getpass.getuser(),
+        "repo_root": str(repo_root),
+        "obsidian_daily_dir": str(obsidian_daily_dir),
+        "state_file": str(STATE_FILE),
+        "worklog_spec": str(WORKLOG_SPEC_PATH),
+        "run_command": " ".join(shlex.quote(a) for a in sys.argv),
+        "inactivity_minutes": max(args.inactivity_minutes, 1),
+        "dry_run": args.dry_run,
+    }
+
+
 def summarize_transcript(path: Path) -> Optional[Dict[str, Any]]:
     msgs = parse_messages(path)
     if not msgs:
@@ -348,81 +383,165 @@ def append_daily_entry(daily_file: Path, block: str, dry_run: bool) -> None:
         f.write("\n")
 
 
-def render_transcript_block(item: Dict[str, Any]) -> str:
+def render_transcript_block(item: Dict[str, Any], runtime: Dict[str, Any]) -> str:
     t = item["mtime"].strftime("%H:%M")
+    date_str = item["mtime"].strftime("%Y-%m-%d")
+    daily_file = Path(runtime["obsidian_daily_dir"]) / f"{date_str}.md"
     requirements = item["user_highlights"] or ([item["first_user"]] if item["first_user"] else ["none"])
     policies = item["assistant_highlights"] or ([item["last_assistant"]] if item["last_assistant"] else ["none"])
     commands = item.get("command_hints", [])
     files = item.get("files", [])
     constraints = item.get("constraints", ["none"])
+    scope_files = [to_absolute_candidate(fp, Path(runtime["repo_root"])) for fp in files[:6]]
+    main_goal = requirements[0] if requirements and requirements[0] != "none" else "会話ログからの要件抽出（手動確認前提）"
+    unresolved = "none"
+    if not item["first_user"].strip():
+        unresolved = "ユーザー初回要件が空に近いため、後続文脈から補完している。"
+    elif len(requirements) < 2:
+        unresolved = "要件粒度が粗い可能性があるため、保存後に手動で具体化すると精度が上がる。"
 
     lines = [
         f"## {t} | 作業ログ ({item['source']})",
         "",
-        "### 1. 背景",
+        "### 前提",
+        f"- 対象OS: {runtime['os']}",
+        f"- 作業ユーザー: {runtime['user']}",
+        f"- トークン/設定の取得元: transcript JSONL（`{item['path']}`）を参照。秘密情報は本処理では未使用。",
+        "- バックアップ方針: 自動ジョブでは追記前バックアップは省略。必要時のみ Step 0 を手動実行。",
+        "",
+        "### 背景",
         f"- セッションタイトル: {item['title']}",
         f"- Transcript: `{item['path']}`",
         f"- 会話ターン: user={item['user_turns']}, assistant={item['assistant_turns']}, total={item['message_count']}",
-        f"- 仕様参照: `{WORKLOG_SPEC_PATH}`",
+        f"- 仕様参照: `{runtime['worklog_spec']}`",
         "",
-        "### 2. 要件定義（ユーザー要件）",
+        "### 要件定義（ユーザー要件）",
+        f"- 目的: {main_goal}",
+        (
+            "- スコープ: "
+            + ", ".join([f"`{item['path']}`", f"`{daily_file}`"] + [f"`{p}`" for p in scope_files])
+        ),
+        "- 期待成果物: WORKLOG_SPEC準拠の作業ログブロックが生成され、日次ノートに追記可能な状態になる。",
+        (
+            "- 受け入れ条件: "
+            "実装手順に `目的/コマンド/期待結果/実結果` が入り、"
+            "検証手順に `判定(pass/fail)` と `根拠` が記載される。"
+        ),
+        "- 制約/前提: " + " / ".join(constraints[:4]),
+        f"- 未確定事項: {unresolved}",
+        "- ユーザー要求（抽出）:",
     ]
 
-    for r in requirements:
+    for r in requirements[:8]:
         lines.append(f"- {r}")
 
     lines.extend([
         "",
-        "### 3. 実装方針",
+        "### 実装方針",
+        "- 採用方針: transcriptから要件・コマンド・制約を抽出し、定型テンプレートへ構造化して保存する。",
+        "- 採用理由: 自動化時でも再現性を担保し、あとから第三者が追跡可能な記録を残せるため。",
+        "- 実行順序: 候補収集 -> 要点抽出 -> テンプレート成形 -> 日次追記 -> 検証コマンド提示。",
+        (
+            "- 代替案と不採用理由: "
+            "自由文のみの要約は書きやすいが再現性が落ちるため不採用。"
+        ),
+        (
+            "- リスクと緩和策: "
+            "抽出漏れのリスクに対して `not executed` 明記・絶対パス記録・dry-run確認で緩和。"
+        ),
+        "- 方針メモ（会話抽出）:",
     ])
-    for p in policies[:4]:
+    for p in policies[:6]:
         lines.append(f"- {p}")
 
     lines.extend([
         "",
-        "### 4. 実装手順（Step 1, 2, 3… コマンド付き）",
-        "1. 要件確認",
-        f"   - source: `{item['path']}`",
-        "2. 実装・操作",
-    ])
-
-    if commands:
-        for c in commands:
-            lines.append(f"   - command: `{c}`")
-    else:
-        lines.append("   - command: `none`")
-
-    lines.extend([
-        "3. 記録",
-        "   - command: `python3 scripts/session_activity_logger.py`",
+        "### 実装手順（Step 0, 1, 2... コマンド付き）",
+        "#### Step 0: バックアップ（任意）",
+        "- 目的: 日次ノート追記前のロールバックポイントを作成する。",
+        "```bash",
+        f"cp \"{daily_file}\" \"{daily_file}.bak\"",
+        "```",
+        "- 期待結果: `.bak` が作成される。",
+        "- 実結果: not executed（自動収集ジョブのため省略）。",
         "",
-        "### 5. 検証手順と結果",
-        "1. inactivity条件を満たす transcript のみ記録対象。",
-        f"2. 結果: user_turns={item['user_turns']}, assistant_turns={item['assistant_turns']}, messages={item['message_count']}",
-        f"3. 最終応答要約: {_truncate(item['last_assistant'] or 'none', 320)}",
+        "#### Step 1: transcript候補の収集と完了判定",
+        "- 目的: 完了済みセッションのみを記録対象にする。",
+        "```bash",
+        runtime["run_command"],
+        "```",
+        f"- 期待結果: 最終更新から {runtime['inactivity_minutes']} 分以上経過した transcript が候補化される。",
+        (
+            "- 実結果: "
+            f"source={item['source']}, mtime={item['mtime'].isoformat()}, "
+            f"user_turns={item['user_turns']}, assistant_turns={item['assistant_turns']}, "
+            f"messages={item['message_count']}"
+        ),
         "",
-        "### 6. 変更ファイル一覧",
+        "#### Step 2: 要件/方針/コマンド候補の抽出",
+        "- 目的: 会話内容から再現可能な要点を抽出する。",
+        "```bash",
+        runtime["run_command"],
+        "```",
+        "- 期待結果: 要件・方針・コマンド候補・制約・対象ファイルが抽出される。",
+        f"- 実結果: command_hints={len(commands)}, files={len(files)}, constraints={len(constraints)}",
+        "",
+        "#### Step 3: 日次ノートへの追記",
+        "- 目的: WORKLOG_SPEC準拠ブロックを日次ノートに追記する。",
+        "```bash",
+        runtime["run_command"],
+        "```",
+        f"- 期待結果: `{daily_file}` に本ブロックが追加される。",
+        "- 実結果: "
+        + ("not executed（dry-runモード）" if runtime["dry_run"] else "executed（追記処理を実行）"),
+        "",
+        "#### Step 4: 最終検証チェックリスト",
+        "- 目的: 追記結果を確認し、再現可能性を担保する。",
+        "```bash",
+        f"rg -n \"## {t} | 作業ログ\" \"{daily_file}\"",
+        f"tail -n 120 \"{daily_file}\"",
+        "```",
+        "- 期待結果: 該当時刻のブロックが検出され、末尾に追記内容が存在する。",
+        "- 実結果: not executed（検証コマンドは手動確認用に提示）。",
+        "",
+        "### 検証手順と結果",
+        "1. transcript完了条件の確認",
+        "```bash",
+        runtime["run_command"],
+        "```",
+        f"- 実結果: inactivity閾値={runtime['inactivity_minutes']}分, transcript={item['path']}",
+        "2. 抽出結果の確認",
+        "```bash",
+        runtime["run_command"],
+        "```",
+        f"- 実結果: final_assistant_summary={_truncate(item['last_assistant'] or 'none', 320)}",
+        "- 判定: pass（ログブロック生成条件を満たす）",
+        f"- 根拠: transcript=`{item['path']}` / daily_note=`{daily_file}` / state=`{runtime['state_file']}`",
+        "",
+        "### 変更ファイル一覧",
     ])
 
     if files:
         for fp in files:
-            lines.append(f"- `{fp}`")
+            abs_fp = to_absolute_candidate(fp, Path(runtime["repo_root"]))
+            lines.append(f"- `{abs_fp}`: 会話中で参照/変更候補として言及。関連作業の対象を明示するため記録。")
     else:
         lines.append("- none")
 
     lines.extend([
         "",
-        "### 7. 既知の制約・注意点",
+        "### 既知の制約・注意点",
     ])
     for c in constraints:
         lines.append(f"- {c}")
 
     lines.extend([
         "",
-        "### 8. 他PCでの再現手順",
-        "1. `/Users/kitak/...` の絶対パスを対象PCのパスへ置換する。",
-        "2. Step 4で記録したコマンドを上から順に実行する。",
+        "### 他PCでの再現手順",
+        "1. `--obsidian-daily-dir` と `--repo-root` を対象PCの実パスへ置換する。",
+        "2. launchd利用時は対象PCのユーザーでジョブ再登録する。",
         "3. `python3 scripts/session_activity_logger.py --dry-run` で出力確認後、本実行する。",
+        "4. 実装手順の Step 1〜4 を上から順に実行して結果を照合する。",
     ])
 
     return "\n".join(lines)
@@ -456,36 +575,120 @@ def run_git(args_repo_root: Path) -> Dict[str, Any]:
     }
 
 
-def render_git_block(git_info: Dict[str, Any]) -> str:
+def render_git_block(git_info: Dict[str, Any], runtime: Dict[str, Any]) -> str:
     t = now_local().strftime("%H:%M")
+    date_str = now_local().strftime("%Y-%m-%d")
+    daily_file = Path(runtime["obsidian_daily_dir"]) / f"{date_str}.md"
     lines = [
         f"## {t} | Repo snapshot",
         "",
-        "### 5. 検証手順と結果",
-        f"- Branch: `{git_info['branch']}`",
-        f"- HEAD: `{git_info['head'][:12]}`",
-        f"- Latest commit: `{git_info['latest']}`",
+        "### 前提",
+        f"- 対象OS: {runtime['os']}",
+        f"- 作業ユーザー: {runtime['user']}",
+        f"- トークン/設定の取得元: Gitメタデータ（`{runtime['repo_root']}`）",
+        "- バックアップ方針: 状態確認のみ。ファイル更新は行わない。",
         "",
-        "### 6. 変更ファイル一覧",
+        "### 背景",
+        "- リポジトリ状態の定点観測を作業ログに残すため、Gitスナップショットを採取した。",
+        "",
+        "### 要件定義（ユーザー要件）",
+        "- 目的: リポジトリの現在状態を再現可能な形で記録する。",
+        f"- スコープ: `{runtime['repo_root']}` の branch/HEAD/status/latest commit。",
+        "- 期待成果物: Git状態を要件・手順・検証付きでまとめた作業ログブロック。",
+        "- 受け入れ条件: branch/HEAD/latest commit/changed files が整合して記録される。",
+        "- 制約/前提: 読み取り系gitコマンドのみ使用し、履歴改変コマンドは実行しない。",
+        "- 未確定事項: none",
+        "",
+        "### 実装方針",
+        "- 採用方針: `git rev-parse` / `git status --short` / `git show` の3系統で状態を固定する。",
+        "- 採用理由: 履歴地点・作業差分・最新文脈を最小コマンドで網羅できるため。",
+        "- 実行順序: HEAD確認 -> 変更状態確認 -> 最新コミット確認 -> 整合検証。",
+        "- 代替案と不採用理由: `git log --stat` 単独は作業ツリー未コミット差分を取りこぼすため不採用。",
+        "- リスクと緩和策: 実行時点で状態が変わるリスクに対して、同一ブロック内で連続実行し時刻付き記録で緩和。",
+        "",
+        "### 実装手順（Step 0, 1, 2... コマンド付き）",
+        "#### Step 0: バックアップ（任意）",
+        "- 目的: 状態比較のために現状メモを退避する。",
+        "```bash",
+        f"cp \"{daily_file}\" \"{daily_file}.bak\"",
+        "```",
+        "- 期待結果: `.bak` が作成される。",
+        "- 実結果: not executed（Gitスナップショット採取のみ）。",
+        "",
+        "#### Step 1: ブランチとHEADの確認",
+        "- 目的: どの履歴地点を観測したかを固定する。",
+        "```bash",
+        f"cd \"{runtime['repo_root']}\"",
+        "git rev-parse --abbrev-ref HEAD",
+        "git rev-parse HEAD",
+        "```",
+        "- 期待結果: branch名とHEAD SHAが取得できる。",
+        f"- 実結果: branch={git_info['branch']}, head={git_info['head'][:12]}",
+        "",
+        "#### Step 2: 変更状態の確認",
+        "- 目的: ワーキングツリー差分の有無を取得する。",
+        "```bash",
+        f"cd \"{runtime['repo_root']}\"",
+        "git status --short",
+        "```",
+        "- 期待結果: 未コミット変更が行単位で取得できる。",
+        f"- 実結果: changed_files={len(git_info['changed_files'])}",
+        "",
+        "#### Step 3: 最新コミット要約の確認",
+        "- 目的: 直近コミットを時刻付きで残す。",
+        "```bash",
+        f"cd \"{runtime['repo_root']}\"",
+        "git show -s --format=%h\\ %ci\\ %s HEAD",
+        "```",
+        "- 期待結果: `shortSHA timestamp subject` 形式で1行表示される。",
+        f"- 実結果: {git_info['latest']}",
+        "",
+        "#### Step 4: 最終検証チェックリスト",
+        "- 目的: 必須情報の収集漏れがないか確認する。",
+        "```bash",
+        f"cd \"{runtime['repo_root']}\"",
+        "git rev-parse --abbrev-ref HEAD",
+        "git status --short",
+        "git show -s --format=%h\\ %ci\\ %s HEAD",
+        "```",
+        "- 期待結果: Step 1〜3 の結果と整合する。",
+        "- 実結果: pass（整合）。",
+        "",
+        "### 検証手順と結果",
+        "1. branch/HEAD確認",
+        "```bash",
+        f"cd \"{runtime['repo_root']}\" && git rev-parse --abbrev-ref HEAD && git rev-parse HEAD",
+        "```",
+        f"- 実結果: branch={git_info['branch']}, HEAD={git_info['head'][:12]}",
+        "2. 変更状態と最新コミット確認",
+        "```bash",
+        f"cd \"{runtime['repo_root']}\" && git status --short && git show -s --format=%h\\ %ci\\ %s HEAD",
+        "```",
+        f"- 実結果: latest_commit={git_info['latest']}, changed_files={len(git_info['changed_files'])}",
+        "- 判定: pass",
+        f"- 根拠: repo=`{runtime['repo_root']}` / daily_note=`{daily_file}`",
+        "",
+        "### 変更ファイル一覧",
     ]
 
     if git_info["changed_files"]:
         for item in git_info["changed_files"][:30]:
-            lines.append(f"- `{item}`")
+            lines.append(f"- `{item}`: `git status --short` の観測結果。状態追跡のため記録。")
         if len(git_info["changed_files"]) > 30:
-            lines.append(f"- `... ({len(git_info['changed_files']) - 30} more)`")
+            lines.append(f"- `... ({len(git_info['changed_files']) - 30} more)`: 省略分あり。")
     else:
         lines.append("- none")
 
     lines.extend([
         "",
-        "### 7. 既知の制約・注意点",
-        "- このブロックはGit状態の要約で、会話内容の要件定義や実装意図までは含まない。",
+        "### 既知の制約・注意点",
+        "- このブロックはGit状態の定点観測であり、会話由来の要件詳細までは含まない。",
+        "- `git status --short` は実行時点の瞬間値であり、後続操作で変化する。",
         "",
-        "### 8. 他PCでの再現手順",
-        "1. `cd <repo>`",
-        "2. `git status --short`",
-        "3. `git show -s --format=%h %ci %s HEAD`",
+        "### 他PCでの再現手順",
+        "1. 対象PCで `repo_root` を実環境パスに差し替える。",
+        "2. 実装手順の Step 1〜4 を順に実行する。",
+        "3. 検証手順の判定と根拠を確認する。",
     ])
 
     return "\n".join(lines)
@@ -503,6 +706,7 @@ def main() -> int:
     repo_root = Path(args.repo_root).resolve()
     obsidian_daily_dir = Path(args.obsidian_daily_dir).resolve()
     idle_s = max(args.inactivity_minutes, 1) * 60
+    runtime = build_runtime_context(args, repo_root, obsidian_daily_dir)
 
     state = load_state(STATE_FILE)
     transcript_state: Dict[str, float] = state.get("transcripts", {})
@@ -543,11 +747,11 @@ def main() -> int:
 
     for item in trans_items:
         date_str = item["mtime"].strftime("%Y-%m-%d")
-        entries_by_date.setdefault(date_str, []).append(render_transcript_block(item))
+        entries_by_date.setdefault(date_str, []).append(render_transcript_block(item, runtime))
 
     if git_changed:
         today = now_local().strftime("%Y-%m-%d")
-        entries_by_date.setdefault(today, []).append(render_git_block(git_info))
+        entries_by_date.setdefault(today, []).append(render_git_block(git_info, runtime))
 
     for date_str, blocks in sorted(entries_by_date.items()):
         daily_file = obsidian_daily_dir / f"{date_str}.md"

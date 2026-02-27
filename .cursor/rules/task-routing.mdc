@@ -308,7 +308,7 @@ Description: その日の思考メモのまとめ（後から更新）
 - `/Users/kitak/QPI_Omni/docs/WORKLOG_SPEC.md`
 
 運用ルール：
-- Notion/Obsidian/レポートの作業ログは、`WORKLOG_SPEC.md` の見出し順（1〜8）に従う。
+- Notion/Obsidian/レポートの作業ログは、`WORKLOG_SPEC.md` の可変見出し方針に従う（固定1〜8は使わない）。
 - 実装手順は Step 単位で `purpose` / `command` / `expected` / `actual` を必須とする。
 - 検証は pass/fail と evidence path（ログ/出力先）を必ず記載する。
 - 保存形式の変更は、ユーザーの明示許可がある場合のみ実施する。
