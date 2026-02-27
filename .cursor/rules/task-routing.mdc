@@ -4,22 +4,17 @@ globs:
 alwaysApply: true
 ---
 
-# タスク・スケジュール・アラームのルーティングルール
+# タスク・スケジュール管理ルール
 
-## Google Calendar（アラーム・通知専用）
+## 大原則：予定・タスク管理はすべてClickUpを使う
 
-以下のキーワードが含まれる場合は **Google Calendar MCP** を使ってイベントを作成する：
-- 「アラームを鳴らして」「アラームを入れて」
-- 「通知して」「通知を入れて」
-- 「リマインドして」「リマインダーを入れて」
-- 「〇時に知らせて」「〇時に教えて」
-- 「起こして」
-
-Google Calendarイベントには必ずリマインダーを設定すること（デフォルト: 10分前）。
+**Google Calendar MCPは使用しない。**
+タスクの追加・変更・削除・確認・スケジュール整理はすべて **ClickUp MCP** を使う。
+ClickUp MCPが使えない場合のフォールバックとして **`python scripts/clickup_helper.py`** を使う。
 
 ## ClickUp（タスク・予定管理）
 
-以下のキーワードが含まれる場合は **`python scripts/clickup_helper.py add`** を使ってタスクを作成する：
+以下のキーワードが含まれる場合は **ClickUp MCP**（フォールバック: `python scripts/clickup_helper.py add`）を使ってタスクを作成する：
 - 「予定を入れて」「予定を追加して」
 - 「タスクを入れて」「タスクを追加して」
 - 「スケジュールして」「ToDo」
