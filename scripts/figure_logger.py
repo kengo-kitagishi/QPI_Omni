@@ -68,6 +68,11 @@ _DEFAULT_DRIVE_HUB_INBOX = Path(
 )
 _DEFAULT_DESKTOP_HUB_INBOX = Path("/Users/kitak/Desktop/figure-hub/inbox")
 _FALLBACK_LOCAL_INBOX = _REPO_ROOT / "results" / "figure_inbox"
+# Windows: Google Drive for Desktop（共有ドライブ）
+_WINDOWS_DRIVE_HUB_INBOXES = [
+    Path(f"{letter}:/共有ドライブ/wakamotolab_meeting/kitagishi/figure-hub/inbox")
+    for letter in ["G", "H", "F", "I"]
+]
 _SHARED_MANIFEST_BASENAME = "figure_inbox_manifest.jsonl"
 
 NOTION_DB_ID = "312eda96228e81659726cd75b221357a"
@@ -99,7 +104,7 @@ def _resolve_inbox_root() -> Path:
     candidates = [
         _DEFAULT_DRIVE_HUB_INBOX,
         _DEFAULT_DESKTOP_HUB_INBOX,
-    ]
+    ] + _WINDOWS_DRIVE_HUB_INBOXES
     for c in candidates:
         if c.exists() or c.parent.exists():
             return c
