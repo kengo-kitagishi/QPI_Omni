@@ -266,32 +266,50 @@ Description: その日の思考メモのまとめ（後から更新）
 
 ### テンプレート構成
 
-```
-タイトル: [会話のテーマを一言で]（日付はDateプロパティに入れるのでタイトルには含めない）
+- 作業ログの本文構成は `/Users/kitak/QPI_Omni/docs/WORKLOG_SPEC.md` を参照。
+- ここに構成を重複記載しない。
 
---- プロパティ ---
-Date: 今日の日付
-Script: 関係したスクリプト名（複数あれば列挙）
-Description: 何をしたかった（ユーザーの言葉で）
 
---- ページ本文 ---
+---
 
-## 何をしたかった
-ユーザーが解決したかった問題・やりたかったことを会話から読み取って記述する。
+## AGENTS整合ルール（運用優先順位）
 
-## 何ができた
-実際に実装・解決できたことを具体的に箇条書きで書く。
+このルールファイル内で方針が競合する場合、以下を優先する。
 
-## 作成・変更したファイル
-- `ファイルパス` : このファイルが何をするものか、何を変えたかを1〜2文で説明
-  （例: `scripts/figure_logger.py` : plt.savefig()の代替。前回との差分パラメータ入りのファイル名で保存し、EXPERIMENT_LOG.mdに自動追記する）
+1. **タスク/予定管理の正本はClickUp**
+- 明示的な予定・タスク依頼は ClickUp を使う。
+- 時間未指定は 12:00-14:00、午前は 09:00-12:00、午後は 13:00-16:00。
 
-## 考えたこと・判断したこと
-会話の中でユーザーが悩んだこと、判断したこと、重要な議論を書く。
+2. **研究ログの正本はローカルMarkdown（Obsidian）**
+- 研究の観察・仮説・解析メモは必ずローカルに残す。
+- 保存先:
+  - `/Users/kitak/Documents/Obsidian Vault/01_Daily/YYYY-MM-DD.md`
+  - `/Users/kitak/Documents/Obsidian Vault/02_Research/analysis/`
 
-## 図（あれば）
-保存された図のパスとその説明。なければこのセクションは省略。
+3. **Notionは入力UI/共有用途として扱う**
+- Notion保存を行っても、ローカルMarkdownの記録を省略しない。
+- Notion連携やAPIが失敗した場合は、ローカル保存を優先し、失敗理由を短く報告する。
 
-## フィードバック
-（空欄 - 後で自分で書く）
-```
+4. **Notion -> Obsidian同期の実行コマンド**
+- API同期:
+  - `/Users/kitak/Documents/Obsidian Vault/98_Automation/sync_notion_to_obsidian.py`
+- Export取り込み（フォールバック）:
+  - `/Users/kitak/Documents/Obsidian Vault/98_Automation/import_notion_export.sh`
+
+5. **QPI_Omniの作業ログ自動収集**
+- Transcript/Gitの自動収集は `scripts/session_activity_logger.py` を使う。
+- 定期実行は `scripts/install_activity_logger_launchd.sh` で設定する。
+
+---
+
+## 作業ログフォーマット（単一仕様）
+
+作業ログの保存形式は以下を正本とする：
+- `/Users/kitak/QPI_Omni/docs/WORKLOG_SPEC.md`
+
+運用ルール：
+- Notion/Obsidian/レポートの作業ログは、`WORKLOG_SPEC.md` の見出し順（1〜8）に従う。
+- 実装手順は Step 単位で `purpose` / `command` / `expected` / `actual` を必須とする。
+- 検証は pass/fail と evidence path（ログ/出力先）を必ず記載する。
+- 保存形式の変更は、ユーザーの明示許可がある場合のみ実施する。
+- 形式変更時はまず `WORKLOG_SPEC.md` を更新し、他ルールは参照のみ行う（重複記載を増やさない）。
