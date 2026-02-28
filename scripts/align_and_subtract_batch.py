@@ -224,6 +224,11 @@ def process_timelapse(pos_name, timelapse_dir, reference_img, tif_files,
             'alignment_results': alignment_results
         }, f, indent=2, ensure_ascii=False)
 
+    # シフト可視化
+    if alignment_results:
+        from shift_visualize import visualize_shifts
+        visualize_shifts(json_path)
+
     # サマリー
     print(f"\n  ✅ {pos_name} 完了: {processed_count}枚", end="")
     if skipped_count > 0:

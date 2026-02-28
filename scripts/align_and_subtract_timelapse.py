@@ -354,6 +354,11 @@ def process_pos_timelapse(pos_name, timelapse_phase_dir, reference_image_path,
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(alignment_info, f, indent=2, ensure_ascii=False)
 
+    # シフト可視化
+    if len(alignment_results) > 0:
+        from shift_visualize import visualize_shifts
+        visualize_shifts(json_path)
+
     # サマリー
     print(f"\n  ✅ 処理完了")
     print(f"     成功: {processed_count}枚")

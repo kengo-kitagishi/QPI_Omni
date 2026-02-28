@@ -10,12 +10,12 @@ from watchdog.events import FileSystemEventHandler
 from qpi import QPIParameters, calc_visibility, _get_dc_ac, _get_visibility
 from threading import Lock
 
+from optical_config import OFFAXIS_CENTER, WAVELENGTH as WAVELENGHTH, NA, PIXELSIZE
+
 WATCH_FOLDER = r"d:\AquisitionData\Kitagishi\basler_image_seq"
-WAVELENGHTH=658e-9
-NA = 0.95
-PIXELSIZE = 3.45e-6/40
-OFFAXIS_CENTER = (1642,443)
-CROP_REGION = (0,2048,208,2256)
+WATCH_FOLDER =r"D:\AquisitionData\Kitagishi\basler_image_seq\vistest_5\Pos0"
+# Basler aca2440は最大2048行のためMicroManager用CROP_REGIONは使わない
+CROP_REGION = (0, 2048, 208, 2256)
 
 VMIN= .75
 VMAX = 0.8
@@ -169,3 +169,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

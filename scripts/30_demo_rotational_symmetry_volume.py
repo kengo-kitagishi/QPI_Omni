@@ -19,6 +19,8 @@ https://elifesciences.org/articles/64901
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import ndimage
+from figure_logger import setup_autosave
+setup_autosave()
 from skimage import morphology, measure
 from skimage.draw import polygon
 import tifffile

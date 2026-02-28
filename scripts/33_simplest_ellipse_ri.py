@@ -10,6 +10,8 @@ Results.csvだけから計算
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from figure_logger import setup_autosave
+setup_autosave()
 
 # =============================================================================
 # パラメータ設定（ここだけ編集）

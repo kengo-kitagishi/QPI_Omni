@@ -1,5 +1,5 @@
 # %%
-from paths import DATA, RESULTS
+#from paths import DATA, RESULTS
 import numpy as np
 import matplotlib.pyplot as plt
 import tifffile
@@ -8,6 +8,9 @@ from qpi import get_field, get_spectrum, make_disk
 from PIL import Image
 from skimage.restoration import unwrap_phase
 from CursorVisualizer import CursorVisualizer
+from figure_logger import setup_autosave
+from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE, CROP_REGION
+setup_autosave()
 
 
 #%%
@@ -54,11 +57,8 @@ cb.run()
 
 # %%
 
-WAVELENGTH = 658 * 10 ** (-9)
-NA = 0.95
 IMG_SHAPE = img.shape
-PIXELSIZE = 3.45 * 10 ** (-6) / 40
-offaxis_center = (1664, 485)
+offaxis_center = OFFAXIS_CENTER  # optical_config.py で管理
 
 params = QPIParameters(
     wavelength=WAVELENGTH,
@@ -173,7 +173,6 @@ plt.colorbar(label="Phase (rad)")
 plt.title("Background-subtracted Phase Map")
 plt.tight_layout()
 plt.show()
-
 # %%
 x_coord = 200  # 任意のx位置
 profile = angle_nobg[:, x_coord]
@@ -187,66 +186,6 @@ plt.grid(True)
 plt.show()
 
 # %% 250522 特徴量検出による位置合わせ。うまくいかず
-
-import cv2
-import numpy as np
-from skimage import morphology
-import tifffile
-
-
-# 1. Load images in grayscale
-img = tifffile.imread("/Users/kitak/QPI/data/250522/angle_nobg_withcell.tif")
-img = img[80:120,0:255]
-bg = tifffile.imread('/Users/kitak/QPI/data/250522/angle_nobg_wocell.tif')
-bg = bg[80:120,0:255]
-plt.imshow(img)
-plt.imshow(bg)
-# float32 → uint8（0–255に正規化）
-def to_uint8(image):
-    image = np.nan_to_num(image)
-    min_val, max_val = np.min(image), np.max(image)
-    if max_val - min_val < 1e-5:
-        return np.zeros_like(image, dtype=np.uint8)
-    norm = (image - min_val) / (max_val - min_val)
-    return (norm * 255).astype(np.uint8)
-
-img_8bit = to_uint8(img)
-bg_8bit  = to_uint8(bg)
-# 2. Feature detection (ORB) and matching
-orb = cv2.ORB_create(nfeatures=500)
-kp1, des1 = orb.detectAndCompute(bg_8bit, None)
-kp2, des2 = orb.detectAndCompute(img_8bit, None)
-bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-matches = sorted(bf.match(des1, des2), key=lambda x: x.distance)[:50]
-
-# 3. Estimate homography from matches
-src_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1,1,2)
-dst_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1,1,2)
-M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-
-# 4. Warp the 'with-cell' image to align with background
-h, w = bg.shape
-aligned = cv2.warpPerspective(img, M, (w, h))
-
-# 5. Subtract background
-diff = cv2.absdiff(bg, aligned)
-plt.imshow(diff)
-
-_, thresh = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
-
-# 6. Morphological cleaning
-kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
-clean = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
-clean = cv2.morphologyEx(clean, cv2.MORPH_CLOSE, kernel)
-
-# 7. Remove tiny artifacts (scikit-image)
-clean_bool = clean.astype(bool)
-clean_bool = morphology.remove_small_objects(clean_bool, min_size=150)
-clean_bool = morphology.remove_small_holes(clean_bool, area_threshold=150)
-result_mask = (clean_bool.astype(np.uint8) * 255)
-
-# 8. Save the final mask as TIFF
-tifffile.imwrite('segmented_cell.tif', result_mask)
 
 # %%
 import os

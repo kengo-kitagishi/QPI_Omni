@@ -527,6 +527,35 @@ def _save_to_notion(record: dict) -> None:
 # =============================================================================
 # Public API
 # =============================================================================
+def setup_autosave(description: str = "") -> None:
+    """
+    Call once at the top of a script to automatically save all open figures
+    whenever plt.show() is called.
+
+    Usage:
+        from figure_logger import setup_autosave
+        setup_autosave()                        # description auto-generated
+        setup_autosave("phase analysis")        # custom description prefix
+    """
+    import matplotlib.pyplot as _plt
+
+    _original_show = _plt.show
+    _caller_script = _detect_script_name()
+
+    def _autosave_show(*args, **kwargs):
+        for fignum in _plt.get_fignums():
+            fig = _plt.figure(fignum)
+            desc = description or f"figure {fignum}"
+            try:
+                save_figure(fig, description=desc, script_name=_caller_script)
+            except Exception as e:
+                print(f"[figure_logger] autosave failed (fig {fignum}): {e}")
+        _original_show(*args, **kwargs)
+
+    _plt.show = _autosave_show
+    print(f"[figure_logger] autosave enabled ({_caller_script})")
+
+
 def save_figure(
     fig,
     params: Optional[dict] = None,

@@ -19,7 +19,7 @@ from qpi_common import create_qpi_params, WAVELENGTH, NA, PIXELSIZE
 # ==================== パラメータ設定 ====================
 
 # 定数設定
-OFFAXIS_CENTER = (1623, 1621)
+from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 CROP = [8, 2056, 416, 2464]  # [y_start, y_end, x_start, x_end]
 MEAN_REGION = [1, 507, 254, 507]  # 平均0調整の領域
 

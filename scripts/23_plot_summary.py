@@ -2,6 +2,8 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import scienceplots  # SciencePlotを使用
+from figure_logger import setup_autosave
+setup_autosave()
 
 # =========================================
 # === 設定 ===

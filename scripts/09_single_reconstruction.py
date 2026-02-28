@@ -7,6 +7,8 @@ from qpi import get_field, get_spectrum, make_disk
 from PIL import Image
 from skimage.restoration import unwrap_phase
 from CursorVisualizer import CursorVisualizer
+from figure_logger import setup_autosave
+setup_autosave()
 
 #%%
 """
@@ -55,12 +57,8 @@ cb.run()
 
 # %%
 
-WAVELENGTH = 663 * 10 ** (-9)
-NA = 0.95
+from optical_config import OFFAXIS_CENTER as offaxis_center, WAVELENGTH, NA, PIXELSIZE
 IMG_SHAPE = img.shape
-PIXELSIZE = 3.45 * 10 ** (-6) / 40
-#offaxis_center = (1504, 1708) #251017_0
-offaxis_center = (845,772) #250611_0.01
 
 params = QPIParameters(
     wavelength=WAVELENGTH,

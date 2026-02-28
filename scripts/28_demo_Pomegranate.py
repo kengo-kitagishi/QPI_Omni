@@ -18,6 +18,8 @@ import tifffile
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.patches import Circle
 import os
+from figure_logger import setup_autosave
+setup_autosave()
 
 class TwoD_to_ThreeD_Reconstructor:
     """Pomegranateアルゴリズムによる2D→3D再構成"""

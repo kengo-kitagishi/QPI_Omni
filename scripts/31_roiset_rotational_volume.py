@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
+from figure_logger import setup_autosave
+setup_autosave()
 import zipfile
 import struct
 import tifffile

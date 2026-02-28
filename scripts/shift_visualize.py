@@ -15,59 +15,87 @@ MAGNIFICATION = 40           # 対物レンズ倍率
 ORIGINAL_DIM = 2048          # 元画像サイズ [px]
 RECONSTRUCTED_DIM = 511      # reconstruct後のサイズ [px]（aperture size）
 
-# 再構成画像の1ピクセルあたりの実距離 [μm]
-PIXEL_SCALE_UM = SENSOR_PIXEL_SIZE / MAGNIFICATION * ORIGINAL_DIM / RECONSTRUCTED_DIM * 1e6
-
 # JSON読み込み
 JSON_PATH = r"E:\Acuisition\kitagishi\260218\move_test_2\Pos1\crop\alignment_transforms.json"
-with open(JSON_PATH, "r") as f:
-    data = json.load(f)
 
-# シフト量を取得
-shift_x = np.array([res["shift_x"] for res in data["alignment_results"]])
-shift_y = np.array([res["shift_y"] for res in data["alignment_results"]])
-frames = list(range(len(shift_x)))
 
-if DISPLAY_MODE == "physical":
-    shift_x_plot = shift_x * PIXEL_SCALE_UM
-    shift_y_plot = shift_y * PIXEL_SCALE_UM
-    unit_label = "μm"
-    print(f"Pixel scale: {PIXEL_SCALE_UM:.4f} μm/px")
-else:
-    shift_x_plot = shift_x
-    shift_y_plot = shift_y
-    unit_label = "pixels"
+def visualize_shifts(
+    json_path,
+    display_mode=None,
+    sensor_pixel_size=SENSOR_PIXEL_SIZE,
+    magnification=MAGNIFICATION,
+    original_dim=ORIGINAL_DIM,
+    reconstructed_dim=RECONSTRUCTED_DIM,
+):
+    """
+    alignment_transforms.json を読み込んでシフト時系列・軌跡をプロットし save_figure() で保存する。
 
-# XY方向のシフトを時間的にプロット
-fig = plt.figure(figsize=(10,5))
-plt.ylim(-1,1)
-plt.plot(frames, shift_x_plot, label='Shift X', marker='o')
-plt.plot(frames, shift_y_plot, label='Shift Y', marker='o')
-plt.xlabel("Frame number")
-plt.ylabel(f"Shift ({unit_label})")
-plt.title(f"Alignment shifts for {data['pos_name']}")
-plt.legend()
-plt.grid(True)
-save_figure(fig,
-            params={"data_source": JSON_PATH, "display_mode": DISPLAY_MODE,
-                    "sensor_pixel_size": SENSOR_PIXEL_SIZE, "magnification": MAGNIFICATION,
-                    "pixel_scale_um": PIXEL_SCALE_UM, "n_frames": len(frames)},
-            description=f"shift_timeseries {data['pos_name']}")
-plt.show()
+    Parameters
+    ----------
+    json_path : str or Path
+        alignment_transforms.json のパス
+    display_mode : str or None
+        "pixel" or "physical"。None のとき DISPLAY_MODE を使用。
+    """
+    mode = display_mode or DISPLAY_MODE
+    pixel_scale_um = sensor_pixel_size / magnification * original_dim / reconstructed_dim * 1e6
 
-# 2Dトラジェクトリ（動きの軌跡）
-fig2 = plt.figure(figsize=(6,6))
-plt.plot(shift_x_plot, shift_y_plot, marker='o')
-plt.xlabel(f"Shift X ({unit_label})")
-plt.ylabel(f"Shift Y ({unit_label})")
-plt.title(f"Trajectory of image shifts for {data['pos_name']}")
-plt.grid(True)
-plt.axis('equal')
-save_figure(fig2,
-            params={"data_source": JSON_PATH, "display_mode": DISPLAY_MODE,
-                    "sensor_pixel_size": SENSOR_PIXEL_SIZE, "magnification": MAGNIFICATION,
-                    "pixel_scale_um": PIXEL_SCALE_UM, "n_frames": len(frames)},
-            description=f"shift_trajectory {data['pos_name']}")
-plt.show()
+    with open(json_path, "r") as f:
+        data = json.load(f)
+
+    shift_x = np.array([res["shift_x"] for res in data["alignment_results"]])
+    shift_y = np.array([res["shift_y"] for res in data["alignment_results"]])
+    frames = list(range(len(shift_x)))
+    pos_name = data.get("pos_name", "unknown")
+
+    if mode == "physical":
+        shift_x_plot = shift_x * pixel_scale_um
+        shift_y_plot = shift_y * pixel_scale_um
+        unit_label = "μm"
+        print(f"Pixel scale: {pixel_scale_um:.4f} μm/px")
+    else:
+        shift_x_plot = shift_x
+        shift_y_plot = shift_y
+        unit_label = "pixels"
+
+    params = {
+        "data_source": str(json_path),
+        "display_mode": mode,
+        "sensor_pixel_size": sensor_pixel_size,
+        "magnification": magnification,
+        "pixel_scale_um": pixel_scale_um,
+        "n_frames": len(frames),
+    }
+
+    # XY方向のシフトを時間的にプロット
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.set_ylim(-1, 1)
+    ax.plot(frames, shift_x_plot, label="Shift X", marker="o")
+    ax.plot(frames, shift_y_plot, label="Shift Y", marker="o")
+    ax.set_xlabel("Frame number")
+    ax.set_ylabel(f"Shift ({unit_label})")
+    ax.set_title(f"Alignment shifts for {pos_name}")
+    ax.legend()
+    ax.grid(True)
+    save_figure(fig, params=params, description=f"shift_timeseries {pos_name}")
+    plt.show()
+
+    # 2Dトラジェクトリ（動きの軌跡）
+    fig2, ax2 = plt.subplots(figsize=(6, 6))
+    ax2.plot(shift_x_plot, shift_y_plot, marker="o")
+    ax2.set_xlabel(f"Shift X ({unit_label})")
+    ax2.set_ylabel(f"Shift Y ({unit_label})")
+    ax2.set_title(f"Trajectory of image shifts for {pos_name}")
+    ax2.grid(True)
+    ax2.set_aspect("equal")
+    save_figure(fig2, params=params, description=f"shift_trajectory {pos_name}")
+    plt.show()
+
+    print(f"[shift_visualize] done: {pos_name}  (n={len(frames)} frames)")
+
+
+# スタンドアロン実行時
+if __name__ == "__main__" or True:
+    visualize_shifts(JSON_PATH)
 
 # %%

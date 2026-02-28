@@ -3,6 +3,8 @@ import numpy as np
 from skimage import io, registration
 from scipy import ndimage
 import matplotlib.pyplot as plt
+from figure_logger import setup_autosave
+setup_autosave()
 
 def load_tif_images(empty_channel_path, cell_channel_path):
     """

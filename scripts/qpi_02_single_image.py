@@ -11,20 +11,22 @@ import tifffile
 from PIL import Image
 from skimage.restoration import unwrap_phase
 from qpi import QPIParameters, get_field
-from qpi_common import create_qpi_params, WAVELENGTH, NA, PIXELSIZE
+from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE, CROP_REGION
+from figure_logger import setup_autosave
+setup_autosave()
 
 # %%
 # ==================== パラメータ設定 ====================
 
 # 画像パス（使用時に変更）
-path = "/Volumes/QPI3/250910_kk/ph_1/Pos1/img_000000000_Default_000.tif"
-path_bg = "/Volumes/QPI3/250910_kk/ph_1/Pos1/img_000000000_Default_000.tif"
+path = r"D:\AquisitionData\Kitagishi\basler_image_seq\Basler_acA2440-75um__25176370__20260228_182040326_1553.tiff"
+path_bg = r"D:\AquisitionData\Kitagishi\basler_image_seq\Basler_acA2440-75um__25176370__20260228_182040326_1553.tiff"
 
 # クロップ領域
-crop_slice = np.s_[8:2056, 208:2256]
+crop_slice = np.s_[CROP_REGION[0]:CROP_REGION[1], CROP_REGION[2]:CROP_REGION[3]]
 
 # QPIパラメータ
-offaxis_center = (1504, 1708)
+offaxis_center = OFFAXIS_CENTER  # optical_config.py で管理
 
 # 保存設定
 SAVE_OUTPUT = False  # Trueにすると結果を保存
@@ -82,6 +84,23 @@ print(f"  - NA: {NA}")
 print(f"  - ピクセルサイズ: {PIXELSIZE*1e6:.3f} µm")
 print(f"  - オフ軸中心: {offaxis_center}")
 print(f"  - 開口サイズ: {params.aperturesize} pixels")
+
+# %%
+# ==================== FFT表示 ====================
+
+img_fft = np.fft.fftshift(np.fft.fft2(img_bg))
+fft_log = np.log(np.abs(img_fft) + 1)
+
+radius = params.aperturesize // 2
+circle_center = (offaxis_center[1], offaxis_center[0])  # matplotlib は (x, y) = (col, row)
+
+fig, ax = plt.subplots(figsize=(8, 8))
+ax.imshow(fft_log, cmap='gray')
+circle = plt.Circle(circle_center, radius, color='red', fill=False, linewidth=1.5)
+ax.add_patch(circle)
+ax.set_title(f'FFT (background)  offaxis={offaxis_center}  r={radius}px')
+plt.tight_layout()
+plt.show()
 
 # %%
 # ==================== QPI再構成 ====================

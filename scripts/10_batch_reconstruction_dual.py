@@ -13,11 +13,7 @@ from qpi import QPIParameters, get_field
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-# 定数設定
-WAVELENGTH = 658e-9  # 663 nm
-NA = 0.95
-PIXELSIZE = 3.45e-6 / 40
-OFFAXIS_CENTER = (1642, 443)  # 必要に応じて調整
+from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 
 # ベースディレクトリ設定
 BASE_DIRS = [

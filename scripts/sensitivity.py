@@ -9,6 +9,8 @@ from skimage.restoration import unwrap_phase
 
 # 既存のqpiモジュールからインポート
 from qpi import QPIParameters, get_field, get_spectrum, make_disk, crop_array
+from figure_logger import setup_autosave
+setup_autosave()
 
 
 # =============================================================================
