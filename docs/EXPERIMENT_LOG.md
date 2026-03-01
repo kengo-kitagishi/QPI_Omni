@@ -1955,3 +1955,53 @@ mean_RI = n_medium + (total_phase × λ × pixel_area) / (2π × volume)
 
 **Inbox**: `/Users/kitak/Library/CloudStorage/GoogleDrive-kengo_kitagishi@cell.c.u-tokyo.ac.jp/共有ドライブ/wakamotolab_meeting/kitagishi/figure-hub/inbox/2026-02-27/figure_logger_smoke_drive/figure_logger_smoke_drive_20260227T094541Z_550bce/figure_logger_smoke_drive__figure_logger_smoke_drive_20260227T094541Z_550bce__f001.png`
 **Published**: `results/figures/QPI_2026-02-27_figure_logger_smoke_drive_v1.png`
+
+---
+
+## 2026-03-01 | `qpi_fig_01_panel` | run `qpi_fig_01_panel_20260228T174046Z_ada785`
+
+**説明**: QPI再構成概要パネル図（修論用）: Raw → FFT → Cropped FFT → Phase, 矢印ラベル・スケールバー付き
+
+**データ情報**: source=`qpi_fig_01_panel.py`
+
+**パラメータ**: `scalebar_um=10`, `source_run=20260228T125954Z_834482`, `panels=f001_raw, f003_fft_red, f005_crop, f006_phase`
+
+**前回からの変更点**:
+  - `panels`: (new) -> **f001_raw, f003_fft_red, f005_crop, f006_phase**
+  - `scalebar_um`: (new) -> **10**
+  - `source_run`: (new) -> **20260228T125954Z_834482**
+
+**Inbox**: `/Users/kitak/Library/CloudStorage/GoogleDrive-kengo_kitagishi@cell.c.u-tokyo.ac.jp/共有ドライブ/wakamotolab_meeting/kitagishi/figure-hub/inbox/2026-03-01/qpi_fig_01_panel/qpi_fig_01_panel_20260228T174046Z_ada785/qpi_fig_01_panel__qpi_fig_01_panel_20260228T174046Z_ada785__f001.png`
+**Published**: `results/figures/QPI_2026-03-01_qpi_fig_01_panel_v1.png`
+
+---
+
+## 2026-03-01 | `qpi_fig_01_panel` | run `qpi_fig_01_panel_20260228T174425Z_7940da`
+
+**説明**: QPI再構成概要パネル図（修論用）: Raw → FFT → Cropped FFT → Phase, 矢印ラベル・スケールバー付き
+
+**データ情報**: source=`qpi_fig_01_panel.py`
+
+**パラメータ**: `scalebar_um=10`, `source_run=20260228T125954Z_834482`, `panels=f001_raw, f003_fft_red, f005_crop, f006_phase`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `/Users/kitak/Library/CloudStorage/GoogleDrive-kengo_kitagishi@cell.c.u-tokyo.ac.jp/共有ドライブ/wakamotolab_meeting/kitagishi/figure-hub/inbox/2026-03-01/qpi_fig_01_panel/qpi_fig_01_panel_20260228T174425Z_7940da/qpi_fig_01_panel__qpi_fig_01_panel_20260228T174425Z_7940da__f001.png`
+**Published**: `results/figures/QPI_2026-03-01_qpi_fig_01_panel_v2.png`
+
+---
+
+## 2026-03-01 | `qpi_fig_01_panel` | run `qpi_fig_01_panel_20260228T174555Z_e8cf2e`
+
+**説明**: QPI再構成概要パネル図（修論用）: Raw → FFT → Cropped FFT → Phase, 矢印ラベル・スケールバー付き
+
+**データ情報**: source=`qpi_fig_01_panel.py`
+
+**パラメータ**: `scalebar_um=10`, `source_run=20260228T125954Z_834482`, `panels=f001_raw, f003_fft_red, f005_crop, f006_phase`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `/Users/kitak/Library/CloudStorage/GoogleDrive-kengo_kitagishi@cell.c.u-tokyo.ac.jp/共有ドライブ/wakamotolab_meeting/kitagishi/figure-hub/inbox/2026-03-01/qpi_fig_01_panel/qpi_fig_01_panel_20260228T174555Z_e8cf2e/qpi_fig_01_panel__qpi_fig_01_panel_20260228T174555Z_e8cf2e__f001.png`
+**Published**: `results/figures/QPI_2026-03-01_qpi_fig_01_panel_v3.png`
