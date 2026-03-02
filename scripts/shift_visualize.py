@@ -7,13 +7,17 @@ from figure_logger import save_figure
 # === 表示モード選択 ===
 # "pixel"   : ピクセル単位で表示（従来通り）
 # "physical" : 実際の距離 [μm] に変換して表示
-DISPLAY_MODE = "pixel"  # "pixel" or "physical"
+DISPLAY_MODE = "physical"  # "pixel" or "physical"
 
 # === 光学パラメータ（物理距離変換用） ===
 SENSOR_PIXEL_SIZE = 3.45e-6  # センサーピクセルサイズ [m]
 MAGNIFICATION = 40           # 対物レンズ倍率
 ORIGINAL_DIM = 2048          # 元画像サイズ [px]
 RECONSTRUCTED_DIM = 511      # reconstruct後のサイズ [px]（aperture size）
+
+# === 時間軸設定 ===
+# None にすると横軸はフレーム番号のまま。数値を入れると横軸が時間 [min] になる
+TIME_INTERVAL_MIN = 5        # 5分間隔。None にすると横軸はフレーム番号
 
 # JSON読み込み
 JSON_PATH = r"E:\Acuisition\kitagishi\260218\move_test_2\Pos1\crop\alignment_transforms.json"
@@ -26,6 +30,7 @@ def visualize_shifts(
     magnification=MAGNIFICATION,
     original_dim=ORIGINAL_DIM,
     reconstructed_dim=RECONSTRUCTED_DIM,
+    time_interval_min=TIME_INTERVAL_MIN,
 ):
     """
     alignment_transforms.json を読み込んでシフト時系列・軌跡をプロットし save_figure() で保存する。
@@ -45,8 +50,15 @@ def visualize_shifts(
 
     shift_x = np.array([res["shift_x"] for res in data["alignment_results"]])
     shift_y = np.array([res["shift_y"] for res in data["alignment_results"]])
-    frames = list(range(len(shift_x)))
+    frames = np.arange(len(shift_x))
     pos_name = data.get("pos_name", "unknown")
+
+    if time_interval_min is not None:
+        x_values = frames * time_interval_min / 60
+        x_label = "Time (h)"
+    else:
+        x_values = frames
+        x_label = "Frame number"
 
     if mode == "physical":
         shift_x_plot = shift_x * pixel_scale_um
@@ -65,14 +77,15 @@ def visualize_shifts(
         "magnification": magnification,
         "pixel_scale_um": pixel_scale_um,
         "n_frames": len(frames),
+        "time_interval_min": time_interval_min,
     }
 
     # XY方向のシフトを時間的にプロット
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.set_ylim(-1, 1)
-    ax.plot(frames, shift_x_plot, label="Shift X", marker="o")
-    ax.plot(frames, shift_y_plot, label="Shift Y", marker="o")
-    ax.set_xlabel("Frame number")
+    ax.plot(x_values, shift_x_plot, label="Shift X", marker="o")
+    ax.plot(x_values, shift_y_plot, label="Shift Y", marker="o")
+    ax.set_xlabel(x_label)
     ax.set_ylabel(f"Shift ({unit_label})")
     ax.set_title(f"Alignment shifts for {pos_name}")
     ax.legend()

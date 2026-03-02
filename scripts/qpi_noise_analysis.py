@@ -27,6 +27,179 @@ PIXELSIZE   = 3.45e-6 / 40  # m/px (3.45 µm カメラ画素, 40x対物)
 OFFAXIS_CENTER = (1664, 485) # (row, col) — CursorVisualizerで確認した値
 
 # ============================================================
+# UC_SENSOR: カメラ temporal noise 測定（センサーノイズ評価）
+#
+# 目的: σ_sensor [e⁻] を実測する（論文 Fig 3.6 の紫線パラメータに相当）
+#
+# 手順:
+#   1. レーザー・照明を完全にOFF にした状態で 100 枚撮影 (dark frames)
+#   2. 各ピクセルの temporal STD を計算 → ADU 単位
+#   3. EMVA1288 の conversion gain で e⁻ に換算
+#   4. σ_sensor [e⁻] を報告 + temporal STD マップを可視化
+#
+# 必要なもの:
+#   - dark frames 100枚入ったディレクトリ（TIF or PNG）
+#   - Basler EMVA1288 レポートから読んだ conversion gain [e⁻/ADU]
+# ============================================================
+
+# %%
+# --- UC_SENSOR 設定 ---
+
+SENSOR_DARK_DIR = "path/to/dark_frames_dir"  # クロップ済み 2048×2048 の dark frames（レーザーOFF）が入ったディレクトリ
+
+# --- Basler acA2440-75um パラメータ（EMVA1288レポートから取得）---
+# EMVA1288 レポートは Basler 公式サイト → カメラ検索 → Downloads → EMVA1288 Data Sheet
+SENSOR_FULL_WELL_E  = 10340     # [e⁻] Full Well Capacity（EMVA1288 記載値）
+SENSOR_BIT_DEPTH    = 12        # 有効ビット深度（12 or 16）
+SENSOR_GAIN         = 1.0       # ソフトウェアゲイン設定値（Pylon で 0 dB = 1.0 に固定）
+# 上記から conversion gain を計算: ADU → e⁻
+# EMVA1288 に "Overall System Gain" [e⁻/DN] が直接載っている場合はその値を使う
+SENSOR_CONVERSION_GAIN = SENSOR_FULL_WELL_E / (2 ** SENSOR_BIT_DEPTH) / SENSOR_GAIN
+# 例: 10340 / 4096 / 1.0 ≈ 2.52 e⁻/ADU
+
+# 論文（Fig 3.6）と同じ: temporal STD マップを 80×80 px で平均した値を報告
+# "plot the average of 80 pixels × 80 pixels in the temporal STD map as the temporal OPD noise"
+SENSOR_ROI_SIZE = 80   # 論文に合わせた値。変えたければここだけ修正
+# ROI 位置: 画像中央に配置（暗状態なら均一なのでどこでも同じだが、端は避ける）
+# 実行時に画像サイズから自動計算するため、ここでは None にしておく
+SENSOR_ROI_CENTER = None   # None → 画像中央を自動使用。(row, col) で明示指定も可
+
+SENSOR_N_FRAMES_EXPECTED = 100      # 読み込むフレーム数の上限（全部使う場合は None）
+
+# %%
+# --- UC_SENSOR 実行 ---
+
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import tifffile
+from PIL import Image
+from figure_logger import save_figure
+
+def _load_frames(directory, n_max=None):
+    """ディレクトリ内の画像をソート順に読み込み (H, W, N) の配列を返す"""
+    exts = {".tif", ".tiff", ".png"}
+    files = sorted(
+        f for f in os.listdir(directory)
+        if os.path.splitext(f)[1].lower() in exts
+    )
+    if n_max is not None:
+        files = files[:n_max]
+    if not files:
+        raise FileNotFoundError(f"画像ファイルが見つかりません: {directory}")
+
+    frames = []
+    for fname in files:
+        path = os.path.join(directory, fname)
+        try:
+            img = tifffile.imread(path).astype(np.float64)
+        except Exception:
+            img = np.array(Image.open(path)).astype(np.float64)
+        frames.append(img)
+
+    stack = np.stack(frames, axis=-1)  # (H, W, N)
+    print(f"  読み込み: {stack.shape[2]} フレーム, shape={stack.shape[:2]}, dtype=float64")
+    return stack
+
+print("=== UC_SENSOR: カメラ temporal noise 測定 ===")
+print(f"  Conversion gain: {SENSOR_CONVERSION_GAIN:.4f} e⁻/ADU")
+print(f"  (full_well={SENSOR_FULL_WELL_E} e⁻, bit_depth={SENSOR_BIT_DEPTH}, gain={SENSOR_GAIN})")
+
+# フレーム読み込み
+dark_stack = _load_frames(SENSOR_DARK_DIR, n_max=SENSOR_N_FRAMES_EXPECTED)  # (H, W, N)
+H, W, N = dark_stack.shape
+print(f"  フレーム数: {N}")
+
+# temporal STD を各ピクセルで計算 [ADU]
+std_map_adu = np.std(dark_stack, axis=2, ddof=1)   # (H, W)
+mean_map_adu = np.mean(dark_stack, axis=2)          # (H, W)
+
+# e⁻ 換算
+std_map_e   = std_map_adu  * SENSOR_CONVERSION_GAIN
+mean_map_e  = mean_map_adu * SENSOR_CONVERSION_GAIN
+
+# 80×80 ROI を画像中央に配置（論文に合わせた集計方法）
+half = SENSOR_ROI_SIZE // 2
+if SENSOR_ROI_CENTER is None:
+    cr, cc = H // 2, W // 2   # 画像中央
+else:
+    cr, cc = SENSOR_ROI_CENTER
+rs, re = cr - half, cr + half
+cs, ce = cc - half, cc + half
+print(f"  ROI: rows {rs}:{re}, cols {cs}:{ce}  ({SENSOR_ROI_SIZE}×{SENSOR_ROI_SIZE} px, 論文準拠)")
+
+roi_std_e   = std_map_e[rs:re, cs:ce]
+roi_mean_e  = mean_map_e[rs:re, cs:ce]
+
+sigma_sensor     = float(np.mean(roi_std_e))
+sigma_sensor_std = float(np.std(roi_std_e))
+mean_dark_e      = float(np.mean(roi_mean_e))
+
+print(f"\n--- 結果 ---")
+print(f"  σ_sensor (ROI mean) = {sigma_sensor:.1f} ± {sigma_sensor_std:.1f} e⁻")
+print(f"  mean dark level     = {mean_dark_e:.1f} e⁻  (dark current + offset)")
+print(f"  ROI: rows {rs}:{re}, cols {cs}:{ce}  ({(re-rs)*(ce-cs)} pixels)")
+
+# --- 図1: temporal STD マップ ---
+fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+
+im0 = axes[0].imshow(std_map_e, cmap="hot", vmax=np.percentile(std_map_e, 99))
+axes[0].set_title("Temporal STD map [e⁻]")
+axes[0].set_xlabel("Column")
+axes[0].set_ylabel("Row")
+plt.colorbar(im0, ax=axes[0], label="STD [e⁻]")
+
+# ROI を囲む矩形を描画
+from matplotlib.patches import Rectangle
+rect = Rectangle((cs, rs), ce - cs, re - rs, linewidth=1.5, edgecolor="cyan", facecolor="none",
+                 label=f"{SENSOR_ROI_SIZE}×{SENSOR_ROI_SIZE} ROI（論文準拠）")
+axes[0].add_patch(rect)
+
+# ROI 内の STD ヒストグラム
+axes[1].hist(roi_std_e.ravel(), bins=50, color="steelblue", edgecolor="white")
+axes[1].axvline(sigma_sensor, color="red", linestyle="--", label=f"mean={sigma_sensor:.1f} e⁻")
+axes[1].set_xlabel("Temporal STD [e⁻]")
+axes[1].set_ylabel("Pixel count")
+axes[1].set_title("STD distribution (ROI)")
+axes[1].legend()
+
+# 時系列: ROI 平均値の推移（ドリフト確認）
+roi_timeseries = dark_stack[rs:re, cs:ce, :].mean(axis=(0, 1)) * SENSOR_CONVERSION_GAIN
+axes[2].plot(roi_timeseries, lw=0.8)
+axes[2].set_xlabel("Frame index")
+axes[2].set_ylabel("ROI mean [e⁻]")
+axes[2].set_title("Dark level timeseries (drift check)")
+axes[2].grid(True, alpha=0.4)
+
+plt.suptitle(
+    f"Camera sensor noise  |  σ_sensor = {sigma_sensor:.1f} e⁻  |  "
+    f"conversion gain = {SENSOR_CONVERSION_GAIN:.3f} e⁻/ADU  |  N = {N} frames",
+    fontsize=11
+)
+plt.tight_layout()
+
+save_figure(
+    fig,
+    params={
+        "n_frames":         N,
+        "conversion_gain":  SENSOR_CONVERSION_GAIN,
+        "full_well_e":      SENSOR_FULL_WELL_E,
+        "bit_depth":        SENSOR_BIT_DEPTH,
+        "gain_setting":     SENSOR_GAIN,
+        "roi_size":         SENSOR_ROI_SIZE,
+        "roi_center":       (int(cr), int(cc)),
+        "sigma_sensor_e":   round(sigma_sensor, 1),
+    },
+    description=f"カメラ sensor noise 測定: σ_sensor={sigma_sensor:.1f} e⁻ (dark frames, N={N})",
+    data_source={
+        "raw_files": [SENSOR_DARK_DIR],
+        "notes":     "Basler acA2440-75um, laser OFF, Pylon gain=0dB",
+    },
+)
+
+print(f"\n参考: OPD noise 理論式の Var(z_sensor) に代入する値 = {sigma_sensor:.1f}^2 = {sigma_sensor**2:.0f} e⁻²")
+
+# ============================================================
 # UC1: 単一画像の任意位置プロファイル
 # ============================================================
 
@@ -165,7 +338,13 @@ UC3_OFFAXIS         = OFFAXIS_CENTER
 # --- UC3 実行 ---
 
 with open(UC3_TRANSFORMS_JSON) as f:
-    transforms = json.load(f)  # リスト or dict — キーはファイル名を想定
+    _raw = json.load(f)
+# align_and_subtract_timelapse.py が出力する形式:
+#   {"alignment_results": [{"filename": "xxx.tif", "shift_x": ..., "shift_y": ...}, ...]}
+if "alignment_results" in _raw:
+    transforms = {r["filename"]: r for r in _raw["alignment_results"]}
+else:
+    transforms = _raw  # 旧来の {filename: {shift_x, shift_y}} 形式にも対応
 
 bg_img3 = np.array(Image.open(UC3_BG_PATH))[UC3_CROP[0]:UC3_CROP[1], UC3_CROP[2]:UC3_CROP[3]]
 _p3 = QPIParameters(wavelength=WAVELENGTH, NA=NA, img_shape=bg_img3.shape,
