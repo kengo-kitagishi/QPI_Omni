@@ -15,8 +15,8 @@ setup_autosave()
 
 #%%
 
-path = "/Volumes/QPI_0_.01_r/251212/ph_1/Pos20/img_000000200_ph_000.tif"
-path_bg = "/Volumes/QPI_0_.01_r/251126_kk/ph_6/Pos1/img_000000000_Default_000.tif"
+path = 
+path_bg = r"D:\AquisitionData\Kitagishi\basler_image_seq\Basler_acA2440-75um__25176370__20260228_193905664_1157.tiff"
 img = Image.open(path)
 
 img_bg = Image.open(path_bg)

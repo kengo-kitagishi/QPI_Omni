@@ -2061,3 +2061,85 @@ mean_RI = n_medium + (total_phase × λ × pixel_area) / (2π × volume)
 
 **Inbox**: `/Users/kitak/Library/CloudStorage/GoogleDrive-kengo_kitagishi@cell.c.u-tokyo.ac.jp/共有ドライブ/wakamotolab_meeting/kitagishi/figure-hub/inbox/2026-03-03/qpi_fig_02_visibility/qpi_fig_02_visibility_20260303T050718Z_724520/qpi_fig_02_visibility__qpi_fig_02_visibility_20260303T050718Z_724520__f001.png`
 **Published**: `results/figures/QPI_2026-03-03_qpi_fig_02_visibility_v3.png`
+
+---
+
+## 2026-03-02 | `unknown` | run `unknown_20260302T140351Z_75c6a9`
+
+**説明**: UC_DIFF adjacent-frame diff noise: mean=27.04 ADU = 68.3 e- (150 pairs)
+
+**データ情報**: source=`Pos0`
+
+**パラメータ**: `n_frames=300`, `n_pairs=150`, `roi_size=80`, `roi_center=(1024, 1224)`, `noise_mean_adu=27.04`, `noise_std_adu=10.81`, `noise_mean_e=68.3`, `conversion_gain=2.5244140625`
+
+**前回からの変更点**:
+  - `conversion_gain`: (new) -> **2.5244140625**
+  - `n_frames`: (new) -> **300**
+  - `n_pairs`: (new) -> **150**
+  - `noise_mean_adu`: (new) -> **27.04**
+  - `noise_mean_e`: (new) -> **68.3**
+  - `noise_std_adu`: (new) -> **10.81**
+  - `roi_center`: (new) -> **(1024, 1224)**
+  - `roi_size`: (new) -> **80**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-02\unknown\unknown_20260302T140351Z_75c6a9\unknown__unknown_20260302T140351Z_75c6a9__f001.png`
+**Published**: `results/figures/QPI_2026-03-02_unknown_v1.png`
+
+---
+
+## 2026-03-02 | `stdin` | run `stdin_20260302T145346Z_167a8a`
+
+**説明**: UC_DIFF adjacent-frame noise: mean=27.04 ADU=68.3 e- (150 pairs)
+
+**データ情報**: source=`Pos0`
+
+**パラメータ**: `data_dir=D:\AquisitionData\Kitagishi\basler_image_seq\vistest_1\Pos0`, `n_frames=300`, `n_pairs=150`, `roi_size=80`, `roi_center=(1024, 1224)`, `noise_mean_adu=27.04`, `noise_std_adu=10.81`, `noise_mean_e=68.3`, `conversion_gain=2.5244140625`
+
+**前回からの変更点**:
+  - `conversion_gain`: (new) -> **2.5244140625**
+  - `data_dir`: (new) -> **D:\AquisitionData\Kitagishi\basler_image_seq\vistest_1\Pos0**
+  - `n_frames`: (new) -> **300**
+  - `n_pairs`: (new) -> **150**
+  - `noise_mean_adu`: (new) -> **27.04**
+  - `noise_mean_e`: (new) -> **68.3**
+  - `noise_std_adu`: (new) -> **10.81**
+  - `roi_center`: (new) -> **(1024, 1224)**
+  - `roi_size`: (new) -> **80**
+
+**Inbox**: `results/figure_inbox/2026-03-02/stdin/stdin_20260302T145346Z_167a8a/stdin__stdin_20260302T145346Z_167a8a__f001.png`
+**Published**: `results/figures/QPI_2026-03-02_stdin_v1.png`
+
+---
+
+## 2026-03-02 | `stdin` | run `stdin_20260302T145643Z_76f6aa`
+
+**説明**: UC_DIFF adjacent-frame noise: mean=27.04 ADU=68.3 e- (150 pairs, exp=10ms)
+
+**データ情報**: source=`Pos0`
+
+**パラメータ**: `data_dir=D:\AquisitionData\Kitagishi\basler_image_seq\vistest_1\Pos0`, `n_frames=300`, `n_pairs=150`, `roi_size=80`, `roi_center=(1024, 1224)`, `exposure_ms=10`, `interval_ms=20`, `mean_max_adu=3684.0`, `noise_mean_adu=27.04`, `noise_std_adu=10.81`, `noise_mean_e=68.3`, `conversion_gain=2.5244140625`
+
+**前回からの変更点**:
+  - `exposure_ms`: (new) -> **10**
+  - `interval_ms`: (new) -> **20**
+  - `mean_max_adu`: (new) -> **3684.0**
+  - `roi_center`: [1024, 1224] -> **(1024, 1224)**
+
+**Inbox**: `results/figure_inbox/2026-03-02/stdin/stdin_20260302T145643Z_76f6aa/stdin__stdin_20260302T145643Z_76f6aa__f001.png`
+**Published**: `results/figures/QPI_2026-03-02_stdin_v2.png`
+
+---
+
+## 2026-03-03 | `stdin` | run `stdin_20260302T150634Z_8fecc6`
+
+**説明**: UC_DIFF adjacent-frame noise: mean=27.04 ADU=68.3 e- (150 pairs, exp=10ms)
+
+**データ情報**: source=`Pos0`
+
+**パラメータ**: `data_dir=D:\AquisitionData\Kitagishi\basler_image_seq\vistest_1\Pos0`, `n_frames=300`, `n_pairs=150`, `roi_size=80`, `roi_center=(1024, 1224)`, `exposure_ms=10`, `interval_ms=20`, `mean_max_adu=3684.0`, `noise_mean_adu=27.04`, `noise_std_adu=10.81`, `noise_mean_e=68.3`, `conversion_gain=2.5244140625`
+
+**前回からの変更点**:
+  - `roi_center`: [1024, 1224] -> **(1024, 1224)**
+
+**Inbox**: `results/figure_inbox/2026-03-03/stdin/stdin_20260302T150634Z_8fecc6/stdin__stdin_20260302T150634Z_8fecc6__f001.png`
+**Published**: `results/figures/QPI_2026-03-03_stdin_v1.png`

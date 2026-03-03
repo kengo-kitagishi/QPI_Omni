@@ -392,3 +392,122 @@ save_figure(fig,
             params={"n_frames": len(shift_mags), "roi": UC3_ROI,
                     "transforms_json": UC3_TRANSFORMS_JSON},
             description="UC3 shift magnitude vs phase noise scatter")
+
+# ============================================================
+# UC_DIFF: 隣接フレーム差分によるノイズ測定
+# ============================================================
+# 目的: 非重複ペア (0&1, 2&3, ...) の差分から temporal noise を推定する
+#
+# 手順:
+#   1. 隣接ペアを逐次読み込み（メモリ節約）
+#   2. 各差分の 80×80 ROI で std を計算
+#   3. std / sqrt(2) = 1フレームあたりノイズ
+#   4. ペアインデックスに対してプロット
+#      → 結果は元の半分のフレーム数 (N//2)
+# ============================================================
+
+# %%
+# --- UC_DIFF 設定 ---
+
+UC_DIFF_DIR        = r"D:\AquisitionData\Kitagishi\basler_image_seq\vistest_1\Pos0"
+UC_DIFF_ROI_SIZE   = 80       # 80×80 ROI (論文準拠)
+UC_DIFF_ROI_CENTER = None     # None → 画像中央; (row, col) で明示指定も可
+
+# %%
+# --- UC_DIFF 実行 ---
+
+print("=== UC_DIFF: 隣接フレーム差分ノイズ測定 ===")
+
+_exts = {".tif", ".tiff", ".png"}
+_files_diff = sorted(
+    f for f in os.listdir(UC_DIFF_DIR)
+    if os.path.splitext(f)[1].lower() in _exts
+)
+N_diff   = len(_files_diff)
+n_pairs  = N_diff // 2
+print(f"  全フレーム数: {N_diff}  → ペア数: {n_pairs}")
+
+# 1枚だけ読んで画像サイズを取得
+_probe = tifffile.imread(os.path.join(UC_DIFF_DIR, _files_diff[0]))
+H_d, W_d = _probe.shape[:2]
+
+# ROI 設定
+_half = UC_DIFF_ROI_SIZE // 2
+if UC_DIFF_ROI_CENTER is None:
+    cr_d, cc_d = H_d // 2, W_d // 2
+else:
+    cr_d, cc_d = UC_DIFF_ROI_CENTER
+rs_d, re_d = cr_d - _half, cr_d + _half
+cs_d, ce_d = cc_d - _half, cc_d + _half
+print(f"  ROI: rows {rs_d}:{re_d}, cols {cs_d}:{ce_d}  ({UC_DIFF_ROI_SIZE}×{UC_DIFF_ROI_SIZE} px)")
+
+# ペアごとに逐次処理（全枚読み込み不要でメモリ節約）
+pair_idx   = []
+noise_vals = []  # std / sqrt(2) [ADU]
+
+for _i in range(n_pairs):
+    _f0 = tifffile.imread(os.path.join(UC_DIFF_DIR, _files_diff[2 * _i    ])).astype(np.float64)
+    _f1 = tifffile.imread(os.path.join(UC_DIFF_DIR, _files_diff[2 * _i + 1])).astype(np.float64)
+    _diff_roi = (_f1 - _f0)[rs_d:re_d, cs_d:ce_d]
+    pair_idx.append(_i)
+    noise_vals.append(float(np.std(_diff_roi) / np.sqrt(2)))
+
+pair_idx   = np.array(pair_idx)
+noise_vals = np.array(noise_vals)
+
+# e⁻ 換算
+noise_e_diff = noise_vals * SENSOR_CONVERSION_GAIN
+
+print(f"\n--- 結果 ---")
+print(f"  noise per frame (ADU): mean={noise_vals.mean():.2f} ± {noise_vals.std():.2f}")
+print(f"  noise per frame (e⁻):  mean={noise_e_diff.mean():.1f} ± {noise_e_diff.std():.1f}")
+
+# --- 図: ノイズ時系列 ---
+fig_diff, axes_diff = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+
+axes_diff[0].plot(pair_idx, noise_vals, lw=0.8, color="steelblue")
+axes_diff[0].axhline(noise_vals.mean(), color="red", ls="--",
+                     label=f"mean = {noise_vals.mean():.2f} ADU")
+axes_diff[0].set_ylabel("Noise per frame [ADU]")
+axes_diff[0].set_title(
+    f"Adjacent-frame diff noise  |  80×80 ROI center=({cr_d},{cc_d})"
+)
+axes_diff[0].legend()
+axes_diff[0].grid(True, alpha=0.4)
+
+axes_diff[1].plot(pair_idx, noise_e_diff, lw=0.8, color="darkorange")
+axes_diff[1].axhline(noise_e_diff.mean(), color="red", ls="--",
+                     label=f"mean = {noise_e_diff.mean():.1f} e⁻")
+axes_diff[1].set_ylabel("Noise per frame [e⁻]")
+axes_diff[1].set_xlabel(f"Pair index  (N = {n_pairs} pairs from {N_diff} frames)")
+axes_diff[1].legend()
+axes_diff[1].grid(True, alpha=0.4)
+
+plt.suptitle(
+    f"UC_DIFF: adjacent-frame diff noise  |  "
+    f"conversion_gain = {SENSOR_CONVERSION_GAIN:.3f} e⁻/ADU  |  "
+    f"N = {N_diff} frames → {n_pairs} pairs",
+    fontsize=11
+)
+plt.tight_layout()
+
+save_figure(
+    fig_diff,
+    params={
+        "data_dir":        UC_DIFF_DIR,
+        "n_frames":        N_diff,
+        "n_pairs":         n_pairs,
+        "roi_size":        UC_DIFF_ROI_SIZE,
+        "roi_center":      (int(cr_d), int(cc_d)),
+        "noise_mean_adu":  round(float(noise_vals.mean()), 2),
+        "noise_std_adu":   round(float(noise_vals.std()), 2),
+        "noise_mean_e":    round(float(noise_e_diff.mean()), 1),
+        "conversion_gain": SENSOR_CONVERSION_GAIN,
+    },
+    description=(
+        f"UC_DIFF 隣接差分ノイズ: mean={noise_vals.mean():.2f} ADU "
+        f"= {noise_e_diff.mean():.1f} e⁻ ({n_pairs} pairs)"
+    ),
+)
+
+print(f"\n完了: {n_pairs} ペア測定")

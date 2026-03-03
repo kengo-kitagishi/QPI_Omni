@@ -46,6 +46,7 @@ import socket
 import subprocess
 import sys
 import traceback
+import unicodedata
 import urllib.request
 import uuid
 from datetime import datetime, timezone
@@ -122,14 +123,38 @@ def _resolve_inbox_root() -> Path:
             )
             _INBOX_ENV_WARNING_SHOWN = True
 
+    def _find_existing(c: Path):
+        """Return the path (possibly NFC/NFD-normalized) if it exists, else None.
+
+        Google Drive for Desktop on Windows syncs directory names from macOS HFS+
+        in NFD form (e.g. "ド" stored as "ト" + combining dakuten U+3099), while
+        Python string literals are typically NFC ("ド" as a single codepoint U+30C9).
+        NTFS preserves the exact bytes as written, so we must try both forms.
+        """
+        if c.exists():
+            return c
+        if sys.platform == "win32":
+            for form in ("NFC", "NFD"):
+                nc = Path(unicodedata.normalize(form, str(c)))
+                try:
+                    if nc.exists():
+                        return nc
+                except (OSError, UnicodeEncodeError, UnicodeDecodeError):
+                    continue
+        return None
+
     candidates = [
         _DEFAULT_DRIVE_HUB_INBOX,
         _DEFAULT_DESKTOP_HUB_INBOX,
     ] + _WINDOWS_DRIVE_HUB_INBOXES
     for c in candidates:
-        if _looks_usable_inbox_root(c):
-            return c.expanduser().resolve()
-    return _FALLBACK_LOCAL_INBOX.expanduser().resolve()
+        try:
+            found = _find_existing(c)
+            if found is not None:
+                return found
+        except (OSError, UnicodeEncodeError, UnicodeDecodeError):
+            continue
+    return _FALLBACK_LOCAL_INBOX
 
 
 def _manifest_path(inbox_root: Path) -> Path:
