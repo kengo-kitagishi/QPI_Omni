@@ -82,6 +82,7 @@ _RUN_CONTEXT = {
     "run_id": None,
     "count": 0,
 }
+_INBOX_ENV_WARNING_SHOWN = False
 
 
 # =============================================================================
@@ -96,19 +97,39 @@ def _sanitize_token(value: str) -> str:
     return out.strip("_") or "unknown"
 
 
+def _looks_usable_inbox_root(path: Path) -> bool:
+    """Return True if the inbox root path looks usable on this machine."""
+    try:
+        expanded = path.expanduser()
+        return expanded.exists() or expanded.parent.exists()
+    except Exception:
+        return False
+
+
 def _resolve_inbox_root() -> Path:
+    global _INBOX_ENV_WARNING_SHOWN
+
     env = os.environ.get("QPI_FIGURE_INBOX_ROOT", "").strip()
     if env:
-        return Path(env).expanduser().resolve()
+        env_path = Path(env).expanduser()
+        if _looks_usable_inbox_root(env_path):
+            return env_path.resolve()
+        if not _INBOX_ENV_WARNING_SHOWN:
+            print(
+                "[figure_logger] warn: QPI_FIGURE_INBOX_ROOT is unusable; "
+                "falling back to default inbox candidates.",
+                file=sys.stderr,
+            )
+            _INBOX_ENV_WARNING_SHOWN = True
 
     candidates = [
         _DEFAULT_DRIVE_HUB_INBOX,
         _DEFAULT_DESKTOP_HUB_INBOX,
     ] + _WINDOWS_DRIVE_HUB_INBOXES
     for c in candidates:
-        if c.exists() or c.parent.exists():
-            return c
-    return _FALLBACK_LOCAL_INBOX
+        if _looks_usable_inbox_root(c):
+            return c.expanduser().resolve()
+    return _FALLBACK_LOCAL_INBOX.expanduser().resolve()
 
 
 def _manifest_path(inbox_root: Path) -> Path:
@@ -354,14 +375,27 @@ def _append_experiment_log(record: dict) -> None:
     data_info_line = ""
     if data_info:
         parts = []
-        if "source" in data_info:
-            parts.append(f"source=`{data_info['source']}`")
+        if "raw_files" in data_info:
+            files = data_info["raw_files"]
+            if isinstance(files, list):
+                for f in files:
+                    parts.append(f"raw=`{f}`")
+            else:
+                parts.append(f"raw=`{files}`")
         if "measured_on" in data_info:
             parts.append(f"measured_on=`{data_info['measured_on']}`")
+        if "sample_id" in data_info:
+            parts.append(f"sample=`{data_info['sample_id']}`")
+        if "run_id_data" in data_info:
+            parts.append(f"data_run=`{data_info['run_id_data']}`")
+        if "source" in data_info:
+            parts.append(f"source=`{data_info['source']}`")
         if "processing" in data_info:
             parts.append(f"processing=`{data_info['processing']}`")
+        if "notes" in data_info:
+            parts.append(f"notes=`{data_info['notes']}`")
         if parts:
-            data_info_line = f"\n**データ情報**: {' / '.join(parts)}\n"
+            data_info_line = f"\n**データ来歴**: {' / '.join(parts)}\n"
 
     inbox_rel = _to_rel_or_abs(Path(record["inbox_file"]))
     published_file = record.get("published_file", "")
@@ -418,15 +452,15 @@ def _load_notion_token() -> str:
         return ""
 
 
-def _find_today_figure_page(token: str, date_str: str) -> Optional[str]:
+def _notion_rt(text: str) -> list:
+    return [{"type": "text", "text": {"content": str(text)[:2000]}}]
+
+
+def _find_today_note_page(token: str, date_str: str, script: str) -> Optional[str]:
+    """当日 + 同スクリプトのページを探して page_id を返す。なければ None。"""
     try:
         url = f"https://api.notion.com/v1/databases/{NOTION_DB_ID}/query"
-        payload = {
-            "filter": {
-                "property": "Date",
-                "date": {"equals": date_str},
-            },
-        }
+        payload = {"filter": {"property": "Date", "date": {"equals": date_str}}}
         req = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
@@ -443,13 +477,93 @@ def _find_today_figure_page(token: str, date_str: str) -> Optional[str]:
         for page in result.get("results", []):
             props = page.get("properties", {})
             title_prop = props.get("Name", props.get("title", {}))
-            title_list = title_prop.get("title", [])
-            page_title = "".join(t.get("plain_text", "") for t in title_list)
-            if page_title.startswith("[図]"):
+            page_title = "".join(
+                t.get("plain_text", "") for t in title_prop.get("title", [])
+            )
+            if script in page_title:
                 return page["id"]
     except Exception:
         return None
     return None
+
+
+def _build_figure_blocks(record: dict) -> list:
+    """1図分のNotion blocksを組み立てる。"""
+    time_str = datetime.now().strftime("%H:%M")
+    description = record.get("description", "")
+    params = record.get("params", {})
+    diff = record.get("diff_from_last", {})
+    data_info = record.get("data_info", {})
+    git_info = record.get("git", {})
+
+    blocks: list = [
+        {"object": "block", "type": "divider", "divider": {}},
+        {
+            "object": "block", "type": "heading_3",
+            "heading_3": {"rich_text": _notion_rt(
+                f"{time_str}  f{record.get('figure_index', 0):03d}  {description}"
+            )},
+        },
+    ]
+
+    # params
+    if params:
+        params_text = "  |  ".join(f"{k} = {v}" for k, v in params.items())
+        blocks.append({
+            "object": "block", "type": "paragraph",
+            "paragraph": {"rich_text": _notion_rt(f"params:  {params_text}")},
+        })
+
+    # diff from last run
+    if diff:
+        diff_lines = "  /  ".join(
+            f"{k}:  {v.get('from')} → {v.get('to')}" for k, v in diff.items()
+        )
+        blocks.append({
+            "object": "block", "type": "paragraph",
+            "paragraph": {"rich_text": _notion_rt(f"変更:  {diff_lines}")},
+        })
+
+    # data_source / data_info
+    if data_info:
+        raw_files = data_info.get("raw_files", [])
+        if isinstance(raw_files, str):
+            raw_files = [raw_files]
+        for f in raw_files[:5]:
+            blocks.append({
+                "object": "block", "type": "paragraph",
+                "paragraph": {"rich_text": _notion_rt(f"raw:  {f}")},
+            })
+        for key, label in [
+            ("measured_on", "measured"),
+            ("sample_id",   "sample"),
+            ("run_id_data", "data_run"),
+            ("notes",       "note"),
+        ]:
+            if key in data_info:
+                blocks.append({
+                    "object": "block", "type": "paragraph",
+                    "paragraph": {"rich_text": _notion_rt(f"{label}:  {data_info[key]}")},
+                })
+
+    # git
+    commit = git_info.get("commit", "")
+    if commit:
+        dirty = " (dirty)" if git_info.get("dirty") else ""
+        blocks.append({
+            "object": "block", "type": "paragraph",
+            "paragraph": {"rich_text": _notion_rt(f"git:  {commit[:10]}{dirty}")},
+        })
+
+    # inbox path
+    inbox = record.get("inbox_file", "")
+    if inbox:
+        blocks.append({
+            "object": "block", "type": "paragraph",
+            "paragraph": {"rich_text": _notion_rt(f"inbox:  {inbox}")},
+        })
+
+    return blocks
 
 
 def _save_to_notion(record: dict) -> None:
@@ -457,38 +571,20 @@ def _save_to_notion(record: dict) -> None:
     if not token:
         return
 
-    def rt(text: str):
-        return [{"type": "text", "text": {"content": str(text)[:2000]}}]
-
     try:
         date_str = record["date_local"]
-        params_text = ", ".join(f"{k}={v}" for k, v in record.get("params", {}).items())
-        diff = record.get("diff_from_last", {})
-        if diff:
-            diff_text = ", ".join(
-                f"{k}: {v.get('from')} -> {v.get('to')}" for k, v in diff.items()
-            )
-        else:
-            diff_text = "first run / no change"
-
+        script = record["script"]
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Notion-Version": "2022-06-28",
         }
+        figure_blocks = _build_figure_blocks(record)
 
-        figure_blocks = [
-            {"object": "block", "type": "heading_3", "heading_3": {"rich_text": rt(record["script"])}},
-            {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(f"run_id={record['run_id']} idx={record['figure_index']}")}},
-            {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(f"description: {record.get('description', '')}")}},
-            {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(f"params: {params_text}")}},
-            {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(f"diff: {diff_text}")}},
-            {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(f"inbox: {record.get('inbox_file', '')}")}},
-        ]
-
-        existing_id = _find_today_figure_page(token, date_str)
+        # 当日同スクリプトのページがあれば追記
+        existing_id = _find_today_note_page(token, date_str, script)
         if existing_id:
-            payload = {"children": [{"object": "block", "type": "divider", "divider": {}}] + figure_blocks}
+            payload = {"children": figure_blocks}
             req = urllib.request.Request(
                 f"https://api.notion.com/v1/blocks/{existing_id}/children",
                 data=json.dumps(payload).encode("utf-8"),
@@ -500,14 +596,16 @@ def _save_to_notion(record: dict) -> None:
             print(f"[figure_logger] Notion追記: https://www.notion.so/{existing_id.replace('-', '')}")
             return
 
+        # なければ新規ページ作成
         payload = {
             "parent": {"database_id": NOTION_DB_ID},
             "properties": {
-                "Name": {"title": rt(f"[図] {date_str}")},
-                "Date": {"date": {"start": date_str}},
-                "Script": {"rich_text": rt(record["script"])},
-                "Description": {"rich_text": rt(record.get("description", ""))},
-                "Type": {"select": {"name": "図"}},
+                "Name":        {"title": _notion_rt(f"{script}  {date_str}")},
+                "Date":        {"date": {"start": date_str}},
+                "Script":      {"rich_text": _notion_rt(script)},
+                "Description": {"rich_text": _notion_rt(record.get("description", ""))},
+                "Type":        {"select": {"name": "作業ログ"}},
+                "WorkType":    {"select": {"name": "figure"}},
             },
             "children": figure_blocks,
         }
@@ -567,6 +665,7 @@ def save_figure(
     publish: Optional[bool] = None,
     save_to_notion: Optional[bool] = None,
     extra_meta: Optional[dict] = None,
+    data_source: Optional[dict] = None,
 ) -> Path:
     """
     Save a matplotlib Figure with inbox-first workflow.
@@ -593,6 +692,24 @@ def save_figure(
         Whether to append to Notion [図] page. If None, reads env QPI_FIGURE_LOGGER_NOTION (default False).
     extra_meta : dict, optional
         Additional metadata to include in per-figure JSON.
+    data_source : dict, optional
+        Raw data provenance. Explicit values override auto-detection.
+        Recommended keys (all optional):
+          "raw_files"   : list[str]  - absolute paths to raw measurement files
+          "measured_on" : str        - measurement date (YYYY-MM-DD)
+          "sample_id"   : str        - sample identifier
+          "run_id_data" : str        - data acquisition run ID
+          "notes"       : str        - free-form provenance notes
+
+        Example::
+            save_figure(
+                fig,
+                data_source={
+                    "raw_files": ["/data/2026-02-28/sample01.nd2"],
+                    "measured_on": "2026-02-28",
+                    "sample_id": "S001",
+                },
+            )
 
     Returns
     -------
@@ -655,7 +772,7 @@ def save_figure(
         "inbox_file": str(inbox_file.resolve()),
         "published_file": published_file,
         "manifest_file": str(manifest_path.resolve()),
-        "data_info": _detect_data_info(),
+        "data_info": {**_detect_data_info(), **(data_source or {})},
         "git": _git_snapshot(),
         "runtime": {
             "python": sys.version.split()[0],

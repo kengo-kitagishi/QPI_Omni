@@ -2005,3 +2005,59 @@ mean_RI = n_medium + (total_phase × λ × pixel_area) / (2π × volume)
 
 **Inbox**: `/Users/kitak/Library/CloudStorage/GoogleDrive-kengo_kitagishi@cell.c.u-tokyo.ac.jp/共有ドライブ/wakamotolab_meeting/kitagishi/figure-hub/inbox/2026-03-01/qpi_fig_01_panel/qpi_fig_01_panel_20260228T174555Z_e8cf2e/qpi_fig_01_panel__qpi_fig_01_panel_20260228T174555Z_e8cf2e__f001.png`
 **Published**: `results/figures/QPI_2026-03-01_qpi_fig_01_panel_v3.png`
+
+---
+
+## 2026-03-03 | `qpi_fig_02_visibility` | run `qpi_fig_02_visibility_20260303T050431Z_e93ef1`
+
+**説明**: Visibility calculation procedure: Hologram → FFT → IFFT(sideband/DC) → Amplitude & OPD → Visibility
+
+**データ来歴**: measured_on=`2517-63-70` / source=`qpi_fig_02_visibility.py`
+
+**パラメータ**: `hologram_path=/Volumes/QPI_0_.01_r/251211/sequence shot/Basler_acA2440-75um__25176370__20251211_152604439_0000.tiff`, `wavelength_nm=658.0`, `NA=0.95`, `offaxis_center=(1664, 485)`, `aperturesize=511`, `crop=(8, 2056, 208, 2256)`, `visibility_mean=0.02046420916738374`
+
+**前回からの変更点**:
+  - `NA`: (new) -> **0.95**
+  - `aperturesize`: (new) -> **511**
+  - `crop`: (new) -> **(8, 2056, 208, 2256)**
+  - `hologram_path`: (new) -> **/Volumes/QPI_0_.01_r/251211/sequence shot/Basler_acA2440-75um__25176370__20251211_152604439_0000.tiff**
+  - `offaxis_center`: (new) -> **(1664, 485)**
+  - `visibility_mean`: (new) -> **0.02046420916738374**
+  - `wavelength_nm`: (new) -> **658.0**
+
+**Inbox**: `/Users/kitak/Library/CloudStorage/GoogleDrive-kengo_kitagishi@cell.c.u-tokyo.ac.jp/共有ドライブ/wakamotolab_meeting/kitagishi/figure-hub/inbox/2026-03-03/qpi_fig_02_visibility/qpi_fig_02_visibility_20260303T050431Z_e93ef1/qpi_fig_02_visibility__qpi_fig_02_visibility_20260303T050431Z_e93ef1__f001.png`
+**Published**: `results/figures/QPI_2026-03-03_qpi_fig_02_visibility_v1.png`
+
+---
+
+## 2026-03-03 | `qpi_fig_02_visibility` | run `qpi_fig_02_visibility_20260303T050628Z_b7e3d8`
+
+**説明**: Visibility calculation procedure: Hologram → FFT → IFFT(sideband/DC) → Amplitude & OPD → Visibility
+
+**データ来歴**: measured_on=`2517-63-70` / source=`qpi_fig_02_visibility.py`
+
+**パラメータ**: `hologram_path=/Volumes/QPI_0_.01_r/251211/sequence shot/Basler_acA2440-75um__25176370__20251211_152604439_0000.tiff`, `wavelength_nm=658.0`, `NA=0.95`, `offaxis_center=(1664, 485)`, `aperturesize=511`, `crop=(8, 2056, 208, 2256)`, `visibility_mean=0.02046420916738374`
+
+**前回からの変更点**:
+  - `crop`: [8, 2056, 208, 2256] -> **(8, 2056, 208, 2256)**
+  - `offaxis_center`: [1664, 485] -> **(1664, 485)**
+
+**Inbox**: `/Users/kitak/Library/CloudStorage/GoogleDrive-kengo_kitagishi@cell.c.u-tokyo.ac.jp/共有ドライブ/wakamotolab_meeting/kitagishi/figure-hub/inbox/2026-03-03/qpi_fig_02_visibility/qpi_fig_02_visibility_20260303T050628Z_b7e3d8/qpi_fig_02_visibility__qpi_fig_02_visibility_20260303T050628Z_b7e3d8__f001.png`
+**Published**: `results/figures/QPI_2026-03-03_qpi_fig_02_visibility_v2.png`
+
+---
+
+## 2026-03-03 | `qpi_fig_02_visibility` | run `qpi_fig_02_visibility_20260303T050718Z_724520`
+
+**説明**: Visibility calculation procedure: Hologram → FFT → IFFT(sideband/DC) → Amplitude & OPD → Visibility
+
+**データ来歴**: measured_on=`2517-63-70` / source=`qpi_fig_02_visibility.py`
+
+**パラメータ**: `hologram_path=/Volumes/QPI_0_.01_r/251211/sequence shot/Basler_acA2440-75um__25176370__20251211_152604439_0000.tiff`, `wavelength_nm=658.0`, `NA=0.95`, `offaxis_center=(1664, 485)`, `aperturesize=511`, `crop=(8, 2056, 208, 2256)`, `visibility_mean=0.02046420916738374`
+
+**前回からの変更点**:
+  - `crop`: [8, 2056, 208, 2256] -> **(8, 2056, 208, 2256)**
+  - `offaxis_center`: [1664, 485] -> **(1664, 485)**
+
+**Inbox**: `/Users/kitak/Library/CloudStorage/GoogleDrive-kengo_kitagishi@cell.c.u-tokyo.ac.jp/共有ドライブ/wakamotolab_meeting/kitagishi/figure-hub/inbox/2026-03-03/qpi_fig_02_visibility/qpi_fig_02_visibility_20260303T050718Z_724520/qpi_fig_02_visibility__qpi_fig_02_visibility_20260303T050718Z_724520__f001.png`
+**Published**: `results/figures/QPI_2026-03-03_qpi_fig_02_visibility_v3.png`

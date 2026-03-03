@@ -1,0 +1,321 @@
+# %%
+"""
+qpi_fig_02_visibility.py
+
+ホログラムから Visibility を計算する手順を示す6パネル図（修論用）。
+
+パネル構成（2行×3列）:
+  上段: a(Hologram) | c(Interferometric Amp) | e(Interferometric OPD)
+  下段: b(2D FFT)   | d(Non-interferometric Amp) | f(Visibility = 2β/α)
+
+矢印:
+  a → b: FFT (下向き)
+  b → c: IFFT (干渉項)
+  b → d: IFFT (非干渉項)
+  c,d → f: ratio (Visibility)
+
+参照: Park et al., Fig. 7.1 スタイル
+"""
+
+import sys
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.gridspec import GridSpec
+from PIL import Image
+import tifffile
+from skimage.restoration import unwrap_phase
+
+sys.path.insert(0, "/Users/kitak/QPI_Omni/scripts")
+from qpi import QPIParameters, get_field, make_disk, crop_array
+from figure_logger import save_figure
+
+# ============================================================
+# 設定 — 実データに合わせて変更
+# ============================================================
+
+HOLOGRAM_PATH = (
+    "/Volumes/QPI_0_.01_r/251211/sequence shot/"
+    "Basler_acA2440-75um__25176370__20251211_152604439_0000.tiff"
+)
+
+WAVELENGTH     = 658e-9          # [m]
+NA             = 0.95
+PIXELSIZE      = 3.45e-6 / 40   # [m/px]
+OFFAXIS_CENTER = (1664, 485)     # (row, col) — FFT空間でのサイドバンド位置
+CROP           = (8, 2056, 208, 2256)  # (row_start, row_end, col_start, col_end)
+
+# ============================================================
+# ホログラム読み込み
+# ============================================================
+
+def load_hologram(path, crop):
+    r0, r1, c0, c1 = crop
+    try:
+        img = tifffile.imread(path).astype(np.float64)
+    except Exception:
+        img = np.array(Image.open(path)).astype(np.float64)
+    if img.ndim == 3:
+        img = img[:, :, 0]
+    return img[r0:r1, c0:c1]
+
+
+if os.path.exists(HOLOGRAM_PATH):
+    holo = load_hologram(HOLOGRAM_PATH, CROP)
+    print(f"Loaded hologram: shape={holo.shape}, dtype={holo.dtype}")
+else:
+    print(f"[WARNING] File not found: {HOLOGRAM_PATH}")
+    print("  → プレースホルダー（ランダムフリンジ）を使用します")
+    rng = np.random.default_rng(42)
+    H, W = 2048, 2048
+    yy, xx = np.mgrid[:H, :W]
+    kx, ky = 0.05, 0.12   # fringe spatial frequency [rad/px]
+    holo = (
+        1000
+        + 300 * np.cos(kx * xx + ky * yy)
+        + 50 * rng.standard_normal((H, W))
+    )
+    holo = np.clip(holo, 0, 4095)
+
+H, W = holo.shape
+
+# ============================================================
+# QPIパラメータ
+# ============================================================
+
+params = QPIParameters(
+    wavelength=WAVELENGTH,
+    NA=NA,
+    img_shape=(H, W),
+    pixelsize=PIXELSIZE,
+    offaxis_center=OFFAXIS_CENTER,
+)
+ap = params.aperturesize
+img_center = params.img_center
+print(f"  aperturesize = {ap} px")
+print(f"  img_center   = {img_center}")
+
+# ============================================================
+# FFT
+# ============================================================
+
+fft_full = np.fft.fftshift(np.fft.fft2(holo))      # (H, W) complex
+fft_log  = np.log1p(np.abs(fft_full))               # 可視化用 log magnitude
+
+# ============================================================
+# 干渉項（サイドバンド / 1次光）抽出 → β
+# ============================================================
+
+sb_mask    = make_disk(OFFAXIS_CENTER, ap // 2, (H, W))
+sb_cropped = crop_array(fft_full * sb_mask, OFFAXIS_CENTER, ap)   # (ap, ap)
+sb_field   = np.fft.ifft2(np.fft.ifftshift(sb_cropped))
+
+beta       = np.abs(sb_field)                        # 干渉項振幅
+opd        = unwrap_phase(np.angle(sb_field))        # 位相 [rad]
+
+# ============================================================
+# 非干渉項（DC / 0次光）抽出 → α
+# ============================================================
+
+dc_mask    = make_disk(img_center, ap // 2, (H, W))
+dc_cropped = crop_array(fft_full * dc_mask, img_center, ap)       # (ap, ap)
+dc_field   = np.fft.ifft2(np.fft.ifftshift(dc_cropped))
+
+alpha      = np.abs(dc_field)                        # 非干渉項振幅
+
+# ============================================================
+# Visibility V = 2β / α
+# ============================================================
+
+with np.errstate(divide="ignore", invalid="ignore"):
+    visibility = 2.0 * beta / alpha
+    visibility[~np.isfinite(visibility)] = 0.0
+
+print(f"  β (mean, center 80%) = {np.percentile(beta, [10, 90])}")
+print(f"  α (mean, center 80%) = {np.percentile(alpha, [10, 90])}")
+print(f"  V (mean)             = {np.mean(visibility[visibility > 0]):.3f}")
+
+# ============================================================
+# 描画
+# ============================================================
+
+FONT = {"fontsize": 9, "fontweight": "bold"}
+
+fig = plt.figure(figsize=(12, 7))
+gs  = GridSpec(
+    2, 3,
+    figure=fig,
+    left=0.04, right=0.97,
+    top=0.95, bottom=0.06,
+    wspace=0.35, hspace=0.35,
+)
+
+ax_a = fig.add_subplot(gs[0, 0])   # Hologram
+ax_b = fig.add_subplot(gs[1, 0])   # FFT
+ax_c = fig.add_subplot(gs[0, 1])   # Interferometric Amp
+ax_d = fig.add_subplot(gs[1, 1])   # Non-interferometric Amp
+ax_e = fig.add_subplot(gs[0, 2])   # OPD
+ax_f = fig.add_subplot(gs[1, 2])   # Visibility
+
+# --- a: Hologram ---
+im_a = ax_a.imshow(holo, cmap="viridis", origin="upper")
+ax_a.set_title("Hologram", **FONT)
+cb_a = plt.colorbar(im_a, ax=ax_a, fraction=0.046, pad=0.04)
+cb_a.set_label("(ADU)", fontsize=7)
+ax_a.set_axis_off()
+
+# --- b: FFT (log magnitude) + circles ---
+im_b = ax_b.imshow(fft_log, cmap="inferno", origin="upper")
+ax_b.set_title("2D FFT", **FONT)
+plt.colorbar(im_b, ax=ax_b, fraction=0.046, pad=0.04).set_label("log|FFT|", fontsize=7)
+ax_b.set_axis_off()
+
+# DC circle
+dc_circle = mpatches.Circle(
+    (img_center[1], img_center[0]),   # (col, row) for matplotlib
+    radius=ap // 2,
+    fill=False, edgecolor="cyan", linewidth=1.2, linestyle="--",
+)
+ax_b.add_patch(dc_circle)
+
+# Sideband circle
+sb_circle = mpatches.Circle(
+    (OFFAXIS_CENTER[1], OFFAXIS_CENTER[0]),
+    radius=ap // 2,
+    fill=False, edgecolor="cyan", linewidth=1.2, linestyle="--",
+)
+ax_b.add_patch(sb_circle)
+
+# --- c: Interferometric Amplitude ---
+vmax_c = np.percentile(beta, 99)
+im_c = ax_c.imshow(beta, cmap="hot", vmin=0, vmax=vmax_c, origin="upper")
+ax_c.set_title("Interferometric term\nAmplitude", **FONT)
+plt.colorbar(im_c, ax=ax_c, fraction=0.046, pad=0.04).set_label("(ADU)", fontsize=7)
+ax_c.set_axis_off()
+
+# --- d: Non-interferometric Amplitude ---
+vmax_d = np.percentile(alpha, 99)
+im_d = ax_d.imshow(alpha, cmap="hot", vmin=0, vmax=vmax_d, origin="upper")
+ax_d.set_title("Non-interferometric term\nAmplitude", **FONT)
+plt.colorbar(im_d, ax=ax_d, fraction=0.046, pad=0.04).set_label("(ADU)", fontsize=7)
+ax_d.set_axis_off()
+
+# --- e: OPD ---
+opd_centered = opd - np.median(opd)
+vlim_e = np.percentile(np.abs(opd_centered), 98)
+im_e = ax_e.imshow(opd_centered, cmap="RdBu_r", vmin=-vlim_e, vmax=vlim_e, origin="upper")
+ax_e.set_title("Interferometric term\nOPD", **FONT)
+plt.colorbar(im_e, ax=ax_e, fraction=0.046, pad=0.04).set_label("(rad)", fontsize=7)
+ax_e.set_axis_off()
+
+# --- f: Visibility ---
+vmin_f = max(0, np.percentile(visibility[visibility > 0], 1))
+vmax_f = min(1, np.percentile(visibility, 99))
+im_f = ax_f.imshow(visibility, cmap="viridis", vmin=vmin_f, vmax=vmax_f, origin="upper")
+ax_f.set_title("Visibility", **FONT)
+plt.colorbar(im_f, ax=ax_f, fraction=0.046, pad=0.04)
+ax_f.set_axis_off()
+
+# ============================================================
+# 矢印（figure 座標）
+# ============================================================
+
+arrow_kw = dict(
+    arrowstyle="-|>",
+    color="black",
+    lw=1.5,
+    mutation_scale=12,
+)
+txt_kw = dict(fontsize=8, ha="center", va="center")
+
+def ax_to_fig(ax, x_ax, y_ax):
+    """axes座標 → figure座標"""
+    return ax.transAxes.transform((x_ax, y_ax))
+
+def draw_arrow(fig, xy_start, xy_end, label="", label_offset=(0, 0)):
+    from matplotlib.patches import FancyArrowPatch
+    arr = FancyArrowPatch(
+        posA=xy_start, posB=xy_end,
+        transform=fig.transFigure,
+        **arrow_kw,
+    )
+    fig.add_artist(arr)
+    if label:
+        mx = (xy_start[0] + xy_end[0]) / 2 + label_offset[0]
+        my = (xy_start[1] + xy_end[1]) / 2 + label_offset[1]
+        fig.text(mx, my, label, **txt_kw)
+
+
+def fig_pos(ax, x_ax, y_ax):
+    """axes座標 → figure fraction"""
+    disp = ax.transAxes.transform((x_ax, y_ax))
+    return fig.transFigure.inverted().transform(disp)
+
+
+# a → b: FFT (下向き)
+draw_arrow(
+    fig,
+    fig_pos(ax_a, 0.5, 0.0),
+    fig_pos(ax_b, 0.5, 1.0),
+    label="FFT",
+    label_offset=(-0.025, 0),
+)
+
+# b → c: IFFT (サイドバンド → 干渉項振幅)
+draw_arrow(
+    fig,
+    fig_pos(ax_b, 1.0, 0.85),
+    fig_pos(ax_c, 0.0, 0.15),
+    label="IFFT",
+    label_offset=(0.01, 0.025),
+)
+
+# b → d: IFFT (DC → 非干渉項振幅)
+draw_arrow(
+    fig,
+    fig_pos(ax_b, 1.0, 0.5),
+    fig_pos(ax_d, 0.0, 0.5),
+    label="IFFT",
+    label_offset=(0, 0.025),
+)
+
+# c → e: (同じ IFFT 結果の位相成分)
+draw_arrow(
+    fig,
+    fig_pos(ax_c, 1.0, 0.5),
+    fig_pos(ax_e, 0.0, 0.5),
+)
+
+# c, d → f: Visibility
+draw_arrow(
+    fig,
+    fig_pos(ax_d, 1.0, 0.5),
+    fig_pos(ax_f, 0.0, 0.5),
+    label="V = 2β/α",
+    label_offset=(0, 0.025),
+)
+
+# ============================================================
+# 保存
+# ============================================================
+
+save_figure(
+    fig,
+    params={
+        "hologram_path": HOLOGRAM_PATH,
+        "wavelength_nm": WAVELENGTH * 1e9,
+        "NA": NA,
+        "offaxis_center": OFFAXIS_CENTER,
+        "aperturesize": int(ap),
+        "crop": CROP,
+        "visibility_mean": float(np.mean(visibility[visibility > 0])),
+    },
+    description=(
+        "Visibility calculation procedure: "
+        "Hologram → FFT → IFFT(sideband/DC) → Amplitude & OPD → Visibility"
+    ),
+)
+
+plt.show()
+print("Done.")
