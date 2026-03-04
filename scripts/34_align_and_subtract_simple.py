@@ -195,7 +195,12 @@ def process_timelapse(timelapse_dir, reference_img, tif_files,
     # シフト可視化
     if alignment_results:
         from shift_visualize import visualize_shifts
-        visualize_shifts(json_path)
+        visualize_shifts(
+            json_path,
+            subtracted_vmin=vmin,
+            subtracted_vmax=vmax,
+            subtracted_cmap=cmap,
+        )
 
     # サマリー
     print(f"\n✅ 処理完了")

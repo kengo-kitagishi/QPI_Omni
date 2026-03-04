@@ -84,6 +84,71 @@ def get_reference_image_path(phase_dir, reference_number):
     return None
 
 
+def compute_delta_correction(reference_img, alt_wo_path, method='ecc'):
+    """
+    培地切り替え補正画像（Δ）を計算する
+
+    Δ = reference_img - alt_wo_aligned
+    使い方: result_correct = (aligned - reference) + Δ
+                           = aligned - alt_wo_aligned
+
+    Parameters
+    ----------
+    reference_img : np.ndarray
+        基準 wo 画像（例: wo_2 の1フレーム）
+    alt_wo_path : str
+        補正したい培地の wo 画像パス（例: wo_0）
+    method : str
+        アライメント方法 ('ecc' or 'phase_correlation')
+
+    Returns
+    -------
+    delta : np.ndarray
+    shift_y, shift_x : float
+    correlation : float
+    """
+    alt_img = load_tif_image(alt_wo_path)
+
+    if alt_img.shape != reference_img.shape:
+        raise ValueError(
+            f"サイズ不一致: reference={reference_img.shape}, alt={alt_img.shape}"
+        )
+
+    if method == 'ecc':
+        reference_uint8 = to_uint8(reference_img)
+        alt_uint8 = to_uint8(alt_img)
+        warp_matrix = np.eye(2, 3, dtype=np.float32)
+        criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-8)
+        correlation, warp_matrix = cv2.findTransformECC(
+            reference_uint8, alt_uint8, warp_matrix,
+            cv2.MOTION_TRANSLATION, criteria
+        )
+        shift_y = float(warp_matrix[1, 2])
+        shift_x = float(warp_matrix[0, 2])
+
+    else:  # phase_correlation
+        from skimage import registration
+        shift, error, _ = registration.phase_cross_correlation(
+            reference_img, alt_img, upsample_factor=10
+        )
+        shift_y, shift_x = float(shift[0]), float(shift[1])
+        correlation = float(1.0 - error)
+        warp_matrix = np.array(
+            [[1.0, 0.0, shift_x], [0.0, 1.0, shift_y]], dtype=np.float32
+        )
+
+    h, w = alt_img.shape
+    alt_aligned = cv2.warpAffine(
+        alt_img.astype(np.float32),
+        warp_matrix,
+        (w, h),
+        flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP,
+    ).astype(np.float64)
+
+    delta = reference_img - alt_aligned
+    return delta, shift_y, shift_x, float(correlation)
+
+
 def find_timelapse_and_reference_pairs(timelapse_base, reference_base, reference_number=21,
                                        pos_start=None, pos_end=None):
     """
@@ -157,7 +222,8 @@ def find_timelapse_and_reference_pairs(timelapse_base, reference_base, reference
 
 def process_pos_timelapse(pos_name, timelapse_phase_dir, reference_image_path,
                           method='ecc', save_png=True, vmin=-0.1, vmax=1.7, cmap='RdBu_r',
-                          png_dpi=150, png_sample_interval=5):
+                          png_dpi=150, png_sample_interval=5,
+                          media_switches=None):
     """
     1つのPosについて全タイムラプス画像を処理
 
@@ -201,6 +267,36 @@ def process_pos_timelapse(pos_name, timelapse_phase_dir, reference_image_path,
         print(f"  ❌ エラー: 参照画像の読み込みに失敗しました - {e}")
         return None
 
+    # ===== ステップ1.5: 培地切り替え補正Δの前処理 =====
+    # frame_corrections: [(frame_number, delta_or_None), ...] (frame_number 昇順)
+    frame_corrections = []
+    if media_switches:
+        print(f"\n[前処理] 培地切り替え補正Δを計算中...")
+        for switch_frame, alt_wo_path in sorted(media_switches, key=lambda x: x[0]):
+            if alt_wo_path is None:
+                frame_corrections.append((switch_frame, None))
+                print(f"  frame {switch_frame}: 参照画像（{os.path.basename(reference_image_path)}）に戻す")
+            else:
+                print(f"  frame {switch_frame}: {os.path.basename(alt_wo_path)} のΔ計算中...")
+                try:
+                    delta, sy, sx, corr = compute_delta_correction(
+                        reference_img, alt_wo_path, method
+                    )
+                    frame_corrections.append((switch_frame, delta))
+                    print(f"    ✅ shift=({sx:.3f}px, {sy:.3f}px), corr={corr:.4f}")
+                    if abs(sy) > 1.0 or abs(sx) > 1.0:
+                        print(f"    ⚠️ 警告: シフト量が1px超 — 補正精度に影響する可能性があります")
+                    # Δ画像をディスクに保存（確認用）
+                    delta_path = os.path.join(
+                        timelapse_phase_dir, f"delta_from_frame{switch_frame}.tif"
+                    )
+                    from skimage import io as skio
+                    skio.imsave(delta_path, delta.astype(np.float32))
+                    print(f"    保存: {os.path.basename(delta_path)}")
+                except Exception as e:
+                    print(f"    ❌ Δ計算失敗: {e}")
+                    return None
+
     # ===== ステップ2: タイムラプス画像リストを取得 =====
     print(f"\n[2/3] タイムラプス画像リスト取得中...")
 
@@ -231,7 +327,7 @@ def process_pos_timelapse(pos_name, timelapse_phase_dir, reference_image_path,
     skipped_count = 0
     png_saved_count = 0
 
-    for timelapse_filename in tqdm(timelapse_files, desc=f"    {pos_name}"):
+    for file_idx, timelapse_filename in enumerate(tqdm(timelapse_files, desc=f"    {pos_name}")):
         try:
             # タイムラプス画像を読み込み
             timelapse_path = os.path.join(timelapse_phase_dir, timelapse_filename)
@@ -299,8 +395,23 @@ def process_pos_timelapse(pos_name, timelapse_phase_dir, reference_image_path,
             aligned_path = os.path.join(aligned_dir, timelapse_filename)
             io.imsave(aligned_path, aligned_img.astype(np.float32))
 
+            # 現在フレームに適用するΔを決定（フレーム番号はファイル名から取得）
+            img_num = get_image_number(timelapse_filename)
+            if img_num is None:
+                img_num = file_idx
+            current_delta = None
+            if frame_corrections:
+                for switch_frame, delta in reversed(frame_corrections):
+                    if img_num >= switch_frame:
+                        current_delta = delta
+                        break
+
             # 引き算: aligned_timelapse - reference
             subtracted = aligned_img - reference_img
+
+            # 培地切り替え補正の適用
+            if current_delta is not None:
+                subtracted = subtracted + current_delta
 
             # TIF保存
             base_name = timelapse_filename.replace("_phase.tif", "").replace("_phase.tiff", "")
@@ -347,6 +458,10 @@ def process_pos_timelapse(pos_name, timelapse_phase_dir, reference_image_path,
         'reference_image_path': reference_image_path,
         'method': method,
         'num_processed': processed_count,
+        'media_switches': [
+            {'frame': f, 'delta_applied': (d is not None)}
+            for f, d in frame_corrections
+        ],
         'alignment_results': alignment_results
     }
 
@@ -357,7 +472,12 @@ def process_pos_timelapse(pos_name, timelapse_phase_dir, reference_image_path,
     # シフト可視化
     if len(alignment_results) > 0:
         from shift_visualize import visualize_shifts
-        visualize_shifts(json_path)
+        visualize_shifts(
+            json_path,
+            subtracted_vmin=vmin,
+            subtracted_vmax=vmax,
+            subtracted_cmap=cmap,
+        )
 
     # サマリー
     print(f"\n  ✅ 処理完了")
@@ -419,6 +539,25 @@ def main():
     VMIN = -0.1               # カラーマップの最小値
     VMAX = 1.7                # カラーマップの最大値
     CMAP = 'RdBu_r'           # カラーマップ
+
+    # ========================================
+    # 培地切り替え設定（オプション）
+    # ========================================
+    # None: 培地切り替えなし（従来通りの動作）
+    #
+    # 使い方:
+    #   [(切り替えフレーム番号, wo画像パス), ...]
+    #   - フレーム番号はファイル名末尾の番号（例: img_..._005_phase.tif → 5）
+    #   - フレーム番号より前は REFERENCE_IMAGE_PATH を使用（2% glucose など）
+    #   - フレーム番号以降は指定した wo 画像で補正
+    #   - None を指定すると REFERENCE_IMAGE_PATH に戻す
+    #
+    # 例（2% → 0% → 2% の実験）:
+    # MEDIA_SWITCHES = [
+    #     (480, r"E:\path\to\wo_0\output_phase\img_..._021_phase.tif"),  # 0% glucose
+    #     (960, None),  # frame 960 以降は 2% glucose に戻す
+    # ]
+    MEDIA_SWITCHES = None
 
     # ========================================
 
@@ -517,7 +656,8 @@ def main():
             vmax=VMAX,
             cmap=CMAP,
             png_dpi=PNG_DPI,
-            png_sample_interval=PNG_SAMPLE_INTERVAL
+            png_sample_interval=PNG_SAMPLE_INTERVAL,
+            media_switches=MEDIA_SWITCHES,
         )
 
         if result is not None:
