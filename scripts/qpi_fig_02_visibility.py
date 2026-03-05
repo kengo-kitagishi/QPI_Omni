@@ -166,37 +166,38 @@ cb_a.set_label("(ADU)", fontsize=7)
 ax_a.set_axis_off()
 
 # --- b: FFT (log magnitude) + circles ---
-im_b = ax_b.imshow(fft_log, cmap="inferno", origin="upper")
+im_b = ax_b.imshow(fft_log, cmap="viridis", origin="upper")
 ax_b.set_title("2D FFT", **FONT)
 plt.colorbar(im_b, ax=ax_b, fraction=0.046, pad=0.04).set_label("log|FFT|", fontsize=7)
 ax_b.set_axis_off()
 
-# DC circle
-dc_circle = mpatches.Circle(
-    (img_center[1], img_center[0]),   # (col, row) for matplotlib
-    radius=ap // 2,
-    fill=False, edgecolor="cyan", linewidth=1.2, linestyle="--",
-)
-ax_b.add_patch(dc_circle)
-
-# Sideband circle
-sb_circle = mpatches.Circle(
-    (OFFAXIS_CENTER[1], OFFAXIS_CENTER[0]),
-    radius=ap // 2,
-    fill=False, edgecolor="cyan", linewidth=1.2, linestyle="--",
-)
-ax_b.add_patch(sb_circle)
+# 2つの円: +1次(r), DC中心(2r)
+radius = ap // 2
+circle_specs = [
+    ((OFFAXIS_CENTER[1], OFFAXIS_CENTER[0]), radius),       # +1次
+    ((img_center[1], img_center[0]), radius * 2),           # DC (2r)
+]
+for (cx, cy), rr in circle_specs:
+    ax_b.add_patch(
+        mpatches.Circle(
+            (cx, cy),
+            radius=rr,
+            fill=False,
+            edgecolor="black",
+            linewidth=1.5,
+        )
+    )
 
 # --- c: Interferometric Amplitude ---
 vmax_c = np.percentile(beta, 99)
-im_c = ax_c.imshow(beta, cmap="hot", vmin=0, vmax=vmax_c, origin="upper")
+im_c = ax_c.imshow(beta, cmap="viridis", vmin=0, vmax=vmax_c, origin="upper")
 ax_c.set_title("Interferometric term\nAmplitude", **FONT)
 plt.colorbar(im_c, ax=ax_c, fraction=0.046, pad=0.04).set_label("(ADU)", fontsize=7)
 ax_c.set_axis_off()
 
 # --- d: Non-interferometric Amplitude ---
 vmax_d = np.percentile(alpha, 99)
-im_d = ax_d.imshow(alpha, cmap="hot", vmin=0, vmax=vmax_d, origin="upper")
+im_d = ax_d.imshow(alpha, cmap="viridis", vmin=0, vmax=vmax_d, origin="upper")
 ax_d.set_title("Non-interferometric term\nAmplitude", **FONT)
 plt.colorbar(im_d, ax=ax_d, fraction=0.046, pad=0.04).set_label("(ADU)", fontsize=7)
 ax_d.set_axis_off()
@@ -204,7 +205,7 @@ ax_d.set_axis_off()
 # --- e: OPD ---
 opd_centered = opd - np.median(opd)
 vlim_e = np.percentile(np.abs(opd_centered), 98)
-im_e = ax_e.imshow(opd_centered, cmap="RdBu_r", vmin=-vlim_e, vmax=vlim_e, origin="upper")
+im_e = ax_e.imshow(opd_centered, cmap="viridis", vmin=-vlim_e, vmax=vlim_e, origin="upper")
 ax_e.set_title("Interferometric term\nOPD", **FONT)
 plt.colorbar(im_e, ax=ax_e, fraction=0.046, pad=0.04).set_label("(rad)", fontsize=7)
 ax_e.set_axis_off()
@@ -216,85 +217,6 @@ im_f = ax_f.imshow(visibility, cmap="viridis", vmin=vmin_f, vmax=vmax_f, origin=
 ax_f.set_title("Visibility", **FONT)
 plt.colorbar(im_f, ax=ax_f, fraction=0.046, pad=0.04)
 ax_f.set_axis_off()
-
-# ============================================================
-# 矢印（figure 座標）
-# ============================================================
-
-arrow_kw = dict(
-    arrowstyle="-|>",
-    color="black",
-    lw=1.5,
-    mutation_scale=12,
-)
-txt_kw = dict(fontsize=8, ha="center", va="center")
-
-def ax_to_fig(ax, x_ax, y_ax):
-    """axes座標 → figure座標"""
-    return ax.transAxes.transform((x_ax, y_ax))
-
-def draw_arrow(fig, xy_start, xy_end, label="", label_offset=(0, 0)):
-    from matplotlib.patches import FancyArrowPatch
-    arr = FancyArrowPatch(
-        posA=xy_start, posB=xy_end,
-        transform=fig.transFigure,
-        **arrow_kw,
-    )
-    fig.add_artist(arr)
-    if label:
-        mx = (xy_start[0] + xy_end[0]) / 2 + label_offset[0]
-        my = (xy_start[1] + xy_end[1]) / 2 + label_offset[1]
-        fig.text(mx, my, label, **txt_kw)
-
-
-def fig_pos(ax, x_ax, y_ax):
-    """axes座標 → figure fraction"""
-    disp = ax.transAxes.transform((x_ax, y_ax))
-    return fig.transFigure.inverted().transform(disp)
-
-
-# a → b: FFT (下向き)
-draw_arrow(
-    fig,
-    fig_pos(ax_a, 0.5, 0.0),
-    fig_pos(ax_b, 0.5, 1.0),
-    label="FFT",
-    label_offset=(-0.025, 0),
-)
-
-# b → c: IFFT (サイドバンド → 干渉項振幅)
-draw_arrow(
-    fig,
-    fig_pos(ax_b, 1.0, 0.85),
-    fig_pos(ax_c, 0.0, 0.15),
-    label="IFFT",
-    label_offset=(0.01, 0.025),
-)
-
-# b → d: IFFT (DC → 非干渉項振幅)
-draw_arrow(
-    fig,
-    fig_pos(ax_b, 1.0, 0.5),
-    fig_pos(ax_d, 0.0, 0.5),
-    label="IFFT",
-    label_offset=(0, 0.025),
-)
-
-# c → e: (同じ IFFT 結果の位相成分)
-draw_arrow(
-    fig,
-    fig_pos(ax_c, 1.0, 0.5),
-    fig_pos(ax_e, 0.0, 0.5),
-)
-
-# c, d → f: Visibility
-draw_arrow(
-    fig,
-    fig_pos(ax_d, 1.0, 0.5),
-    fig_pos(ax_f, 0.0, 0.5),
-    label="V = 2β/α",
-    label_offset=(0, 0.025),
-)
 
 # ============================================================
 # 保存
