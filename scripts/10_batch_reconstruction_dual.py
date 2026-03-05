@@ -17,7 +17,7 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 
 # ベースディレクトリ設定
 BASE_DIRS = [
-    r"E:\Acuisition\kitagishi\260216\move_test_4"
+    r"E:\Acuisition\kitagishi\260301\movetest_8"
 ]
 
 def process_folder(base_dir, pos_start=None, pos_end=None):
@@ -75,7 +75,7 @@ def process_folder(base_dir, pos_start=None, pos_end=None):
 
     # 各Posフォルダを処理
     # pos_split: 前半・後半を分けるPos番号（Pos31未満が前半、Pos31以降が後半）
-    pos_split = 44
+    pos_split = 3
     for pos_name in pos_folders:
         process_pos_folder(base_dir, bg_dir, pos_name, pos_split=pos_split)
 
@@ -275,6 +275,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 # %%

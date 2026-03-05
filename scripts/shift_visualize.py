@@ -110,7 +110,7 @@ def visualize_shifts(
 
 
 # スタンドアロン実行時
-if __name__ == "__main__" or True:
+if __name__ == "__main__":
     visualize_shifts(JSON_PATH)
 
 # %%

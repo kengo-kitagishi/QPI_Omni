@@ -3471,3 +3471,165 @@ mean_RI = n_medium + (total_phase × λ × pixel_area) / (2π × volume)
 
 **Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f014.png`
 **Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v24.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_timeseries unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_3\Pos4\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - `data_source`: E:\Acuisition\kitagishi\260301\movetest_3\Pos3\cropped\alignment_transforms.json -> **E:\Acuisition\kitagishi\260301\movetest_3\Pos4\cropped\alignment_transforms.json**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f015.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v25.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_trajectory unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_3\Pos4\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f016.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v26.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_timeseries unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos1\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - `data_source`: E:\Acuisition\kitagishi\260301\movetest_3\Pos4\cropped\alignment_transforms.json -> **E:\Acuisition\kitagishi\260301\movetest_4\Pos1\cropped\alignment_transforms.json**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f017.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v27.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_trajectory unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos1\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f018.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v28.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_timeseries unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos2\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - `data_source`: E:\Acuisition\kitagishi\260301\movetest_4\Pos1\cropped\alignment_transforms.json -> **E:\Acuisition\kitagishi\260301\movetest_4\Pos2\cropped\alignment_transforms.json**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f019.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v29.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_trajectory unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos2\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f020.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v30.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_timeseries unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos3\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=299`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - `data_source`: E:\Acuisition\kitagishi\260301\movetest_4\Pos2\cropped\alignment_transforms.json -> **E:\Acuisition\kitagishi\260301\movetest_4\Pos3\cropped\alignment_transforms.json**
+  - `n_frames`: 300 -> **299**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f021.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v31.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_trajectory unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos3\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=299`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f022.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v32.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_timeseries unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos4\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=295`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - `data_source`: E:\Acuisition\kitagishi\260301\movetest_4\Pos3\cropped\alignment_transforms.json -> **E:\Acuisition\kitagishi\260301\movetest_4\Pos4\cropped\alignment_transforms.json**
+  - `n_frames`: 299 -> **295**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f023.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v33.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_trajectory unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos4\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=295`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f024.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v34.png`
