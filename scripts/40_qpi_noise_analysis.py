@@ -412,7 +412,9 @@ save_figure(fig,
 UC_DIFF_DIR        = r"D:\AquisitionData\Kitagishi\basler_image_seq\vistest_1\Pos0"
 UC_DIFF_ROI_SIZE   = 80       # 80×80 ROI (論文準拠)
 UC_DIFF_ROI_CENTER = None     # None → 画像中央; (row, col) で明示指定も可
-UC_DIFF_N_PAIRS    = 50       # None → 全フレームから全ペア; 整数 → 先頭 N ペアのみ使用
+UC_DIFF_PAIR_START_1BASED = 50
+UC_DIFF_PAIR_END_1BASED   = 99
+UC_DIFF_READ_NOISE_E = None   # 実測読み出しノイズ [e⁻]（不明なら None）
 
 # %%
 # --- UC_DIFF 実行 ---
@@ -424,11 +426,30 @@ _files_diff = sorted(
     f for f in os.listdir(UC_DIFF_DIR)
     if os.path.splitext(f)[1].lower() in _exts
 )
-if UC_DIFF_N_PAIRS is not None:
-    _files_diff = _files_diff[:UC_DIFF_N_PAIRS * 2]
 N_diff   = len(_files_diff)
-n_pairs  = N_diff // 2
-print(f"  全フレーム数: {N_diff}  → ペア数: {n_pairs}")
+n_pairs_total = N_diff // 2
+pair_start_idx = UC_DIFF_PAIR_START_1BASED - 1
+pair_end_idx = UC_DIFF_PAIR_END_1BASED - 1
+
+if pair_start_idx < 0 or pair_end_idx < pair_start_idx:
+    raise ValueError(
+        "UC_DIFF pair range is invalid: "
+        f"{UC_DIFF_PAIR_START_1BASED}-{UC_DIFF_PAIR_END_1BASED}"
+    )
+if pair_end_idx >= n_pairs_total:
+    raise ValueError(
+        "UC_DIFF pair range exceeds available pairs: "
+        f"requested {UC_DIFF_PAIR_START_1BASED}-{UC_DIFF_PAIR_END_1BASED}, "
+        f"available 1-{n_pairs_total}"
+    )
+
+selected_pair_idx = np.arange(pair_start_idx, pair_end_idx + 1, dtype=int)
+n_pairs = len(selected_pair_idx)
+print(f"  全フレーム数: {N_diff}  → 総ペア数: {n_pairs_total}")
+print(
+    "  解析対象ペア番号: "
+    f"{UC_DIFF_PAIR_START_1BASED}-{UC_DIFF_PAIR_END_1BASED} (N={n_pairs})"
+)
 
 # 1枚だけ読んで画像サイズを取得
 _probe = tifffile.imread(os.path.join(UC_DIFF_DIR, _files_diff[0]))
@@ -447,42 +468,121 @@ print(f"  ROI: rows {rs_d}:{re_d}, cols {cs_d}:{ce_d}  ({UC_DIFF_ROI_SIZE}×{UC_
 # ペアごとに逐次処理（全枚読み込み不要でメモリ節約）
 pair_idx   = []
 noise_vals = []  # std / sqrt(2) [ADU]
+roi_mean_adu_vals = []
+shot_limit_e_vals = []
+theory_limit_e_vals = []
 
-for _i in range(n_pairs):
+for _i in selected_pair_idx:
     _f0 = tifffile.imread(os.path.join(UC_DIFF_DIR, _files_diff[2 * _i    ])).astype(np.float64)
     _f1 = tifffile.imread(os.path.join(UC_DIFF_DIR, _files_diff[2 * _i + 1])).astype(np.float64)
-    _diff_roi = (_f1 - _f0)[rs_d:re_d, cs_d:ce_d]
-    pair_idx.append(_i)
+    _roi0 = _f0[rs_d:re_d, cs_d:ce_d]
+    _roi1 = _f1[rs_d:re_d, cs_d:ce_d]
+    _diff_roi = _roi1 - _roi0
+
+    # 理論限界（ショットノイズ）: sigma_shot = sqrt(N_e)
+    _roi_mean_adu = float(0.5 * (_roi0.mean() + _roi1.mean()))
+    _roi_mean_e = max(_roi_mean_adu * SENSOR_CONVERSION_GAIN, 0.0)
+    _shot_limit_e = float(np.sqrt(_roi_mean_e))
+    if UC_DIFF_READ_NOISE_E is None:
+        _theory_limit_e = _shot_limit_e
+    else:
+        _theory_limit_e = float(np.sqrt(_shot_limit_e**2 + UC_DIFF_READ_NOISE_E**2))
+
+    pair_idx.append(_i + 1)
     noise_vals.append(float(np.std(_diff_roi) / np.sqrt(2)))
+    roi_mean_adu_vals.append(_roi_mean_adu)
+    shot_limit_e_vals.append(_shot_limit_e)
+    theory_limit_e_vals.append(_theory_limit_e)
 
 pair_idx   = np.array(pair_idx)
 noise_vals = np.array(noise_vals)
+roi_mean_adu_vals = np.array(roi_mean_adu_vals)
+shot_limit_e_vals = np.array(shot_limit_e_vals)
+theory_limit_e_vals = np.array(theory_limit_e_vals)
 
 # e⁻ 換算
 noise_e_diff = noise_vals * SENSOR_CONVERSION_GAIN
+shot_limit_adu_vals = shot_limit_e_vals / SENSOR_CONVERSION_GAIN
+theory_limit_adu_vals = theory_limit_e_vals / SENSOR_CONVERSION_GAIN
+
+noise_mean_adu = float(noise_vals.mean())
+noise_std_adu = float(noise_vals.std())
+noise_mean_e = float(noise_e_diff.mean())
+noise_std_e = float(noise_e_diff.std())
+
+roi_mean_adu = float(roi_mean_adu_vals.mean())
+roi_mean_e = float(roi_mean_adu * SENSOR_CONVERSION_GAIN)
+shot_limit_mean_adu = float(shot_limit_adu_vals.mean())
+shot_limit_mean_e = float(shot_limit_e_vals.mean())
+theory_limit_mean_adu = float(theory_limit_adu_vals.mean())
+theory_limit_mean_e = float(theory_limit_e_vals.mean())
+
+ratio_measured_to_shot = (
+    float(noise_mean_e / shot_limit_mean_e) if shot_limit_mean_e > 0 else np.nan
+)
+ratio_measured_to_theory = (
+    float(noise_mean_e / theory_limit_mean_e) if theory_limit_mean_e > 0 else np.nan
+)
 
 print(f"\n--- 結果 ---")
-print(f"  noise per frame (ADU): mean={noise_vals.mean():.2f} ± {noise_vals.std():.2f}")
-print(f"  noise per frame (e⁻):  mean={noise_e_diff.mean():.1f} ± {noise_e_diff.std():.1f}")
+print(f"  noise per frame (ADU): mean={noise_mean_adu:.2f} ± {noise_std_adu:.2f}")
+print(f"  noise per frame (e⁻):  mean={noise_mean_e:.1f} ± {noise_std_e:.1f}")
+print(f"\n--- 理論限界（ROI平均強度ベース） ---")
+print(f"  ROI mean intensity: {roi_mean_adu:.1f} ADU = {roi_mean_e:.0f} e⁻")
+print(
+    f"  shot-noise limit:  {shot_limit_mean_adu:.2f} ADU "
+    f"= {shot_limit_mean_e:.1f} e⁻ / frame"
+)
+if UC_DIFF_READ_NOISE_E is None:
+    print("  read-noise term:    not set (shot-noise only)")
+else:
+    print(f"  read-noise term:    {UC_DIFF_READ_NOISE_E:.1f} e⁻")
+    print(
+        f"  shot+read limit:    {theory_limit_mean_adu:.2f} ADU "
+        f"= {theory_limit_mean_e:.1f} e⁻ / frame"
+    )
+print(
+    f"  measured / shot limit: {ratio_measured_to_shot:.2f}x "
+    f"({ratio_measured_to_shot * 100:.1f}%)"
+)
+if UC_DIFF_READ_NOISE_E is not None:
+    print(
+        f"  measured / shot+read limit: {ratio_measured_to_theory:.2f}x "
+        f"({ratio_measured_to_theory * 100:.1f}%)"
+    )
 
 # --- 図: ノイズ時系列 ---
 fig_diff, axes_diff = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
 
 axes_diff[0].plot(pair_idx, noise_vals, lw=0.8, color="steelblue")
-axes_diff[0].axhline(noise_vals.mean(), color="red", ls="--",
-                     label=f"mean = {noise_vals.mean():.2f} ADU")
+axes_diff[0].axhline(noise_mean_adu, color="red", ls="--",
+                     label=f"measured mean = {noise_mean_adu:.2f} ADU")
+axes_diff[0].axhline(shot_limit_mean_adu, color="green", ls=":",
+                     label=f"shot limit = {shot_limit_mean_adu:.2f} ADU")
+if UC_DIFF_READ_NOISE_E is not None:
+    axes_diff[0].axhline(theory_limit_mean_adu, color="purple", ls="-.",
+                         label=f"shot+read limit = {theory_limit_mean_adu:.2f} ADU")
 axes_diff[0].set_ylabel("Noise per frame [ADU]")
 axes_diff[0].set_title(
-    f"Adjacent-frame diff noise  |  80×80 ROI center=({cr_d},{cc_d})"
+    f"Adjacent-frame diff noise  |  80×80 ROI center=({cr_d},{cc_d})  |  "
+    f"measured/shot={ratio_measured_to_shot:.2f}x"
 )
 axes_diff[0].legend()
 axes_diff[0].grid(True, alpha=0.4)
 
 axes_diff[1].plot(pair_idx, noise_e_diff, lw=0.8, color="darkorange")
-axes_diff[1].axhline(noise_e_diff.mean(), color="red", ls="--",
-                     label=f"mean = {noise_e_diff.mean():.1f} e⁻")
+axes_diff[1].axhline(noise_mean_e, color="red", ls="--",
+                     label=f"measured mean = {noise_mean_e:.1f} e⁻")
+axes_diff[1].axhline(shot_limit_mean_e, color="green", ls=":",
+                     label=f"shot limit = {shot_limit_mean_e:.1f} e⁻")
+if UC_DIFF_READ_NOISE_E is not None:
+    axes_diff[1].axhline(theory_limit_mean_e, color="purple", ls="-.",
+                         label=f"shot+read limit = {theory_limit_mean_e:.1f} e⁻")
 axes_diff[1].set_ylabel("Noise per frame [e⁻]")
-axes_diff[1].set_xlabel(f"Pair index  (N = {n_pairs} pairs from {N_diff} frames)")
+axes_diff[1].set_xlabel(
+    f"Pair number  (N = {n_pairs}, selected {UC_DIFF_PAIR_START_1BASED}-"
+    f"{UC_DIFF_PAIR_END_1BASED} / total {n_pairs_total})"
+)
 axes_diff[1].legend()
 axes_diff[1].grid(True, alpha=0.4)
 axes_diff[1].set_xlim(0, n_pairs)
@@ -490,7 +590,8 @@ axes_diff[1].set_xlim(0, n_pairs)
 plt.suptitle(
     f"UC_DIFF: adjacent-frame diff noise  |  "
     f"conversion_gain = {SENSOR_CONVERSION_GAIN:.3f} e⁻/ADU  |  "
-    f"N = {N_diff} frames → {n_pairs} pairs",
+    f"N = {N_diff} frames → total {n_pairs_total} pairs, "
+    f"selected {UC_DIFF_PAIR_START_1BASED}-{UC_DIFF_PAIR_END_1BASED}",
     fontsize=11
 )
 plt.tight_layout()
@@ -500,18 +601,129 @@ save_figure(
     params={
         "data_dir":        UC_DIFF_DIR,
         "n_frames":        N_diff,
+        "n_pairs_total":   n_pairs_total,
         "n_pairs":         n_pairs,
+        "pair_start_1based": UC_DIFF_PAIR_START_1BASED,
+        "pair_end_1based": UC_DIFF_PAIR_END_1BASED,
         "roi_size":        UC_DIFF_ROI_SIZE,
         "roi_center":      (int(cr_d), int(cc_d)),
-        "noise_mean_adu":  round(float(noise_vals.mean()), 2),
-        "noise_std_adu":   round(float(noise_vals.std()), 2),
-        "noise_mean_e":    round(float(noise_e_diff.mean()), 1),
+        "noise_mean_adu":  round(noise_mean_adu, 2),
+        "noise_std_adu":   round(noise_std_adu, 2),
+        "noise_mean_e":    round(noise_mean_e, 1),
+        "noise_std_e":     round(noise_std_e, 1),
+        "roi_mean_adu":    round(roi_mean_adu, 1),
+        "shot_limit_mean_adu": round(shot_limit_mean_adu, 2),
+        "shot_limit_mean_e":   round(shot_limit_mean_e, 1),
+        "theory_limit_mean_adu": round(theory_limit_mean_adu, 2),
+        "theory_limit_mean_e":   round(theory_limit_mean_e, 1),
+        "read_noise_e":    UC_DIFF_READ_NOISE_E,
+        "measured_over_shot": round(ratio_measured_to_shot, 3),
+        "measured_over_theory": round(ratio_measured_to_theory, 3),
         "conversion_gain": SENSOR_CONVERSION_GAIN,
     },
     description=(
-        f"UC_DIFF 隣接差分ノイズ: mean={noise_vals.mean():.2f} ADU "
-        f"= {noise_e_diff.mean():.1f} e⁻ ({n_pairs} pairs)"
+        f"UC_DIFF 隣接差分ノイズ: measured={noise_mean_adu:.2f} ADU "
+        f"({noise_mean_e:.1f} e⁻), shot_limit={shot_limit_mean_adu:.2f} ADU "
+        f"({shot_limit_mean_e:.1f} e⁻), measured/shot={ratio_measured_to_shot:.2f}x "
+        f"({n_pairs} pairs, selected {UC_DIFF_PAIR_START_1BASED}-{UC_DIFF_PAIR_END_1BASED})"
     ),
 )
 
-print(f"\n完了: {n_pairs} ペア測定")
+# --- 図: 上段(ADU)のみ ---
+fig_diff_top, ax_top = plt.subplots(1, 1, figsize=(10, 3.8))
+ax_top.plot(pair_idx, noise_vals, lw=0.8, color="steelblue")
+ax_top.axhline(noise_mean_adu, color="red", ls="--",
+               label=f"measured mean = {noise_mean_adu:.2f} ADU")
+ax_top.axhline(shot_limit_mean_adu, color="green", ls=":",
+               label=f"shot limit = {shot_limit_mean_adu:.2f} ADU")
+if UC_DIFF_READ_NOISE_E is not None:
+    ax_top.axhline(theory_limit_mean_adu, color="purple", ls="-.",
+                   label=f"shot+read limit = {theory_limit_mean_adu:.2f} ADU")
+ax_top.set_ylabel("Noise per frame [ADU]")
+ax_top.set_xlabel(
+    f"Pair number  (N = {n_pairs}, selected {UC_DIFF_PAIR_START_1BASED}-"
+    f"{UC_DIFF_PAIR_END_1BASED} / total {n_pairs_total})"
+)
+ax_top.set_title(
+    f"Adjacent-frame diff noise (ADU)  |  ROI 80×80 center=({cr_d},{cc_d})  |  "
+    f"measured/shot={ratio_measured_to_shot:.2f}x"
+)
+ax_top.legend()
+ax_top.grid(True, alpha=0.4)
+fig_diff_top.tight_layout()
+
+save_figure(
+    fig_diff_top,
+    params={
+        "parent":            "UC_DIFF_combined",
+        "panel":             "top_ADU",
+        "n_frames":          N_diff,
+        "n_pairs_total":     n_pairs_total,
+        "n_pairs":           n_pairs,
+        "pair_start_1based": UC_DIFF_PAIR_START_1BASED,
+        "pair_end_1based":   UC_DIFF_PAIR_END_1BASED,
+        "roi_size":          UC_DIFF_ROI_SIZE,
+        "roi_center":        (int(cr_d), int(cc_d)),
+        "noise_mean_adu":    round(noise_mean_adu, 2),
+        "shot_limit_mean_adu": round(shot_limit_mean_adu, 2),
+        "theory_limit_mean_adu": round(theory_limit_mean_adu, 2),
+        "read_noise_e":      UC_DIFF_READ_NOISE_E,
+    },
+    description=(
+        f"UC_DIFF top panel only (ADU): measured={noise_mean_adu:.2f} ADU, "
+        f"shot_limit={shot_limit_mean_adu:.2f} ADU, "
+        f"selected pairs={UC_DIFF_PAIR_START_1BASED}-{UC_DIFF_PAIR_END_1BASED}"
+    ),
+)
+
+# --- 図: 下段(e-)のみ ---
+fig_diff_bottom, ax_bottom = plt.subplots(1, 1, figsize=(10, 3.8))
+ax_bottom.plot(pair_idx, noise_e_diff, lw=0.8, color="darkorange")
+ax_bottom.axhline(noise_mean_e, color="red", ls="--",
+                  label=f"measured mean = {noise_mean_e:.1f} e⁻")
+ax_bottom.axhline(shot_limit_mean_e, color="green", ls=":",
+                  label=f"shot limit = {shot_limit_mean_e:.1f} e⁻")
+if UC_DIFF_READ_NOISE_E is not None:
+    ax_bottom.axhline(theory_limit_mean_e, color="purple", ls="-.",
+                      label=f"shot+read limit = {theory_limit_mean_e:.1f} e⁻")
+ax_bottom.set_ylabel("Noise per frame [e⁻]")
+ax_bottom.set_xlabel(
+    f"Pair number  (N = {n_pairs}, selected {UC_DIFF_PAIR_START_1BASED}-"
+    f"{UC_DIFF_PAIR_END_1BASED} / total {n_pairs_total})"
+)
+ax_bottom.set_title(
+    f"Adjacent-frame diff noise (e⁻)  |  ROI 80×80 center=({cr_d},{cc_d})  |  "
+    f"measured/shot={ratio_measured_to_shot:.2f}x"
+)
+ax_bottom.legend()
+ax_bottom.grid(True, alpha=0.4)
+fig_diff_bottom.tight_layout()
+
+save_figure(
+    fig_diff_bottom,
+    params={
+        "parent":            "UC_DIFF_combined",
+        "panel":             "bottom_electron",
+        "n_frames":          N_diff,
+        "n_pairs_total":     n_pairs_total,
+        "n_pairs":           n_pairs,
+        "pair_start_1based": UC_DIFF_PAIR_START_1BASED,
+        "pair_end_1based":   UC_DIFF_PAIR_END_1BASED,
+        "roi_size":          UC_DIFF_ROI_SIZE,
+        "roi_center":        (int(cr_d), int(cc_d)),
+        "noise_mean_e":      round(noise_mean_e, 1),
+        "shot_limit_mean_e": round(shot_limit_mean_e, 1),
+        "theory_limit_mean_e": round(theory_limit_mean_e, 1),
+        "read_noise_e":      UC_DIFF_READ_NOISE_E,
+    },
+    description=(
+        f"UC_DIFF bottom panel only (e-): measured={noise_mean_e:.1f} e⁻, "
+        f"shot_limit={shot_limit_mean_e:.1f} e⁻, "
+        f"selected pairs={UC_DIFF_PAIR_START_1BASED}-{UC_DIFF_PAIR_END_1BASED}"
+    ),
+)
+
+print(
+    f"\n完了: {n_pairs} ペア測定 "
+    f"(pair {UC_DIFF_PAIR_START_1BASED}-{UC_DIFF_PAIR_END_1BASED})"
+)

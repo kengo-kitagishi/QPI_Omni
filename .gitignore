@@ -144,3 +144,4 @@ mcp.json
 htmlcov/
 .tox/
 .hypothesis/
+.claude/
