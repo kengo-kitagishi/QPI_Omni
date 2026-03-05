@@ -412,6 +412,7 @@ save_figure(fig,
 UC_DIFF_DIR        = r"D:\AquisitionData\Kitagishi\basler_image_seq\vistest_1\Pos0"
 UC_DIFF_ROI_SIZE   = 80       # 80×80 ROI (論文準拠)
 UC_DIFF_ROI_CENTER = None     # None → 画像中央; (row, col) で明示指定も可
+UC_DIFF_N_PAIRS    = 50       # None → 全フレームから全ペア; 整数 → 先頭 N ペアのみ使用
 
 # %%
 # --- UC_DIFF 実行 ---
@@ -423,6 +424,8 @@ _files_diff = sorted(
     f for f in os.listdir(UC_DIFF_DIR)
     if os.path.splitext(f)[1].lower() in _exts
 )
+if UC_DIFF_N_PAIRS is not None:
+    _files_diff = _files_diff[:UC_DIFF_N_PAIRS * 2]
 N_diff   = len(_files_diff)
 n_pairs  = N_diff // 2
 print(f"  全フレーム数: {N_diff}  → ペア数: {n_pairs}")
@@ -482,6 +485,7 @@ axes_diff[1].set_ylabel("Noise per frame [e⁻]")
 axes_diff[1].set_xlabel(f"Pair index  (N = {n_pairs} pairs from {N_diff} frames)")
 axes_diff[1].legend()
 axes_diff[1].grid(True, alpha=0.4)
+axes_diff[1].set_xlim(0, n_pairs)
 
 plt.suptitle(
     f"UC_DIFF: adjacent-frame diff noise  |  "

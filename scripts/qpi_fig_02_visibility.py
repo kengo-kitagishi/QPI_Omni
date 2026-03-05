@@ -27,7 +27,7 @@ from PIL import Image
 import tifffile
 from skimage.restoration import unwrap_phase
 
-sys.path.insert(0, "/Users/kitak/QPI_Omni/scripts")
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent))
 from qpi import QPIParameters, get_field, make_disk, crop_array
 from figure_logger import save_figure
 
@@ -36,8 +36,8 @@ from figure_logger import save_figure
 # ============================================================
 
 HOLOGRAM_PATH = (
-    "/Volumes/QPI_0_.01_r/251211/sequence shot/"
-    "Basler_acA2440-75um__25176370__20251211_152604439_0000.tiff"
+    r"E:\Acuisition\kitagishi\260301\movetest_3\Pos2"
+    r"\img_000000000_Default_000.tif"
 )
 
 WAVELENGTH     = 658e-9          # [m]

@@ -2143,3 +2143,166 @@ mean_RI = n_medium + (total_phase × λ × pixel_area) / (2π × volume)
 
 **Inbox**: `results/figure_inbox/2026-03-03/stdin/stdin_20260302T150634Z_8fecc6/stdin__stdin_20260302T150634Z_8fecc6__f001.png`
 **Published**: `results/figures/QPI_2026-03-03_stdin_v1.png`
+
+---
+
+## 2026-03-03 | `qpi_fig_01_reconstruction_overview` | run `qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11`
+
+**説明**: 元画像（グレースケール）
+
+**データ来歴**: measured_on=`0000-00-00` / source=`img_000000000_Default_000.tif`
+
+**パラメータ**: `crop=(0, 2048, 208, 2256)`
+
+**前回からの変更点**:
+  - `crop`: (new) -> **(0, 2048, 208, 2256)**
+  - `offaxis_center`: (1712, 532) -> **(deleted)**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-03\qpi_fig_01_reconstruction_overview\qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11\qpi_fig_01_reconstruction_overview__qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11__f001.png`
+**Published**: `results/figures/QPI_2026-03-03_qpi_fig_01_reconstruction_overview_v1.png`
+
+---
+
+## 2026-03-03 | `qpi_fig_01_reconstruction_overview` | run `qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11`
+
+**説明**: FFT（ログスケール、グレースケール）
+
+**データ来歴**: measured_on=`0000-00-00` / source=`img_000000000_Default_000.tif`
+
+**パラメータ**: `offaxis_center=(1712, 532)`
+
+**前回からの変更点**:
+  - `crop`: (0, 2048, 208, 2256) -> **(deleted)**
+  - `offaxis_center`: (new) -> **(1712, 532)**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-03\qpi_fig_01_reconstruction_overview\qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11\qpi_fig_01_reconstruction_overview__qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11__f002.png`
+**Published**: `results/figures/QPI_2026-03-03_qpi_fig_01_reconstruction_overview_v2.png`
+
+---
+
+## 2026-03-03 | `qpi_fig_01_reconstruction_overview` | run `qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11`
+
+**説明**: FFT + フィルタ円（赤）: +1次(r), DC(2r), -1次(r)
+
+**データ来歴**: measured_on=`0000-00-00` / source=`img_000000000_Default_000.tif`
+
+**パラメータ**: `offaxis_center=(1712, 532)`, `radius=255`, `circle_color=red`
+
+**前回からの変更点**:
+  - `circle_color`: (new) -> **red**
+  - `radius`: (new) -> **255**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-03\qpi_fig_01_reconstruction_overview\qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11\qpi_fig_01_reconstruction_overview__qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11__f003.png`
+**Published**: `results/figures/QPI_2026-03-03_qpi_fig_01_reconstruction_overview_v3.png`
+
+---
+
+## 2026-03-03 | `qpi_fig_01_reconstruction_overview` | run `qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11`
+
+**説明**: FFT + フィルタ円（白）: +1次(r), DC(2r), -1次(r)
+
+**データ来歴**: measured_on=`0000-00-00` / source=`img_000000000_Default_000.tif`
+
+**パラメータ**: `offaxis_center=(1712, 532)`, `radius=255`, `circle_color=white`
+
+**前回からの変更点**:
+  - `circle_color`: red -> **white**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-03\qpi_fig_01_reconstruction_overview\qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11\qpi_fig_01_reconstruction_overview__qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11__f004.png`
+**Published**: `results/figures/QPI_2026-03-03_qpi_fig_01_reconstruction_overview_v4.png`
+
+---
+
+## 2026-03-03 | `qpi_fig_01_reconstruction_overview` | run `qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11`
+
+**説明**: オフ軸ピーク切り出し・中心化（円外ゼロ埋め）
+
+**データ来歴**: measured_on=`0000-00-00` / source=`img_000000000_Default_000.tif`
+
+**パラメータ**: `offaxis_center=(1712, 532)`, `radius=255`
+
+**前回からの変更点**:
+  - `circle_color`: white -> **(deleted)**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-03\qpi_fig_01_reconstruction_overview\qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11\qpi_fig_01_reconstruction_overview__qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11__f005.png`
+**Published**: `results/figures/QPI_2026-03-03_qpi_fig_01_reconstruction_overview_v5.png`
+
+---
+
+## 2026-03-03 | `qpi_fig_01_reconstruction_overview` | run `qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11`
+
+**説明**: 位相再構成（グレースケール）
+
+**データ来歴**: measured_on=`0000-00-00` / source=`img_000000000_Default_000.tif`
+
+**パラメータ**: `offaxis_center=(1712, 532)`
+
+**前回からの変更点**:
+  - `radius`: 255 -> **(deleted)**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-03\qpi_fig_01_reconstruction_overview\qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11\qpi_fig_01_reconstruction_overview__qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11__f006.png`
+**Published**: `results/figures/QPI_2026-03-03_qpi_fig_01_reconstruction_overview_v6.png`
+
+---
+
+## 2026-03-03 | `qpi_fig_01_reconstruction_procedure` | run `qpi_fig_01_reconstruction_procedure_20260303T084353Z_2f3831`
+
+**説明**: QPI再構成手順6パネル図（修論用）: raw → 2D FFT → sideband centering → LP filtering → 2D IFT → background subtraction, スネーク状レイアウト（上段a-b-c / 下段f-e-d）
+
+**データ来歴**: raw=`G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-03\qpi_fig_01_reconstruction_overview\qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11\qpi_fig_01_reconstruction_overview__qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11__f001.png` / raw=`G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-03\qpi_fig_01_reconstruction_overview\qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11\qpi_fig_01_reconstruction_overview__qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11__f003.png` / raw=`G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-03\qpi_fig_01_reconstruction_overview\qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11\qpi_fig_01_reconstruction_overview__qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11__f005.png` / measured_on=`2026-03-03` / data_run=`qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11` / source=`qpi_fig_01_reconstruction_procedure.py` / notes=`source panels generated by qpi_fig_01_reconstruction_overview.py on measurement PC`
+
+**パラメータ**: `scalebar_um=10`, `panels=a=f001, b=f003(RGB), c=f005, d=TODO, e=TODO, f=TODO`, `layout=snake 2x3 (a-b-c top / f-e-d bottom)`
+
+**前回からの変更点**:
+  - `layout`: (new) -> **snake 2x3 (a-b-c top / f-e-d bottom)**
+  - `panels`: (new) -> **a=f001, b=f003(RGB), c=f005, d=TODO, e=TODO, f=TODO**
+  - `scalebar_um`: (new) -> **10**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-03\qpi_fig_01_reconstruction_procedure\qpi_fig_01_reconstruction_procedure_20260303T084353Z_2f3831\qpi_fig_01_reconstruction_procedure__qpi_fig_01_reconstruction_procedure_20260303T084353Z_2f3831__f001.png`
+**Published**: `results/figures/QPI_2026-03-03_qpi_fig_01_reconstruction_procedure_v1.png`
+
+---
+
+## 2026-03-03 | `uc_diff` | run `uc_diff_20260303T084710Z_c6e14b`
+
+**説明**: UC_DIFF 隣接差分ノイズ: mean=26.88 ADU = 67.9 e⁻ (50 pairs)
+
+**データ来歴**: source=`dark_frames_dir`
+
+**パラメータ**: `data_dir=D:\AquisitionData\Kitagishi\basler_image_seq\vistest_1\Pos0`, `n_frames=100`, `n_pairs=50`, `roi_size=80`, `roi_center=(1024, 1224)`, `noise_mean_adu=26.88`, `noise_std_adu=9.4`, `noise_mean_e=67.9`, `conversion_gain=2.5244140625`
+
+**前回からの変更点**:
+  - `conversion_gain`: (new) -> **2.5244140625**
+  - `data_dir`: (new) -> **D:\AquisitionData\Kitagishi\basler_image_seq\vistest_1\Pos0**
+  - `n_frames`: (new) -> **100**
+  - `n_pairs`: (new) -> **50**
+  - `noise_mean_adu`: (new) -> **26.88**
+  - `noise_mean_e`: (new) -> **67.9**
+  - `noise_std_adu`: (new) -> **9.4**
+  - `roi_center`: (new) -> **(1024, 1224)**
+  - `roi_size`: (new) -> **80**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-03\uc_diff\uc_diff_20260303T084710Z_c6e14b\uc_diff__uc_diff_20260303T084710Z_c6e14b__f001.png`
+**Published**: `results/figures/QPI_2026-03-03_uc_diff_v1.png`
+
+---
+
+## 2026-03-03 | `qpi_fig_02_visibility` | run `qpi_fig_02_visibility_20260303T084718Z_cafa98`
+
+**説明**: Visibility calculation procedure: Hologram → FFT → IFFT(sideband/DC) → Amplitude & OPD → Visibility
+
+**データ来歴**: measured_on=`0000-00-00` / source=`qpi_fig_02_visibility.py`
+
+**パラメータ**: `hologram_path=E:\Acuisition\kitagishi\260301\movetest_3\Pos2\img_000000000_Default_000.tif`, `wavelength_nm=658.0`, `NA=0.95`, `offaxis_center=(1664, 485)`, `aperturesize=511`, `crop=(8, 2056, 208, 2256)`, `visibility_mean=0.7819924271022725`
+
+**前回からの変更点**:
+  - `NA`: (new) -> **0.95**
+  - `aperturesize`: (new) -> **511**
+  - `crop`: (new) -> **(8, 2056, 208, 2256)**
+  - `hologram_path`: (new) -> **E:\Acuisition\kitagishi\260301\movetest_3\Pos2\img_000000000_Default_000.tif**
+  - `offaxis_center`: (new) -> **(1664, 485)**
+  - `visibility_mean`: (new) -> **0.7819924271022725**
+  - `wavelength_nm`: (new) -> **658.0**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-03\qpi_fig_02_visibility\qpi_fig_02_visibility_20260303T084718Z_cafa98\qpi_fig_02_visibility__qpi_fig_02_visibility_20260303T084718Z_cafa98__f001.png`
+**Published**: `results/figures/QPI_2026-03-03_qpi_fig_02_visibility_v1.png`

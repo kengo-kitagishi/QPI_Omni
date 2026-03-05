@@ -24,7 +24,7 @@ from figure_logger import save_figure
 # ============================================================
 # 設定
 # ============================================================
-PATH = r"D:\AquisitionData\Kitagishi\basler_image_seq\vistest_5\Pos0\img_000001591_ph_000.tif"
+PATH = r"E:\Acuisition\kitagishi\260301\movetest_3\Pos2\img_000000000_Default_000.tif"
 
 # ============================================================
 # 画像読み込み・クロップ
