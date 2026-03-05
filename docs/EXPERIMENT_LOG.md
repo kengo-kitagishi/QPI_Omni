@@ -2306,3 +2306,1168 @@ mean_RI = n_medium + (total_phase × λ × pixel_area) / (2π × volume)
 
 **Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-03\qpi_fig_02_visibility\qpi_fig_02_visibility_20260303T084718Z_cafa98\qpi_fig_02_visibility__qpi_fig_02_visibility_20260303T084718Z_cafa98__f001.png`
 **Published**: `results/figures/QPI_2026-03-03_qpi_fig_02_visibility_v1.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T060154Z_46b2c0`
+
+**説明**: shift_timeseries unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260218\move_test_2\Pos1\crop\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=292`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - `data_source`: (new) -> **E:\Acuisition\kitagishi\260218\move_test_2\Pos1\crop\alignment_transforms.json**
+  - `display_mode`: (new) -> **physical**
+  - `magnification`: (new) -> **40**
+  - `n_frames`: (new) -> **292**
+  - `pixel_scale_um`: (new) -> **0.34567514677103717**
+  - `sensor_pixel_size`: (new) -> **3.45e-06**
+  - `time_interval_min`: (new) -> **5**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T060154Z_46b2c0\frozen_runpy__frozen_runpy_20260305T060154Z_46b2c0__f001.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v1.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T060154Z_46b2c0`
+
+**説明**: shift_trajectory unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260218\move_test_2\Pos1\crop\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=292`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T060154Z_46b2c0\frozen_runpy__frozen_runpy_20260305T060154Z_46b2c0__f002.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v2.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T060154Z_46b2c0`
+
+**説明**: shift_timeseries unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos4\output_phase\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - `data_source`: E:\Acuisition\kitagishi\260218\move_test_2\Pos1\crop\alignment_transforms.json -> **E:\Acuisition\kitagishi\260301\movetest_4\Pos4\output_phase\alignment_transforms.json**
+  - `n_frames`: 292 -> **300**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T060154Z_46b2c0\frozen_runpy__frozen_runpy_20260305T060154Z_46b2c0__f003.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v3.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T060154Z_46b2c0`
+
+**説明**: shift_trajectory unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos4\output_phase\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T060154Z_46b2c0\frozen_runpy__frozen_runpy_20260305T060154Z_46b2c0__f004.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v4.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T060154Z_46b2c0`
+
+**説明**: shift_timeseries unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos3\output_phase\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=299`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - `data_source`: E:\Acuisition\kitagishi\260301\movetest_4\Pos4\output_phase\alignment_transforms.json -> **E:\Acuisition\kitagishi\260301\movetest_4\Pos3\output_phase\alignment_transforms.json**
+  - `n_frames`: 300 -> **299**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T060154Z_46b2c0\frozen_runpy__frozen_runpy_20260305T060154Z_46b2c0__f005.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v5.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T060154Z_46b2c0`
+
+**説明**: shift_trajectory unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos3\output_phase\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=299`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T060154Z_46b2c0\frozen_runpy__frozen_runpy_20260305T060154Z_46b2c0__f006.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v6.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T063709Z_8a73f1`
+
+**説明**: shift_timeseries unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos4\output_phase\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - `data_source`: E:\Acuisition\kitagishi\260301\movetest_4\Pos3\output_phase\alignment_transforms.json -> **E:\Acuisition\kitagishi\260301\movetest_4\Pos4\output_phase\alignment_transforms.json**
+  - `n_frames`: 299 -> **300**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T063709Z_8a73f1\frozen_runpy__frozen_runpy_20260305T063709Z_8a73f1__f001.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v7.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T063709Z_8a73f1`
+
+**説明**: shift_trajectory unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos4\output_phase\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T063709Z_8a73f1\frozen_runpy__frozen_runpy_20260305T063709Z_8a73f1__f002.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v8.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T063709Z_8a73f1`
+
+**説明**: shift_timeseries unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos4\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=298`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - `data_source`: E:\Acuisition\kitagishi\260301\movetest_4\Pos4\output_phase\alignment_transforms.json -> **E:\Acuisition\kitagishi\260301\movetest_4\Pos4\cropped\alignment_transforms.json**
+  - `n_frames`: 300 -> **298**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T063709Z_8a73f1\frozen_runpy__frozen_runpy_20260305T063709Z_8a73f1__f003.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v9.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T063709Z_8a73f1`
+
+**説明**: shift_trajectory unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos4\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=298`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T063709Z_8a73f1\frozen_runpy__frozen_runpy_20260305T063709Z_8a73f1__f004.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v10.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_timeseries unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos4\output_phase\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - `data_source`: E:\Acuisition\kitagishi\260301\movetest_4\Pos4\cropped\alignment_transforms.json -> **E:\Acuisition\kitagishi\260301\movetest_4\Pos4\output_phase\alignment_transforms.json**
+  - `n_frames`: 298 -> **300**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f001.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v11.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_trajectory unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos4\output_phase\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f002.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v12.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_timeseries unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos3\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=299`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - `data_source`: E:\Acuisition\kitagishi\260301\movetest_4\Pos4\output_phase\alignment_transforms.json -> **E:\Acuisition\kitagishi\260301\movetest_4\Pos3\cropped\alignment_transforms.json**
+  - `n_frames`: 300 -> **299**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f003.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v13.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_trajectory unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos3\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=299`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f004.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v14.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_timeseries unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos2\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - `data_source`: E:\Acuisition\kitagishi\260301\movetest_4\Pos3\cropped\alignment_transforms.json -> **E:\Acuisition\kitagishi\260301\movetest_4\Pos2\cropped\alignment_transforms.json**
+  - `n_frames`: 299 -> **300**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f005.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v15.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_trajectory unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos2\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f006.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v16.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_timeseries unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos1\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - `data_source`: E:\Acuisition\kitagishi\260301\movetest_4\Pos2\cropped\alignment_transforms.json -> **E:\Acuisition\kitagishi\260301\movetest_4\Pos1\cropped\alignment_transforms.json**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f007.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v17.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_trajectory unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_4\Pos1\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f008.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v18.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T082741Z_7c7c2f`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T082741Z_7c7c2f\09_single_reconstruction__09_single_reconstruction_20260305T082741Z_7c7c2f__f001.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v1.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T082741Z_7c7c2f`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T082741Z_7c7c2f\09_single_reconstruction__09_single_reconstruction_20260305T082741Z_7c7c2f__f002.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v2.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T082741Z_7c7c2f`
+
+**説明**: figure 2
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T082741Z_7c7c2f\09_single_reconstruction__09_single_reconstruction_20260305T082741Z_7c7c2f__f003.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v3.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T082741Z_7c7c2f`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T082741Z_7c7c2f\09_single_reconstruction__09_single_reconstruction_20260305T082741Z_7c7c2f__f004.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v4.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T082741Z_7c7c2f`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T082741Z_7c7c2f\09_single_reconstruction__09_single_reconstruction_20260305T082741Z_7c7c2f__f005.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v5.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T082741Z_7c7c2f`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T082741Z_7c7c2f\09_single_reconstruction__09_single_reconstruction_20260305T082741Z_7c7c2f__f006.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v6.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T082741Z_7c7c2f`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T082741Z_7c7c2f\09_single_reconstruction__09_single_reconstruction_20260305T082741Z_7c7c2f__f007.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v7.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T082741Z_7c7c2f`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T082741Z_7c7c2f\09_single_reconstruction__09_single_reconstruction_20260305T082741Z_7c7c2f__f008.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v8.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T082942Z_04b5cb`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T082942Z_04b5cb\09_single_reconstruction__09_single_reconstruction_20260305T082942Z_04b5cb__f001.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v9.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T082942Z_04b5cb`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T082942Z_04b5cb\09_single_reconstruction__09_single_reconstruction_20260305T082942Z_04b5cb__f002.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v10.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T082942Z_04b5cb`
+
+**説明**: figure 2
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T082942Z_04b5cb\09_single_reconstruction__09_single_reconstruction_20260305T082942Z_04b5cb__f003.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v11.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T082942Z_04b5cb`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T082942Z_04b5cb\09_single_reconstruction__09_single_reconstruction_20260305T082942Z_04b5cb__f004.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v12.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T082942Z_04b5cb`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T082942Z_04b5cb\09_single_reconstruction__09_single_reconstruction_20260305T082942Z_04b5cb__f005.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v13.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T082942Z_04b5cb`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T082942Z_04b5cb\09_single_reconstruction__09_single_reconstruction_20260305T082942Z_04b5cb__f006.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v14.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T082942Z_04b5cb`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T082942Z_04b5cb\09_single_reconstruction__09_single_reconstruction_20260305T082942Z_04b5cb__f007.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v15.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T082942Z_04b5cb`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T082942Z_04b5cb\09_single_reconstruction__09_single_reconstruction_20260305T082942Z_04b5cb__f008.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v16.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083129Z_99381c`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083129Z_99381c\09_single_reconstruction__09_single_reconstruction_20260305T083129Z_99381c__f001.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v17.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083129Z_99381c`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083129Z_99381c\09_single_reconstruction__09_single_reconstruction_20260305T083129Z_99381c__f002.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v18.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083129Z_99381c`
+
+**説明**: figure 2
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083129Z_99381c\09_single_reconstruction__09_single_reconstruction_20260305T083129Z_99381c__f003.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v19.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083129Z_99381c`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083129Z_99381c\09_single_reconstruction__09_single_reconstruction_20260305T083129Z_99381c__f004.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v20.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083129Z_99381c`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083129Z_99381c\09_single_reconstruction__09_single_reconstruction_20260305T083129Z_99381c__f005.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v21.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083129Z_99381c`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083129Z_99381c\09_single_reconstruction__09_single_reconstruction_20260305T083129Z_99381c__f006.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v22.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083129Z_99381c`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083129Z_99381c\09_single_reconstruction__09_single_reconstruction_20260305T083129Z_99381c__f007.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v23.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083129Z_99381c`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083129Z_99381c\09_single_reconstruction__09_single_reconstruction_20260305T083129Z_99381c__f008.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v24.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083537Z_05832e`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083537Z_05832e\09_single_reconstruction__09_single_reconstruction_20260305T083537Z_05832e__f001.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v25.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083537Z_05832e`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083537Z_05832e\09_single_reconstruction__09_single_reconstruction_20260305T083537Z_05832e__f002.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v26.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083537Z_05832e`
+
+**説明**: figure 2
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083537Z_05832e\09_single_reconstruction__09_single_reconstruction_20260305T083537Z_05832e__f003.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v27.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083537Z_05832e`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083537Z_05832e\09_single_reconstruction__09_single_reconstruction_20260305T083537Z_05832e__f004.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v28.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083537Z_05832e`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083537Z_05832e\09_single_reconstruction__09_single_reconstruction_20260305T083537Z_05832e__f005.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v29.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083537Z_05832e`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083537Z_05832e\09_single_reconstruction__09_single_reconstruction_20260305T083537Z_05832e__f006.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v30.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083537Z_05832e`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083537Z_05832e\09_single_reconstruction__09_single_reconstruction_20260305T083537Z_05832e__f007.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v31.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083537Z_05832e`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083537Z_05832e\09_single_reconstruction__09_single_reconstruction_20260305T083537Z_05832e__f008.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v32.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083628Z_b1d238`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083628Z_b1d238\09_single_reconstruction__09_single_reconstruction_20260305T083628Z_b1d238__f001.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v33.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083628Z_b1d238`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083628Z_b1d238\09_single_reconstruction__09_single_reconstruction_20260305T083628Z_b1d238__f002.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v34.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083628Z_b1d238`
+
+**説明**: figure 2
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083628Z_b1d238\09_single_reconstruction__09_single_reconstruction_20260305T083628Z_b1d238__f003.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v35.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083628Z_b1d238`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083628Z_b1d238\09_single_reconstruction__09_single_reconstruction_20260305T083628Z_b1d238__f004.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v36.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083628Z_b1d238`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083628Z_b1d238\09_single_reconstruction__09_single_reconstruction_20260305T083628Z_b1d238__f005.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v37.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083628Z_b1d238`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083628Z_b1d238\09_single_reconstruction__09_single_reconstruction_20260305T083628Z_b1d238__f006.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v38.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083628Z_b1d238`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083628Z_b1d238\09_single_reconstruction__09_single_reconstruction_20260305T083628Z_b1d238__f007.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v39.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083628Z_b1d238`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083628Z_b1d238\09_single_reconstruction__09_single_reconstruction_20260305T083628Z_b1d238__f008.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v40.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083828Z_a07ba8`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083828Z_a07ba8\09_single_reconstruction__09_single_reconstruction_20260305T083828Z_a07ba8__f001.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v41.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083828Z_a07ba8`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083828Z_a07ba8\09_single_reconstruction__09_single_reconstruction_20260305T083828Z_a07ba8__f002.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v42.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083828Z_a07ba8`
+
+**説明**: figure 2
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083828Z_a07ba8\09_single_reconstruction__09_single_reconstruction_20260305T083828Z_a07ba8__f003.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v43.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083828Z_a07ba8`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083828Z_a07ba8\09_single_reconstruction__09_single_reconstruction_20260305T083828Z_a07ba8__f004.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v44.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083828Z_a07ba8`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083828Z_a07ba8\09_single_reconstruction__09_single_reconstruction_20260305T083828Z_a07ba8__f005.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v45.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083828Z_a07ba8`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083828Z_a07ba8\09_single_reconstruction__09_single_reconstruction_20260305T083828Z_a07ba8__f006.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v46.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083828Z_a07ba8`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083828Z_a07ba8\09_single_reconstruction__09_single_reconstruction_20260305T083828Z_a07ba8__f007.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v47.png`
+
+---
+
+## 2026-03-05 | `09_single_reconstruction` | run `09_single_reconstruction_20260305T083828Z_a07ba8`
+
+**説明**: figure 1
+
+**データ来歴**: measured_on=`0000-00-00` / source=`09_single_reconstruction.py`
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\09_single_reconstruction\09_single_reconstruction_20260305T083828Z_a07ba8\09_single_reconstruction__09_single_reconstruction_20260305T083828Z_a07ba8__f008.png`
+**Published**: `results/figures/QPI_2026-03-05_09_single_reconstruction_v48.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_timeseries unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_3\Pos1\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - `data_source`: E:\Acuisition\kitagishi\260301\movetest_4\Pos1\cropped\alignment_transforms.json -> **E:\Acuisition\kitagishi\260301\movetest_3\Pos1\cropped\alignment_transforms.json**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f009.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v19.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_trajectory unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_3\Pos1\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f010.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v20.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_timeseries unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_3\Pos2\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - `data_source`: E:\Acuisition\kitagishi\260301\movetest_3\Pos1\cropped\alignment_transforms.json -> **E:\Acuisition\kitagishi\260301\movetest_3\Pos2\cropped\alignment_transforms.json**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f011.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v21.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_trajectory unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_3\Pos2\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f012.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v22.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_timeseries unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_3\Pos3\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - `data_source`: E:\Acuisition\kitagishi\260301\movetest_3\Pos2\cropped\alignment_transforms.json -> **E:\Acuisition\kitagishi\260301\movetest_3\Pos3\cropped\alignment_transforms.json**
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f013.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v23.png`
+
+---
+
+## 2026-03-05 | `frozen_runpy` | run `frozen_runpy_20260305T080849Z_b316fe`
+
+**説明**: shift_trajectory unknown
+
+**データ来歴**: source=`shift_visualize.py`
+
+**パラメータ**: `data_source=E:\Acuisition\kitagishi\260301\movetest_3\Pos3\cropped\alignment_transforms.json`, `display_mode=physical`, `sensor_pixel_size=3.45e-06`, `magnification=40`, `pixel_scale_um=0.34567514677103717`, `n_frames=300`, `time_interval_min=5`
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f014.png`
+**Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v24.png`

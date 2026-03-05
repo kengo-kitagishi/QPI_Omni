@@ -15,8 +15,8 @@ setup_autosave()
 path = r"/Volumes/QPI3/250910_kk/ph_1/Pos1/img_000000000_Default_000.tif"
 path_bg = r"/Volumes/QPI3/250910_kk/ph_1/Pos1/img_000000000_Default_000.tif"
 """
-path = r"F:\250611_kk\ph_1\Pos1\img_000000001_Default_000.tif"
-path_bg = r"F:\250611_kk\ph_1\Pos0\img_000000001_Default_000.tif"
+path = r"E:\Acuisition\kitagishi\260301\movetest_8\Pos2\img_000000004_ph_000.tif"
+path_bg = r"E:\Acuisition\kitagishi\260301\movetest_8\Pos0\img_000000004_ph_000.tif"
 
 img = Image.open(path)
 
@@ -108,7 +108,7 @@ plt.show()
 angle_nobg = angle - angle_bg 
 #angle_nobg = angle_nobg - np.mean(angle_nobg[244:254,1:254])
 angle_nobg = angle_nobg - np.mean(angle_nobg[1:100,1:254])
-plt.imshow(angle_nobg,vmin=-0.1,vmax=0.1)
+plt.imshow(angle_nobg,vmin=-4,vmax=2)
 plt.colorbar()
 plt.show()
 
@@ -155,7 +155,7 @@ plt.imshow(visibility,vmin=0.3,vmax=0.95)
 plt.colorbar()
 plt.show()
 
-plt.hist(visibility.flatten(), bins=100, range=(0.3, 1))
+plt.hist(visibility.flatten(), bins=100, range=(0.6, 1))
 plt.show()
 print(visibility.mean())
 

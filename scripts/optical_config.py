@@ -15,7 +15,7 @@ WAVELENGTH / NA / PIXELSIZE はハード変更のない限り触らない。
 # ★ 実験前に更新するパラメータ
 # ============================================================
 
-OFFAXIS_CENTER = (1712, 532)   # (row, col) — 2026-02-28 更新
+OFFAXIS_CENTER = (1710, 644)   # (row, col) — 2026-02-28 更新
 
 # クロップ領域 (row_start, row_end, col_start, col_end)
 # カメラ位置を変えた場合は要更新
