@@ -1,0 +1,64 @@
+{
+  "created_at": "2026-03-06T12:23:56.667935",
+  "text": "花王ES: 推敲して提出する",
+  "duration_minutes": 90,
+  "target_list": "plan",
+  "due": "2026-03-12",
+  "category": "general",
+  "priority": "high",
+  "schedule_bias_hours": -8,
+  "matched_keywords": [],
+  "workflow": null,
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-03-09",
+    "end_date": "2026-03-22",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "rearrange",
+      "slot_start": "2026-03-09T17:10:00+09:00",
+      "slot_end": "2026-03-09T18:40:00+09:00",
+      "list_key": "plan",
+      "score": 1773043800.0,
+      "reasons": [
+        "move task 86ewr280b (Rules Skills ni directory flow wo matomeru)"
+      ],
+      "moves": [
+        {
+          "task_id": "86ewr280b",
+          "task_name": "Rules Skills ni directory flow wo matomeru",
+          "from_start": "2026-03-09T17:00:00+09:00",
+          "from_end": "2026-03-09T20:00:00+09:00",
+          "to_start": "2026-03-10T09:00:00+09:00",
+          "to_end": "2026-03-10T12:00:00+09:00",
+          "task_url": "https://app.clickup.com/t/86ewr280b",
+          "list_key": "plan"
+        }
+      ]
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-10T09:00:00+09:00",
+      "slot_end": "2026-03-10T10:30:00+09:00",
+      "list_key": "plan",
+      "score": 1773100800.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-10T16:10:00+09:00",
+      "slot_end": "2026-03-10T17:40:00+09:00",
+      "list_key": "plan",
+      "score": 1773126600.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": []
+    }
+  ]
+}

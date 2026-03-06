@@ -1,0 +1,60 @@
+{
+  "created_at": "2026-03-06T11:06:17.142190",
+  "text": "Figure 2の凡例を2時間で修正したい",
+  "duration_minutes": 120,
+  "target_list": "manuscript",
+  "due": "2026-03-10",
+  "priority": "normal",
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-03-06",
+    "end_date": "2026-03-15",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "rearrange",
+      "slot_start": "2026-03-06T14:10:00+09:00",
+      "slot_end": "2026-03-06T16:10:00+09:00",
+      "list_key": "manuscript",
+      "score": 1772773800.0,
+      "reasons": [
+        "move task 86ewr0z4d (【実験】0%培地交換（T0+120h）)"
+      ],
+      "moves": [
+        {
+          "task_id": "86ewr0z4d",
+          "task_name": "【実験】0%培地交換（T0+120h）",
+          "from_start": "2026-03-06T15:00:00+09:00",
+          "from_end": "2026-03-06T16:00:00+09:00",
+          "to_start": "2026-03-06T16:10:00+09:00",
+          "to_end": "2026-03-06T17:10:00+09:00",
+          "task_url": "https://app.clickup.com/t/86ewr0z4d",
+          "list_key": "experiment"
+        }
+      ]
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-06T16:10:00+09:00",
+      "slot_end": "2026-03-06T18:10:00+09:00",
+      "list_key": "manuscript",
+      "score": 1772781000.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-07T09:00:00+09:00",
+      "slot_end": "2026-03-07T11:00:00+09:00",
+      "list_key": "manuscript",
+      "score": 1772841600.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": []
+    }
+  ]
+}

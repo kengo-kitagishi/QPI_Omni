@@ -1,0 +1,200 @@
+{
+  "created_at": "2026-03-06T13:27:59.117959",
+  "range": {
+    "start": "2026-03-06",
+    "end": "2026-04-04",
+    "near_days": 7
+  },
+  "counts": {
+    "fetched": 654,
+    "scheduled": 58,
+    "unscheduled": 9,
+    "overdue": 78,
+    "due_soon_unscheduled": 0,
+    "after_due": 0
+  },
+  "findings": [
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86ewrdf40",
+      "task_name": "Figure修正: fig_pres_qpi_opticalsetting_elements",
+      "list_key": "manuscript",
+      "reason": "03-06 12:00 schematic QPI図: fiber線の太さを修正 と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-08T18:50:00+09:00",
+      "suggested_slot_end": "2026-03-08T20:50:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86evrf4dn",
+      "task_name": "Vast heterogeneity in cytoplasmic diffusion rates revealed ",
+      "list_key": "slide",
+      "reason": "03-06 17:10 Nvidia install手順のDocumentation作る と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-08T18:50:00+09:00",
+      "suggested_slot_end": "2026-03-08T20:50:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86evw1au6",
+      "task_name": "OmniposeのDocumentation作る",
+      "list_key": "manuscript",
+      "reason": "03-06 18:30 Vast heterogeneity in cytoplasmic diffusion rates revealed  と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-08T18:50:00+09:00",
+      "suggested_slot_end": "2026-03-08T19:50:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86evrehy8",
+      "task_name": "Quantitative phase imaging based on holography: trends and new perspectives",
+      "list_key": "input",
+      "reason": "03-06 19:40 顕微鏡パソコンにnotion,clickup設定を入れる と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-08T18:50:00+09:00",
+      "suggested_slot_end": "2026-03-08T20:50:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86ewr3a1n",
+      "task_name": "スマホにGoogleカレンダーのウィジェットを置く",
+      "list_key": "plan",
+      "reason": "03-07 09:00 Mother Machine3Dの概念図 と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-08T18:50:00+09:00",
+      "suggested_slot_end": "2026-03-08T19:20:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86evu3zwf",
+      "task_name": "Label free mid inframatry",
+      "list_key": "input",
+      "reason": "03-07 18:10 3条件のbgを取得 と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-08T18:50:00+09:00",
+      "suggested_slot_end": "2026-03-08T20:50:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86evu46zv",
+      "task_name": "Cell Volume change through water efflux impacts cell stiffness and stem cell fate",
+      "list_key": "input",
+      "reason": "03-08 10:30 training datasetを作る と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-08T18:50:00+09:00",
+      "suggested_slot_end": "2026-03-08T20:50:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86ewqyywe",
+      "task_name": "DC1｜研究背景を書く②・研究の独自性を整理",
+      "list_key": "manuscript",
+      "reason": "03-09 11:00  Nano Mid infra と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-10T10:10:00+09:00",
+      "suggested_slot_end": "2026-03-10T11:10:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr08x1",
+      "task_name": "Movingを確認",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "acquisition",
+      "reason": "workflow順序が逆転: stage=acquisition より前段 (setup) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-10T10:10:00+09:00",
+      "suggested_slot_end": "2026-03-10T12:40:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr08e5",
+      "task_name": "3条件のbgを取得",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "acquisition",
+      "reason": "workflow順序が逆転: stage=acquisition より前段 (setup) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-10T10:10:00+09:00",
+      "suggested_slot_end": "2026-03-10T12:40:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr09ev",
+      "task_name": "training datasetを作る",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "processing",
+      "reason": "workflow順序が逆転: stage=processing より前段 (acquisition) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-11T11:10:00+09:00",
+      "suggested_slot_end": "2026-03-11T14:10:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "defer_low_priority",
+      "task_id": "86ew9k38a",
+      "task_name": "Mother Machine3Dの概念図",
+      "list_key": "slide",
+      "reason": "低優先カテゴリ(figure)で、期限圧力タスク 78 件あり",
+      "action": "後ろ倒しを検討",
+      "suggested_slot_start": "2026-03-13T13:30:00+09:00",
+      "suggested_slot_end": "2026-03-13T15:30:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "defer_low_priority",
+      "task_id": "86ewn8381",
+      "task_name": "Reconstruction Procedureの図を作る",
+      "list_key": "manuscript",
+      "reason": "低優先カテゴリ(figure)で、期限圧力タスク 78 件あり",
+      "action": "後ろ倒しを検討",
+      "suggested_slot_start": "2026-03-13T13:30:00+09:00",
+      "suggested_slot_end": "2026-03-13T14:30:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "defer_low_priority",
+      "task_id": "86evu4cpx",
+      "task_name": "biochemical reaction とdiffusionの図",
+      "list_key": "manuscript",
+      "reason": "低優先カテゴリ(figure)で、期限圧力タスク 78 件あり",
+      "action": "後ろ倒しを検討",
+      "suggested_slot_start": "2026-03-13T13:30:00+09:00",
+      "suggested_slot_end": "2026-03-13T15:30:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "defer_low_priority",
+      "task_id": "86ewt7w1w",
+      "task_name": "文献input: ScienceDirect chapter (S0580951716300022)",
+      "list_key": "manuscript",
+      "reason": "低優先カテゴリ(input)で、期限圧力タスク 78 件あり",
+      "action": "後ろ倒しを検討",
+      "suggested_slot_start": "2026-03-13T13:30:00+09:00",
+      "suggested_slot_end": "2026-03-13T15:30:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "defer_low_priority",
+      "task_id": "86ew9k3bm",
+      "task_name": "OmniposeのUnet図",
+      "list_key": "slide",
+      "reason": "低優先カテゴリ(figure)で、期限圧力タスク 78 件あり",
+      "action": "後ろ倒しを検討",
+      "suggested_slot_start": "2026-03-13T13:30:00+09:00",
+      "suggested_slot_end": "2026-03-13T15:00:00+09:00"
+    }
+  ]
+}

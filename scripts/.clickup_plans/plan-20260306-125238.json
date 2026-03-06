@@ -1,0 +1,64 @@
+{
+  "created_at": "2026-03-06T12:52:38.839203",
+  "text": "mNeonGreen計測、Sorbitol",
+  "duration_minutes": 60,
+  "target_list": "experiment",
+  "due": "",
+  "category": "general",
+  "priority": "normal",
+  "schedule_bias_hours": 0,
+  "matched_keywords": [],
+  "workflow": {
+    "group": "exp_code",
+    "stage": "unspecified",
+    "order": 999,
+    "matched_keywords": [],
+    "start_after": null
+  },
+  "medium_flow": {
+    "step": "change_low_0",
+    "step_label": "培地交換low%0%",
+    "start_after": null
+  },
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-03-06",
+    "end_date": "2026-03-19",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "direct",
+      "slot_start": "2026-03-06T14:50:00+09:00",
+      "slot_end": "2026-03-06T15:50:00+09:00",
+      "list_key": "experiment",
+      "score": 1772776200.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-08T18:50:00+09:00",
+      "slot_end": "2026-03-08T19:50:00+09:00",
+      "list_key": "experiment",
+      "score": 1772963400.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-10T10:10:00+09:00",
+      "slot_end": "2026-03-10T11:10:00+09:00",
+      "list_key": "experiment",
+      "score": 1773105000.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": []
+    }
+  ]
+}

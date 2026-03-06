@@ -1,0 +1,1319 @@
+{
+  "created_at": "2026-03-06T12:56:13.938644",
+  "tasks": [
+    {
+      "task_id": "86evrf15q",
+      "get_status": 200,
+      "task": {
+        "id": "86evrf15q",
+        "custom_id": null,
+        "custom_item_id": 0,
+        "name": "コンセントを抜く",
+        "text_content": "",
+        "description": "",
+        "status": {
+          "id": "p90188594666_6pMncdVn",
+          "status": "complete",
+          "color": "#0f9d9f",
+          "orderindex": 6,
+          "type": "done"
+        },
+        "orderindex": "39908295.00000000000000000000000000000000",
+        "date_created": "1764825743030",
+        "date_updated": "1770886061783",
+        "date_closed": null,
+        "date_done": "1765071212871",
+        "archived": false,
+        "creator": {
+          "id": 180192796,
+          "username": "北岸健吾",
+          "color": "#595d66",
+          "email": "kitaken063339@gmail.com",
+          "profilePicture": null
+        },
+        "assignees": [
+          {
+            "id": 180192796,
+            "username": "北岸健吾",
+            "color": "#595d66",
+            "initials": "北",
+            "email": "kitaken063339@gmail.com",
+            "profilePicture": null
+          }
+        ],
+        "group_assignees": [],
+        "watchers": [
+          {
+            "id": 180192796,
+            "username": "北岸健吾",
+            "color": "#595d66",
+            "initials": "北",
+            "email": "kitaken063339@gmail.com",
+            "profilePicture": null
+          }
+        ],
+        "checklists": [],
+        "tags": [],
+        "parent": null,
+        "top_level_parent": null,
+        "priority": null,
+        "due_date": "1765069200000",
+        "start_date": "1765065600000",
+        "points": null,
+        "time_estimate": null,
+        "time_spent": 0,
+        "custom_fields": [
+          {
+            "id": "cc335263-d490-484a-b248-b2e7ad760515",
+            "name": "重要度",
+            "type": "drop_down",
+            "type_config": {
+              "ai": {
+                "prompt": "",
+                "source": "custom_dropdown"
+              },
+              "sorting": "manual",
+              "new_drop_down": true,
+              "options": [
+                {
+                  "id": "0fbd1ddb-10d3-4cfd-95f2-7e325cf9bfcd",
+                  "name": "critical",
+                  "color": "#FF4081",
+                  "orderindex": 0
+                },
+                {
+                  "id": "24490421-3381-4742-8a09-d567f75c35e1",
+                  "name": "high",
+                  "color": "#2ecd6f",
+                  "orderindex": 1
+                },
+                {
+                  "id": "402428aa-c5d4-4782-bda8-fe6b81c71425",
+                  "name": "medium",
+                  "color": "#800000",
+                  "orderindex": 2
+                },
+                {
+                  "id": "34141bf1-a867-43f6-8c21-7536e95ab87f",
+                  "name": "low",
+                  "color": "#FF7FAB",
+                  "orderindex": 3
+                }
+              ]
+            },
+            "date_created": "1764817638375",
+            "hide_from_guests": false,
+            "required": false
+          },
+          {
+            "id": "e100306f-c21f-4330-9ade-d0a9fdd56298",
+            "name": "Category",
+            "type": "drop_down",
+            "type_config": {
+              "ai": {
+                "prompt": "",
+                "source": "categorize"
+              },
+              "sorting": "manual",
+              "new_drop_down": true,
+              "options": [
+                {
+                  "id": "10408bc1-aa7c-49c5-93c3-2a5ca267eaa5",
+                  "name": "ExpPrep",
+                  "color": "#FF4081",
+                  "orderindex": 0
+                },
+                {
+                  "id": "9d9ca3c1-89b1-49b9-bb88-d7e87f5e969d",
+                  "name": "RunExp",
+                  "color": "#1bbc9c",
+                  "orderindex": 1
+                },
+                {
+                  "id": "6bee7bf4-b0ce-4e43-ba85-3d3ea3189bbf",
+                  "name": "SysMaint",
+                  "color": "#f900ea",
+                  "orderindex": 2
+                },
+                {
+                  "id": "e5c43c6a-9290-44cb-8feb-4be587e87d47",
+                  "name": "ProtoTune",
+                  "color": "#fff",
+                  "orderindex": 3
+                },
+                {
+                  "id": "85de5620-a226-4b4d-8351-ba9603cbed08",
+                  "name": "DataIngest",
+                  "color": "#800000",
+                  "orderindex": 4
+                },
+                {
+                  "id": "76117e21-90d4-420e-a890-d593a06e9638",
+                  "name": "DataOps",
+                  "color": "#0231E8",
+                  "orderindex": 5
+                },
+                {
+                  "id": "1af7154b-0b46-40dc-a23f-ca17db1e7f39",
+                  "name": "VizBuild",
+                  "color": "#f900ea",
+                  "orderindex": 6
+                },
+                {
+                  "id": "08e85f46-663a-4c24-aa87-f4ae9d214a3a",
+                  "name": "NoteLog",
+                  "color": "#FF4081",
+                  "orderindex": 7
+                },
+                {
+                  "id": "25cef11f-63a6-46ec-99c7-4602063603ac",
+                  "name": "SlideBuild",
+                  "color": "#04A9F4",
+                  "orderindex": 8
+                },
+                {
+                  "id": "8c28568b-72d0-4d12-980f-02935eeb6bad",
+                  "name": "PaperDraft",
+                  "color": "#0231E8",
+                  "orderindex": 9
+                },
+                {
+                  "id": "66bab9c7-710c-4a27-9b41-6d05a2adc827",
+                  "name": "TalkPrep",
+                  "color": "#2ecd6f",
+                  "orderindex": 10
+                },
+                {
+                  "id": "cb4fb774-f5a7-4629-97d7-64f7c215c7a5",
+                  "name": "LiteratureOps",
+                  "color": "#2ecd6f",
+                  "orderindex": 11
+                },
+                {
+                  "id": "94797cb8-4fa8-478f-87f1-85acd48f201c",
+                  "name": "ProjectSync",
+                  "color": "#0231E8",
+                  "orderindex": 12
+                },
+                {
+                  "id": "d7af6f2f-d13e-442b-84d9-b375f47bf0a5",
+                  "name": "AdminFlow",
+                  "color": "#e50000",
+                  "orderindex": 13
+                }
+              ]
+            },
+            "date_created": "1764818628595",
+            "hide_from_guests": false,
+            "required": false
+          },
+          {
+            "id": "e184ee65-77c5-4818-b7f8-59fc2c359d0b",
+            "name": "締切ミーティング",
+            "type": "drop_down",
+            "type_config": {
+              "ai": {
+                "prompt": "",
+                "source": "custom_dropdown"
+              },
+              "sorting": "manual",
+              "new_drop_down": true,
+              "options": [
+                {
+                  "id": "b050d1ef-96d9-452f-851c-8d1b8e28bab6",
+                  "name": "12/9 小グループミーティング",
+                  "color": "#FF4081",
+                  "orderindex": 0
+                },
+                {
+                  "id": "dc68885a-5303-4c32-8276-14e26278f6e2",
+                  "name": "1/23 小グループミーティング",
+                  "color": "#e50000",
+                  "orderindex": 1
+                },
+                {
+                  "id": "d1e735ee-e413-4649-9458-5ab50d7772f7",
+                  "name": "2/17 小グループミーティング",
+                  "color": "#bf55ec",
+                  "orderindex": 2
+                },
+                {
+                  "id": "71098a36-b80e-4445-b6f3-2590b92ecf87",
+                  "name": "2/17 journal club",
+                  "color": "#81B1FF",
+                  "orderindex": 3
+                },
+                {
+                  "id": "3bd56c43-d7a4-4130-94c0-dc89bf9bb8fa",
+                  "name": "3/10 小グループミーティング",
+                  "color": "#FF4081",
+                  "orderindex": 4
+                },
+                {
+                  "id": "c83580b3-6e1b-4717-9ac5-270100a2f8ce",
+                  "name": "学会発表",
+                  "color": "#E65100",
+                  "orderindex": 5
+                },
+                {
+                  "id": "b168ee2b-b551-4395-a34b-d6777ddb1cb8",
+                  "name": "論文投稿",
+                  "color": "#04A9F4",
+                  "orderindex": 6
+                },
+                {
+                  "id": "c08786d6-005b-4c7f-a7c2-29408e5eb7ba",
+                  "name": "課題",
+                  "color": null,
+                  "orderindex": 7
+                },
+                {
+                  "id": "8552ab37-8c74-4b40-9f10-16d102d09229",
+                  "name": "その他",
+                  "color": null,
+                  "orderindex": 8
+                }
+              ]
+            },
+            "date_created": "1764817554884",
+            "hide_from_guests": false,
+            "value": 8,
+            "value_richtext": "",
+            "required": false
+          }
+        ],
+        "dependencies": [],
+        "linked_tasks": [],
+        "locations": [],
+        "team_id": "90182161625",
+        "url": "https://app.clickup.com/t/86evrf15q",
+        "sharing": {
+          "public": false,
+          "public_share_expires_on": null,
+          "public_fields": [
+            "assignees",
+            "priority",
+            "due_date",
+            "content",
+            "comments",
+            "attachments",
+            "customFields",
+            "subtasks",
+            "tags",
+            "checklists",
+            "coverimage"
+          ],
+          "token": null,
+          "seo_optimized": false
+        },
+        "permission_level": "create",
+        "list": {
+          "id": "901813997604",
+          "name": "3_E X P E R I M E N T",
+          "access": true
+        },
+        "project": {
+          "id": "901810535075",
+          "name": "Q P I",
+          "hidden": false,
+          "access": true
+        },
+        "folder": {
+          "id": "901810535075",
+          "name": "Q P I",
+          "hidden": false,
+          "access": true
+        },
+        "space": {
+          "id": "90188594666"
+        },
+        "attachments": []
+      }
+    },
+    {
+      "task_id": "86evrf12y",
+      "get_status": 200,
+      "task": {
+        "id": "86evrf12y",
+        "custom_id": null,
+        "custom_item_id": 0,
+        "name": "顕微鏡の電源を切る",
+        "text_content": "",
+        "description": "",
+        "status": {
+          "id": "p90188594666_6pMncdVn",
+          "status": "complete",
+          "color": "#0f9d9f",
+          "orderindex": 6,
+          "type": "done"
+        },
+        "orderindex": "39908294.00000000000000000000000000000000",
+        "date_created": "1764825723566",
+        "date_updated": "1770886072812",
+        "date_closed": null,
+        "date_done": "1765071202162",
+        "archived": false,
+        "creator": {
+          "id": 180192796,
+          "username": "北岸健吾",
+          "color": "#595d66",
+          "email": "kitaken063339@gmail.com",
+          "profilePicture": null
+        },
+        "assignees": [
+          {
+            "id": 180192796,
+            "username": "北岸健吾",
+            "color": "#595d66",
+            "initials": "北",
+            "email": "kitaken063339@gmail.com",
+            "profilePicture": null
+          }
+        ],
+        "group_assignees": [],
+        "watchers": [
+          {
+            "id": 180192796,
+            "username": "北岸健吾",
+            "color": "#595d66",
+            "initials": "北",
+            "email": "kitaken063339@gmail.com",
+            "profilePicture": null
+          }
+        ],
+        "checklists": [],
+        "tags": [],
+        "parent": null,
+        "top_level_parent": null,
+        "priority": null,
+        "due_date": "1765072800000",
+        "start_date": "1765069200000",
+        "points": null,
+        "time_estimate": null,
+        "time_spent": 0,
+        "custom_fields": [
+          {
+            "id": "cc335263-d490-484a-b248-b2e7ad760515",
+            "name": "重要度",
+            "type": "drop_down",
+            "type_config": {
+              "ai": {
+                "prompt": "",
+                "source": "custom_dropdown"
+              },
+              "sorting": "manual",
+              "new_drop_down": true,
+              "options": [
+                {
+                  "id": "0fbd1ddb-10d3-4cfd-95f2-7e325cf9bfcd",
+                  "name": "critical",
+                  "color": "#FF4081",
+                  "orderindex": 0
+                },
+                {
+                  "id": "24490421-3381-4742-8a09-d567f75c35e1",
+                  "name": "high",
+                  "color": "#2ecd6f",
+                  "orderindex": 1
+                },
+                {
+                  "id": "402428aa-c5d4-4782-bda8-fe6b81c71425",
+                  "name": "medium",
+                  "color": "#800000",
+                  "orderindex": 2
+                },
+                {
+                  "id": "34141bf1-a867-43f6-8c21-7536e95ab87f",
+                  "name": "low",
+                  "color": "#FF7FAB",
+                  "orderindex": 3
+                }
+              ]
+            },
+            "date_created": "1764817638375",
+            "hide_from_guests": false,
+            "required": false
+          },
+          {
+            "id": "e100306f-c21f-4330-9ade-d0a9fdd56298",
+            "name": "Category",
+            "type": "drop_down",
+            "type_config": {
+              "ai": {
+                "prompt": "",
+                "source": "categorize"
+              },
+              "sorting": "manual",
+              "new_drop_down": true,
+              "options": [
+                {
+                  "id": "10408bc1-aa7c-49c5-93c3-2a5ca267eaa5",
+                  "name": "ExpPrep",
+                  "color": "#FF4081",
+                  "orderindex": 0
+                },
+                {
+                  "id": "9d9ca3c1-89b1-49b9-bb88-d7e87f5e969d",
+                  "name": "RunExp",
+                  "color": "#1bbc9c",
+                  "orderindex": 1
+                },
+                {
+                  "id": "6bee7bf4-b0ce-4e43-ba85-3d3ea3189bbf",
+                  "name": "SysMaint",
+                  "color": "#f900ea",
+                  "orderindex": 2
+                },
+                {
+                  "id": "e5c43c6a-9290-44cb-8feb-4be587e87d47",
+                  "name": "ProtoTune",
+                  "color": "#fff",
+                  "orderindex": 3
+                },
+                {
+                  "id": "85de5620-a226-4b4d-8351-ba9603cbed08",
+                  "name": "DataIngest",
+                  "color": "#800000",
+                  "orderindex": 4
+                },
+                {
+                  "id": "76117e21-90d4-420e-a890-d593a06e9638",
+                  "name": "DataOps",
+                  "color": "#0231E8",
+                  "orderindex": 5
+                },
+                {
+                  "id": "1af7154b-0b46-40dc-a23f-ca17db1e7f39",
+                  "name": "VizBuild",
+                  "color": "#f900ea",
+                  "orderindex": 6
+                },
+                {
+                  "id": "08e85f46-663a-4c24-aa87-f4ae9d214a3a",
+                  "name": "NoteLog",
+                  "color": "#FF4081",
+                  "orderindex": 7
+                },
+                {
+                  "id": "25cef11f-63a6-46ec-99c7-4602063603ac",
+                  "name": "SlideBuild",
+                  "color": "#04A9F4",
+                  "orderindex": 8
+                },
+                {
+                  "id": "8c28568b-72d0-4d12-980f-02935eeb6bad",
+                  "name": "PaperDraft",
+                  "color": "#0231E8",
+                  "orderindex": 9
+                },
+                {
+                  "id": "66bab9c7-710c-4a27-9b41-6d05a2adc827",
+                  "name": "TalkPrep",
+                  "color": "#2ecd6f",
+                  "orderindex": 10
+                },
+                {
+                  "id": "cb4fb774-f5a7-4629-97d7-64f7c215c7a5",
+                  "name": "LiteratureOps",
+                  "color": "#2ecd6f",
+                  "orderindex": 11
+                },
+                {
+                  "id": "94797cb8-4fa8-478f-87f1-85acd48f201c",
+                  "name": "ProjectSync",
+                  "color": "#0231E8",
+                  "orderindex": 12
+                },
+                {
+                  "id": "d7af6f2f-d13e-442b-84d9-b375f47bf0a5",
+                  "name": "AdminFlow",
+                  "color": "#e50000",
+                  "orderindex": 13
+                }
+              ]
+            },
+            "date_created": "1764818628595",
+            "hide_from_guests": false,
+            "required": false
+          },
+          {
+            "id": "e184ee65-77c5-4818-b7f8-59fc2c359d0b",
+            "name": "締切ミーティング",
+            "type": "drop_down",
+            "type_config": {
+              "ai": {
+                "prompt": "",
+                "source": "custom_dropdown"
+              },
+              "sorting": "manual",
+              "new_drop_down": true,
+              "options": [
+                {
+                  "id": "b050d1ef-96d9-452f-851c-8d1b8e28bab6",
+                  "name": "12/9 小グループミーティング",
+                  "color": "#FF4081",
+                  "orderindex": 0
+                },
+                {
+                  "id": "dc68885a-5303-4c32-8276-14e26278f6e2",
+                  "name": "1/23 小グループミーティング",
+                  "color": "#e50000",
+                  "orderindex": 1
+                },
+                {
+                  "id": "d1e735ee-e413-4649-9458-5ab50d7772f7",
+                  "name": "2/17 小グループミーティング",
+                  "color": "#bf55ec",
+                  "orderindex": 2
+                },
+                {
+                  "id": "71098a36-b80e-4445-b6f3-2590b92ecf87",
+                  "name": "2/17 journal club",
+                  "color": "#81B1FF",
+                  "orderindex": 3
+                },
+                {
+                  "id": "3bd56c43-d7a4-4130-94c0-dc89bf9bb8fa",
+                  "name": "3/10 小グループミーティング",
+                  "color": "#FF4081",
+                  "orderindex": 4
+                },
+                {
+                  "id": "c83580b3-6e1b-4717-9ac5-270100a2f8ce",
+                  "name": "学会発表",
+                  "color": "#E65100",
+                  "orderindex": 5
+                },
+                {
+                  "id": "b168ee2b-b551-4395-a34b-d6777ddb1cb8",
+                  "name": "論文投稿",
+                  "color": "#04A9F4",
+                  "orderindex": 6
+                },
+                {
+                  "id": "c08786d6-005b-4c7f-a7c2-29408e5eb7ba",
+                  "name": "課題",
+                  "color": null,
+                  "orderindex": 7
+                },
+                {
+                  "id": "8552ab37-8c74-4b40-9f10-16d102d09229",
+                  "name": "その他",
+                  "color": null,
+                  "orderindex": 8
+                }
+              ]
+            },
+            "date_created": "1764817554884",
+            "hide_from_guests": false,
+            "value": 7,
+            "value_richtext": "",
+            "required": false
+          }
+        ],
+        "dependencies": [],
+        "linked_tasks": [],
+        "locations": [],
+        "team_id": "90182161625",
+        "url": "https://app.clickup.com/t/86evrf12y",
+        "sharing": {
+          "public": false,
+          "public_share_expires_on": null,
+          "public_fields": [
+            "assignees",
+            "priority",
+            "due_date",
+            "content",
+            "comments",
+            "attachments",
+            "customFields",
+            "subtasks",
+            "tags",
+            "checklists",
+            "coverimage"
+          ],
+          "token": null,
+          "seo_optimized": false
+        },
+        "permission_level": "create",
+        "list": {
+          "id": "901813997604",
+          "name": "3_E X P E R I M E N T",
+          "access": true
+        },
+        "project": {
+          "id": "901810535075",
+          "name": "Q P I",
+          "hidden": false,
+          "access": true
+        },
+        "folder": {
+          "id": "901810535075",
+          "name": "Q P I",
+          "hidden": false,
+          "access": true
+        },
+        "space": {
+          "id": "90188594666"
+        },
+        "attachments": []
+      }
+    },
+    {
+      "task_id": "86evrfgw8",
+      "get_status": 200,
+      "task": {
+        "id": "86evrfgw8",
+        "custom_id": null,
+        "custom_item_id": 0,
+        "name": "データを取り出しに向かう",
+        "text_content": "",
+        "description": "",
+        "status": {
+          "id": "p90188594666_6pMncdVn",
+          "status": "complete",
+          "color": "#0f9d9f",
+          "orderindex": 6,
+          "type": "done"
+        },
+        "orderindex": "39908297.00000000000000000000000000000000",
+        "date_created": "1764828425091",
+        "date_updated": "1770886077809",
+        "date_closed": null,
+        "date_done": "1767779575813",
+        "archived": false,
+        "creator": {
+          "id": 180192796,
+          "username": "北岸健吾",
+          "color": "#595d66",
+          "email": "kitaken063339@gmail.com",
+          "profilePicture": null
+        },
+        "assignees": [
+          {
+            "id": 180192796,
+            "username": "北岸健吾",
+            "color": "#595d66",
+            "initials": "北",
+            "email": "kitaken063339@gmail.com",
+            "profilePicture": null
+          }
+        ],
+        "group_assignees": [],
+        "watchers": [
+          {
+            "id": 180192796,
+            "username": "北岸健吾",
+            "color": "#595d66",
+            "initials": "北",
+            "email": "kitaken063339@gmail.com",
+            "profilePicture": null
+          }
+        ],
+        "checklists": [],
+        "tags": [],
+        "parent": null,
+        "top_level_parent": null,
+        "priority": null,
+        "due_date": "1765152000000",
+        "start_date": "1765148400000",
+        "points": null,
+        "time_estimate": null,
+        "time_spent": 0,
+        "custom_fields": [
+          {
+            "id": "cc335263-d490-484a-b248-b2e7ad760515",
+            "name": "重要度",
+            "type": "drop_down",
+            "type_config": {
+              "ai": {
+                "prompt": "",
+                "source": "custom_dropdown"
+              },
+              "sorting": "manual",
+              "new_drop_down": true,
+              "options": [
+                {
+                  "id": "0fbd1ddb-10d3-4cfd-95f2-7e325cf9bfcd",
+                  "name": "critical",
+                  "color": "#FF4081",
+                  "orderindex": 0
+                },
+                {
+                  "id": "24490421-3381-4742-8a09-d567f75c35e1",
+                  "name": "high",
+                  "color": "#2ecd6f",
+                  "orderindex": 1
+                },
+                {
+                  "id": "402428aa-c5d4-4782-bda8-fe6b81c71425",
+                  "name": "medium",
+                  "color": "#800000",
+                  "orderindex": 2
+                },
+                {
+                  "id": "34141bf1-a867-43f6-8c21-7536e95ab87f",
+                  "name": "low",
+                  "color": "#FF7FAB",
+                  "orderindex": 3
+                }
+              ]
+            },
+            "date_created": "1764817638375",
+            "hide_from_guests": false,
+            "required": false
+          },
+          {
+            "id": "e100306f-c21f-4330-9ade-d0a9fdd56298",
+            "name": "Category",
+            "type": "drop_down",
+            "type_config": {
+              "ai": {
+                "prompt": "",
+                "source": "categorize"
+              },
+              "sorting": "manual",
+              "new_drop_down": true,
+              "options": [
+                {
+                  "id": "10408bc1-aa7c-49c5-93c3-2a5ca267eaa5",
+                  "name": "ExpPrep",
+                  "color": "#FF4081",
+                  "orderindex": 0
+                },
+                {
+                  "id": "9d9ca3c1-89b1-49b9-bb88-d7e87f5e969d",
+                  "name": "RunExp",
+                  "color": "#1bbc9c",
+                  "orderindex": 1
+                },
+                {
+                  "id": "6bee7bf4-b0ce-4e43-ba85-3d3ea3189bbf",
+                  "name": "SysMaint",
+                  "color": "#f900ea",
+                  "orderindex": 2
+                },
+                {
+                  "id": "e5c43c6a-9290-44cb-8feb-4be587e87d47",
+                  "name": "ProtoTune",
+                  "color": "#fff",
+                  "orderindex": 3
+                },
+                {
+                  "id": "85de5620-a226-4b4d-8351-ba9603cbed08",
+                  "name": "DataIngest",
+                  "color": "#800000",
+                  "orderindex": 4
+                },
+                {
+                  "id": "76117e21-90d4-420e-a890-d593a06e9638",
+                  "name": "DataOps",
+                  "color": "#0231E8",
+                  "orderindex": 5
+                },
+                {
+                  "id": "1af7154b-0b46-40dc-a23f-ca17db1e7f39",
+                  "name": "VizBuild",
+                  "color": "#f900ea",
+                  "orderindex": 6
+                },
+                {
+                  "id": "08e85f46-663a-4c24-aa87-f4ae9d214a3a",
+                  "name": "NoteLog",
+                  "color": "#FF4081",
+                  "orderindex": 7
+                },
+                {
+                  "id": "25cef11f-63a6-46ec-99c7-4602063603ac",
+                  "name": "SlideBuild",
+                  "color": "#04A9F4",
+                  "orderindex": 8
+                },
+                {
+                  "id": "8c28568b-72d0-4d12-980f-02935eeb6bad",
+                  "name": "PaperDraft",
+                  "color": "#0231E8",
+                  "orderindex": 9
+                },
+                {
+                  "id": "66bab9c7-710c-4a27-9b41-6d05a2adc827",
+                  "name": "TalkPrep",
+                  "color": "#2ecd6f",
+                  "orderindex": 10
+                },
+                {
+                  "id": "cb4fb774-f5a7-4629-97d7-64f7c215c7a5",
+                  "name": "LiteratureOps",
+                  "color": "#2ecd6f",
+                  "orderindex": 11
+                },
+                {
+                  "id": "94797cb8-4fa8-478f-87f1-85acd48f201c",
+                  "name": "ProjectSync",
+                  "color": "#0231E8",
+                  "orderindex": 12
+                },
+                {
+                  "id": "d7af6f2f-d13e-442b-84d9-b375f47bf0a5",
+                  "name": "AdminFlow",
+                  "color": "#e50000",
+                  "orderindex": 13
+                }
+              ]
+            },
+            "date_created": "1764818628595",
+            "hide_from_guests": false,
+            "required": false
+          },
+          {
+            "id": "e184ee65-77c5-4818-b7f8-59fc2c359d0b",
+            "name": "締切ミーティング",
+            "type": "drop_down",
+            "type_config": {
+              "ai": {
+                "prompt": "",
+                "source": "custom_dropdown"
+              },
+              "sorting": "manual",
+              "new_drop_down": true,
+              "options": [
+                {
+                  "id": "b050d1ef-96d9-452f-851c-8d1b8e28bab6",
+                  "name": "12/9 小グループミーティング",
+                  "color": "#FF4081",
+                  "orderindex": 0
+                },
+                {
+                  "id": "dc68885a-5303-4c32-8276-14e26278f6e2",
+                  "name": "1/23 小グループミーティング",
+                  "color": "#e50000",
+                  "orderindex": 1
+                },
+                {
+                  "id": "d1e735ee-e413-4649-9458-5ab50d7772f7",
+                  "name": "2/17 小グループミーティング",
+                  "color": "#bf55ec",
+                  "orderindex": 2
+                },
+                {
+                  "id": "71098a36-b80e-4445-b6f3-2590b92ecf87",
+                  "name": "2/17 journal club",
+                  "color": "#81B1FF",
+                  "orderindex": 3
+                },
+                {
+                  "id": "3bd56c43-d7a4-4130-94c0-dc89bf9bb8fa",
+                  "name": "3/10 小グループミーティング",
+                  "color": "#FF4081",
+                  "orderindex": 4
+                },
+                {
+                  "id": "c83580b3-6e1b-4717-9ac5-270100a2f8ce",
+                  "name": "学会発表",
+                  "color": "#E65100",
+                  "orderindex": 5
+                },
+                {
+                  "id": "b168ee2b-b551-4395-a34b-d6777ddb1cb8",
+                  "name": "論文投稿",
+                  "color": "#04A9F4",
+                  "orderindex": 6
+                },
+                {
+                  "id": "c08786d6-005b-4c7f-a7c2-29408e5eb7ba",
+                  "name": "課題",
+                  "color": null,
+                  "orderindex": 7
+                },
+                {
+                  "id": "8552ab37-8c74-4b40-9f10-16d102d09229",
+                  "name": "その他",
+                  "color": null,
+                  "orderindex": 8
+                }
+              ]
+            },
+            "date_created": "1764817554884",
+            "hide_from_guests": false,
+            "value": 1,
+            "value_richtext": "",
+            "required": false
+          }
+        ],
+        "dependencies": [],
+        "linked_tasks": [],
+        "locations": [],
+        "team_id": "90182161625",
+        "url": "https://app.clickup.com/t/86evrfgw8",
+        "sharing": {
+          "public": false,
+          "public_share_expires_on": null,
+          "public_fields": [
+            "assignees",
+            "priority",
+            "due_date",
+            "content",
+            "comments",
+            "attachments",
+            "customFields",
+            "subtasks",
+            "tags",
+            "checklists",
+            "coverimage"
+          ],
+          "token": null,
+          "seo_optimized": false
+        },
+        "permission_level": "create",
+        "list": {
+          "id": "901813997604",
+          "name": "3_E X P E R I M E N T",
+          "access": true
+        },
+        "project": {
+          "id": "901810535075",
+          "name": "Q P I",
+          "hidden": false,
+          "access": true
+        },
+        "folder": {
+          "id": "901810535075",
+          "name": "Q P I",
+          "hidden": false,
+          "access": true
+        },
+        "space": {
+          "id": "90188594666"
+        },
+        "attachments": []
+      }
+    },
+    {
+      "task_id": "86evuf5t0",
+      "get_status": 200,
+      "task": {
+        "id": "86evuf5t0",
+        "custom_id": null,
+        "custom_item_id": 0,
+        "name": "アドラボに行く",
+        "text_content": "",
+        "description": "",
+        "status": {
+          "id": "p90188594666_6pMncdVn",
+          "status": "complete",
+          "color": "#0f9d9f",
+          "orderindex": 6,
+          "type": "done"
+        },
+        "orderindex": "39908421.40274545000000000000000000000000",
+        "date_created": "1765338014175",
+        "date_updated": "1770886086499",
+        "date_closed": null,
+        "date_done": "1765355489204",
+        "archived": false,
+        "creator": {
+          "id": 180192796,
+          "username": "北岸健吾",
+          "color": "#595d66",
+          "email": "kitaken063339@gmail.com",
+          "profilePicture": null
+        },
+        "assignees": [
+          {
+            "id": 180192796,
+            "username": "北岸健吾",
+            "color": "#595d66",
+            "initials": "北",
+            "email": "kitaken063339@gmail.com",
+            "profilePicture": null
+          }
+        ],
+        "group_assignees": [],
+        "watchers": [
+          {
+            "id": 180192796,
+            "username": "北岸健吾",
+            "color": "#595d66",
+            "initials": "北",
+            "email": "kitaken063339@gmail.com",
+            "profilePicture": null
+          }
+        ],
+        "checklists": [],
+        "tags": [],
+        "parent": null,
+        "top_level_parent": null,
+        "priority": null,
+        "due_date": "1765339200000",
+        "start_date": "1765337400000",
+        "points": null,
+        "time_estimate": null,
+        "time_spent": 0,
+        "custom_fields": [
+          {
+            "id": "cc335263-d490-484a-b248-b2e7ad760515",
+            "name": "重要度",
+            "type": "drop_down",
+            "type_config": {
+              "ai": {
+                "prompt": "",
+                "source": "custom_dropdown"
+              },
+              "sorting": "manual",
+              "new_drop_down": true,
+              "options": [
+                {
+                  "id": "0fbd1ddb-10d3-4cfd-95f2-7e325cf9bfcd",
+                  "name": "critical",
+                  "color": "#FF4081",
+                  "orderindex": 0
+                },
+                {
+                  "id": "24490421-3381-4742-8a09-d567f75c35e1",
+                  "name": "high",
+                  "color": "#2ecd6f",
+                  "orderindex": 1
+                },
+                {
+                  "id": "402428aa-c5d4-4782-bda8-fe6b81c71425",
+                  "name": "medium",
+                  "color": "#800000",
+                  "orderindex": 2
+                },
+                {
+                  "id": "34141bf1-a867-43f6-8c21-7536e95ab87f",
+                  "name": "low",
+                  "color": "#FF7FAB",
+                  "orderindex": 3
+                }
+              ]
+            },
+            "date_created": "1764817638375",
+            "hide_from_guests": false,
+            "required": false
+          },
+          {
+            "id": "e100306f-c21f-4330-9ade-d0a9fdd56298",
+            "name": "Category",
+            "type": "drop_down",
+            "type_config": {
+              "ai": {
+                "prompt": "",
+                "source": "categorize"
+              },
+              "sorting": "manual",
+              "new_drop_down": true,
+              "options": [
+                {
+                  "id": "10408bc1-aa7c-49c5-93c3-2a5ca267eaa5",
+                  "name": "ExpPrep",
+                  "color": "#FF4081",
+                  "orderindex": 0
+                },
+                {
+                  "id": "9d9ca3c1-89b1-49b9-bb88-d7e87f5e969d",
+                  "name": "RunExp",
+                  "color": "#1bbc9c",
+                  "orderindex": 1
+                },
+                {
+                  "id": "6bee7bf4-b0ce-4e43-ba85-3d3ea3189bbf",
+                  "name": "SysMaint",
+                  "color": "#f900ea",
+                  "orderindex": 2
+                },
+                {
+                  "id": "e5c43c6a-9290-44cb-8feb-4be587e87d47",
+                  "name": "ProtoTune",
+                  "color": "#fff",
+                  "orderindex": 3
+                },
+                {
+                  "id": "85de5620-a226-4b4d-8351-ba9603cbed08",
+                  "name": "DataIngest",
+                  "color": "#800000",
+                  "orderindex": 4
+                },
+                {
+                  "id": "76117e21-90d4-420e-a890-d593a06e9638",
+                  "name": "DataOps",
+                  "color": "#0231E8",
+                  "orderindex": 5
+                },
+                {
+                  "id": "1af7154b-0b46-40dc-a23f-ca17db1e7f39",
+                  "name": "VizBuild",
+                  "color": "#f900ea",
+                  "orderindex": 6
+                },
+                {
+                  "id": "08e85f46-663a-4c24-aa87-f4ae9d214a3a",
+                  "name": "NoteLog",
+                  "color": "#FF4081",
+                  "orderindex": 7
+                },
+                {
+                  "id": "25cef11f-63a6-46ec-99c7-4602063603ac",
+                  "name": "SlideBuild",
+                  "color": "#04A9F4",
+                  "orderindex": 8
+                },
+                {
+                  "id": "8c28568b-72d0-4d12-980f-02935eeb6bad",
+                  "name": "PaperDraft",
+                  "color": "#0231E8",
+                  "orderindex": 9
+                },
+                {
+                  "id": "66bab9c7-710c-4a27-9b41-6d05a2adc827",
+                  "name": "TalkPrep",
+                  "color": "#2ecd6f",
+                  "orderindex": 10
+                },
+                {
+                  "id": "cb4fb774-f5a7-4629-97d7-64f7c215c7a5",
+                  "name": "LiteratureOps",
+                  "color": "#2ecd6f",
+                  "orderindex": 11
+                },
+                {
+                  "id": "94797cb8-4fa8-478f-87f1-85acd48f201c",
+                  "name": "ProjectSync",
+                  "color": "#0231E8",
+                  "orderindex": 12
+                },
+                {
+                  "id": "d7af6f2f-d13e-442b-84d9-b375f47bf0a5",
+                  "name": "AdminFlow",
+                  "color": "#e50000",
+                  "orderindex": 13
+                }
+              ]
+            },
+            "date_created": "1764818628595",
+            "hide_from_guests": false,
+            "required": false
+          },
+          {
+            "id": "e184ee65-77c5-4818-b7f8-59fc2c359d0b",
+            "name": "締切ミーティング",
+            "type": "drop_down",
+            "type_config": {
+              "ai": {
+                "prompt": "",
+                "source": "custom_dropdown"
+              },
+              "sorting": "manual",
+              "new_drop_down": true,
+              "options": [
+                {
+                  "id": "b050d1ef-96d9-452f-851c-8d1b8e28bab6",
+                  "name": "12/9 小グループミーティング",
+                  "color": "#FF4081",
+                  "orderindex": 0
+                },
+                {
+                  "id": "dc68885a-5303-4c32-8276-14e26278f6e2",
+                  "name": "1/23 小グループミーティング",
+                  "color": "#e50000",
+                  "orderindex": 1
+                },
+                {
+                  "id": "d1e735ee-e413-4649-9458-5ab50d7772f7",
+                  "name": "2/17 小グループミーティング",
+                  "color": "#bf55ec",
+                  "orderindex": 2
+                },
+                {
+                  "id": "71098a36-b80e-4445-b6f3-2590b92ecf87",
+                  "name": "2/17 journal club",
+                  "color": "#81B1FF",
+                  "orderindex": 3
+                },
+                {
+                  "id": "3bd56c43-d7a4-4130-94c0-dc89bf9bb8fa",
+                  "name": "3/10 小グループミーティング",
+                  "color": "#FF4081",
+                  "orderindex": 4
+                },
+                {
+                  "id": "c83580b3-6e1b-4717-9ac5-270100a2f8ce",
+                  "name": "学会発表",
+                  "color": "#E65100",
+                  "orderindex": 5
+                },
+                {
+                  "id": "b168ee2b-b551-4395-a34b-d6777ddb1cb8",
+                  "name": "論文投稿",
+                  "color": "#04A9F4",
+                  "orderindex": 6
+                },
+                {
+                  "id": "c08786d6-005b-4c7f-a7c2-29408e5eb7ba",
+                  "name": "課題",
+                  "color": null,
+                  "orderindex": 7
+                },
+                {
+                  "id": "8552ab37-8c74-4b40-9f10-16d102d09229",
+                  "name": "その他",
+                  "color": null,
+                  "orderindex": 8
+                }
+              ]
+            },
+            "date_created": "1764817554884",
+            "hide_from_guests": false,
+            "required": false
+          }
+        ],
+        "dependencies": [],
+        "linked_tasks": [],
+        "locations": [],
+        "team_id": "90182161625",
+        "url": "https://app.clickup.com/t/86evuf5t0",
+        "sharing": {
+          "public": false,
+          "public_share_expires_on": null,
+          "public_fields": [
+            "assignees",
+            "priority",
+            "due_date",
+            "content",
+            "comments",
+            "attachments",
+            "customFields",
+            "subtasks",
+            "tags",
+            "checklists",
+            "coverimage"
+          ],
+          "token": null,
+          "seo_optimized": false
+        },
+        "permission_level": "create",
+        "list": {
+          "id": "901813997604",
+          "name": "3_E X P E R I M E N T",
+          "access": true
+        },
+        "project": {
+          "id": "901810535075",
+          "name": "Q P I",
+          "hidden": false,
+          "access": true
+        },
+        "folder": {
+          "id": "901810535075",
+          "name": "Q P I",
+          "hidden": false,
+          "access": true
+        },
+        "space": {
+          "id": "90188594666"
+        },
+        "attachments": []
+      }
+    }
+  ]
+}

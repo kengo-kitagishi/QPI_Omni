@@ -1,0 +1,69 @@
+{
+  "created_at": "2026-03-06T13:12:09.853569",
+  "text": "O/N culture",
+  "duration_minutes": 120,
+  "target_list": "experiment",
+  "due": "",
+  "category": "general",
+  "priority": "normal",
+  "schedule_bias_hours": 0,
+  "matched_keywords": [],
+  "workflow": {
+    "group": "exp_code",
+    "stage": "unspecified",
+    "order": 999,
+    "matched_keywords": [],
+    "start_after": null
+  },
+  "medium_flow": {
+    "step": "on_culture",
+    "step_label": "o/n culture",
+    "start_after": null,
+    "end_before": null
+  },
+  "split_task_rule": null,
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-03-06",
+    "end_date": "2026-03-26",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "direct",
+      "slot_start": "2026-03-08T18:50:00+09:00",
+      "slot_end": "2026-03-08T20:50:00+09:00",
+      "list_key": "experiment",
+      "score": 1772963400.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": [],
+      "segments": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-10T10:10:00+09:00",
+      "slot_end": "2026-03-10T12:10:00+09:00",
+      "list_key": "experiment",
+      "score": 1773105000.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": [],
+      "segments": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-10T16:10:00+09:00",
+      "slot_end": "2026-03-10T18:10:00+09:00",
+      "list_key": "experiment",
+      "score": 1773126600.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": [],
+      "segments": []
+    }
+  ]
+}

@@ -1,0 +1,119 @@
+{
+  "created_at": "2026-03-06T13:12:05.857627",
+  "text": "NH4Cl作成",
+  "duration_minutes": 60,
+  "target_list": "experiment",
+  "due": "",
+  "category": "general",
+  "priority": "normal",
+  "schedule_bias_hours": 0,
+  "matched_keywords": [],
+  "workflow": {
+    "group": "exp_code",
+    "stage": "unspecified",
+    "order": 999,
+    "matched_keywords": [],
+    "start_after": null
+  },
+  "medium_flow": null,
+  "split_task_rule": {
+    "id": "nh4cl_prepare_collect",
+    "segments": [
+      {
+        "label": "prepare",
+        "duration_minutes": 30,
+        "same_day": false,
+        "offset_minutes": 0
+      },
+      {
+        "label": "collect",
+        "duration_minutes": 30,
+        "same_day": true,
+        "min_offset_minutes": 60
+      }
+    ]
+  },
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-03-06",
+    "end_date": "2026-03-19",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "split",
+      "slot_start": "2026-03-08T18:50:00+09:00",
+      "slot_end": "2026-03-08T20:20:00+09:00",
+      "list_key": "experiment",
+      "score": 1772963400.0,
+      "reasons": [
+        "split rule=nh4cl_prepare_collect (prepare:30m, collect:30m)"
+      ],
+      "moves": [],
+      "segments": [
+        {
+          "label": "prepare",
+          "task_name": "NH4Cl作成",
+          "slot_start": "2026-03-08T18:50:00+09:00",
+          "slot_end": "2026-03-08T19:20:00+09:00"
+        },
+        {
+          "label": "collect",
+          "task_name": "NH4Cl回収",
+          "slot_start": "2026-03-08T19:50:00+09:00",
+          "slot_end": "2026-03-08T20:20:00+09:00"
+        }
+      ]
+    },
+    {
+      "label": "split",
+      "slot_start": "2026-03-08T19:00:00+09:00",
+      "slot_end": "2026-03-08T20:30:00+09:00",
+      "list_key": "experiment",
+      "score": 1772964000.0,
+      "reasons": [
+        "split rule=nh4cl_prepare_collect (prepare:30m, collect:30m)"
+      ],
+      "moves": [],
+      "segments": [
+        {
+          "label": "prepare",
+          "task_name": "NH4Cl作成",
+          "slot_start": "2026-03-08T19:00:00+09:00",
+          "slot_end": "2026-03-08T19:30:00+09:00"
+        },
+        {
+          "label": "collect",
+          "task_name": "NH4Cl回収",
+          "slot_start": "2026-03-08T20:00:00+09:00",
+          "slot_end": "2026-03-08T20:30:00+09:00"
+        }
+      ]
+    },
+    {
+      "label": "split",
+      "slot_start": "2026-03-08T19:10:00+09:00",
+      "slot_end": "2026-03-08T20:40:00+09:00",
+      "list_key": "experiment",
+      "score": 1772964600.0,
+      "reasons": [
+        "split rule=nh4cl_prepare_collect (prepare:30m, collect:30m)"
+      ],
+      "moves": [],
+      "segments": [
+        {
+          "label": "prepare",
+          "task_name": "NH4Cl作成",
+          "slot_start": "2026-03-08T19:10:00+09:00",
+          "slot_end": "2026-03-08T19:40:00+09:00"
+        },
+        {
+          "label": "collect",
+          "task_name": "NH4Cl回収",
+          "slot_start": "2026-03-08T20:10:00+09:00",
+          "slot_end": "2026-03-08T20:40:00+09:00"
+        }
+      ]
+    }
+  ]
+}

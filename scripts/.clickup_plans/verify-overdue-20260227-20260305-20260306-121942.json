@@ -1,0 +1,202 @@
+{
+  "created_at": "2026-03-06T12:19:42.105407+09:00",
+  "team_id": "90182161625",
+  "range": {
+    "start": "2026-02-27",
+    "end": "2026-03-05",
+    "timezone": "Asia/Tokyo"
+  },
+  "open_count": 23,
+  "counts_by_list": {
+    "1_P L A N": 16,
+    "workout": 4,
+    "ご飯": 2,
+    "学会発表": 1
+  },
+  "tasks": [
+    {
+      "task_id": "86ewrkx3r",
+      "name": "ご飯",
+      "list_name": "ご飯",
+      "list_id": "901814077641",
+      "status_type": "open",
+      "due_date": "1772197200000"
+    },
+    {
+      "task_id": "86ewr0801",
+      "name": "コーヒー",
+      "list_name": "ご飯",
+      "list_id": "901814077641",
+      "status_type": "open",
+      "due_date": "1772154000000"
+    },
+    {
+      "task_id": "86ewr048q",
+      "name": "JC反省会",
+      "list_name": "学会発表",
+      "list_id": "901813997648",
+      "status_type": "open",
+      "due_date": "1772544600000"
+    },
+    {
+      "task_id": "86ewqxwjq",
+      "name": "jog",
+      "list_name": "workout",
+      "list_id": "901814111806",
+      "status_type": "open",
+      "due_date": "1772609400000"
+    },
+    {
+      "task_id": "86ewqxwjf",
+      "name": "jog",
+      "list_name": "workout",
+      "list_id": "901814111806",
+      "status_type": "open",
+      "due_date": "1772436600000"
+    },
+    {
+      "task_id": "86ewqxwjb",
+      "name": "weight",
+      "list_name": "workout",
+      "list_id": "901814111806",
+      "status_type": "done",
+      "due_date": "1772352000000"
+    },
+    {
+      "task_id": "86ewqxwj0",
+      "name": "jog",
+      "list_name": "workout",
+      "list_id": "901814111806",
+      "status_type": "open",
+      "due_date": "1772188200000"
+    },
+    {
+      "task_id": "86ewqrp8g",
+      "name": "ご飯",
+      "list_name": "1_P L A N",
+      "list_id": "901813997590",
+      "status_type": "open",
+      "due_date": "1772710200000"
+    },
+    {
+      "task_id": "86ewqrp86",
+      "name": "ご飯",
+      "list_name": "1_P L A N",
+      "list_id": "901813997590",
+      "status_type": "open",
+      "due_date": "1772685000000"
+    },
+    {
+      "task_id": "86ewqrp7h",
+      "name": "ご飯",
+      "list_name": "1_P L A N",
+      "list_id": "901813997590",
+      "status_type": "open",
+      "due_date": "1772623800000"
+    },
+    {
+      "task_id": "86ewqrp71",
+      "name": "ご飯",
+      "list_name": "1_P L A N",
+      "list_id": "901813997590",
+      "status_type": "open",
+      "due_date": "1772598600000"
+    },
+    {
+      "task_id": "86ewqrp6p",
+      "name": "ご飯",
+      "list_name": "1_P L A N",
+      "list_id": "901813997590",
+      "status_type": "open",
+      "due_date": "1772537400000"
+    },
+    {
+      "task_id": "86ewqrp5q",
+      "name": "ご飯",
+      "list_name": "1_P L A N",
+      "list_id": "901813997590",
+      "status_type": "open",
+      "due_date": "1772512200000"
+    },
+    {
+      "task_id": "86ewqrp5g",
+      "name": "ご飯",
+      "list_name": "1_P L A N",
+      "list_id": "901813997590",
+      "status_type": "open",
+      "due_date": "1772451000000"
+    },
+    {
+      "task_id": "86ewqrp5c",
+      "name": "ご飯",
+      "list_name": "1_P L A N",
+      "list_id": "901813997590",
+      "status_type": "open",
+      "due_date": "1772425800000"
+    },
+    {
+      "task_id": "86ewqrp47",
+      "name": "ご飯",
+      "list_name": "1_P L A N",
+      "list_id": "901813997590",
+      "status_type": "open",
+      "due_date": "1772364600000"
+    },
+    {
+      "task_id": "86ewqrp43",
+      "name": "ご飯",
+      "list_name": "1_P L A N",
+      "list_id": "901813997590",
+      "status_type": "open",
+      "due_date": "1772339400000"
+    },
+    {
+      "task_id": "86ewqrp3k",
+      "name": "ご飯",
+      "list_name": "1_P L A N",
+      "list_id": "901813997590",
+      "status_type": "open",
+      "due_date": "1772281800000"
+    },
+    {
+      "task_id": "86ewqrktz",
+      "name": "ご飯",
+      "list_name": "1_P L A N",
+      "list_id": "901813997590",
+      "status_type": "open",
+      "due_date": "1772256600000"
+    },
+    {
+      "task_id": "86ewqrkpg",
+      "name": "ご飯",
+      "list_name": "1_P L A N",
+      "list_id": "901813997590",
+      "status_type": "open",
+      "due_date": "1772172000000"
+    },
+    {
+      "task_id": "86ewqrhr8",
+      "name": "部活",
+      "list_name": "1_P L A N",
+      "list_id": "901813997590",
+      "status_type": "open",
+      "due_date": "1772706600000"
+    },
+    {
+      "task_id": "86ewqrhqy",
+      "name": "部活",
+      "list_name": "1_P L A N",
+      "list_id": "901813997590",
+      "status_type": "open",
+      "due_date": "1772533800000"
+    },
+    {
+      "task_id": "86ewqrhqn",
+      "name": "部活",
+      "list_name": "1_P L A N",
+      "list_id": "901813997590",
+      "status_type": "open",
+      "due_date": "1772249400000"
+    }
+  ]
+}

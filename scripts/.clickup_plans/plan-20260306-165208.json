@@ -1,0 +1,34 @@
+{
+  "created_at": "2026-03-06T16:52:08.106372",
+  "text": "alignment改善をする。code。2時間。優先度高め",
+  "duration_minutes": 120,
+  "target_list": "other",
+  "due": "",
+  "category": "general",
+  "priority": "normal",
+  "schedule_bias_hours": 0,
+  "matched_keywords": [],
+  "workflow": null,
+  "medium_flow": null,
+  "split_task_rule": null,
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-03-06",
+    "end_date": "2026-03-07",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "direct",
+      "slot_start": "2026-03-07T10:10:00+09:00",
+      "slot_end": "2026-03-07T12:10:00+09:00",
+      "list_key": "other",
+      "score": 1772845800.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": [],
+      "segments": []
+    }
+  ]
+}

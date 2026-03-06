@@ -1,0 +1,31 @@
+{
+  "created_at": "2026-03-06T14:01:04.016359",
+  "range": {
+    "start": "2026-03-07",
+    "end": "2026-03-20",
+    "near_days": 2
+  },
+  "counts": {
+    "fetched": 654,
+    "scheduled": 49,
+    "unscheduled": 0,
+    "overdue": 79,
+    "due_soon_unscheduled": 0,
+    "after_due": 0
+  },
+  "findings": [
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr09ev",
+      "task_name": "training datasetを作る",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "processing",
+      "reason": "workflow順序が逆転: stage=processing より前段 (acquisition) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-17T17:00:00+09:00",
+      "suggested_slot_end": "2026-03-17T20:00:00+09:00"
+    }
+  ]
+}

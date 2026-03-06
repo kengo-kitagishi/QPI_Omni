@@ -1,0 +1,146 @@
+{
+  "created_at": "2026-03-06T12:22:28.172589+09:00",
+  "range": {
+    "start": "2026-03-01",
+    "end": "2026-03-31"
+  },
+  "counts": {
+    "fetched": 649,
+    "scheduled_in_march": 53,
+    "unscheduled_in_march": 9,
+    "overdue_total": 82,
+    "due_soon_unscheduled": 0
+  },
+  "buckets": {
+    "overdue_unscheduled_count": 11,
+    "overdue_scheduled_future_count": 0,
+    "overdue_scheduled_past_or_now_count": 71,
+    "overdue_unscheduled_by_list": {
+      "daily": 3,
+      "experiment": 5,
+      "meeting": 2,
+      "slide": 1
+    },
+    "overdue_scheduled_past_or_now_by_list": {
+      "code": 2,
+      "daily": 11,
+      "experiment": 45,
+      "input": 3,
+      "manuscript": 3,
+      "meeting": 3,
+      "other": 2,
+      "slide": 2
+    }
+  },
+  "effort_minutes": {
+    "overdue_unscheduled": 1320,
+    "overdue_scheduled_past_or_now": 8460,
+    "overdue_scheduled_future": 0
+  },
+  "capacity_minutes": {
+    "work_window_total": 18517,
+    "already_scheduled": 4004,
+    "free_until_month_end": 14513
+  },
+  "top_overdue_unscheduled": [
+    {
+      "task_id": "86evrwu1f",
+      "list_key": "experiment",
+      "name": "培地交換 2% 2%",
+      "due_at": "2025-12-12T04:00:00+09:00",
+      "est_minutes": 120,
+      "movable": true,
+      "reason": ""
+    },
+    {
+      "task_id": "86evvwq7d",
+      "list_key": "experiment",
+      "name": "培地交換",
+      "due_at": "2025-12-16T08:30:00+09:00",
+      "est_minutes": 120,
+      "movable": true,
+      "reason": ""
+    },
+    {
+      "task_id": "86evwrnj3",
+      "list_key": "daily",
+      "name": "ショート動画ブロッカー入れる",
+      "due_at": "2025-12-18T04:00:00+09:00",
+      "est_minutes": 120,
+      "movable": true,
+      "reason": ""
+    },
+    {
+      "task_id": "86evwr407",
+      "list_key": "daily",
+      "name": "日記タグ作り方",
+      "due_at": "2025-12-25T04:00:00+09:00",
+      "est_minutes": 120,
+      "movable": true,
+      "reason": ""
+    },
+    {
+      "task_id": "86evwr74q",
+      "list_key": "meeting",
+      "name": "就活について考えるhttps://note.com/bon_pu/n/nbfc16ca49dea#2715e518-accb-4dc3-8642-cfef35c43eb9",
+      "due_at": "2026-01-02T04:00:00+09:00",
+      "est_minutes": 120,
+      "movable": false,
+      "reason": "list=meeting is fixed"
+    },
+    {
+      "task_id": "86ew46bd3",
+      "list_key": "experiment",
+      "name": "O/N culture",
+      "due_at": "2026-01-07T20:00:00+09:00",
+      "est_minutes": 120,
+      "movable": true,
+      "reason": ""
+    },
+    {
+      "task_id": "86ew9vej8",
+      "list_key": "daily",
+      "name": "開発環境を",
+      "due_at": "2026-01-24T04:00:00+09:00",
+      "est_minutes": 120,
+      "movable": true,
+      "reason": ""
+    },
+    {
+      "task_id": "86ewca5rx",
+      "list_key": "experiment",
+      "name": "Micromanager取り直し",
+      "due_at": "2026-01-29T04:00:00+09:00",
+      "est_minutes": 120,
+      "movable": true,
+      "reason": ""
+    },
+    {
+      "task_id": "86ewca5ad",
+      "list_key": "experiment",
+      "name": "培地交換",
+      "due_at": "2026-01-29T04:00:00+09:00",
+      "est_minutes": 120,
+      "movable": true,
+      "reason": ""
+    },
+    {
+      "task_id": "86ewmubbv",
+      "list_key": "meeting",
+      "name": "Journal Club",
+      "due_at": "2026-02-24T04:00:00+09:00",
+      "est_minutes": 120,
+      "movable": false,
+      "reason": "list=meeting is fixed"
+    },
+    {
+      "task_id": "86ewmubht",
+      "list_key": "slide",
+      "name": "plasmolysis論文を3回読む",
+      "due_at": "2026-02-26T04:00:00+09:00",
+      "est_minutes": 120,
+      "movable": true,
+      "reason": ""
+    }
+  ]
+}

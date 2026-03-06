@@ -1,0 +1,71 @@
+{
+  "created_at": "2026-03-06T14:06:16.296026",
+  "text": "TA担当を決める",
+  "duration_minutes": 120,
+  "target_list": "plan",
+  "due": "",
+  "category": "admin",
+  "priority": "high",
+  "schedule_bias_hours": -16,
+  "matched_keywords": [
+    "ta"
+  ],
+  "workflow": null,
+  "medium_flow": null,
+  "split_task_rule": null,
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-03-10",
+    "end_date": "2026-03-16",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "rearrange",
+      "slot_start": "2026-03-11T09:00:00+09:00",
+      "slot_end": "2026-03-11T11:00:00+09:00",
+      "list_key": "plan",
+      "score": 1773187200.0,
+      "reasons": [
+        "move task 86evu49dq (Physical properties of the cytoplasm modulate the rates of microtubele polymerization and depolymerization)"
+      ],
+      "moves": [
+        {
+          "task_id": "86evu49dq",
+          "task_name": "Physical properties of the cytoplasm modulate the rates of microtubele polymerization and depolymerization",
+          "from_start": "2026-03-11T09:00:00+09:00",
+          "from_end": "2026-03-11T11:00:00+09:00",
+          "to_start": "2026-03-11T11:00:00+09:00",
+          "to_end": "2026-03-11T13:00:00+09:00",
+          "task_url": "https://app.clickup.com/t/86evu49dq",
+          "list_key": "input"
+        }
+      ],
+      "segments": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-11T11:10:00+09:00",
+      "slot_end": "2026-03-11T13:10:00+09:00",
+      "list_key": "plan",
+      "score": 1773195000.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": [],
+      "segments": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-12T11:40:00+09:00",
+      "slot_end": "2026-03-12T13:40:00+09:00",
+      "list_key": "plan",
+      "score": 1773283200.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": [],
+      "segments": []
+    }
+  ]
+}

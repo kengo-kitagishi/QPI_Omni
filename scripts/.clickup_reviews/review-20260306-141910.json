@@ -1,0 +1,42 @@
+{
+  "created_at": "2026-03-06T14:19:10.312787",
+  "range": {
+    "start": "2026-03-11",
+    "end": "2026-03-27",
+    "near_days": 2
+  },
+  "counts": {
+    "fetched": 670,
+    "scheduled": 50,
+    "unscheduled": 0,
+    "overdue": 79,
+    "due_soon_unscheduled": 0,
+    "after_due": 0
+  },
+  "findings": [
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86evw9qq1",
+      "task_name": "分裂様式について調べる。https://doi.org/10.1091/mbc.E14-10-1441",
+      "list_key": "manuscript",
+      "reason": "03-16 11:50 学振DC1｜深掘り執筆セッションD-2/4（推敲・一貫性チェック） と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-16T15:00:00+09:00",
+      "suggested_slot_end": "2026-03-16T18:00:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr09ev",
+      "task_name": "training datasetを作る",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "processing",
+      "reason": "workflow順序が逆転: stage=processing より前段 (acquisition) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-17T17:00:00+09:00",
+      "suggested_slot_end": "2026-03-17T20:00:00+09:00"
+    }
+  ]
+}

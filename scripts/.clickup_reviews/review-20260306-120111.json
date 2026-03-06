@@ -1,0 +1,68 @@
+{
+  "created_at": "2026-03-06T12:01:11.768467",
+  "range": {
+    "start": "2026-03-06",
+    "end": "2026-03-12",
+    "near_days": 3
+  },
+  "counts": {
+    "fetched": 605,
+    "scheduled": 24,
+    "unscheduled": 1,
+    "overdue": 69,
+    "due_soon_unscheduled": 0,
+    "after_due": 0
+  },
+  "findings": [
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86ewrdf40",
+      "task_name": "Figure修正: fig_pres_qpi_opticalsetting_elements",
+      "list_key": "manuscript",
+      "reason": "03-06 12:00 schematic QPI図: fiber線の太さを修正 と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-08T17:40:00+09:00",
+      "suggested_slot_end": "2026-03-08T19:40:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr08x1",
+      "task_name": "Movingを確認",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "acquisition",
+      "reason": "workflow順序が逆転: stage=acquisition より前段 (setup) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-08T17:40:00+09:00",
+      "suggested_slot_end": "2026-03-08T20:10:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr08e5",
+      "task_name": "3条件のbgを取得",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "acquisition",
+      "reason": "workflow順序が逆転: stage=acquisition より前段 (setup) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-08T17:40:00+09:00",
+      "suggested_slot_end": "2026-03-08T20:10:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr09ev",
+      "task_name": "training datasetを作る",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "processing",
+      "reason": "workflow順序が逆転: stage=processing より前段 (acquisition) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-10T16:10:00+09:00",
+      "suggested_slot_end": "2026-03-10T19:10:00+09:00"
+    }
+  ]
+}

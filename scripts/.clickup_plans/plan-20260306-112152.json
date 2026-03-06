@@ -1,0 +1,53 @@
+{
+  "kind": "carryover",
+  "created_at": "2026-03-06T11:21:52.648748",
+  "from_date": "2026-03-05",
+  "window_start": "2026-03-06",
+  "window_days": 7,
+  "proposals": [
+    {
+      "task_id": "86ewqyyxu",
+      "task_name": "DC1｜研究目的・研究計画を書く",
+      "list_key": "manuscript",
+      "status": "proposed",
+      "from_start": "2026-03-05T12:00:00+09:00",
+      "from_end": "2026-03-05T13:00:00+09:00",
+      "to_start": "2026-03-06T16:10:00+09:00",
+      "to_end": "2026-03-06T18:10:00+09:00",
+      "task_url": "https://app.clickup.com/t/86ewqyyxu"
+    },
+    {
+      "task_id": "86ewt7w1w",
+      "task_name": "文献input: ScienceDirect chapter (S0580951716300022)",
+      "list_key": "manuscript",
+      "status": "proposed",
+      "from_start": "2026-03-05T12:00:00+09:00",
+      "from_end": "2026-03-05T14:00:00+09:00",
+      "to_start": "2026-03-06T18:10:00+09:00",
+      "to_end": "2026-03-06T20:10:00+09:00",
+      "task_url": "https://app.clickup.com/t/86ewt7w1w"
+    },
+    {
+      "task_id": "86ewr280b",
+      "task_name": "Rules Skills ni directory flow wo matomeru",
+      "list_key": "plan",
+      "status": "proposed",
+      "from_start": "2026-03-05T13:00:00+09:00",
+      "from_end": "2026-03-05T16:00:00+09:00",
+      "to_start": "2026-03-07T09:00:00+09:00",
+      "to_end": "2026-03-07T12:00:00+09:00",
+      "task_url": "https://app.clickup.com/t/86ewr280b"
+    },
+    {
+      "task_id": "86ewr0z29",
+      "task_name": "【実験】0.0055%培地交換（T0+96h）",
+      "list_key": "experiment",
+      "status": "proposed",
+      "from_start": "2026-03-05T16:30:00+09:00",
+      "from_end": "2026-03-05T17:30:00+09:00",
+      "to_start": "2026-03-07T12:00:00+09:00",
+      "to_end": "2026-03-07T13:00:00+09:00",
+      "task_url": "https://app.clickup.com/t/86ewr0z29"
+    }
+  ]
+}

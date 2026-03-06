@@ -1,0 +1,62 @@
+{
+  "created_at": "2026-03-06T12:00:46.683733",
+  "text": "training datasetを作る",
+  "duration_minutes": 120,
+  "target_list": "experiment",
+  "due": "",
+  "category": "general",
+  "priority": "normal",
+  "schedule_bias_hours": 0,
+  "matched_keywords": [],
+  "workflow": {
+    "group": "exp_code",
+    "stage": "processing",
+    "order": 30,
+    "matched_keywords": [
+      "training",
+      "dataset"
+    ],
+    "start_after": "2026-03-10T16:10:00+09:00"
+  },
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-03-06",
+    "end_date": "2026-03-19",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "direct",
+      "slot_start": "2026-03-10T16:10:00+09:00",
+      "slot_end": "2026-03-10T18:10:00+09:00",
+      "list_key": "experiment",
+      "score": 1773126600.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-11T09:00:00+09:00",
+      "slot_end": "2026-03-11T11:00:00+09:00",
+      "list_key": "experiment",
+      "score": 1773187200.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-12T09:00:00+09:00",
+      "slot_end": "2026-03-12T11:00:00+09:00",
+      "list_key": "experiment",
+      "score": 1773273600.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": []
+    }
+  ]
+}

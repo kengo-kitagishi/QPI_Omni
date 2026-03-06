@@ -1,0 +1,64 @@
+{
+  "created_at": "2026-03-06T12:23:03.630092",
+  "text": "花王ES: 設問確認と必要情報の洗い出し",
+  "duration_minutes": 60,
+  "target_list": "plan",
+  "due": "2026-03-10",
+  "category": "general",
+  "priority": "high",
+  "schedule_bias_hours": -8,
+  "matched_keywords": [],
+  "workflow": null,
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-03-06",
+    "end_date": "2026-03-19",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "rearrange",
+      "slot_start": "2026-03-06T14:10:00+09:00",
+      "slot_end": "2026-03-06T15:10:00+09:00",
+      "list_key": "plan",
+      "score": 1772773800.0,
+      "reasons": [
+        "move task 86ewqyvxc (学振DC1 申請書フォーマットをダウンロード)"
+      ],
+      "moves": [
+        {
+          "task_id": "86ewqyvxc",
+          "task_name": "学振DC1 申請書フォーマットをダウンロード",
+          "from_start": "2026-03-06T14:10:00+09:00",
+          "from_end": "2026-03-06T14:40:00+09:00",
+          "to_start": "2026-03-06T15:10:00+09:00",
+          "to_end": "2026-03-06T15:40:00+09:00",
+          "task_url": "https://app.clickup.com/t/86ewqyvxc",
+          "list_key": "plan"
+        }
+      ]
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-06T14:50:00+09:00",
+      "slot_end": "2026-03-06T15:50:00+09:00",
+      "list_key": "plan",
+      "score": 1772776200.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-08T17:40:00+09:00",
+      "slot_end": "2026-03-08T18:40:00+09:00",
+      "list_key": "plan",
+      "score": 1772959200.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": []
+    }
+  ]
+}

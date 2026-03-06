@@ -1,0 +1,55 @@
+{
+  "created_at": "2026-03-06T11:25:46.242828",
+  "text": "TAのどの授業の担当になるか決めないとな",
+  "duration_minutes": 120,
+  "target_list": "plan",
+  "due": "",
+  "category": "admin",
+  "priority": "high",
+  "schedule_bias_hours": -16,
+  "matched_keywords": [
+    "授業",
+    "ta"
+  ],
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-03-06",
+    "end_date": "2026-03-19",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "direct",
+      "slot_start": "2026-03-06T16:10:00+09:00",
+      "slot_end": "2026-03-06T18:10:00+09:00",
+      "list_key": "plan",
+      "score": 1772781000.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-07T09:00:00+09:00",
+      "slot_end": "2026-03-07T11:00:00+09:00",
+      "list_key": "plan",
+      "score": 1772841600.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-08T09:00:00+09:00",
+      "slot_end": "2026-03-08T11:00:00+09:00",
+      "list_key": "plan",
+      "score": 1772928000.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": []
+    }
+  ]
+}

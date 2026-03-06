@@ -1,0 +1,62 @@
+{
+  "created_at": "2026-03-06T12:56:17.637392",
+  "task_ids": [
+    "86evrf15q",
+    "86evrf12y",
+    "86evrfgw8",
+    "86evuf5t0"
+  ],
+  "backup_path": "/Users/kitak/QPI_Omni/scripts/.clickup_plans/delete-backup-20260306-125613.json",
+  "delete_results": [
+    {
+      "task_id": "86evrf15q",
+      "delete_status": 204,
+      "delete_response": {}
+    },
+    {
+      "task_id": "86evrf12y",
+      "delete_status": 204,
+      "delete_response": {}
+    },
+    {
+      "task_id": "86evrfgw8",
+      "delete_status": 204,
+      "delete_response": {}
+    },
+    {
+      "task_id": "86evuf5t0",
+      "delete_status": 204,
+      "delete_response": {}
+    }
+  ],
+  "verify_results": [
+    {
+      "task_id": "86evrf15q",
+      "verify_get_status": 404,
+      "verify_body": {
+        "error": "{\"err\":\"Task not found, deleted\",\"ECODE\":\"ITEM_013\"}"
+      }
+    },
+    {
+      "task_id": "86evrf12y",
+      "verify_get_status": 404,
+      "verify_body": {
+        "error": "{\"err\":\"Task not found, deleted\",\"ECODE\":\"ITEM_013\"}"
+      }
+    },
+    {
+      "task_id": "86evrfgw8",
+      "verify_get_status": 404,
+      "verify_body": {
+        "error": "{\"err\":\"Task not found, deleted\",\"ECODE\":\"ITEM_013\"}"
+      }
+    },
+    {
+      "task_id": "86evuf5t0",
+      "verify_get_status": 404,
+      "verify_body": {
+        "error": "{\"err\":\"Task not found, deleted\",\"ECODE\":\"ITEM_013\"}"
+      }
+    }
+  ]
+}

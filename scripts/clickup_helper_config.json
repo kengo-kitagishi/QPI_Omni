@@ -1,0 +1,407 @@
+{
+  "lists": {
+    "plan": "901813997590",
+    "input": "901813997568",
+    "experiment": "901813997604",
+    "code": "901813997608",
+    "manuscript": "901813997612",
+    "slide": "901813997621",
+    "meeting": "901813997648",
+    "competition": "901814044181",
+    "other": "901814001256",
+    "daily": "901814085779"
+  },
+  "timezone": "Asia/Tokyo",
+  "work_hours_start": 9,
+  "work_hours_end": 21,
+  "planning_days": 14,
+  "monthly_horizon_days": 35,
+  "carryover_days": 7,
+  "deadline_warn_days": 3,
+  "min_gap_minutes": 10,
+  "default_duration_minutes": 120,
+  "input_default_duration_minutes": 120,
+  "max_candidates": 3,
+  "fixed_list_keys": [
+    "meeting",
+    "competition"
+  ],
+  "fixed_keyword_patterns": [
+    "meeting",
+    "会議",
+    "seminar",
+    "授業",
+    "学会",
+    "発表",
+    "部活"
+  ],
+  "deadline_keyword_patterns": [
+    "feedback",
+    "フィードバック",
+    "review",
+    "レビュー",
+    "添削",
+    "修正依頼",
+    "締切",
+    "締め切り"
+  ],
+  "no_schedule_day_list_keys": [
+    "competition"
+  ],
+  "no_schedule_day_keyword_patterns": [
+    "春季OP",
+    "六大学対校戦",
+    "関東インカレ"
+  ],
+  "blocked_write_list_keys": [
+    "plan"
+  ],
+  "rearrange_allowed_list_keys": [
+    "input"
+  ],
+  "category_order": [
+    "admin",
+    "writing",
+    "experiment",
+    "figure",
+    "input",
+    "general"
+  ],
+  "category_keyword_rules": {
+    "admin": [
+      "授業",
+      "ta",
+      "申し込み",
+      "申込",
+      "registration",
+      "応募",
+      "申請",
+      "相談",
+      "連絡"
+    ],
+    "writing": [
+      "執筆",
+      "paper",
+      "manuscript",
+      "draft",
+      "報告資料",
+      "資料",
+      "report",
+      "slide",
+      "スライド",
+      "発表資料"
+    ],
+    "experiment": [
+      "実験",
+      "検証",
+      "validation",
+      "analysis",
+      "解析"
+    ],
+    "figure": [
+      "figure",
+      "図",
+      "作図",
+      "凡例",
+      "編集"
+    ],
+    "input": [
+      "input",
+      "inbox",
+      "メモ",
+      "idea",
+      "いつか"
+    ],
+    "general": []
+  },
+  "category_priority": {
+    "admin": "high",
+    "writing": "high",
+    "experiment": "normal",
+    "figure": "normal",
+    "input": "low",
+    "general": "normal"
+  },
+  "category_bias_hours": {
+    "admin": -8,
+    "writing": -6,
+    "experiment": 0,
+    "figure": 8,
+    "input": 24,
+    "general": 0
+  },
+  "category_default_list": {
+    "admin": "other",
+    "writing": "manuscript",
+    "experiment": "experiment",
+    "figure": "manuscript",
+    "input": "input",
+    "general": "other"
+  },
+  "priority_bias_hours": {
+    "urgent": -24,
+    "high": -8,
+    "normal": 0,
+    "low": 12
+  },
+  "memory_md_path": "schedule_companion_memory.md",
+  "memory_auto_append": true,
+  "max_pages_per_list": 10,
+  "max_tasks_per_list": 500,
+  "auto_discover_lists": true,
+  "protect_experiment_structure": true,
+  "review_horizon_days": 14,
+  "review_near_days": 2,
+  "review_max_findings": 12,
+  "workflow_enabled": true,
+  "workflow_groups": {
+    "exp_code": [
+      "experiment",
+      "code"
+    ]
+  },
+  "workflow_stage_rules": [
+    {
+      "group": "exp_code",
+      "stage": "setup",
+      "order": 10,
+      "keywords": [
+        "bonding",
+        "setup",
+        "準備",
+        "導入",
+        "install",
+        "設定",
+        "notion",
+        "clickup"
+      ]
+    },
+    {
+      "group": "exp_code",
+      "stage": "acquisition",
+      "order": 20,
+      "keywords": [
+        "培地交換",
+        "bg",
+        "moving",
+        "細胞",
+        "取得",
+        "撮影",
+        "実験"
+      ]
+    },
+    {
+      "group": "exp_code",
+      "stage": "processing",
+      "order": 30,
+      "keywords": [
+        "training",
+        "dataset",
+        "reconstruction",
+        "alignment",
+        "解析",
+        "analysis",
+        "検証"
+      ]
+    },
+    {
+      "group": "exp_code",
+      "stage": "documentation",
+      "order": 40,
+      "keywords": [
+        "documentation",
+        "report",
+        "図",
+        "figure",
+        "まとめ"
+      ]
+    }
+  ],
+  "workflow_gap_minutes": 10,
+  "workflow_review_max_findings": 4,
+  "medium_flow_enabled": true,
+  "medium_flow_steps": [
+    {
+      "id": "on_culture",
+      "keywords": [
+        "o/n culture",
+        "onculture",
+        "overnight culture",
+        "o/n"
+      ]
+    },
+    {
+      "id": "pre_culture",
+      "keywords": [
+        "pre culture",
+        "preculture",
+        "pre-culture",
+        "前培養"
+      ]
+    },
+    {
+      "id": "cell_insertion_done",
+      "keywords": [
+        "細胞導入完了",
+        "細胞導入"
+      ]
+    },
+    {
+      "id": "change_2_2",
+      "keywords": [
+        "培地交換2%2%",
+        "培地交換 2% 2%",
+        "2%to2%",
+        "2% 2%"
+      ]
+    },
+    {
+      "id": "change_2_low",
+      "keywords": [
+        "培地交換2%low%",
+        "培地交換 2% low%",
+        "2%low%",
+        "2% 0.0055%",
+        "2% 0.01%"
+      ]
+    },
+    {
+      "id": "change_low_0",
+      "keywords": [
+        "培地交換low%0%",
+        "培地交換 low% 0%",
+        "low%0%",
+        "0.0055% 0%",
+        "0.01% 0%",
+        "mneongreen",
+        "sorbitol計測",
+        "sorbitol"
+      ]
+    },
+    {
+      "id": "change_0_2",
+      "keywords": [
+        "培地交換0%2%",
+        "培地交換 0% 2%",
+        "0%to2%",
+        "0% 2%"
+      ]
+    }
+  ],
+  "medium_flow_rules": [
+    {
+      "step": "pre_culture",
+      "predecessors": [
+        "on_culture"
+      ],
+      "gap_hours": 24
+    },
+    {
+      "step": "change_2_2",
+      "predecessors": [
+        "cell_insertion_done",
+        "change_0_2"
+      ],
+      "gap_days": 2
+    },
+    {
+      "step": "change_2_low",
+      "predecessors": [
+        "change_2_2"
+      ],
+      "gap_days": 2
+    },
+    {
+      "step": "change_low_0",
+      "predecessors": [
+        "change_2_low"
+      ],
+      "gap_days": 1
+    },
+    {
+      "step": "change_0_2",
+      "predecessors": [
+        "change_low_0"
+      ],
+      "gap_days": 2
+    }
+  ],
+  "medium_flow_t0_offset_map": {
+    "48": "change_2_2",
+    "96": "change_2_low",
+    "120": "change_low_0",
+    "168": "change_0_2",
+    "216": "change_2_2"
+  },
+  "medium_flow_review_max_findings": 6,
+  "split_task_rules": [
+    {
+      "id": "glucose_prepare_collect",
+      "list_key": "experiment",
+      "keywords": [
+        "glucose sln",
+        "glucosesln",
+        "glucose"
+      ],
+      "segments": [
+        {
+          "label": "prepare",
+          "offset_minutes": 0,
+          "duration_minutes": 10
+        },
+        {
+          "label": "collect",
+          "min_offset_minutes": 360,
+          "same_day": true,
+          "duration_minutes": 30
+        }
+      ]
+    },
+    {
+      "id": "nh4cl_prepare_collect",
+      "list_key": "experiment",
+      "keywords": [
+        "nh4cl",
+        "nh4cl作成",
+        "nh4cl 作成"
+      ],
+      "segments": [
+        {
+          "label": "prepare",
+          "offset_minutes": 0,
+          "duration_minutes": 30
+        },
+        {
+          "label": "collect",
+          "min_offset_minutes": 60,
+          "same_day": true,
+          "duration_minutes": 30
+        }
+      ]
+    },
+    {
+      "id": "emm_prepare_collect",
+      "list_key": "experiment",
+      "keywords": [
+        "emm培地",
+        "emm培地作成",
+        "emm 培地",
+        "emm medium",
+        "emm"
+      ],
+      "segments": [
+        {
+          "label": "prepare",
+          "offset_minutes": 0,
+          "duration_minutes": 30
+        },
+        {
+          "label": "collect",
+          "min_offset_minutes": 120,
+          "same_day": true,
+          "duration_minutes": 10
+        }
+      ]
+    }
+  ]
+}

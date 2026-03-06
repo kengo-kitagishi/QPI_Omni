@@ -1,0 +1,99 @@
+{
+  "created_at": "2026-03-06T13:32:17.421055",
+  "range": {
+    "start": "2026-03-06",
+    "end": "2026-04-04",
+    "near_days": 7
+  },
+  "counts": {
+    "fetched": 654,
+    "scheduled": 59,
+    "unscheduled": 9,
+    "overdue": 78,
+    "due_soon_unscheduled": 0,
+    "after_due": 0
+  },
+  "findings": [
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr08x1",
+      "task_name": "Movingを確認",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "acquisition",
+      "reason": "workflow順序が逆転: stage=acquisition より前段 (setup) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-08T10:40:00+09:00",
+      "suggested_slot_end": "2026-03-08T13:10:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr08e5",
+      "task_name": "3条件のbgを取得",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "acquisition",
+      "reason": "workflow順序が逆転: stage=acquisition より前段 (setup) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-08T10:40:00+09:00",
+      "suggested_slot_end": "2026-03-08T13:10:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "defer_low_priority",
+      "task_id": "86ewrdf40",
+      "task_name": "Figure修正: fig_pres_qpi_opticalsetting_elements",
+      "list_key": "manuscript",
+      "reason": "低優先カテゴリ(figure)で、期限圧力タスク 78 件あり",
+      "action": "後ろ倒しを検討",
+      "suggested_slot_start": "2026-03-13T18:30:00+09:00",
+      "suggested_slot_end": "2026-03-13T20:30:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "defer_low_priority",
+      "task_id": "86ewuz8ha",
+      "task_name": "Figure Fix Tracker確認（未解決の上位3件を選ぶ）",
+      "list_key": "plan",
+      "reason": "低優先カテゴリ(figure)で、期限圧力タスク 78 件あり",
+      "action": "後ろ倒しを検討",
+      "suggested_slot_start": "2026-03-13T18:30:00+09:00",
+      "suggested_slot_end": "2026-03-13T19:30:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "defer_low_priority",
+      "task_id": "86ew9k3bm",
+      "task_name": "OmniposeのUnet図",
+      "list_key": "slide",
+      "reason": "低優先カテゴリ(figure)で、期限圧力タスク 78 件あり",
+      "action": "後ろ倒しを検討",
+      "suggested_slot_start": "2026-03-13T18:30:00+09:00",
+      "suggested_slot_end": "2026-03-13T20:00:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "defer_low_priority",
+      "task_id": "86ewn8381",
+      "task_name": "Reconstruction Procedureの図を作る",
+      "list_key": "manuscript",
+      "reason": "低優先カテゴリ(figure)で、期限圧力タスク 78 件あり",
+      "action": "後ろ倒しを検討",
+      "suggested_slot_start": "2026-03-13T18:30:00+09:00",
+      "suggested_slot_end": "2026-03-13T19:30:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "defer_low_priority",
+      "task_id": "86evu4cpx",
+      "task_name": "biochemical reaction とdiffusionの図",
+      "list_key": "manuscript",
+      "reason": "低優先カテゴリ(figure)で、期限圧力タスク 78 件あり",
+      "action": "後ろ倒しを検討",
+      "suggested_slot_start": "2026-03-13T18:30:00+09:00",
+      "suggested_slot_end": "2026-03-13T20:30:00+09:00"
+    }
+  ]
+}

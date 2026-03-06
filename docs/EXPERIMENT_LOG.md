@@ -3753,3 +3753,17 @@ mean_RI = n_medium + (total_phase × λ × pixel_area) / (2π × volume)
 
 **Inbox**: `G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\frozen_runpy\frozen_runpy_20260305T080849Z_b316fe\frozen_runpy__frozen_runpy_20260305T080849Z_b316fe__f024.png`
 **Published**: `results/figures/QPI_2026-03-05_frozen_runpy_v34.png`
+
+---
+
+## 2026-03-05 | `stdin` | run `stdin_20260305T133109Z_f07e00`
+
+**説明**: tiff test
+
+**パラメータ**: (none)
+
+**前回からの変更点**:
+  - (first run / no change)
+
+**Inbox**: `/Users/kitak/Library/CloudStorage/GoogleDrive-kengo_kitagishi@cell.c.u-tokyo.ac.jp/共有ドライブ/wakamotolab_meeting/kitagishi/figure-hub/inbox/2026-03-05/stdin/stdin_20260305T133109Z_f07e00/stdin__stdin_20260305T133109Z_f07e00__f001.tif`
+**Published**: `(disabled)`

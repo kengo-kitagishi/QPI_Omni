@@ -1,0 +1,40 @@
+{
+  "created_at": "2026-03-06T14:35:44.329094",
+  "range": {
+    "start": "2026-04-25",
+    "end": "2026-05-24",
+    "near_days": 2
+  },
+  "counts": {
+    "fetched": 662,
+    "scheduled": 10,
+    "unscheduled": 3,
+    "overdue": 77,
+    "due_soon_unscheduled": 0,
+    "after_due": 0
+  },
+  "findings": [
+    {
+      "severity": "high",
+      "type": "no_schedule_day_violation",
+      "task_id": "86ewuz1ae",
+      "task_name": "Quantitative Microbiology Symposium（学会大会）",
+      "list_key": "meeting",
+      "reason": "大会日(2026-05-19)に予定が入っています",
+      "action": "大会日の翌日以降に移動",
+      "suggested_slot_start": "2026-05-21T09:00:00+09:00",
+      "suggested_slot_end": "2026-05-21T21:00:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "no_schedule_day_violation",
+      "task_id": "86ewuz1af",
+      "task_name": "Quantitative Microbiology Symposium（学会大会）",
+      "list_key": "meeting",
+      "reason": "大会日(2026-05-20)に予定が入っています",
+      "action": "大会日の翌日以降に移動",
+      "suggested_slot_start": "2026-05-21T09:00:00+09:00",
+      "suggested_slot_end": "2026-05-21T21:00:00+09:00"
+    }
+  ]
+}

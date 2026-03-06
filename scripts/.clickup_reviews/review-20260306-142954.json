@@ -1,0 +1,64 @@
+{
+  "created_at": "2026-03-06T14:29:54.622649",
+  "range": {
+    "start": "2026-03-06",
+    "end": "2026-03-30",
+    "near_days": 2
+  },
+  "counts": {
+    "fetched": 660,
+    "scheduled": 73,
+    "unscheduled": 0,
+    "overdue": 77,
+    "due_soon_unscheduled": 0,
+    "after_due": 0
+  },
+  "findings": [
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86ewr04gk",
+      "task_name": "bonding",
+      "list_key": "experiment",
+      "reason": "03-07 14:30 Macromolecular Crowdingの歴史を書く と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-07T20:10:00+09:00",
+      "suggested_slot_end": "2026-03-07T20:40:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86ew9k1x8",
+      "task_name": "Z-stack thickness mapを",
+      "list_key": "slide",
+      "reason": "03-08 09:00 細胞導入 と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-08T12:50:00+09:00",
+      "suggested_slot_end": "2026-03-08T14:50:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86ewuzp83",
+      "task_name": "学振DC1｜深掘り執筆セッションB-3/4（研究計画の具体化）",
+      "list_key": "manuscript",
+      "reason": "03-08 10:00 Z-stack thickness mapを と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-08T12:40:00+09:00",
+      "suggested_slot_end": "2026-03-08T14:40:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr09ev",
+      "task_name": "training datasetを作る",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "processing",
+      "reason": "workflow順序が逆転: stage=processing より前段 (acquisition) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-17T17:00:00+09:00",
+      "suggested_slot_end": "2026-03-17T20:00:00+09:00"
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "created_at": "2026-03-06T12:30:09.200118",
+  "text": "input: Quantitative phase imaging paperを読む",
+  "duration_minutes": 120,
+  "target_list": "manuscript",
+  "due": "",
+  "category": "writing",
+  "priority": "high",
+  "schedule_bias_hours": -14,
+  "matched_keywords": [
+    "paper"
+  ],
+  "workflow": null,
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-03-06",
+    "end_date": "2026-03-19",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "rearrange",
+      "slot_start": "2026-03-07T12:10:00+09:00",
+      "slot_end": "2026-03-07T14:10:00+09:00",
+      "list_key": "manuscript",
+      "score": 1772853000.0,
+      "reasons": [
+        "move task 86evw9qq1 (分裂様式について調べる。https://doi.org/10.1091/mbc.E14-10-1441)"
+      ],
+      "moves": [
+        {
+          "task_id": "86evw9qq1",
+          "task_name": "分裂様式について調べる。https://doi.org/10.1091/mbc.E14-10-1441",
+          "from_start": "2026-03-07T12:00:00+09:00",
+          "from_end": "2026-03-07T15:00:00+09:00",
+          "to_start": "2026-03-08T17:40:00+09:00",
+          "to_end": "2026-03-08T20:40:00+09:00",
+          "task_url": "https://app.clickup.com/t/86evw9qq1",
+          "list_key": "manuscript"
+        }
+      ]
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-08T17:40:00+09:00",
+      "slot_end": "2026-03-08T19:40:00+09:00",
+      "list_key": "manuscript",
+      "score": 1772959200.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-10T09:00:00+09:00",
+      "slot_end": "2026-03-10T11:00:00+09:00",
+      "list_key": "manuscript",
+      "score": 1773100800.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": []
+    }
+  ]
+}

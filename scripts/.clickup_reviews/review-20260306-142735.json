@@ -1,0 +1,42 @@
+{
+  "created_at": "2026-03-06T14:27:35.229841",
+  "range": {
+    "start": "2026-03-06",
+    "end": "2026-03-30",
+    "near_days": 2
+  },
+  "counts": {
+    "fetched": 664,
+    "scheduled": 77,
+    "unscheduled": 0,
+    "overdue": 78,
+    "due_soon_unscheduled": 0,
+    "after_due": 0
+  },
+  "findings": [
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86ewr04gk",
+      "task_name": "bonding",
+      "list_key": "experiment",
+      "reason": "03-07 14:30 Macromolecular Crowdingの歴史を書く と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-07T20:10:00+09:00",
+      "suggested_slot_end": "2026-03-07T20:40:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr09ev",
+      "task_name": "training datasetを作る",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "processing",
+      "reason": "workflow順序が逆転: stage=processing より前段 (acquisition) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-17T17:00:00+09:00",
+      "suggested_slot_end": "2026-03-17T20:00:00+09:00"
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "created_at": "2026-03-06T13:20:03.598773",
+  "text": "持ち物準備（PC・充電器・名刺）",
+  "duration_minutes": 60,
+  "target_list": "plan",
+  "due": "2026-05-17",
+  "category": "general",
+  "priority": "normal",
+  "schedule_bias_hours": 0,
+  "matched_keywords": [],
+  "workflow": null,
+  "medium_flow": null,
+  "split_task_rule": null,
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-05-11",
+    "end_date": "2026-05-17",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "direct",
+      "slot_start": "2026-05-11T09:00:00+09:00",
+      "slot_end": "2026-05-11T10:00:00+09:00",
+      "list_key": "plan",
+      "score": 1778457600.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": [],
+      "segments": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-05-12T09:00:00+09:00",
+      "slot_end": "2026-05-12T10:00:00+09:00",
+      "list_key": "plan",
+      "score": 1778544000.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": [],
+      "segments": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-05-13T09:00:00+09:00",
+      "slot_end": "2026-05-13T10:00:00+09:00",
+      "list_key": "plan",
+      "score": 1778630400.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": [],
+      "segments": []
+    }
+  ]
+}

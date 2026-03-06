@@ -1,0 +1,119 @@
+{
+  "created_at": "2026-03-06T13:02:52.096347",
+  "text": "glucose sln.作成",
+  "duration_minutes": 40,
+  "target_list": "experiment",
+  "due": "",
+  "category": "general",
+  "priority": "normal",
+  "schedule_bias_hours": 0,
+  "matched_keywords": [],
+  "workflow": {
+    "group": "exp_code",
+    "stage": "unspecified",
+    "order": 999,
+    "matched_keywords": [],
+    "start_after": null
+  },
+  "medium_flow": null,
+  "split_task_rule": {
+    "id": "glucose_prepare_collect",
+    "segments": [
+      {
+        "label": "prepare",
+        "duration_minutes": 10,
+        "same_day": false,
+        "offset_minutes": 0
+      },
+      {
+        "label": "collect",
+        "duration_minutes": 30,
+        "same_day": true,
+        "min_offset_minutes": 360
+      }
+    ]
+  },
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-03-06",
+    "end_date": "2026-03-12",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "split",
+      "slot_start": "2026-03-10T10:10:00+09:00",
+      "slot_end": "2026-03-10T16:40:00+09:00",
+      "list_key": "experiment",
+      "score": 1773105000.0,
+      "reasons": [
+        "split rule=glucose_prepare_collect (prepare:10m, collect:30m)"
+      ],
+      "moves": [],
+      "segments": [
+        {
+          "label": "prepare",
+          "task_name": "glucose sln.作成",
+          "slot_start": "2026-03-10T10:10:00+09:00",
+          "slot_end": "2026-03-10T10:20:00+09:00"
+        },
+        {
+          "label": "collect",
+          "task_name": "glucose sln.回収",
+          "slot_start": "2026-03-10T16:10:00+09:00",
+          "slot_end": "2026-03-10T16:40:00+09:00"
+        }
+      ]
+    },
+    {
+      "label": "split",
+      "slot_start": "2026-03-10T10:20:00+09:00",
+      "slot_end": "2026-03-10T16:50:00+09:00",
+      "list_key": "experiment",
+      "score": 1773105600.0,
+      "reasons": [
+        "split rule=glucose_prepare_collect (prepare:10m, collect:30m)"
+      ],
+      "moves": [],
+      "segments": [
+        {
+          "label": "prepare",
+          "task_name": "glucose sln.作成",
+          "slot_start": "2026-03-10T10:20:00+09:00",
+          "slot_end": "2026-03-10T10:30:00+09:00"
+        },
+        {
+          "label": "collect",
+          "task_name": "glucose sln.回収",
+          "slot_start": "2026-03-10T16:20:00+09:00",
+          "slot_end": "2026-03-10T16:50:00+09:00"
+        }
+      ]
+    },
+    {
+      "label": "split",
+      "slot_start": "2026-03-10T10:30:00+09:00",
+      "slot_end": "2026-03-10T17:00:00+09:00",
+      "list_key": "experiment",
+      "score": 1773106200.0,
+      "reasons": [
+        "split rule=glucose_prepare_collect (prepare:10m, collect:30m)"
+      ],
+      "moves": [],
+      "segments": [
+        {
+          "label": "prepare",
+          "task_name": "glucose sln.作成",
+          "slot_start": "2026-03-10T10:30:00+09:00",
+          "slot_end": "2026-03-10T10:40:00+09:00"
+        },
+        {
+          "label": "collect",
+          "task_name": "glucose sln.回収",
+          "slot_start": "2026-03-10T16:30:00+09:00",
+          "slot_end": "2026-03-10T17:00:00+09:00"
+        }
+      ]
+    }
+  ]
+}
