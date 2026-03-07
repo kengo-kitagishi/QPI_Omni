@@ -691,6 +691,7 @@ def save_figure(
     save_to_notion: Optional[bool] = None,
     extra_meta: Optional[dict] = None,
     data_source: Optional[dict] = None,
+    copy_files: Optional[list] = None,
 ) -> Path:
     """
     Save a matplotlib Figure with inbox-first workflow.
@@ -809,6 +810,16 @@ def save_figure(
     }
     if extra_meta:
         meta["extra_meta"] = extra_meta
+
+    if copy_files:
+        for item in copy_files:
+            if isinstance(item, (list, tuple)):
+                src, dst_name = item[0], item[1]
+            else:
+                src, dst_name = item, os.path.basename(item)
+            dst = inbox_dir / dst_name
+            shutil.copy2(src, dst)
+            print(f"[figure_logger] inbox copy: {dst}")
 
     meta_path = inbox_file.with_suffix(".json")
     _json_dump(meta_path, meta)

@@ -16,7 +16,7 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 
 # ベースディレクトリ設定
 BASE_DIRS = [
-    r"E:\Acuisition\kitagishi\260216\move_test_2"
+    r"E:\Acuisition\kitagishi\260301\movetest_8\Pos0\img_000000004_ph_000.tif"
 ]
 
 def process_folder(base_dir, pos_start=None, pos_end=None):

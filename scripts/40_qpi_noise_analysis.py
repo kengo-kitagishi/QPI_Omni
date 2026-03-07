@@ -24,7 +24,7 @@ from figure_logger import save_figure
 WAVELENGTH  = 658e-9        # m
 NA          = 0.95
 PIXELSIZE   = 3.45e-6 / 40  # m/px (3.45 µm カメラ画素, 40x対物)
-OFFAXIS_CENTER = (1664, 485) # (row, col) — CursorVisualizerで確認した値
+OFFAXIS_CENTER = (1710, 644) # (row, col) — CursorVisualizerで確認した値
 
 # ============================================================
 # UC_SENSOR: カメラ temporal noise 測定（センサーノイズ評価）
@@ -409,7 +409,7 @@ save_figure(fig,
 # %%
 # --- UC_DIFF 設定 ---
 
-UC_DIFF_DIR        = r"D:\AquisitionData\Kitagishi\basler_image_seq\vistest_1\Pos0"
+UC_DIFF_DIR        = r"D:\AquisitionData\Kitagishi\basler_image_seq\exp60ms_int100ms_300frame_meanint_620\Pos0"
 UC_DIFF_ROI_SIZE   = 80       # 80×80 ROI (論文準拠)
 UC_DIFF_ROI_CENTER = None     # None → 画像中央; (row, col) で明示指定も可
 UC_DIFF_PAIR_START_1BASED = 50
@@ -727,3 +727,5 @@ print(
     f"\n完了: {n_pairs} ペア測定 "
     f"(pair {UC_DIFF_PAIR_START_1BASED}-{UC_DIFF_PAIR_END_1BASED})"
 )
+
+# %%
