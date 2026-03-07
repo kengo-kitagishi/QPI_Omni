@@ -1,0 +1,80 @@
+{
+  "created_at": "2026-03-06T18:13:56.262659",
+  "text": "claude codeでclickup連携の環境構築をする。2時間。優先度中。計測中に進める",
+  "duration_minutes": 120,
+  "target_list": "other",
+  "due": "",
+  "category": "general",
+  "priority": "normal",
+  "schedule_bias_hours": 0,
+  "matched_keywords": [],
+  "workflow": null,
+  "medium_flow": null,
+  "split_task_rule": null,
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-03-11",
+    "end_date": "2026-03-17",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "rearrange",
+      "slot_start": "2026-03-11T09:00:00+09:00",
+      "slot_end": "2026-03-11T11:00:00+09:00",
+      "list_key": "other",
+      "score": 1773187200.0,
+      "reasons": [
+        "move task 86evu49dq (Physical properties of the cytoplasm modulate the rates of microtubele polymerization and depolymerization)"
+      ],
+      "moves": [
+        {
+          "task_id": "86evu49dq",
+          "task_name": "Physical properties of the cytoplasm modulate the rates of microtubele polymerization and depolymerization",
+          "from_start": "2026-03-11T09:00:00+09:00",
+          "from_end": "2026-03-11T11:00:00+09:00",
+          "to_start": "2026-03-13T11:50:00+09:00",
+          "to_end": "2026-03-13T13:50:00+09:00",
+          "task_url": "https://app.clickup.com/t/86evu49dq",
+          "list_key": "input"
+        }
+      ],
+      "segments": []
+    },
+    {
+      "label": "rearrange",
+      "slot_start": "2026-03-12T09:00:00+09:00",
+      "slot_end": "2026-03-12T11:00:00+09:00",
+      "list_key": "other",
+      "score": 1773273600.0,
+      "reasons": [
+        "move task 86evu47b1 (Decoupling of rates of protein synthesis from cell expansion leads to supergrowth)"
+      ],
+      "moves": [
+        {
+          "task_id": "86evu47b1",
+          "task_name": "Decoupling of rates of protein synthesis from cell expansion leads to supergrowth",
+          "from_start": "2026-03-12T09:00:00+09:00",
+          "from_end": "2026-03-12T11:30:00+09:00",
+          "to_start": "2026-03-13T11:50:00+09:00",
+          "to_end": "2026-03-13T14:20:00+09:00",
+          "task_url": "https://app.clickup.com/t/86evu47b1",
+          "list_key": "input"
+        }
+      ],
+      "segments": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-13T11:50:00+09:00",
+      "slot_end": "2026-03-13T13:50:00+09:00",
+      "list_key": "other",
+      "score": 1773370200.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": [],
+      "segments": []
+    }
+  ]
+}

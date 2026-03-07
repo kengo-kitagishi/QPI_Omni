@@ -703,6 +703,35 @@
 - candidates=3 plan=/Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260306-150834.json
 - decision: keep as low-priority background reading unless manuscript section deadline is within 7 days
 
+## 2026-03-06 16:55 - apply by user approval (option 1)
+- request: "alignment改善を 1時間後から2時間" with conflict-aware rearrangement
+- applied: created `alignment改善` 2026-03-06 17:51-19:51 in `code` (task_id=86ewv38nt)
+- moved: `学振DC1 執筆スケジュールを立てる` (86ewqyvyh) to 2026-03-06 21:40-22:40
+- verification: same-day agenda rechecked, no overlap with `alignment改善` block
+
+## 2026-03-06 18:15 - pending proposal (measurement-window use)
+- request summary: during measurement windows, progress Claude Code based ClickUp scheduling setup and requirements definition
+- constraint: analysis PC Claude Code integration is difficult for now; use waiting windows while measurements are running
+- policy: confirm with user before applying any schedule change
+- candidate windows found:
+  - 2026-03-11 16:30-18:20 (between experiment blocks)
+  - 2026-03-12 15:40-17:00 (between experiment blocks)
+  - 2026-03-12 20:00-21:00 (post-measurement same day)
+
+## 2026-03-06 18:18 - applied by user approval
+- user approved proposal with "はい"
+- created in `code` list:
+  - 2026-03-11 16:30-18:20 `Claude CodeでClickUp連携の要件定義（計測中）` (86ewv3d5h)
+  - 2026-03-12 15:40-17:00 `Claude CodeでClickUp連携の環境構築①（セットアップ準備）` (86ewv3d5p)
+  - 2026-03-12 20:00-21:00 `Claude CodeでClickUp連携の環境構築②（検証手順・運用整理）` (86ewv3d62)
+- verification: 2026-03-11~12 agenda checked, no overlaps, experiment blocks kept intact
+
+## 2026-03-06 18:31 - applied by user approval
+- user request: `2026/05/25 15:00~15:40 相関演習`
+- created fixed event in `meeting`: `相関演習` (86ewv719w)
+- time: 2026-05-25 15:00-15:40 JST
+- verification: agenda(2026-05-25) shows 1 scheduled item, no conflict
+
 ## 2026-03-06 15:07 - advise consultation
 - text: molecular crowding review論文をinputする。2時間。優先度は低め
 - category=input priority=urgent bias=+0h
@@ -732,6 +761,28 @@
 - workflow=none
 - medium_flow=none
 - candidates=1 plan=/Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260306-165208.json
+- fixed_rules=meeting, competition
+- rearrange_scope=input
+- protect_experiment_structure=True
+
+## 2026-03-06 18:13 - advise consultation
+- text: claude codeでclickup連携の環境構築をする。2時間。優先度中。計測中に進める
+- category=general priority=normal bias=+0h
+- target_list=other due=(none) duration=120m
+- workflow=none
+- medium_flow=none
+- candidates=3 plan=/Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260306-181356.json
+- fixed_rules=meeting, competition
+- rearrange_scope=input
+- protect_experiment_structure=True
+
+## 2026-03-06 18:13 - advise consultation
+- text: claude codeでclickup連携の要件定義をする。2時間。優先度高め
+- category=general priority=normal bias=+0h
+- target_list=other due=(none) duration=120m
+- workflow=none
+- medium_flow=none
+- candidates=3 plan=/Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260306-181357.json
 - fixed_rules=meeting, competition
 - rearrange_scope=input
 - protect_experiment_structure=True
