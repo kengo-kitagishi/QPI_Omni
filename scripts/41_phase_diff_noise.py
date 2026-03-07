@@ -202,11 +202,12 @@ for _i in selected_pair_idx:
         vis    = _get_visibility(dc, ac)
 
         # σ_shot (eq. A.9) — _get_phase_noise が実装済み
+        N_electron_map = np.abs(dc) * SENSOR_CONVERSION_GAIN  # ADU → e⁻
         sigma_shot_map = _get_phase_noise(
-            vis, aperturesize, np.abs(dc), img_shape
+            vis, aperturesize, N_electron_map, img_shape
         )
-        # ROI 内で平均してスカラー化（再構成後の ROI に対応するため全体平均を使う）
-        sigma_shot_scalar = float(np.mean(sigma_shot_map))
+        # ROI 内で平均してスカラー化（測定 ROI と同じ領域で評価）
+        sigma_shot_scalar = float(np.mean(sigma_shot_map[rs:re, cs:ce]))
 
         # σ_sensor (eq. A.12)
         if sigma_s_adu is not None:

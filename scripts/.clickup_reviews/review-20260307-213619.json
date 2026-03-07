@@ -1,0 +1,29 @@
+{
+  "created_at": "2026-03-07T21:36:19.124805",
+  "range": {
+    "start": "2026-03-07",
+    "end": "2026-03-08",
+    "near_days": 2
+  },
+  "counts": {
+    "fetched": 679,
+    "scheduled": 10,
+    "unscheduled": 0,
+    "overdue": 87,
+    "due_soon_unscheduled": 0,
+    "after_due": 0
+  },
+  "findings": [
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86ewr04gk",
+      "task_name": "bonding",
+      "list_key": "experiment",
+      "reason": "03-07 14:30 Macromolecular Crowdingの歴史を書く と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-08T10:40:00+09:00",
+      "suggested_slot_end": "2026-03-08T11:10:00+09:00"
+    }
+  ]
+}

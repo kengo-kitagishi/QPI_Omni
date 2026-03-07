@@ -1,0 +1,123 @@
+{
+  "created_at": "2026-03-08T00:11:46.753550",
+  "range": {
+    "start": "2026-03-11",
+    "end": "2026-03-18",
+    "near_days": 2
+  },
+  "counts": {
+    "fetched": 681,
+    "scheduled": 35,
+    "unscheduled": 0,
+    "overdue": 85,
+    "due_soon_unscheduled": 0,
+    "after_due": 0
+  },
+  "findings": [
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86ewr0z00",
+      "task_name": "【実験】2%培地交換（T0+48h）",
+      "list_key": "experiment",
+      "reason": "03-11 09:00 Physical properties of the cytoplasm modulate the rates of microtubele polymerization and depolymerization と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-12T13:50:00+09:00",
+      "suggested_slot_end": "2026-03-12T14:50:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86evu485z",
+      "task_name": "Vast heterogeneity in cytoplasm diffusion rates revealed by nanorheology and Doppelganger simulation",
+      "list_key": "input",
+      "reason": "03-13 10:00 【実験】0.0055%培地交換（T0+96h） と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-13T11:40:00+09:00",
+      "suggested_slot_end": "2026-03-13T12:40:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86ewr0z4d",
+      "task_name": "【実験】0%培地交換（T0+120h）",
+      "list_key": "experiment",
+      "reason": "03-14 09:00 学振DC1｜深掘り執筆セッションB-2/4（研究計画の具体化） と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-14T11:10:00+09:00",
+      "suggested_slot_end": "2026-03-14T12:10:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86evu401t",
+      "task_name": " Nano Mid infra",
+      "list_key": "input",
+      "reason": "03-16 10:00 【実験】2%培地交換（T0+168h） と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-16T17:10:00+09:00",
+      "suggested_slot_end": "2026-03-16T18:40:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86ewr0z90",
+      "task_name": "【実験】2%培地交換（T0+216h）",
+      "list_key": "experiment",
+      "reason": "03-18 09:00 Relevance and Regulation of Cell Density と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-18T15:00:00+09:00",
+      "suggested_slot_end": "2026-03-18T16:00:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86ewuzmqq",
+      "task_name": "学振DC1｜深掘り執筆セッションD（推敲・一貫性チェック）",
+      "list_key": "manuscript",
+      "reason": "03-18 10:00 【実験】2%培地交換（T0+216h） と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-18T15:00:00+09:00",
+      "suggested_slot_end": "2026-03-18T17:00:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr08x1",
+      "task_name": "Movingを確認",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "acquisition",
+      "reason": "workflow順序が逆転: stage=acquisition より前段 (setup) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-13T11:50:00+09:00",
+      "suggested_slot_end": "2026-03-13T14:20:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr08e5",
+      "task_name": "3条件のbgを取得",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "acquisition",
+      "reason": "workflow順序が逆転: stage=acquisition より前段 (setup) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-13T11:50:00+09:00",
+      "suggested_slot_end": "2026-03-13T14:20:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr09ev",
+      "task_name": "training datasetを作る",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "processing",
+      "reason": "workflow順序が逆転: stage=processing より前段 (acquisition, setup) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-18T15:00:00+09:00",
+      "suggested_slot_end": "2026-03-18T18:00:00+09:00"
+    }
+  ]
+}

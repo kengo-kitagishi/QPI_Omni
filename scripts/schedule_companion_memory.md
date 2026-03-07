@@ -732,6 +732,40 @@
 - time: 2026-05-25 15:00-15:40 JST
 - verification: agenda(2026-05-25) shows 1 scheduled item, no conflict
 
+## 2026-03-07 21:42 - applied by user approval (today carryover)
+- context: user worked on grid_alignment + adjacent-diff code from 14:30 to 22:00, then dinner 1h; planned tasks delayed
+- moved to 2026-03-08:
+  - 10:40-11:40 `Macromolecular Crowdingの歴史を書く` (86evrwqv0)
+  - 13:30-15:30 `学振DC1｜深掘り執筆セッションA-3/4（背景・独自性）` (86ewuzp7w)
+  - 15:40-17:40 `執筆デー @ GRATBROWN Roast and Bake（駒場）` (86ewr34cy)
+  - 18:50-19:20 `学振DC1 書き方の本を買って読む` (86ewqyvwr)
+  - 19:30-20:30 `就活ES締め切り調査（花王・東京電力）` (86ewr35hx)
+- verification: agenda/review for 2026-03-08 reports no overlap findings
+
+## 2026-03-07 22:03 - done log applied
+- user request: add today's work as done
+- created and marked complete in `code`:
+  - 14:30-18:00 `grid_alignment実装` (86ewvdw7r)
+  - 18:00-22:00 `隣接差分コード実装` (86ewvdw8f)
+- verification: both tasks show `status=complete` and `status_type=done`
+
+## 2026-03-07 22:08 - applied by user request
+- user request: move `細胞導入` to the morning of the day after tomorrow
+- interpreted date: `2026-03-09` (明後日 from 2026-03-07 JST)
+- moved: `細胞導入` (86ewr092c) -> 2026-03-09 08:30-10:00 JST
+- verification: agenda(2026-03-09) shows the updated experiment slot in morning
+
+## 2026-03-08 00:11 - applied by user request (medium exchange chain)
+- user request: shift medium-exchange tasks together with moved cell introduction
+- base anchor: `細胞導入` completion = 2026-03-09 10:00 JST
+- recalculated by T0 offsets in task names:
+  - `【実験】2%培地交換（T0+48h）` (86ewr0z00) -> 2026-03-11 10:00-11:00
+  - `【実験】0.0055%培地交換（T0+96h）` (86ewr0z29) -> 2026-03-13 10:00-11:00
+  - `【実験】0%培地交換（T0+120h）` (86ewr0z4d) -> 2026-03-14 10:00-11:00
+  - `【実験】2%培地交換（T0+168h）` (86ewr0z63) -> 2026-03-16 10:00-11:00
+  - `【実験】2%培地交換（T0+216h）` (86ewr0z90) -> 2026-03-18 10:00-11:00
+- note: review found overlaps with non-experiment tasks after enforcing T0 timing; follow-up rescheduling can be applied if requested
+
 ## 2026-03-06 15:07 - advise consultation
 - text: molecular crowding review論文をinputする。2時間。優先度は低め
 - category=input priority=urgent bias=+0h
@@ -786,3 +820,23 @@
 - fixed_rules=meeting, competition
 - rearrange_scope=input
 - protect_experiment_structure=True
+
+## 2026-03-07 21:35 - review check
+- range: 2026-03-06->2026-03-07
+- pressure: overdue=87 due_soon_unscheduled=0
+- findings: 2 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260307-213555.json
+
+## 2026-03-07 21:36 - review check
+- range: 2026-03-07->2026-03-08
+- pressure: overdue=87 due_soon_unscheduled=0
+- findings: 1 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260307-213619.json
+
+## 2026-03-07 21:42 - review check
+- range: 2026-03-08->2026-03-08
+- pressure: overdue=83 due_soon_unscheduled=0
+- findings: 0 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260307-214218.json
+
+## 2026-03-08 00:11 - review check
+- range: 2026-03-11->2026-03-18
+- pressure: overdue=85 due_soon_unscheduled=0
+- findings: 9 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260308-001146.json
