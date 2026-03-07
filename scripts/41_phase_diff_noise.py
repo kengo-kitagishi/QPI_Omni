@@ -48,8 +48,10 @@ SENSOR_READ_NOISE_E = None       # e.g. 3.0
 
 # --- データ設定 ---
 
-DATA_DIR          = r"path/to/hologram_dir"  # ホログラム TIFF が並ぶディレクトリ
-CROP_REGION       = None         # None or (r0, r1, c0, c1)（raw 画像の切り出し範囲）
+DATA_DIR          = r"D:\AquisitionData\Kitagishi\basler_image_seq\exp60ms_int100ms_300frame_meanint_620\Pos0" # ホログラム TIFF が並ぶディレクトリ
+CROP_SIDE         = None         # "right" → 右端, "left" → 左端, None → CROP_REGION を直接使う
+CROP_SIZE         = 2048         # CROP_SIDE 使用時の正方形サイズ [px]
+CROP_REGION       = None         # None or (r0, r1, c0, c1)（CROP_SIDE=None のときだけ参照）
 ROI_SIZE          = 80           # ノイズ計測 ROI サイズ [px]（論文準拠 80×80）
 ROI_CENTER        = None         # None → 再構成画像の中央。(row, col) で明示指定も可
 PAIR_START_1BASED = 1            # 解析開始ペア番号（1 始まり）
@@ -83,11 +85,19 @@ print(f"  全フレーム数: {N_total} → 総ペア数: {n_pairs_total}")
 if N_total == 0:
     raise FileNotFoundError(f"ホログラムファイルが見つかりません: {DATA_DIR}")
 
-# 1 枚プローブ読み込みで画像サイズを確定
+# 1 枚プローブ読み込みで画像サイズを確定、CROP_REGION を解決
 _probe_raw = tifffile.imread(os.path.join(DATA_DIR, _files[0])).astype(np.float64)
+_H_full, _W_full = _probe_raw.shape[:2]
+
+if CROP_SIDE == "right":
+    CROP_REGION = (0, _H_full, _W_full - CROP_SIZE, _W_full)
+elif CROP_SIDE == "left":
+    CROP_REGION = (0, _H_full, 0, CROP_SIZE)
+
 if CROP_REGION is not None:
     r0, r1, c0, c1 = CROP_REGION
     _probe_raw = _probe_raw[r0:r1, c0:c1]
+    print(f"  クロップ: {CROP_SIDE or 'manual'}  rows {r0}:{r1}, cols {c0}:{c1}")
 img_shape = _probe_raw.shape[:2]
 print(f"  画像サイズ (after crop): {img_shape}")
 
