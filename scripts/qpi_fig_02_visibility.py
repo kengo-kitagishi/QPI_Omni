@@ -19,6 +19,9 @@ qpi_fig_02_visibility.py
 
 import sys
 import os
+import shutil
+from datetime import datetime
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -45,6 +48,18 @@ NA             = 0.95
 PIXELSIZE      = 3.45e-6 / 40   # [m/px]
 OFFAXIS_CENTER = (1664, 485)     # (row, col) — FFT空間でのサイドバンド位置
 CROP           = (8, 2056, 208, 2256)  # (row_start, row_end, col_start, col_end)
+EXPORT_SINGLE_PANELS = True
+SINGLE_PANEL_TIF_BASE = (
+    Path(__file__).resolve().parents[1] / "results" / "figures" / "visibility_single_panels"
+)
+HOLOGRAM_VMIN = 0.0
+HOLOGRAM_VMAX = 4096.0
+INTERFERO_AMP_VMIN = 0.0
+INTERFERO_AMP_VMAX = 250.0
+NON_INTERFERO_AMP_VMIN = 0.0
+NON_INTERFERO_AMP_VMAX = 500.0
+VISIBILITY_VMIN = 0.3
+VISIBILITY_VMAX = 1.0
 
 # ============================================================
 # ホログラム読み込み
@@ -142,6 +157,50 @@ print(f"  V (mean)             = {np.mean(visibility[visibility > 0]):.3f}")
 
 FONT = {"fontsize": 9, "fontweight": "bold"}
 
+
+def _finite_percentile(arr, q, fallback):
+    finite = np.asarray(arr)[np.isfinite(arr)]
+    if finite.size == 0:
+        return float(fallback)
+    return float(np.percentile(finite, q))
+
+
+def _safe_visibility_limits(vis):
+    positive = np.asarray(vis)[(vis > 0) & np.isfinite(vis)]
+    if positive.size == 0:
+        return 0.0, 1.0
+    vmin = max(0.0, float(np.percentile(positive, 1)))
+    vmax = min(1.0, _finite_percentile(vis, 99, 1.0))
+    if vmax <= vmin:
+        vmax = min(1.0, vmin + 1e-6)
+    return vmin, vmax
+
+
+def _save_single_panel_preview(name, image, cmap, vmin, vmax, cbar_label, export_png_path=None):
+    panel_fig, panel_ax = plt.subplots(figsize=(4.2, 4.2))
+    im = panel_ax.imshow(image, cmap=cmap, vmin=vmin, vmax=vmax, origin="upper")
+    panel_ax.set_title(name, **FONT)
+    panel_ax.set_axis_off()
+    if cbar_label:
+        cbar = plt.colorbar(im, ax=panel_ax, fraction=0.046, pad=0.04)
+        cbar.set_label(cbar_label, fontsize=7)
+    saved_path = save_figure(
+        panel_fig,
+        params={
+            "panel_name": name,
+            "cmap": cmap,
+            "vmin": None if vmin is None else float(vmin),
+            "vmax": None if vmax is None else float(vmax),
+        },
+        description=f"Single panel preview for range check: {name}",
+        publish=False,
+    )
+    if export_png_path is not None:
+        export_png_path = Path(export_png_path)
+        export_png_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(saved_path, export_png_path)
+    plt.close(panel_fig)
+
 fig = plt.figure(figsize=(12, 7))
 gs  = GridSpec(
     2, 3,
@@ -159,7 +218,7 @@ ax_e = fig.add_subplot(gs[0, 2])   # OPD
 ax_f = fig.add_subplot(gs[1, 2])   # Visibility
 
 # --- a: Hologram ---
-im_a = ax_a.imshow(holo, cmap="viridis", origin="upper")
+im_a = ax_a.imshow(holo, cmap="viridis", vmin=HOLOGRAM_VMIN, vmax=HOLOGRAM_VMAX, origin="upper")
 ax_a.set_title("Hologram", **FONT)
 cb_a = plt.colorbar(im_a, ax=ax_a, fraction=0.046, pad=0.04)
 cb_a.set_label("(ADU)", fontsize=7)
@@ -189,34 +248,88 @@ for (cx, cy), rr in circle_specs:
     )
 
 # --- c: Interferometric Amplitude ---
-vmax_c = np.percentile(beta, 99)
-im_c = ax_c.imshow(beta, cmap="viridis", vmin=0, vmax=vmax_c, origin="upper")
+vmin_c, vmax_c = INTERFERO_AMP_VMIN, INTERFERO_AMP_VMAX
+im_c = ax_c.imshow(beta, cmap="viridis", vmin=vmin_c, vmax=vmax_c, origin="upper")
 ax_c.set_title("Interferometric term\nAmplitude", **FONT)
 plt.colorbar(im_c, ax=ax_c, fraction=0.046, pad=0.04).set_label("(ADU)", fontsize=7)
 ax_c.set_axis_off()
 
 # --- d: Non-interferometric Amplitude ---
-vmax_d = np.percentile(alpha, 99)
-im_d = ax_d.imshow(alpha, cmap="viridis", vmin=0, vmax=vmax_d, origin="upper")
+vmin_d, vmax_d = NON_INTERFERO_AMP_VMIN, NON_INTERFERO_AMP_VMAX
+im_d = ax_d.imshow(alpha, cmap="viridis", vmin=vmin_d, vmax=vmax_d, origin="upper")
 ax_d.set_title("Non-interferometric term\nAmplitude", **FONT)
 plt.colorbar(im_d, ax=ax_d, fraction=0.046, pad=0.04).set_label("(ADU)", fontsize=7)
 ax_d.set_axis_off()
 
 # --- e: OPD ---
 opd_centered = opd - np.median(opd)
-vlim_e = np.percentile(np.abs(opd_centered), 98)
+vlim_e = _finite_percentile(np.abs(opd_centered), 98, 1.0)
 im_e = ax_e.imshow(opd_centered, cmap="viridis", vmin=-vlim_e, vmax=vlim_e, origin="upper")
 ax_e.set_title("Interferometric term\nOPD", **FONT)
 plt.colorbar(im_e, ax=ax_e, fraction=0.046, pad=0.04).set_label("(rad)", fontsize=7)
 ax_e.set_axis_off()
 
 # --- f: Visibility ---
-vmin_f = max(0, np.percentile(visibility[visibility > 0], 1))
-vmax_f = min(1, np.percentile(visibility, 99))
+vmin_f, vmax_f = VISIBILITY_VMIN, VISIBILITY_VMAX
 im_f = ax_f.imshow(visibility, cmap="viridis", vmin=vmin_f, vmax=vmax_f, origin="upper")
 ax_f.set_title("Visibility", **FONT)
 plt.colorbar(im_f, ax=ax_f, fraction=0.046, pad=0.04)
 ax_f.set_axis_off()
+
+# ============================================================
+# 単一パネル保存（レンジ確認用）
+# ============================================================
+if EXPORT_SINGLE_PANELS:
+    run_tag = datetime.now().strftime("%Y%m%dT%H%M%S")
+    single_tif_dir = SINGLE_PANEL_TIF_BASE / run_tag
+    single_tif_dir.mkdir(parents=True, exist_ok=True)
+
+    raw_tif_specs = [
+        ("panel_a_hologram", holo),
+        ("panel_b_fft_log", fft_log),
+        ("panel_c_interferometric_amp_beta", beta),
+        ("panel_d_non_interferometric_amp_alpha", alpha),
+        ("panel_e_opd_centered", opd_centered),
+        ("panel_f_visibility", visibility),
+    ]
+    for panel_name, panel_data in raw_tif_specs:
+        out_tif = single_tif_dir / f"{panel_name}.tif"
+        tifffile.imwrite(out_tif, np.asarray(panel_data, dtype=np.float32))
+
+    _save_single_panel_preview(
+        "a: Hologram", holo, "viridis", HOLOGRAM_VMIN, HOLOGRAM_VMAX, "(ADU)",
+        export_png_path=single_tif_dir / "panel_a_hologram_viridis.png",
+    )
+    _save_single_panel_preview(
+        "b: 2D FFT (log)", fft_log, "viridis", None, None, "log|FFT|",
+        export_png_path=single_tif_dir / "panel_b_fft_log_viridis.png",
+    )
+    _save_single_panel_preview(
+        "c: Interferometric Amp", beta, "viridis", vmin_c, vmax_c, "(ADU)",
+        export_png_path=single_tif_dir / "panel_c_interferometric_amp_beta_viridis.png",
+    )
+    _save_single_panel_preview(
+        "d: Non-interferometric Amp", alpha, "viridis", vmin_d, vmax_d, "(ADU)",
+        export_png_path=single_tif_dir / "panel_d_non_interferometric_amp_alpha_viridis.png",
+    )
+    _save_single_panel_preview(
+        "e: OPD", opd_centered, "viridis", -vlim_e, vlim_e, "(rad)",
+        export_png_path=single_tif_dir / "panel_e_opd_centered_viridis.png",
+    )
+    _save_single_panel_preview(
+        "f: Visibility", visibility, "viridis", vmin_f, vmax_f, "",
+        export_png_path=single_tif_dir / "panel_f_visibility_viridis.png",
+    )
+
+    print(f"Single-panel raw TIFs: {single_tif_dir}")
+    print(f"Single-panel viridis PNGs: {single_tif_dir}")
+    print(
+        "Current preview ranges: "
+        f"c=[{vmin_c:.6g},{vmax_c:.6g}], "
+        f"d=[{vmin_d:.6g},{vmax_d:.6g}], "
+        f"e=[{-vlim_e:.6g},{vlim_e:.6g}], "
+        f"f=[{vmin_f:.6g},{vmax_f:.6g}]"
+    )
 
 # ============================================================
 # 保存
