@@ -40,6 +40,15 @@ OUTLIER_MAD_THRESH = 2.5              # チャネル間外れ値除去のMAD閾�
 OUTLIER_TIMESERIES_WINDOW = 11        # 時系列外れ値検出のメジアンフィルタ幅（奇数）
 OUTLIER_TIMESERIES_THRESH = 3.0       # 時系列MAD閾値（0で無効）
 OUTPUT_JSON = "pos_shifts.json"
+
+# --- グリッド基準画像への gaussian_backsub 適用 ---
+# True にするとグリッド基準画像にも timelapse と同じ backsub を適用する
+APPLY_BACKSUB_TO_GRID_REF = True
+BACKSUB_MIN_PHASE   = -1.1
+BACKSUB_HIST_MIN    = -1.1
+BACKSUB_HIST_MAX    =  1.5
+BACKSUB_N_BINS      = 512
+BACKSUB_SMOOTH_WINDOW = 20
 # ============================================================
 
 
@@ -47,6 +56,51 @@ def to_uint8(img, vmin=VMIN, vmax=VMAX):
     clipped = np.clip(img, vmin, vmax)
     normalized = (clipped - vmin) / (vmax - vmin)
     return (normalized * 255).astype(np.uint8)
+
+
+def compute_backsub_offset(img: np.ndarray) -> float:
+    """
+    gaussian_backsub と同じ手法で背景ピークをガウスフィットし、
+    補正オフセット（= -peak_mean）を返す。ファイル保存なし。
+    img: float 配列（任意形状）
+    """
+    from scipy.ndimage import uniform_filter1d
+    from scipy.optimize import curve_fit
+
+    bin_edges = np.linspace(BACKSUB_HIST_MIN, BACKSUB_HIST_MAX, BACKSUB_N_BINS + 1)
+    hist_counts, _ = np.histogram(img.flatten(), bins=bin_edges)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    bin_width = bin_centers[1] - bin_centers[0]
+
+    smoothed = uniform_filter1d(hist_counts, size=BACKSUB_SMOOTH_WINDOW, mode='nearest')
+    smoothed = uniform_filter1d(smoothed, size=BACKSUB_SMOOTH_WINDOW, mode='nearest')
+
+    valid_idx = np.where(bin_centers >= BACKSUB_MIN_PHASE)[0]
+    max_search_idx = int(len(bin_centers) * 0.95)
+    search_idx = valid_idx[valid_idx < max_search_idx]
+    if len(search_idx) == 0:
+        return 0.0
+
+    peak_idx = search_idx[np.argmax(smoothed[search_idx])]
+    peak_value = bin_centers[peak_idx]
+
+    fit_width = 300
+    s = max(0, peak_idx - fit_width)
+    e = min(len(bin_centers), peak_idx + fit_width)
+    x_data = bin_centers[s:e]
+    y_data = smoothed[s:e]
+
+    def gaussian(x, amp, mean, std):
+        return amp * np.exp(-((x - mean) ** 2) / (2 * std ** 2))
+
+    try:
+        p0 = [float(np.max(y_data)), peak_value, bin_width * 20]
+        popt, _ = curve_fit(gaussian, x_data, y_data, p0=p0, maxfev=5000)
+        _, mean_fit, _ = popt
+        return float(-mean_fit)
+    except Exception as ex:
+        print(f"    [backsub] Gaussian fit 失敗 ({ex}), ピーク値で代用")
+        return float(-peak_value)
 
 
 def ecc_align(ref_u8, tl_u8):
@@ -149,8 +203,13 @@ def load_grid_refs(channels_dir, n_channels):
     for ch in range(n_channels):
         roi = rois[ch] if ch < len(rois) else rois[-1]
         cropped = extract_rect_roi(grid_img, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"])
+        if APPLY_BACKSUB_TO_GRID_REF:
+            offset = compute_backsub_offset(cropped)
+            cropped = cropped + offset
+            print(f"  ch{ch:02d} ROI crop: {cropped.shape}  backsub offset={offset:+.4f} rad")
+        else:
+            print(f"  ch{ch:02d} ROI crop: {cropped.shape}")
         refs.append(cropped)
-        print(f"  ch{ch:02d} ROI crop: {cropped.shape}")
 
     return refs, str(grid_ref_path)
 

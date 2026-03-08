@@ -191,7 +191,7 @@ def run_detect(img_path: Path, crop_w: int, crop_h: int, out_dir: Path,
     preview_path = out_dir / "channel_detection_preview.png"
     plt.savefig(str(preview_path), dpi=150, bbox_inches="tight")
     print(f"プレビュー保存: {preview_path}")
-    plt.show()
+    plt.show(block=False)
 
     roi_path = out_dir / ROI_FILENAME
     with open(roi_path, "w", encoding="utf-8") as f:

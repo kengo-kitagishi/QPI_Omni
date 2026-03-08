@@ -18,6 +18,9 @@ import sys
 from pathlib import Path
 from tqdm import tqdm
 
+sys.path.insert(0, str(Path(__file__).parent))
+from compute_pos_shifts import compute_backsub_offset
+
 # ============================================================
 # 設定パラメータ
 # ============================================================
@@ -48,6 +51,10 @@ SHIFT_SIGN_Y = 1
 
 # 逆シフト適用（subtracted をシフト補正して元の位置に戻すか）
 APPLY_INVERSE_SHIFT = False
+# グリッド画像に backsub オフセットを適用するか
+APPLY_BACKSUB_TO_GRID = True
+# サブピクセル残差 warp をグリッド画像に適用するか
+APPLY_SUBPIXEL_CORRECTION = True
 # ============================================================
 
 
@@ -103,9 +110,9 @@ def find_nearest_grid(pos_map, dx_um, dy_um, x_step, y_step):
 
 
 def load_grid_image(pos_dir, z_index):
-    """グリッドPosフォルダからz画像を読み込む。"""
-    fname = f"img_000000000_ph_{z_index:03d}.tif"
-    path = pos_dir / fname
+    """グリッドPosフォルダから再構成済み位相画像を読み込む。"""
+    fname = f"img_000000000_ph_{z_index:03d}_phase.tif"
+    path = pos_dir / "output_phase" / fname
     if not path.exists():
         raise FileNotFoundError(f"グリッド画像が見つかりません: {path}")
     return tifffile.imread(str(path)).astype(np.float64)
@@ -250,6 +257,19 @@ def main():
 
             if grid_img is not None:
                 grid_cropped = extract_rect_roi(grid_img, cy, cx, crop_w, crop_h)
+
+                # backsub オフセット補正
+                if APPLY_BACKSUB_TO_GRID:
+                    offset = compute_backsub_offset(grid_cropped)
+                    grid_cropped = grid_cropped + offset
+
+                # サブピクセル残差 warp
+                if APPLY_SUBPIXEL_CORRECTION and (sx != 0.0 or sy != 0.0):
+                    pixel_scale_um_local = SENSOR_PIXEL_SIZE / MAGNIFICATION * ORIGINAL_DIM / RECONSTRUCTED_DIM * 1e6
+                    residual_x_px = SHIFT_SIGN_X * sx - xi * X_STEP / pixel_scale_um_local
+                    residual_y_px = SHIFT_SIGN_Y * sy - yi * Y_STEP / pixel_scale_um_local
+                    grid_cropped = apply_inverse_shift_warp(grid_cropped, residual_x_px, residual_y_px)
+
                 # サイズ不一致はリサイズで吸収
                 if grid_cropped.shape != frame_data.shape:
                     import cv2
@@ -289,6 +309,8 @@ def main():
             "shift_sign_x": SHIFT_SIGN_X,
             "shift_sign_y": SHIFT_SIGN_Y,
             "apply_inverse_shift": APPLY_INVERSE_SHIFT,
+            "apply_backsub_to_grid": APPLY_BACKSUB_TO_GRID,
+            "apply_subpixel_correction": APPLY_SUBPIXEL_CORRECTION,
             "frame_log": subtract_log
         }, f, indent=2, ensure_ascii=False)
     print(f"ログ保存: {log_path}")

@@ -195,6 +195,10 @@ save_figure(
         "raw_files": [SENSOR_DARK_DIR],
         "notes":     "Basler acA2440-75um, laser OFF, Pylon gain=0dB",
     },
+    data={
+        "std_map_e":      std_map_e,
+        "roi_timeseries": roi_timeseries,
+    },
 )
 
 print(f"\n参考: OPD noise 理論式の Var(z_sensor) に代入する値 = {sigma_sensor:.1f}^2 = {sigma_sensor**2:.0f} e⁻²")
@@ -241,7 +245,8 @@ plt.colorbar(im, ax=ax, label="Phase (rad)")
 ax.set_title("Background-subtracted Phase Map")
 plt.tight_layout()
 save_figure(fig, params={"crop": UC1_CROP, "offaxis_center": OFFAXIS_CENTER},
-            description="UC1 phase map")
+            description="UC1 phase map",
+            data={"phase_map": angle_nobg})
 
 # %%
 # プロファイルプロット
@@ -265,7 +270,8 @@ ax.set_xlabel(xlabel)
 ax.set_ylabel("Phase (rad)")
 ax.grid(True)
 save_figure(fig, params={"axis": UC1_PROFILE_AXIS, "coord": UC1_PROFILE_COORD},
-            description="UC1 phase profile")
+            description="UC1 phase profile",
+            data={"profile": profile})
 
 # ============================================================
 # UC2: タイムラプスノイズ追跡
@@ -316,7 +322,8 @@ axes[1].set_xlabel("Frame index")
 axes[1].grid(True)
 plt.tight_layout()
 save_figure(fig, params={"roi": UC2_ROI, "n_frames": len(frames)},
-            description="UC2 timelapse noise tracking")
+            description="UC2 timelapse noise tracking",
+            data={"frames": frames, "roi_mean": roi_mean, "roi_std": roi_std})
 
 print(f"Overall noise std: {roi_std.mean():.4f} rad  ({roi_std.mean() * WAVELENGTH / (4 * np.pi) * 1e9:.2f} nm)")
 
@@ -391,7 +398,8 @@ if len(shift_mags) > 1:
 save_figure(fig,
             params={"n_frames": len(shift_mags), "roi": UC3_ROI,
                     "transforms_json": UC3_TRANSFORMS_JSON},
-            description="UC3 shift magnitude vs phase noise scatter")
+            description="UC3 shift magnitude vs phase noise scatter",
+            data={"shift_mags": shift_mags, "phase_stds": phase_stds})
 
 # ============================================================
 # UC_DIFF: 隣接フレーム差分によるノイズ測定
@@ -596,6 +604,15 @@ plt.suptitle(
 )
 plt.tight_layout()
 
+_uc_diff_data = {
+    "pair_idx":           pair_idx,
+    "noise_adu":          noise_vals,
+    "noise_e":            noise_e_diff,
+    "shot_limit_adu":     shot_limit_adu_vals,
+    "shot_limit_e":       shot_limit_e_vals,
+    "roi_mean_adu":       roi_mean_adu_vals,
+}
+
 save_figure(
     fig_diff,
     params={
@@ -627,6 +644,7 @@ save_figure(
         f"({shot_limit_mean_e:.1f} e⁻), measured/shot={ratio_measured_to_shot:.2f}x "
         f"({n_pairs} pairs, selected {UC_DIFF_PAIR_START_1BASED}-{UC_DIFF_PAIR_END_1BASED})"
     ),
+    data=_uc_diff_data,
 )
 
 # --- 図: 上段(ADU)のみ ---
@@ -674,6 +692,7 @@ save_figure(
         f"shot_limit={shot_limit_mean_adu:.2f} ADU, "
         f"selected pairs={UC_DIFF_PAIR_START_1BASED}-{UC_DIFF_PAIR_END_1BASED}"
     ),
+    data=_uc_diff_data,
 )
 
 # --- 図: 下段(e-)のみ ---
@@ -721,6 +740,7 @@ save_figure(
         f"shot_limit={shot_limit_mean_e:.1f} e⁻, "
         f"selected pairs={UC_DIFF_PAIR_START_1BASED}-{UC_DIFF_PAIR_END_1BASED}"
     ),
+    data=_uc_diff_data,
 )
 
 print(

@@ -692,6 +692,7 @@ def save_figure(
     extra_meta: Optional[dict] = None,
     data_source: Optional[dict] = None,
     copy_files: Optional[list] = None,
+    data: Optional[dict] = None,
 ) -> Path:
     """
     Save a matplotlib Figure with inbox-first workflow.
@@ -737,6 +738,23 @@ def save_figure(
                 },
             )
 
+    data : dict, optional
+        Numerical arrays underlying this figure, saved as a compressed .npz
+        alongside the image. Useful for replotting with different ranges
+        without rerunning the pipeline. Values must be numpy-compatible
+        (ndarray, list, or scalar).
+
+        Example::
+            save_figure(
+                fig,
+                data={"pair_nums": pair_nums, "noise_mrad": noise_mrad_vals},
+            )
+
+        Reload later::
+            import numpy as np
+            d = np.load("path/to/figure__f001_data.npz")
+            noise = d["noise_mrad"]
+
     Returns
     -------
     pathlib.Path
@@ -771,6 +789,14 @@ def save_figure(
     inbox_file = inbox_dir / f"{base}.{fmt}"
     fig.savefig(inbox_file, dpi=dpi, bbox_inches="tight")
 
+    data_file = ""
+    if data:
+        import numpy as np
+        npz_path = inbox_dir / f"{base}_data.npz"
+        np.savez_compressed(npz_path, **data)
+        data_file = str(npz_path.resolve())
+        print(f"[figure_logger] data saved:  {npz_path}")
+
     published_file = ""
     if publish:
         out = Path(output_dir).expanduser().resolve() if output_dir else _DEFAULT_PUBLISH_DIR
@@ -798,6 +824,8 @@ def save_figure(
         "inbox_file": str(inbox_file.resolve()),
         "published_file": published_file,
         "manifest_file": str(manifest_path.resolve()),
+        "data_file": data_file,
+        "data_keys": list(data.keys()) if data else [],
         "data_info": {**_detect_data_info(), **(data_source or {})},
         "git": _git_snapshot(),
         "runtime": {

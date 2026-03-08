@@ -40,7 +40,7 @@ GRID_DIR = r"E:\Acuisition\kitagishi\260301\multipos_test_1"
 # ============================================================
 # ★ 実行ステップ（False でスキップ）
 # ============================================================
-STEP_GRID_RECONSTRUCTION     = True
+STEP_GRID_RECONSTRUCTION     = False
 STEP_TIMELAPSE_RECONSTRUCTION = False
 STEP_CHANNEL_CROP            = True
 STEP_GAUSSIAN_BACKSUB        = True
@@ -52,7 +52,7 @@ STEP_GRID_SUBTRACT           = True
 # Pos フィルタ（タイムラプス側）
 # ============================================================
 # None で全 Pos。["Pos1", "Pos3"] のように指定も可
-POS_FILTER = None
+POS_FILTER = ["Pos1"]
 
 # ============================================================
 # QPI 光学パラメータ
@@ -63,15 +63,15 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 # Pos 番号によるクロップ切り替え（grid / timelapse 共通）
 # ============================================================
 POS_SPLIT   = 3
-CROP_BEFORE = (0, 2048,   0, 2048)   # Pos0, Pos1, Pos2
-CROP_AFTER  = (0, 2048, 416, 2464)   # Pos3 以降
+CROP_BEFORE = (0, 2048, 416, 2464)   # Pos0, Pos1, Pos2  → 右側 (416:2464)
+CROP_AFTER  = (0, 2048,   0, 2048)   # Pos3 以降        → 左側 (0:2048)
 
 # ============================================================
 # 再構成パラメータ
 # ============================================================
 # グリッド
 GRID_BG_BASE_LABEL        = "Pos0"   # BG として使うグリッドの base_label
-GRID_TARGET_BASE_LABELS   = None  # None で Pos0 以外を全処理
+GRID_TARGET_BASE_LABELS   = ["Pos1"]  # None で Pos0 以外を全処理
 GRID_SKIP_IF_EXISTS       = False
 GRID_MEAN_REGION          = None     # (r1, r2, c1, c2) or None
 
@@ -130,6 +130,7 @@ SHIFTS_VMAX               =  2.0
 SHIFTS_OUTLIER_MAD_THRESH = 2.5
 SHIFTS_TIMESERIES_WINDOW  = 11
 SHIFTS_TIMESERIES_THRESH  = 3.0
+SHIFTS_APPLY_BACKSUB_TO_GRID_REF = True  # グリッド基準画像にも gaussian_backsub を適用
 
 # ============================================================
 # grid_subtract パラメータ
@@ -531,6 +532,7 @@ def step_compute_shifts(channels_dir: Path, base_label: str):
     cps.OUTLIER_MAD_THRESH        = SHIFTS_OUTLIER_MAD_THRESH
     cps.OUTLIER_TIMESERIES_WINDOW = SHIFTS_TIMESERIES_WINDOW
     cps.OUTLIER_TIMESERIES_THRESH = SHIFTS_TIMESERIES_THRESH
+    cps.APPLY_BACKSUB_TO_GRID_REF = SHIFTS_APPLY_BACKSUB_TO_GRID_REF
     cps.main()
 
 

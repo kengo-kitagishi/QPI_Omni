@@ -55,7 +55,7 @@ CROP_REGION       = None         # None or (r0, r1, c0, c1)（CROP_SIDE=None の
 ROI_SIZE          = 80           # ノイズ計測 ROI サイズ [px]（論文準拠 80×80）
 ROI_CENTER        = None         # None → 再構成画像の中央。(row, col) で明示指定も可
 PAIR_START_1BASED = 1            # 解析開始ペア番号（1 始まり）
-PAIR_END_1BASED   = 150           # 解析終了ペア番号（1 始まり）
+PAIR_END_1BASED   = 50           # 解析終了ペア番号（1 始まり）
 
 # ============================================================
 # 初期化・パラメータ確認
@@ -343,6 +343,12 @@ _params_common = dict(
     conversion_gain=round(SENSOR_CONVERSION_GAIN, 4),
 )
 
+_data_common = {
+    "pair_nums":      pair_nums,
+    "noise_mrad":     noise_mrad_vals,
+    "noise_nm":       noise_nm_vals,
+}
+
 save_figure(
     fig_combined,
     params=_params_common,
@@ -354,6 +360,7 @@ save_figure(
         f"measured/shot={ratio_shot:.2f}x  "
         f"({n_pairs} pairs, {PAIR_START_1BASED}-{PAIR_END_1BASED})"
     ),
+    data=_data_common,
 )
 
 # %%
@@ -388,6 +395,7 @@ save_figure(
         f"measured={noise_mean_mrad:.2f} mrad, σ_shot={sigma_shot_mrad:.2f} mrad, "
         f"measured/shot={ratio_shot:.2f}x"
     ),
+    data=_data_common,
 )
 
 # %%
@@ -422,6 +430,7 @@ save_figure(
         f"measured={noise_mean_nm:.3f} nm, σ_shot={sigma_shot_nm:.4f} nm, "
         f"measured/shot={ratio_shot:.2f}x"
     ),
+    data=_data_common,
 )
 
 print(f"\n完了: {n_pairs} ペア測定 (pair {PAIR_START_1BASED}-{PAIR_END_1BASED})")
