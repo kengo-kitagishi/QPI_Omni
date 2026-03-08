@@ -52,7 +52,7 @@ STEP_GRID_SUBTRACT           = True
 # Pos フィルタ（タイムラプス側）
 # ============================================================
 # None で全 Pos。["Pos1", "Pos3"] のように指定も可
-POS_FILTER = ["Pos1"]
+POS_FILTER = None
 
 # ============================================================
 # QPI 光学パラメータ
@@ -71,7 +71,7 @@ CROP_AFTER  = (0, 2048, 416, 2464)   # Pos3 以降
 # ============================================================
 # グリッド
 GRID_BG_BASE_LABEL        = "Pos0"   # BG として使うグリッドの base_label
-GRID_TARGET_BASE_LABELS   = ["Pos1"]  # None で Pos0 以外を全処理
+GRID_TARGET_BASE_LABELS   = None  # None で Pos0 以外を全処理
 GRID_SKIP_IF_EXISTS       = False
 GRID_MEAN_REGION          = None     # (r1, r2, c1, c2) or None
 

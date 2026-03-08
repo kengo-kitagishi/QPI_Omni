@@ -55,7 +55,7 @@ CROP_REGION       = None         # None or (r0, r1, c0, c1)（CROP_SIDE=None の
 ROI_SIZE          = 80           # ノイズ計測 ROI サイズ [px]（論文準拠 80×80）
 ROI_CENTER        = None         # None → 再構成画像の中央。(row, col) で明示指定も可
 PAIR_START_1BASED = 1            # 解析開始ペア番号（1 始まり）
-PAIR_END_1BASED   = 50           # 解析終了ペア番号（1 始まり）
+PAIR_END_1BASED   = 150           # 解析終了ペア番号（1 始まり）
 
 # ============================================================
 # 初期化・パラメータ確認
