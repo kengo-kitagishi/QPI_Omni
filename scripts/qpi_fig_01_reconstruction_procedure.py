@@ -30,6 +30,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.gridspec import GridSpec
+import tifffile
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from figure_logger import save_figure
@@ -47,6 +48,7 @@ PRE = (
     "qpi_fig_01_reconstruction_overview__"
     "qpi_fig_01_reconstruction_overview_20260303T084146Z_f2af11__"
 )
+SINGLE_PANEL_TIF_BASE = pathlib.Path(__file__).resolve().parents[1] / "results" / "figures" / "reconstruction_procedure_single_panels"
 
 
 # ============================================================
@@ -192,6 +194,12 @@ def save_panel_figure(img, label, gray, scalebar):
     )
     plt.close(panel_fig)
 
+
+def save_panel_tif(img, label, out_dir):
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_tif = out_dir / f"panel_{label}.tif"
+    tifffile.imwrite(out_tif, np.asarray(img))
+
 # ============================================================
 # 水平矢印
 # ============================================================
@@ -284,8 +292,10 @@ save_figure(
 )
 
 # 各パネルを同一 save_figure フォルダ(run_id)にも保存
+single_tif_dir = SINGLE_PANEL_TIF_BASE / datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
 for _, panel_img, panel_label, panel_gray, panel_scalebar in panels:
     save_panel_figure(panel_img, panel_label, panel_gray, panel_scalebar)
+    save_panel_tif(panel_img, panel_label, single_tif_dir)
 
 # figure-hub inbox にも保存
 today = datetime.date.today().strftime("%Y-%m-%d")
@@ -301,3 +311,4 @@ fig.savefig(inbox_out / "qpi_fig_01_reconstruction_procedure.svg", bbox_inches="
 
 print(f"PNG: results/figures/")
 print(f"PDF/SVG: {inbox_out}")
+print(f"Single panel TIF: {single_tif_dir}")
