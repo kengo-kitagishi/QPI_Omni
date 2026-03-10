@@ -33,26 +33,30 @@ sys.path.insert(0, str(_script_dir))
 # ★ データパス
 # ============================================================
 TIMELAPSE_DIRS = [
-    r"E:\Acuisition\kitagishi\260301\movetest_8",
+    r"E:\Acuisition\kitagishi\260301\movetest_9",
 ]
 GRID_DIR = r"E:\Acuisition\kitagishi\260301\multipos_test_1"
+
 
 # ============================================================
 # ★ 実行ステップ（False でスキップ）
 # ============================================================
 STEP_GRID_RECONSTRUCTION     = False
-STEP_TIMELAPSE_RECONSTRUCTION = False
+STEP_TIMELAPSE_RECONSTRUCTION = True
 STEP_CHANNEL_CROP            = True
 STEP_GAUSSIAN_BACKSUB        = True
 STEP_ALIGN_SIMPLE            = False   # 確認用（時間がかかる）
 STEP_COMPUTE_SHIFTS          = True    # shift_visualize も自動実行
 STEP_GRID_SUBTRACT           = True
 
+# テストラン: None で全フレーム、整数で先頭 N フレームのみ処理
+TEST_N_FRAMES                = None
+
 # ============================================================
 # Pos フィルタ（タイムラプス側）
 # ============================================================
 # None で全 Pos。["Pos1", "Pos3"] のように指定も可
-POS_FILTER = ["Pos1"]
+POS_FILTER = None
 
 # ============================================================
 # QPI 光学パラメータ
@@ -71,7 +75,7 @@ CROP_AFTER  = (0, 2048,   0, 2048)   # Pos3 以降        → 左側 (0:2048)
 # ============================================================
 # グリッド
 GRID_BG_BASE_LABEL        = "Pos0"   # BG として使うグリッドの base_label
-GRID_TARGET_BASE_LABELS   = ["Pos1"]  # None で Pos0 以外を全処理
+GRID_TARGET_BASE_LABELS   = None  # None で Pos0 以外を全処理
 GRID_SKIP_IF_EXISTS       = False
 GRID_MEAN_REGION          = None     # (r1, r2, c1, c2) or None
 
@@ -131,6 +135,14 @@ SHIFTS_OUTLIER_MAD_THRESH = 2.5
 SHIFTS_TIMESERIES_WINDOW  = 11
 SHIFTS_TIMESERIES_THRESH  = 3.0
 SHIFTS_APPLY_BACKSUB_TO_GRID_REF = True  # グリッド基準画像にも gaussian_backsub を適用
+SHIFTS_USE_INCREMENTAL_TRACKING  = True   # 逐次追跡モード
+SHIFTS_X_STEP                    = 0.1   # グリッドステップ [μm]（GSUB_X_STEP と同値）
+SHIFTS_Y_STEP                    = 0.1   # [μm]
+SHIFTS_SHIFT_SIGN_X              = 1
+SHIFTS_SHIFT_SIGN_Y              = 1
+SHIFTS_JUMP_THRESH_UM            = 1.0   # 前フレームとのシフト差 [μm] を超えたら外れ値
+# calibrate_grid_positions.py の出力 JSON (None で名目値を使用)
+GRID_CALIBRATION_JSON            = None   # 例: r"E:\...\grid_calibration.json"
 
 # ============================================================
 # grid_subtract パラメータ
@@ -142,9 +154,11 @@ GSUB_SENSOR_PIXEL_SIZE    = 3.45e-6
 GSUB_MAGNIFICATION        = 40
 GSUB_ORIGINAL_DIM         = 2048
 GSUB_RECONSTRUCTED_DIM    = 511
-GSUB_SHIFT_SIGN_X         = 1
-GSUB_SHIFT_SIGN_Y         = 1
-GSUB_APPLY_INVERSE_SHIFT  = False
+GSUB_SHIFT_SIGN_X              = 1
+GSUB_SHIFT_SIGN_Y              = 1
+GSUB_APPLY_INVERSE_SHIFT       = False
+GSUB_APPLY_BACKSUB_TO_GRID     = True   # グリッド画像に backsub を適用
+GSUB_APPLY_SUBPIXEL_CORRECTION = True   # サブピクセル残差 warp をフレームに適用
 # ============================================================
 
 
@@ -351,7 +365,7 @@ def step_timelapse_reconstruction(tl_dir: Path):
         # スキップ判定（全フレーム再構成済みか）
         if TL_SKIP_IF_EXISTS and out_dir.exists():
             done = set(p.name for p in out_dir.glob("*.tif"))
-            if all(p.name in done for p in tif_files):
+            if all((p.stem + "_phase.tif") in done for p in tif_files):
                 print(f"  [SKIP already] {pos_dir.name}")
                 processed.append(pos_dir)
                 continue
@@ -374,7 +388,7 @@ def step_timelapse_reconstruction(tl_dir: Path):
 
         n_ok = n_skip = n_err = 0
         for tif_path in tqdm(tif_files, desc=f"  {pos_dir.name}"):
-            out_path = out_dir / tif_path.name
+            out_path = out_dir / (tif_path.stem + "_phase.tif")
             if TL_SKIP_IF_EXISTS and out_path.exists():
                 n_skip += 1
                 continue
@@ -532,7 +546,19 @@ def step_compute_shifts(channels_dir: Path, base_label: str):
     cps.OUTLIER_MAD_THRESH        = SHIFTS_OUTLIER_MAD_THRESH
     cps.OUTLIER_TIMESERIES_WINDOW = SHIFTS_TIMESERIES_WINDOW
     cps.OUTLIER_TIMESERIES_THRESH = SHIFTS_TIMESERIES_THRESH
-    cps.APPLY_BACKSUB_TO_GRID_REF = SHIFTS_APPLY_BACKSUB_TO_GRID_REF
+    cps.APPLY_BACKSUB_TO_GRID_REF      = SHIFTS_APPLY_BACKSUB_TO_GRID_REF
+    cps.USE_INCREMENTAL_TRACKING       = SHIFTS_USE_INCREMENTAL_TRACKING
+    cps.X_STEP                         = SHIFTS_X_STEP
+    cps.Y_STEP                         = SHIFTS_Y_STEP
+    cps.SHIFT_SIGN_X                   = SHIFTS_SHIFT_SIGN_X
+    cps.SHIFT_SIGN_Y                   = SHIFTS_SHIFT_SIGN_Y
+    cps.JUMP_THRESH_UM                 = SHIFTS_JUMP_THRESH_UM
+    cps.GRID_CALIBRATION_JSON          = GRID_CALIBRATION_JSON
+    cps.SENSOR_PIXEL_SIZE              = GSUB_SENSOR_PIXEL_SIZE
+    cps.MAGNIFICATION                  = GSUB_MAGNIFICATION
+    cps.ORIGINAL_DIM                   = GSUB_ORIGINAL_DIM
+    cps.RECONSTRUCTED_DIM              = GSUB_RECONSTRUCTED_DIM
+    cps.MAX_FRAMES                     = TEST_N_FRAMES
     cps.main()
 
 
@@ -550,22 +576,26 @@ def step_grid_subtract(channels_dir: Path, base_label: str):
         print(f"  [SKIP] channel_rois.json なし: {rois_json}")
         return
 
-    gs.CHANNELS_DIR        = str(channels_dir)
-    gs.CHANNEL_PATTERN     = SHIFTS_CHANNEL_PATTERN
+    # channels_dir = .../PosX/output_phase/channels → PosX dir = parent.parent
+    gs.TIMELAPSE_DIR       = str(channels_dir.parent.parent)
     gs.SHIFTS_JSON         = str(shifts_json)
     gs.CHANNEL_ROIS_JSON   = str(rois_json)
     gs.GRID_DIR            = GRID_DIR
     gs.BASE_LABEL          = base_label
-    gs.Z_INDEX             = GSUB_Z_INDEX
+    gs.GRID_Z_INDEX        = GSUB_Z_INDEX
     gs.X_STEP              = GSUB_X_STEP
     gs.Y_STEP              = GSUB_Y_STEP
     gs.SENSOR_PIXEL_SIZE   = GSUB_SENSOR_PIXEL_SIZE
     gs.MAGNIFICATION       = GSUB_MAGNIFICATION
     gs.ORIGINAL_DIM        = GSUB_ORIGINAL_DIM
     gs.RECONSTRUCTED_DIM   = GSUB_RECONSTRUCTED_DIM
-    gs.SHIFT_SIGN_X        = GSUB_SHIFT_SIGN_X
-    gs.SHIFT_SIGN_Y        = GSUB_SHIFT_SIGN_Y
-    gs.APPLY_INVERSE_SHIFT = GSUB_APPLY_INVERSE_SHIFT
+    gs.SHIFT_SIGN_X              = GSUB_SHIFT_SIGN_X
+    gs.SHIFT_SIGN_Y              = GSUB_SHIFT_SIGN_Y
+    gs.APPLY_INVERSE_SHIFT       = GSUB_APPLY_INVERSE_SHIFT
+    gs.APPLY_BACKSUB_TO_GRID     = GSUB_APPLY_BACKSUB_TO_GRID
+    gs.APPLY_SUBPIXEL_CORRECTION = GSUB_APPLY_SUBPIXEL_CORRECTION
+    gs.GRID_CALIBRATION_JSON     = GRID_CALIBRATION_JSON
+    gs.MAX_FRAMES                = TEST_N_FRAMES
     gs.main()
 
 

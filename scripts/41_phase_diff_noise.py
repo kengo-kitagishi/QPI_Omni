@@ -48,14 +48,14 @@ SENSOR_READ_NOISE_E = None       # e.g. 3.0
 
 # --- データ設定 ---
 
-DATA_DIR          = r"D:\AquisitionData\Kitagishi\basler_image_seq\exp60ms_int100ms_300frame_meanint_620\Pos0" # ホログラム TIFF が並ぶディレクトリ
+DATA_DIR          = r"D:\AquisitionData\Kitagishi\basler_image_seq\exp10ms_int100ms_300frame_1\Pos0" # ホログラム TIFF が並ぶディレクトリ
 CROP_SIDE         = None         # "right" → 右端, "left" → 左端, None → CROP_REGION を直接使う
 CROP_SIZE         = 2048         # CROP_SIDE 使用時の正方形サイズ [px]
 CROP_REGION       = None         # None or (r0, r1, c0, c1)（CROP_SIDE=None のときだけ参照）
 ROI_SIZE          = 80           # ノイズ計測 ROI サイズ [px]（論文準拠 80×80）
 ROI_CENTER        = None         # None → 再構成画像の中央。(row, col) で明示指定も可
 PAIR_START_1BASED = 1            # 解析開始ペア番号（1 始まり）
-PAIR_END_1BASED   = 50           # 解析終了ペア番号（1 始まり）
+PAIR_END_1BASED   = 150           # 解析終了ペア番号（1 始まり）
 
 # ============================================================
 # 初期化・パラメータ確認

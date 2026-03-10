@@ -49,6 +49,24 @@ BACKSUB_HIST_MIN    = -1.1
 BACKSUB_HIST_MAX    =  1.5
 BACKSUB_N_BINS      = 512
 BACKSUB_SMOOTH_WINDOW = 20
+
+# --- 逐次追跡モード ---
+# True にすると前フレームのシフトから最近傍 grid(xi,yi) を基準に選ぶ
+USE_INCREMENTAL_TRACKING   = False   # デフォルト False（後から pipeline で上書き）
+X_STEP                     = 0.1    # グリッドステップ [μm]
+Y_STEP                     = 0.1    # グリッドステップ [μm]
+SHIFT_SIGN_X               = 1      # シフト符号（1 or -1）
+SHIFT_SIGN_Y               = 1
+JUMP_THRESH_UM             = 1.0   # 前フレームとのシフト差がこれ [μm] を超えたら外れ値（0で無効）
+MAX_FRAMES                 = None  # テストラン用: None で全フレーム、整数で先頭 N フレームのみ
+# 光学パラメータ（pixel scale 計算用）
+SENSOR_PIXEL_SIZE          = 3.45e-6  # [m]
+MAGNIFICATION              = 40
+ORIGINAL_DIM               = 2048
+RECONSTRUCTED_DIM          = 511
+# グリッドキャリブレーション（calibrate_grid_positions.py の出力 JSON）
+# None → 名目値 (xi*X_STEP/pixel_scale_um) を使用
+GRID_CALIBRATION_JSON      = None
 # ============================================================
 
 
@@ -214,6 +232,128 @@ def load_grid_refs(channels_dir, n_channels):
     return refs, str(grid_ref_path)
 
 
+def load_grid_calibration(json_path):
+    """
+    grid_calibration.json を読み込み、(xi, yi) → (actual_dx_px, actual_dy_px) の dict を返す。
+    """
+    with open(json_path, encoding="utf-8") as f:
+        data = json.load(f)
+    cal = {}
+    for entry in data.get("positions", []):
+        cal[(entry["xi"], entry["yi"])] = (
+            entry["actual_dx_px"],
+            entry["actual_dy_px"],
+        )
+    return cal
+
+
+def scan_grid_positions(grid_dir, base_label):
+    """(xi, yi) → folder_path のマップを返す。"""
+    import re
+    grid_dir = Path(grid_dir)
+    pattern = re.compile(rf"^{re.escape(base_label)}_x([+-]?\d+)_y([+-]?\d+)$")
+    pos_map = {}
+    for d in grid_dir.iterdir():
+        if not d.is_dir():
+            continue
+        m = pattern.match(d.name)
+        if m:
+            pos_map[(int(m.group(1)), int(m.group(2)))] = d
+    return pos_map
+
+
+def find_nearest_grid(pos_map, dx_um, dy_um, x_step, y_step):
+    """最近傍 (xi, yi) と距離を返す。"""
+    best_key, best_dist = None, float('inf')
+    for (xi, yi) in pos_map:
+        dist = ((xi * x_step - dx_um) ** 2 + (yi * y_step - dy_um) ** 2) ** 0.5
+        if dist < best_dist:
+            best_dist = dist
+            best_key = (xi, yi)
+    return best_key, best_dist
+
+
+def load_grid_ref_mn(pos_map, xi, yi, rois, n_channels):
+    """
+    grid(xi, yi) の各チャネル ROI crop を返す。
+    固定 (cx, cy) で crop するので pre-cropped stacks と直接比較可能。
+    """
+    from channel_crop import extract_rect_roi
+    pos_dir = pos_map[(xi, yi)]
+    fname = f"img_000000000_ph_{GRID_Z_INDEX:03d}_phase.tif"
+    path = pos_dir / "output_phase" / fname
+    if not path.exists():
+        raise FileNotFoundError(f"グリッド画像が見つかりません: {path}")
+    grid_img = tifffile.imread(str(path)).astype(np.float64)
+    refs_out = []
+    for ch in range(n_channels):
+        roi = rois[ch] if ch < len(rois) else rois[-1]
+        cropped = extract_rect_roi(grid_img, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"])
+        if APPLY_BACKSUB_TO_GRID_REF:
+            cropped = cropped + compute_backsub_offset(cropped)
+        refs_out.append(cropped)
+    return refs_out
+
+
+def _frame_result_from_per_channel(t, per_channel):
+    """
+    per_channel リストから外れ値除去・平均を計算し (frame_result, sx_avg, sy_avg) を返す。
+    全チャネル失敗時は sx_avg=sy_avg=None。
+    """
+    valid = [c for c in per_channel if not c["excluded"]]
+    if len(valid) == 0:
+        return {
+            "frame_index": t,
+            "shift_x_avg": None,
+            "shift_y_avg": None,
+            "n_channels_used": 0,
+            "n_channels_excluded_outlier": 0,
+            "is_outlier_timeseries": False,
+            "per_channel": per_channel
+        }, None, None
+
+    xs = np.array([c["shift_x"] for c in valid])
+    ys = np.array([c["shift_y"] for c in valid])
+
+    if len(valid) >= 3:
+        outlier_x = remove_outliers_mad(xs.tolist(), OUTLIER_MAD_THRESH)
+        outlier_y = remove_outliers_mad(ys.tolist(), OUTLIER_MAD_THRESH)
+        is_outlier = outlier_x | outlier_y
+    else:
+        is_outlier = np.zeros(len(valid), dtype=bool)
+
+    for i, c in enumerate(valid):
+        if is_outlier[i]:
+            c["excluded"] = True
+            c["exclude_reason"] = "channel_outlier_mad"
+
+    used = [c for c in valid if not c["excluded"]]
+    n_excluded = int(np.sum(is_outlier))
+
+    if len(used) == 0:
+        sx_avg = float(np.mean(xs))
+        sy_avg = float(np.mean(ys))
+        n_used = len(valid)
+        n_excluded = 0
+        for c in valid:
+            c["excluded"] = False
+            c["exclude_reason"] = None
+    else:
+        sx_avg = float(np.mean([c["shift_x"] for c in used]))
+        sy_avg = float(np.mean([c["shift_y"] for c in used]))
+        n_used = len(used)
+
+    return {
+        "frame_index": t,
+        "shift_x_avg": sx_avg,
+        "shift_y_avg": sy_avg,
+        "n_channels_used": n_used,
+        "n_channels_excluded_outlier": n_excluded,
+        "is_outlier_timeseries": False,
+        "per_channel": per_channel
+    }, sx_avg, sy_avg
+
+
 def main():
     channels_dir = Path(CHANNELS_DIR)
     if not channels_dir.exists():
@@ -240,6 +380,10 @@ def main():
 
     n_frames = stacks[0].shape[0]
     n_channels = len(stacks)
+    if MAX_FRAMES is not None and MAX_FRAMES < n_frames:
+        stacks = [s[:MAX_FRAMES] for s in stacks]
+        n_frames = MAX_FRAMES
+        print(f"[TEST] フレームを {n_frames} に制限")
     print(f"\nフレーム数: {n_frames}")
     print(f"アライメント手法: {ALIGNMENT_METHOD}")
     print(f"外れ値MAD閾値: {OUTLIER_MAD_THRESH}")
@@ -250,7 +394,7 @@ def main():
 
     # 基準画像の構築
     reference_info = {}
-    if USE_GRID_REFERENCE:
+    if USE_GRID_REFERENCE or USE_INCREMENTAL_TRACKING:
         print(f"\n基準: グリッド x+0_y+0  ({GRID_BASE_LABEL})")
         try:
             refs, grid_ref_path_str = load_grid_refs(channels_dir, n_channels)
@@ -279,95 +423,154 @@ def main():
     if ALIGNMENT_METHOD == 'ecc':
         refs_u8 = [to_uint8(r) for r in refs]
 
+    # channel_rois.json 読み込み（逐次追跡モードで使用）
+    rois_for_incremental = None
+    if USE_INCREMENTAL_TRACKING:
+        rois_path = Path(CHANNEL_ROIS_JSON)
+        if not rois_path.exists():
+            print(f"ERROR: CHANNEL_ROIS_JSON が見つかりません: {rois_path}")
+            sys.exit(1)
+        with open(rois_path, encoding="utf-8") as f:
+            rois_for_incremental = json.load(f)
+
     # フレームごとにアライメント計算
     frame_results = []
 
-    for t in tqdm(range(n_frames), desc="フレーム処理"):
-        per_channel = []
-        for ch in range(n_channels):
-            frame = stacks[ch][t]
-            if ALIGNMENT_METHOD == 'ecc':
-                result = ecc_align(refs_u8[ch], to_uint8(frame))
+    if USE_INCREMENTAL_TRACKING:
+        pixel_scale_um = SENSOR_PIXEL_SIZE / MAGNIFICATION * ORIGINAL_DIM / RECONSTRUCTED_DIM * 1e6
+        pos_map = scan_grid_positions(GRID_DIR, GRID_BASE_LABEL)
+        if not pos_map:
+            print("ERROR: グリッド Pos が見つかりません")
+            sys.exit(1)
+        print(f"[incremental] grid Pos数: {len(pos_map)}")
+
+        # グリッドキャリブレーション読み込み
+        grid_cal = {}
+        if GRID_CALIBRATION_JSON:
+            cal_path = Path(GRID_CALIBRATION_JSON)
+            if cal_path.exists():
+                grid_cal = load_grid_calibration(str(cal_path))
+                print(f"[calibration] {len(grid_cal)} 点の実計測オフセットを読み込み: {cal_path}")
             else:
-                result = phase_align(refs[ch], frame)
+                print(f"[calibration] JSON が見つかりません: {cal_path}  → 名目値を使用")
 
-            if result is None:
-                per_channel.append({
-                    "channel": ch,
-                    "shift_x": None,
-                    "shift_y": None,
-                    "correlation": None,
-                    "excluded": True,
-                    "exclude_reason": "alignment_failed"
-                })
+        prev_shift_x, prev_shift_y = 0.0, 0.0
+        grid_ref_cache    = {}   # (xi, yi) → list of float crops
+        grid_ref_u8_cache = {}   # (xi, yi) → list of uint8 crops
+
+        for t in tqdm(range(n_frames), desc="フレーム処理"):
+            # ---- 最近傍グリッド点を選択 ----
+            if grid_cal:
+                # キャリブレーション済み: 実ピクセル変位と prev_shift の距離で比較
+                best_key, best_dist = None, float('inf')
+                for key, (adx, ady) in grid_cal.items():
+                    if key not in pos_map:
+                        continue
+                    dist = ((adx - prev_shift_x) ** 2 + (ady - prev_shift_y) ** 2) ** 0.5
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_key = key
+                xi, yi = best_key
             else:
-                sx, sy, corr = result
-                per_channel.append({
-                    "channel": ch,
-                    "shift_x": sx,
-                    "shift_y": sy,
-                    "correlation": corr,
-                    "excluded": False,
-                    "exclude_reason": None
-                })
+                # 名目値: ステージ空間で比較
+                dx_um = SHIFT_SIGN_X * prev_shift_y * pixel_scale_um  # shift_y → xi
+                dy_um = SHIFT_SIGN_Y * prev_shift_x * pixel_scale_um  # shift_x → yi
+                (xi, yi), _ = find_nearest_grid(pos_map, dx_um, dy_um, X_STEP, Y_STEP)
 
-        # 有効なシフト値のみ取り出す
-        valid = [c for c in per_channel if not c["excluded"]]
-        if len(valid) == 0:
-            frame_results.append({
-                "frame_index": t,
-                "shift_x_avg": None,
-                "shift_y_avg": None,
-                "n_channels_used": 0,
-                "n_channels_excluded_outlier": 0,
-                "is_outlier_timeseries": False,
-                "per_channel": per_channel
-            })
-            continue
+            if (xi, yi) not in grid_ref_cache:
+                try:
+                    grid_ref_cache[(xi, yi)] = load_grid_ref_mn(
+                        pos_map, xi, yi, rois_for_incremental, n_channels)
+                    if ALIGNMENT_METHOD == 'ecc':
+                        grid_ref_u8_cache[(xi, yi)] = [
+                            to_uint8(r) for r in grid_ref_cache[(xi, yi)]]
+                except FileNotFoundError as e:
+                    print(f"\n[t={t}] {e}  → grid(0,0) にフォールバック")
+                    xi, yi = 0, 0
 
-        # チャネル間外れ値除去（MAD）
-        xs = np.array([c["shift_x"] for c in valid])
-        ys = np.array([c["shift_y"] for c in valid])
+            cur_refs    = grid_ref_cache.get((xi, yi), refs)
+            cur_refs_u8 = grid_ref_u8_cache.get((xi, yi), refs_u8 if ALIGNMENT_METHOD == 'ecc' else None)
 
-        if len(valid) >= 3:
-            outlier_x = remove_outliers_mad(xs.tolist(), OUTLIER_MAD_THRESH)
-            outlier_y = remove_outliers_mad(ys.tolist(), OUTLIER_MAD_THRESH)
-            is_outlier = outlier_x | outlier_y
-        else:
-            is_outlier = np.zeros(len(valid), dtype=bool)
+            # ---- grid(xi,yi) の content offset (grid(0,0) 基準) ----
+            if grid_cal and (xi, yi) in grid_cal:
+                grid_offset_x, grid_offset_y = grid_cal[(xi, yi)]
+            else:
+                # 名目値: xi → 画像Y offset、yi → 画像X offset
+                grid_offset_x = SHIFT_SIGN_Y * yi * Y_STEP / pixel_scale_um
+                grid_offset_y = SHIFT_SIGN_X * xi * X_STEP / pixel_scale_um
 
-        for i, c in enumerate(valid):
-            if is_outlier[i]:
-                c["excluded"] = True
-                c["exclude_reason"] = "channel_outlier_mad"
-        # per_channel リストに反映されている（参照）
+            per_channel = []
+            for ch in range(n_channels):
+                frame = stacks[ch][t]
+                if ALIGNMENT_METHOD == 'ecc':
+                    result = ecc_align(cur_refs_u8[ch], to_uint8(frame))
+                else:
+                    result = phase_align(cur_refs[ch], frame)
 
-        used = [c for c in valid if not c["excluded"]]
-        n_excluded = int(np.sum(is_outlier))
+                if result is None:
+                    per_channel.append({
+                        "channel": ch, "shift_x": None, "shift_y": None,
+                        "correlation": None, "excluded": True,
+                        "exclude_reason": "alignment_failed",
+                        "grid_xi": xi, "grid_yi": yi
+                    })
+                else:
+                    fine_x, fine_y, corr = result
+                    per_channel.append({
+                        "channel": ch,
+                        "shift_x": fine_x + grid_offset_x,
+                        "shift_y": fine_y + grid_offset_y,
+                        "correlation": corr,
+                        "excluded": False, "exclude_reason": None,
+                        "grid_xi": xi, "grid_yi": yi
+                    })
 
-        if len(used) == 0:
-            # 全チャネルが外れ値扱い → 外れ値除去なしで全平均
-            sx_avg = float(np.mean(xs))
-            sy_avg = float(np.mean(ys))
-            n_used = len(valid)
-            n_excluded = 0
-            for c in valid:
-                c["excluded"] = False
-                c["exclude_reason"] = None
-        else:
-            sx_avg = float(np.mean([c["shift_x"] for c in used]))
-            sy_avg = float(np.mean([c["shift_y"] for c in used]))
-            n_used = len(used)
+            frame_result, sx_avg, sy_avg = _frame_result_from_per_channel(t, per_channel)
 
-        frame_results.append({
-            "frame_index": t,
-            "shift_x_avg": sx_avg,
-            "shift_y_avg": sy_avg,
-            "n_channels_used": n_used,
-            "n_channels_excluded_outlier": n_excluded,
-            "is_outlier_timeseries": False,  # 後で更新
-            "per_channel": per_channel
-        })
+            # ジャンプ検出: 前フレームとのシフト差が JUMP_THRESH_UM を超えたら外れ値
+            if sx_avg is not None and JUMP_THRESH_UM > 0:
+                jump = (((sx_avg - prev_shift_x) * pixel_scale_um) ** 2
+                        + ((sy_avg - prev_shift_y) * pixel_scale_um) ** 2) ** 0.5
+                if jump > JUMP_THRESH_UM:
+                    frame_result["is_outlier_timeseries"] = True
+                    sx_avg = sy_avg = None  # prev_shift を更新しない
+
+            frame_results.append(frame_result)
+            if sx_avg is not None:
+                prev_shift_x, prev_shift_y = sx_avg, sy_avg
+
+    else:
+        for t in tqdm(range(n_frames), desc="フレーム処理"):
+            per_channel = []
+            for ch in range(n_channels):
+                frame = stacks[ch][t]
+                if ALIGNMENT_METHOD == 'ecc':
+                    result = ecc_align(refs_u8[ch], to_uint8(frame))
+                else:
+                    result = phase_align(refs[ch], frame)
+
+                if result is None:
+                    per_channel.append({
+                        "channel": ch,
+                        "shift_x": None,
+                        "shift_y": None,
+                        "correlation": None,
+                        "excluded": True,
+                        "exclude_reason": "alignment_failed"
+                    })
+                else:
+                    sx, sy, corr = result
+                    per_channel.append({
+                        "channel": ch,
+                        "shift_x": sx,
+                        "shift_y": sy,
+                        "correlation": corr,
+                        "excluded": False,
+                        "exclude_reason": None
+                    })
+
+            frame_result, _, _ = _frame_result_from_per_channel(t, per_channel)
+            frame_results.append(frame_result)
 
     # 時系列外れ値検出
     avg_x = [r["shift_x_avg"] for r in frame_results]

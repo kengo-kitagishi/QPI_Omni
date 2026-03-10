@@ -14,7 +14,10 @@
       "mcp__claude_ai_Notion__notion-fetch",
       "mcp__notionApi__API-retrieve-a-page",
       "mcp__notionApi__API-get-block-children",
-      "mcp__notionApi__API-patch-block-children"
+      "mcp__notionApi__API-patch-block-children",
+      "Bash(robocopy:*)",
+      "Bash(cmd //c \"C:\\\\Users\\\\QPI\\\\Documents\\\\QPI_Omni\\\\scripts\\\\sync\\\\sync_claude_logs.bat\")",
+      "Read(//c/Users/QPI/.claude/**)"
     ]
   }
 }

@@ -1,19 +1,24 @@
 """
 Micro-Manager .pos ファイルにグリッドを展開するスクリプト
 入力: movetest.pos（元ポジション）
-出力: movetest_grid.pos（各ポジションを中心に 41x21 グリッド展開）
+出力: movetest_grid.pos（各ポジションを中心にグリッド展開）
+
+軸対応:
+  ステージ X (xi) → 画像 Y 方向   観測ドリフト ±1 μm → X_HALF = 12 (±1.2 μm)
+  ステージ Y (yi) → 画像 X 方向   観測ドリフト ±3 μm → Y_HALF = 35 (±3.5 μm)
+  合計: 25 × 71 = 1775 点/Pos
 """
 import json
 import copy
 
 # ---- パラメータ ----
-INPUT_POS  = r"E:\Acuisition\kitagishi\260301\movetest.pos"
-OUTPUT_POS = r"E:\Acuisition\kitagishi\260301\movetest_grid.pos"
+INPUT_POS  = r"D:\AquisitionData\Kitagishi\260310\movetest.pos"
+OUTPUT_POS = r"D:\AquisitionData\Kitagishi\260310\movetest_grid_12_30.pos"
 
 X_STEP = 0.1   # μm
 Y_STEP = 0.1   # μm
-X_HALF = 20    # 片側 → 合計 41個
-Y_HALF = 10    # 片側 → 合計 21個
+X_HALF = 12    # 片側 → 合計 25個（ステージX → 画像Y、±1.2 μm カバー）
+Y_HALF = 30    # 片側 → 合計 61個（ステージY → 画像X、±3.0 μm カバー）
 # --------------------
 
 with open(INPUT_POS, "r") as f:

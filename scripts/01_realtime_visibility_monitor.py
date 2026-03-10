@@ -13,7 +13,7 @@ from threading import Lock
 from optical_config import OFFAXIS_CENTER, WAVELENGTH as WAVELENGHTH, NA, PIXELSIZE
 
 WATCH_FOLDER = r"d:\AquisitionData\Kitagishi\basler_image_seq"
-WATCH_FOLDER =r"D:\AquisitionData\Kitagishi\basler_image_seq\vistest_9\Pos0"
+WATCH_FOLDER =r"D:\AquisitionData\Kitagishi\basler_image_seq\vistest_11\Pos0"
 # Basler aca2440は最大2048行のためMicroManager用CROP_REGIONは使わない
 CROP_REGION = (0, 2048, 208, 2256)
 

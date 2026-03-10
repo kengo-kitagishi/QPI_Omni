@@ -46,14 +46,14 @@ HOLOGRAM_PATH = (
 WAVELENGTH     = 658e-9          # [m]
 NA             = 0.95
 PIXELSIZE      = 3.45e-6 / 40   # [m/px]
-OFFAXIS_CENTER = (1664, 485)     # (row, col) — FFT空間でのサイドバンド位置
+OFFAXIS_CENTER = (1712,  532)     # (row, col) — FFT空間でのサイドバンド位置
 CROP           = (8, 2056, 208, 2256)  # (row_start, row_end, col_start, col_end)
 EXPORT_SINGLE_PANELS = True
 SINGLE_PANEL_TIF_BASE = (
     Path(__file__).resolve().parents[1] / "results" / "figures" / "visibility_single_panels"
 )
-HOLOGRAM_VMIN = 0.0
-HOLOGRAM_VMAX = 4096.0
+HOLOGRAM_VMIN = float(np.percentile(holo, 1))
+HOLOGRAM_VMAX = float(np.percentile(holo, 99))
 INTERFERO_AMP_VMIN = 0.0
 INTERFERO_AMP_VMAX = 250.0
 NON_INTERFERO_AMP_VMIN = 0.0
@@ -91,7 +91,7 @@ else:
         + 300 * np.cos(kx * xx + ky * yy)
         + 50 * rng.standard_normal((H, W))
     )
-    holo = np.clip(holo, 0, 4095)
+    holo = np.clip(holo, 0, 4096)
 
 H, W = holo.shape
 
@@ -354,3 +354,5 @@ save_figure(
 
 plt.show()
 print("Done.")
+
+# %%
