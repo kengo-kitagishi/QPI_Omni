@@ -1,0 +1,127 @@
+{
+  "created_at": "2026-03-08T14:34:54.172400",
+  "text": "脱気",
+  "duration_minutes": 30,
+  "target_list": "experiment",
+  "due": "",
+  "category": "experiment",
+  "priority": "normal",
+  "schedule_bias_hours": 0,
+  "matched_keywords": [
+    "脱気"
+  ],
+  "workflow": {
+    "group": "exp_code",
+    "stage": "unspecified",
+    "order": 999,
+    "matched_keywords": [],
+    "start_after": null
+  },
+  "medium_flow": null,
+  "split_task_rule": {
+    "id": "degas_prepare_collect",
+    "segments": [
+      {
+        "label": "prepare",
+        "duration_minutes": 15,
+        "same_day": false,
+        "offset_minutes": 0
+      },
+      {
+        "label": "collect",
+        "duration_minutes": 15,
+        "same_day": true,
+        "min_offset_minutes": 60
+      }
+    ]
+  },
+  "wait_task_like": true,
+  "jog_window_optimization": {
+    "enabled": false,
+    "anchor_count": 0,
+    "window_minutes": 180
+  },
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-03-10",
+    "end_date": "2026-03-10",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "split",
+      "slot_start": "2026-03-10T10:10:00+09:00",
+      "slot_end": "2026-03-10T11:25:00+09:00",
+      "list_key": "experiment",
+      "score": 1773105000.0,
+      "reasons": [
+        "split rule=degas_prepare_collect (prepare:15m, collect:15m)"
+      ],
+      "moves": [],
+      "segments": [
+        {
+          "label": "prepare",
+          "task_name": "脱気",
+          "slot_start": "2026-03-10T10:10:00+09:00",
+          "slot_end": "2026-03-10T10:25:00+09:00"
+        },
+        {
+          "label": "collect",
+          "task_name": "脱気 回収",
+          "slot_start": "2026-03-10T11:10:00+09:00",
+          "slot_end": "2026-03-10T11:25:00+09:00"
+        }
+      ]
+    },
+    {
+      "label": "split",
+      "slot_start": "2026-03-10T10:20:00+09:00",
+      "slot_end": "2026-03-10T11:35:00+09:00",
+      "list_key": "experiment",
+      "score": 1773105600.0,
+      "reasons": [
+        "split rule=degas_prepare_collect (prepare:15m, collect:15m)"
+      ],
+      "moves": [],
+      "segments": [
+        {
+          "label": "prepare",
+          "task_name": "脱気",
+          "slot_start": "2026-03-10T10:20:00+09:00",
+          "slot_end": "2026-03-10T10:35:00+09:00"
+        },
+        {
+          "label": "collect",
+          "task_name": "脱気 回収",
+          "slot_start": "2026-03-10T11:20:00+09:00",
+          "slot_end": "2026-03-10T11:35:00+09:00"
+        }
+      ]
+    },
+    {
+      "label": "split",
+      "slot_start": "2026-03-10T10:30:00+09:00",
+      "slot_end": "2026-03-10T11:45:00+09:00",
+      "list_key": "experiment",
+      "score": 1773106200.0,
+      "reasons": [
+        "split rule=degas_prepare_collect (prepare:15m, collect:15m)"
+      ],
+      "moves": [],
+      "segments": [
+        {
+          "label": "prepare",
+          "task_name": "脱気",
+          "slot_start": "2026-03-10T10:30:00+09:00",
+          "slot_end": "2026-03-10T10:45:00+09:00"
+        },
+        {
+          "label": "collect",
+          "task_name": "脱気 回収",
+          "slot_start": "2026-03-10T11:30:00+09:00",
+          "slot_end": "2026-03-10T11:45:00+09:00"
+        }
+      ]
+    }
+  ]
+}

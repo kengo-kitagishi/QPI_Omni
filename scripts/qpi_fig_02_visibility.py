@@ -20,6 +20,7 @@ qpi_fig_02_visibility.py
 import sys
 import os
 import shutil
+import argparse
 from datetime import datetime
 from pathlib import Path
 import numpy as np
@@ -38,7 +39,7 @@ from figure_logger import save_figure
 # 設定 — 実データに合わせて変更
 # ============================================================
 
-HOLOGRAM_PATH = (
+DEFAULT_HOLOGRAM_PATH = (
     r"E:\Acuisition\kitagishi\260301\movetest_3\Pos2"
     r"\img_000000000_Default_000.tif"
 )
@@ -48,8 +49,8 @@ NA             = 0.95
 PIXELSIZE      = 3.45e-6 / 40   # [m/px]
 OFFAXIS_CENTER = (1712,  532)     # (row, col) — FFT空間でのサイドバンド位置
 CROP           = (8, 2056, 208, 2256)  # (row_start, row_end, col_start, col_end)
-EXPORT_SINGLE_PANELS = True
-SINGLE_PANEL_TIF_BASE = (
+DEFAULT_EXPORT_SINGLE_PANELS = True
+DEFAULT_SINGLE_PANEL_TIF_BASE = (
     Path(__file__).resolve().parents[1] / "results" / "figures" / "visibility_single_panels"
 )
 HOLOGRAM_VMIN = float(np.percentile(holo, 1))
@@ -60,6 +61,40 @@ NON_INTERFERO_AMP_VMIN = 0.0
 NON_INTERFERO_AMP_VMAX = 500.0
 VISIBILITY_VMIN = 0.3
 VISIBILITY_VMAX = 1.0
+
+
+def _parse_args():
+    parser = argparse.ArgumentParser(
+        description="Create visibility reconstruction 6-panel figure with optional single-panel exports."
+    )
+    parser.add_argument(
+        "--hologram-path",
+        default=DEFAULT_HOLOGRAM_PATH,
+        help="Input hologram .tif path.",
+    )
+    parser.add_argument(
+        "--single-panel-out-dir",
+        default=str(DEFAULT_SINGLE_PANEL_TIF_BASE),
+        help="Base directory for single panel TIF/PNG outputs.",
+    )
+    parser.add_argument(
+        "--run-tag",
+        default=None,
+        help="Optional fixed run tag for output folder name (e.g., 20260308T230000).",
+    )
+    parser.add_argument(
+        "--no-single-panel-export",
+        action="store_true",
+        help="Disable single panel TIF/PNG export.",
+    )
+    return parser.parse_args()
+
+
+_args = _parse_args()
+HOLOGRAM_PATH = _args.hologram_path
+SINGLE_PANEL_TIF_BASE = Path(_args.single_panel_out_dir).expanduser()
+EXPORT_SINGLE_PANELS = DEFAULT_EXPORT_SINGLE_PANELS and (not _args.no_single_panel_export)
+RUN_TAG_OVERRIDE = _args.run_tag
 
 # ============================================================
 # ホログラム読み込み
@@ -280,7 +315,7 @@ ax_f.set_axis_off()
 # 単一パネル保存（レンジ確認用）
 # ============================================================
 if EXPORT_SINGLE_PANELS:
-    run_tag = datetime.now().strftime("%Y%m%dT%H%M%S")
+    run_tag = RUN_TAG_OVERRIDE or datetime.now().strftime("%Y%m%dT%H%M%S")
     single_tif_dir = SINGLE_PANEL_TIF_BASE / run_tag
     single_tif_dir.mkdir(parents=True, exist_ok=True)
 

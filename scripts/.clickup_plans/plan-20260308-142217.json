@@ -1,0 +1,127 @@
+{
+  "created_at": "2026-03-08T14:22:17.886289",
+  "text": "AC",
+  "duration_minutes": 60,
+  "target_list": "experiment",
+  "due": "",
+  "category": "experiment",
+  "priority": "normal",
+  "schedule_bias_hours": 0,
+  "matched_keywords": [
+    "ac"
+  ],
+  "workflow": {
+    "group": "exp_code",
+    "stage": "unspecified",
+    "order": 999,
+    "matched_keywords": [],
+    "start_after": null
+  },
+  "medium_flow": null,
+  "split_task_rule": {
+    "id": "autoclave_prepare_collect",
+    "segments": [
+      {
+        "label": "prepare",
+        "duration_minutes": 30,
+        "same_day": false,
+        "offset_minutes": 0
+      },
+      {
+        "label": "collect",
+        "duration_minutes": 30,
+        "same_day": true,
+        "min_offset_minutes": 120
+      }
+    ]
+  },
+  "wait_task_like": true,
+  "jog_window_optimization": {
+    "enabled": false,
+    "anchor_count": 0,
+    "window_minutes": 180
+  },
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-03-09",
+    "end_date": "2026-03-11",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "split",
+      "slot_start": "2026-03-09T15:10:00+09:00",
+      "slot_end": "2026-03-09T19:50:00+09:00",
+      "list_key": "experiment",
+      "score": 1773036600.0,
+      "reasons": [
+        "split rule=autoclave_prepare_collect (prepare:30m, collect:30m)"
+      ],
+      "moves": [],
+      "segments": [
+        {
+          "label": "prepare",
+          "task_name": "AC",
+          "slot_start": "2026-03-09T15:10:00+09:00",
+          "slot_end": "2026-03-09T15:40:00+09:00"
+        },
+        {
+          "label": "collect",
+          "task_name": "AC 回収",
+          "slot_start": "2026-03-09T19:20:00+09:00",
+          "slot_end": "2026-03-09T19:50:00+09:00"
+        }
+      ]
+    },
+    {
+      "label": "split",
+      "slot_start": "2026-03-09T15:20:00+09:00",
+      "slot_end": "2026-03-09T19:50:00+09:00",
+      "list_key": "experiment",
+      "score": 1773037200.0,
+      "reasons": [
+        "split rule=autoclave_prepare_collect (prepare:30m, collect:30m)"
+      ],
+      "moves": [],
+      "segments": [
+        {
+          "label": "prepare",
+          "task_name": "AC",
+          "slot_start": "2026-03-09T15:20:00+09:00",
+          "slot_end": "2026-03-09T15:50:00+09:00"
+        },
+        {
+          "label": "collect",
+          "task_name": "AC 回収",
+          "slot_start": "2026-03-09T19:20:00+09:00",
+          "slot_end": "2026-03-09T19:50:00+09:00"
+        }
+      ]
+    },
+    {
+      "label": "split",
+      "slot_start": "2026-03-09T15:30:00+09:00",
+      "slot_end": "2026-03-09T19:50:00+09:00",
+      "list_key": "experiment",
+      "score": 1773037800.0,
+      "reasons": [
+        "split rule=autoclave_prepare_collect (prepare:30m, collect:30m)"
+      ],
+      "moves": [],
+      "segments": [
+        {
+          "label": "prepare",
+          "task_name": "AC",
+          "slot_start": "2026-03-09T15:30:00+09:00",
+          "slot_end": "2026-03-09T16:00:00+09:00"
+        },
+        {
+          "label": "collect",
+          "task_name": "AC 回収",
+          "slot_start": "2026-03-09T19:20:00+09:00",
+          "slot_end": "2026-03-09T19:50:00+09:00"
+        }
+      ]
+    }
+  ]
+}

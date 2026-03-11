@@ -56,6 +56,7 @@ DEFAULT_FIXED_KEYWORDS = [
     "seminar",
     "授業",
     "学会",
+    "大会",
     "発表",
     "診察",
     "病院",
@@ -126,6 +127,13 @@ def _default_category_keyword_rules() -> Dict[str, List[str]]:
             "validation",
             "analysis",
             "解析",
+            "autoclave",
+            "オートクレーブ",
+            "オークレ",
+            "ac",
+            "脱気",
+            "degas",
+            "degassing",
         ],
         "figure": [
             "figure",
@@ -430,6 +438,45 @@ def _default_split_task_rules() -> List[Dict[str, object]]:
                 },
             ],
         },
+        {
+            "id": "autoclave_prepare_collect",
+            "list_key": "experiment",
+            "keywords": [
+                "オートクレーブ",
+                "オークレ",
+                "チューブオークレ",
+                "チューブオートクレーブ",
+                "autoclave",
+                "ac",
+            ],
+            "segments": [
+                {"label": "prepare", "offset_minutes": 0, "duration_minutes": 30},
+                {
+                    "label": "collect",
+                    "min_offset_minutes": 120,
+                    "same_day": True,
+                    "duration_minutes": 30,
+                },
+            ],
+        },
+        {
+            "id": "degas_prepare_collect",
+            "list_key": "experiment",
+            "keywords": [
+                "脱気",
+                "degas",
+                "degassing",
+            ],
+            "segments": [
+                {"label": "prepare", "offset_minutes": 0, "duration_minutes": 15},
+                {
+                    "label": "collect",
+                    "min_offset_minutes": 60,
+                    "same_day": True,
+                    "duration_minutes": 15,
+                },
+            ],
+        },
     ]
 
 
@@ -456,6 +503,9 @@ class HelperConfig:
     deadline_warn_days: int = 3
     fixed_list_keys: List[str] = field(default_factory=lambda: ["meeting", "competition"])
     fixed_keyword_patterns: List[str] = field(default_factory=lambda: list(DEFAULT_FIXED_KEYWORDS))
+    jog_keyword_patterns: List[str] = field(default_factory=lambda: ["jog", "ジョグ"])
+    wait_task_use_jog_windows: bool = True
+    wait_task_jog_window_minutes: int = 180
     deadline_keyword_patterns: List[str] = field(default_factory=lambda: list(DEFAULT_DEADLINE_KEYWORDS))
     no_schedule_day_list_keys: List[str] = field(default_factory=lambda: ["competition"])
     no_schedule_day_keyword_patterns: List[str] = field(
@@ -844,6 +894,12 @@ def load_runtime_config(path_str: str) -> HelperConfig:
         cfg.fixed_list_keys = [str(x) for x in raw["fixed_list_keys"]]
     if isinstance(raw.get("fixed_keyword_patterns"), list):
         cfg.fixed_keyword_patterns = [str(x) for x in raw["fixed_keyword_patterns"]]
+    if isinstance(raw.get("jog_keyword_patterns"), list):
+        cfg.jog_keyword_patterns = [str(x) for x in raw["jog_keyword_patterns"]]
+    if isinstance(raw.get("wait_task_use_jog_windows"), bool):
+        cfg.wait_task_use_jog_windows = raw["wait_task_use_jog_windows"]
+    if isinstance(raw.get("wait_task_jog_window_minutes"), int):
+        cfg.wait_task_jog_window_minutes = raw["wait_task_jog_window_minutes"]
     if isinstance(raw.get("deadline_keyword_patterns"), list):
         cfg.deadline_keyword_patterns = [str(x) for x in raw["deadline_keyword_patterns"]]
     if isinstance(raw.get("no_schedule_day_list_keys"), list):
@@ -1522,6 +1578,7 @@ def infer_split_task_rule(
     normalized = normalize_compact_text(text)
     if not normalized:
         return None
+    normalized_plain = (text or "").lower().replace("％", "%")
 
     best_rule: Optional[Dict[str, object]] = None
     best_len = 0
@@ -1535,13 +1592,146 @@ def infer_split_task_rule(
         if not isinstance(keywords, list):
             continue
         for kw in keywords:
-            kw_norm = normalize_compact_text(str(kw))
+            kw_raw = str(kw).strip()
+            kw_norm = normalize_compact_text(kw_raw)
             if not kw_norm:
                 continue
-            if kw_norm in normalized and len(kw_norm) > best_len:
+            # Avoid false positives for very short ASCII aliases (e.g., "ac").
+            if re.fullmatch(r"[a-z0-9]{1,3}", kw_raw.lower()):
+                matched = keyword_in_text(kw_raw, normalized_plain)
+            else:
+                matched = kw_norm in normalized
+            if matched and len(kw_norm) > best_len:
                 best_rule = rule
                 best_len = len(kw_norm)
     return best_rule
+
+
+def split_rule_has_wait_gap(split_rule: Optional[Dict[str, object]]) -> bool:
+    if not isinstance(split_rule, dict):
+        return False
+    segments = split_rule.get("segments", [])
+    if not isinstance(segments, list) or len(segments) < 2:
+        return False
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        for key in ("offset_minutes", "min_offset_minutes", "max_offset_minutes"):
+            if key not in seg:
+                continue
+            try:
+                if int(seg.get(key, 0)) > 0:
+                    return True
+            except (TypeError, ValueError):
+                continue
+    return False
+
+
+def infer_wait_task_like(text: str, split_rule: Optional[Dict[str, object]]) -> bool:
+    if split_rule_has_wait_gap(split_rule):
+        return True
+    normalized = (text or "").lower()
+    wait_keywords = [
+        "待",
+        "wait",
+        "待機",
+        "回収",
+        "after",
+        "時間後",
+        "h後",
+    ]
+    return any(keyword_in_text(kw, normalized) for kw in wait_keywords)
+
+
+def collect_keyword_task_intervals(
+    scheduled_tasks: Sequence[TaskWindow],
+    keyword_patterns: Sequence[str],
+) -> List[Tuple[datetime, datetime]]:
+    if not keyword_patterns:
+        return []
+    intervals: List[Tuple[datetime, datetime]] = []
+    for task in scheduled_tasks:
+        if not (task.start_at and task.end_at):
+            continue
+        text = (task.name or "").lower()
+        if any(keyword_in_text(kw, text) for kw in keyword_patterns):
+            intervals.append((task.start_at, task.end_at))
+    return merge_intervals(intervals)
+
+
+def _slot_segment_windows(slot: SlotCandidate) -> List[Tuple[datetime, datetime]]:
+    windows: List[Tuple[datetime, datetime]] = []
+    for seg in slot.segments:
+        if not isinstance(seg, dict):
+            continue
+        raw_start = str(seg.get("slot_start", "")).strip()
+        raw_end = str(seg.get("slot_end", "")).strip()
+        if not raw_start or not raw_end:
+            continue
+        try:
+            seg_start = datetime.fromisoformat(raw_start)
+            seg_end = datetime.fromisoformat(raw_end)
+        except ValueError:
+            continue
+        if seg_end <= seg_start:
+            continue
+        windows.append((seg_start, seg_end))
+    windows.sort(key=lambda x: x[0])
+    return windows
+
+
+def compute_wait_task_jog_bonus(
+    slot: SlotCandidate,
+    jog_intervals: Sequence[Tuple[datetime, datetime]],
+    window_minutes: int,
+) -> float:
+    if not jog_intervals:
+        return 0.0
+    window_sec = max(1, window_minutes) * 60.0
+    bonus = 0.0
+
+    # Prefer placing a wait-like task right before or right after jogging.
+    edge_dist = min(
+        min(
+            abs((slot.slot_end - jog_start).total_seconds()),
+            abs((slot.slot_start - jog_end).total_seconds()),
+        )
+        for jog_start, jog_end in jog_intervals
+    )
+    if edge_dist < window_sec:
+        bonus += (window_sec - edge_dist) * 2.0
+
+    # For split tasks, strongly prefer layouts where jogging fits into the waiting gap.
+    seg_windows = _slot_segment_windows(slot)
+    if len(seg_windows) < 2:
+        return bonus
+
+    for idx in range(len(seg_windows) - 1):
+        gap_start = seg_windows[idx][1]
+        gap_end = seg_windows[idx + 1][0]
+        if gap_end <= gap_start:
+            continue
+        overlap_found = False
+        nearest_gap_dist: Optional[float] = None
+        for jog_start, jog_end in jog_intervals:
+            overlap_start = max(gap_start, jog_start)
+            overlap_end = min(gap_end, jog_end)
+            if overlap_end > overlap_start:
+                overlap_found = True
+                overlap_sec = (overlap_end - overlap_start).total_seconds()
+                bonus += 7200.0 + min(overlap_sec, window_sec) * 1.0
+            dist = min(
+                abs((jog_start - gap_start).total_seconds()),
+                abs((jog_end - gap_end).total_seconds()),
+                abs((jog_start - gap_end).total_seconds()),
+                abs((jog_end - gap_start).total_seconds()),
+            )
+            if nearest_gap_dist is None or dist < nearest_gap_dist:
+                nearest_gap_dist = dist
+        if not overlap_found and nearest_gap_dist is not None and nearest_gap_dist < window_sec:
+            bonus += (window_sec - nearest_gap_dist) * 1.0
+
+    return bonus
 
 
 def derive_split_segment_name(base_name: str, label: str) -> str:
@@ -2183,6 +2373,9 @@ def select_best_slots(
     schedule_bias_hours: int,
     max_candidates: int,
     prefer_tight_gap: bool = False,
+    prefer_around_jog_for_wait: bool = False,
+    jog_intervals: Optional[Sequence[Tuple[datetime, datetime]]] = None,
+    jog_window_minutes: int = 0,
 ) -> List[SlotCandidate]:
     priority_boost = PRIORITY_SCORE.get(priority_name, 2)
     if slots:
@@ -2203,7 +2396,14 @@ def select_best_slots(
         late_penalty = 0.0
         if due_at and slot.slot_end > due_at:
             late_penalty = (slot.slot_end - due_at).total_seconds() / 60.0 * (10 + priority_boost)
-        return start_score + late_penalty
+        jog_bonus = 0.0
+        if prefer_around_jog_for_wait and jog_intervals:
+            jog_bonus = compute_wait_task_jog_bonus(
+                slot,
+                jog_intervals=jog_intervals,
+                window_minutes=jog_window_minutes,
+            )
+        return start_score + late_penalty - jog_bonus
 
     ranked = sorted(slots, key=score_fn)
     for item in ranked:
@@ -2221,6 +2421,9 @@ def build_rearrangement_candidates(
     schedule_bias_hours: int,
     start_after: Optional[datetime],
     max_candidates: int,
+    prefer_around_jog_for_wait: bool = False,
+    jog_intervals: Optional[Sequence[Tuple[datetime, datetime]]] = None,
+    jog_window_minutes: int = 0,
 ) -> List[SlotCandidate]:
     direct_slots = find_free_slots(
         snapshot,
@@ -2236,6 +2439,9 @@ def build_rearrangement_candidates(
         priority_name=priority_name,
         schedule_bias_hours=schedule_bias_hours,
         max_candidates=1,
+        prefer_around_jog_for_wait=prefer_around_jog_for_wait,
+        jog_intervals=jog_intervals,
+        jog_window_minutes=jog_window_minutes,
     )
     direct_best = direct_ranked[0] if direct_ranked else None
 
@@ -2366,6 +2572,9 @@ def build_rearrangement_candidates(
         priority_name=priority_name,
         schedule_bias_hours=schedule_bias_hours,
         max_candidates=max_candidates,
+        prefer_around_jog_for_wait=prefer_around_jog_for_wait,
+        jog_intervals=jog_intervals,
+        jog_window_minutes=jog_window_minutes,
     )
 
 
@@ -3902,6 +4111,12 @@ def command_advise(args: argparse.Namespace, cfg: HelperConfig) -> int:
         default=None,
     )
     split_rule = infer_split_task_rule(args.text, target_list, cfg)
+    wait_task_like = infer_wait_task_like(args.text, split_rule)
+    jog_intervals = collect_keyword_task_intervals(
+        snapshot.scheduled_tasks,
+        cfg.jog_keyword_patterns,
+    )
+    prefer_jog_windows = cfg.wait_task_use_jog_windows and wait_task_like and bool(jog_intervals)
     split_total_duration = 0
     if split_rule and isinstance(split_rule.get("segments"), list):
         for seg in split_rule.get("segments", []):
@@ -3947,6 +4162,9 @@ def command_advise(args: argparse.Namespace, cfg: HelperConfig) -> int:
         schedule_bias_hours=policy.schedule_bias_hours,
         max_candidates=cfg.max_candidates,
         prefer_tight_gap=(policy.category == "input"),
+        prefer_around_jog_for_wait=prefer_jog_windows,
+        jog_intervals=jog_intervals,
+        jog_window_minutes=cfg.wait_task_jog_window_minutes,
     )
 
     if split_rule is not None or policy.category == "input":
@@ -3962,6 +4180,9 @@ def command_advise(args: argparse.Namespace, cfg: HelperConfig) -> int:
             schedule_bias_hours=policy.schedule_bias_hours,
             start_after=combined_start_after,
             max_candidates=max(1, cfg.max_candidates - 1),
+            prefer_around_jog_for_wait=prefer_jog_windows,
+            jog_intervals=jog_intervals,
+            jog_window_minutes=cfg.wait_task_jog_window_minutes,
         )
         if medium_flow_end_before:
             rearranged = [s for s in rearranged if s.slot_end <= medium_flow_end_before]
@@ -3996,6 +4217,14 @@ def command_advise(args: argparse.Namespace, cfg: HelperConfig) -> int:
             print(f"  - medium-flow end_before: {medium_flow_end_before.isoformat()}")
     if split_rule:
         print(f"- split-task rule: {split_rule.get('id', 'unknown')}")
+    if cfg.wait_task_use_jog_windows and wait_task_like:
+        if jog_intervals:
+            print(
+                f"- jog-window optimization: enabled "
+                f"(anchors={len(jog_intervals)}, window={cfg.wait_task_jog_window_minutes}m)"
+            )
+        else:
+            print("- jog-window optimization: waiting-task detected, but no jog anchors found")
     print(f"- due: {args.due or '(none)'}")
     if has_deadline_signal(args.text, cfg) and not args.due:
         print("- note: deadline signal detected (feedback/review系). --due 指定を推奨")
@@ -4080,6 +4309,12 @@ def command_advise(args: argparse.Namespace, cfg: HelperConfig) -> int:
             if split_rule
             else None
         ),
+        "wait_task_like": wait_task_like,
+        "jog_window_optimization": {
+            "enabled": bool(prefer_jog_windows),
+            "anchor_count": len(jog_intervals),
+            "window_minutes": cfg.wait_task_jog_window_minutes,
+        },
         "timezone": snapshot.timezone,
         "snapshot": {
             "start_date": snapshot.start_date.isoformat(),

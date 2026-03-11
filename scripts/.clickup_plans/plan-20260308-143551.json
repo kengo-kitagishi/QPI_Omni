@@ -1,0 +1,46 @@
+{
+  "created_at": "2026-03-08T14:35:51.226129",
+  "text": "デバイス配合",
+  "duration_minutes": 30,
+  "target_list": "experiment",
+  "due": "",
+  "category": "general",
+  "priority": "normal",
+  "schedule_bias_hours": 0,
+  "matched_keywords": [],
+  "workflow": {
+    "group": "exp_code",
+    "stage": "unspecified",
+    "order": 999,
+    "matched_keywords": [],
+    "start_after": null
+  },
+  "medium_flow": null,
+  "split_task_rule": null,
+  "wait_task_like": false,
+  "jog_window_optimization": {
+    "enabled": false,
+    "anchor_count": 0,
+    "window_minutes": 180
+  },
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-03-10",
+    "end_date": "2026-03-10",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "direct",
+      "slot_start": "2026-03-10T10:10:00+09:00",
+      "slot_end": "2026-03-10T10:40:00+09:00",
+      "list_key": "experiment",
+      "score": 1773105000.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": [],
+      "segments": []
+    }
+  ]
+}

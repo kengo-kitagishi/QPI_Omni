@@ -1,0 +1,88 @@
+{
+  "created_at": "2026-03-08T14:45:57.552707",
+  "text": "リアルなOpticalsettingの図を作成する",
+  "duration_minutes": 120,
+  "target_list": "manuscript",
+  "due": "",
+  "category": "figure",
+  "priority": "normal",
+  "schedule_bias_hours": 8,
+  "matched_keywords": [
+    "図"
+  ],
+  "workflow": null,
+  "medium_flow": null,
+  "split_task_rule": null,
+  "wait_task_like": false,
+  "jog_window_optimization": {
+    "enabled": false,
+    "anchor_count": 0,
+    "window_minutes": 180
+  },
+  "timezone": "Asia/Tokyo",
+  "snapshot": {
+    "start_date": "2026-03-08",
+    "end_date": "2026-03-21",
+    "warnings": []
+  },
+  "candidates": [
+    {
+      "label": "rearrange",
+      "slot_start": "2026-03-09T12:10:00+09:00",
+      "slot_end": "2026-03-09T14:10:00+09:00",
+      "list_key": "manuscript",
+      "score": 1773025800.0,
+      "reasons": [
+        "move task 86ewuzp8h (学振DC1｜深掘り執筆セッションC-3/4（仮説と検証設計）)"
+      ],
+      "moves": [
+        {
+          "task_id": "86ewuzp8h",
+          "task_name": "学振DC1｜深掘り執筆セッションC-3/4（仮説と検証設計）",
+          "from_start": "2026-03-09T12:00:00+09:00",
+          "from_end": "2026-03-09T14:30:00+09:00",
+          "to_start": "2026-03-10T10:10:00+09:00",
+          "to_end": "2026-03-10T12:40:00+09:00",
+          "task_url": "https://app.clickup.com/t/86ewuzp8h",
+          "list_key": "manuscript"
+        }
+      ],
+      "segments": []
+    },
+    {
+      "label": "rearrange",
+      "slot_start": "2026-03-08T14:50:00+09:00",
+      "slot_end": "2026-03-08T16:50:00+09:00",
+      "list_key": "manuscript",
+      "score": 1773034672.647147,
+      "reasons": [
+        "move task 86ewuzp7w (学振DC1｜深掘り執筆セッションA-3/4（背景・独自性）)"
+      ],
+      "moves": [
+        {
+          "task_id": "86ewuzp7w",
+          "task_name": "学振DC1｜深掘り執筆セッションA-3/4（背景・独自性）",
+          "from_start": "2026-03-08T15:30:00+09:00",
+          "from_end": "2026-03-08T17:30:00+09:00",
+          "to_start": "2026-03-10T10:10:00+09:00",
+          "to_end": "2026-03-10T12:10:00+09:00",
+          "task_url": "https://app.clickup.com/t/86ewuzp7w",
+          "list_key": "manuscript"
+        }
+      ],
+      "segments": []
+    },
+    {
+      "label": "direct",
+      "slot_start": "2026-03-10T10:10:00+09:00",
+      "slot_end": "2026-03-10T12:10:00+09:00",
+      "list_key": "manuscript",
+      "score": 1773105000.0,
+      "reasons": [
+        "fits in free time"
+      ],
+      "moves": [],
+      "segments": []
+    }
+  ]
+}

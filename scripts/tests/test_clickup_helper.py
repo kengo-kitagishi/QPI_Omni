@@ -189,6 +189,12 @@ class ClickUpHelperLogicTests(unittest.TestCase):
         p_training = clickup_helper.infer_task_policy('training datasetを作る', 'auto', cfg)
         self.assertNotEqual(p_training.category, 'admin')
 
+        p_ac = clickup_helper.infer_task_policy('AC', 'auto', cfg)
+        self.assertEqual(p_ac.category, 'experiment')
+
+        p_degas = clickup_helper.infer_task_policy('脱気', 'auto', cfg)
+        self.assertEqual(p_degas.category, 'experiment')
+
         p_feedback = clickup_helper.infer_task_policy('指導教員からfeedbackをもらって修正する', 'auto', cfg)
         self.assertEqual(p_feedback.priority_name, 'urgent')
 
@@ -211,6 +217,20 @@ class ClickUpHelperLogicTests(unittest.TestCase):
         self.assertEqual(resolved, 'other')
         self.assertIsNotNone(warn)
         self.assertIn('blocked', warn)
+
+    def test_looks_fixed_keywords_for_meeting_gakkai_taikai(self):
+        cfg = clickup_helper.HelperConfig(
+            fixed_list_keys=['meeting', 'competition'],
+            fixed_keyword_patterns=['meeting', '学会', '大会'],
+        )
+        for name in ['groupmeeting', '学会発表', '春季大会']:
+            fixed, reason = clickup_helper.looks_fixed(
+                {'name': name, 'description': '', 'status': {'type': 'open'}},
+                list_key='other',
+                cfg=cfg,
+            )
+            self.assertTrue(fixed)
+            self.assertIn('matched keyword', reason)
 
     def test_select_best_slots_with_defer_bias(self):
         now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
@@ -276,6 +296,88 @@ class ClickUpHelperLogicTests(unittest.TestCase):
             prefer_tight_gap=True,
         )
         self.assertEqual(tight_ranked[0].slot_start, later_tight.slot_start)
+
+    def test_select_best_slots_prefers_jog_window_for_wait_like_task(self):
+        now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+        early_slot = clickup_helper.SlotCandidate(
+            label='direct',
+            slot_start=now + timedelta(hours=6, minutes=30),
+            slot_end=now + timedelta(hours=7, minutes=0),
+            list_key='experiment',
+            score=0.0,
+        )
+        near_jog_slot = clickup_helper.SlotCandidate(
+            label='direct',
+            slot_start=now + timedelta(hours=7, minutes=30),
+            slot_end=now + timedelta(hours=8, minutes=0),
+            list_key='experiment',
+            score=0.0,
+        )
+        jog_intervals = [
+            (now + timedelta(hours=8), now + timedelta(hours=9)),
+        ]
+        ranked = clickup_helper.select_best_slots(
+            slots=[early_slot, near_jog_slot],
+            due_at=None,
+            priority_name='normal',
+            schedule_bias_hours=0,
+            max_candidates=2,
+            prefer_around_jog_for_wait=True,
+            jog_intervals=jog_intervals,
+            jog_window_minutes=180,
+        )
+        self.assertEqual(ranked[0].slot_start, near_jog_slot.slot_start)
+
+    def test_compute_wait_task_jog_bonus_prefers_gap_with_jog(self):
+        now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+        jog_intervals = [
+            (now + timedelta(hours=7), now + timedelta(hours=8)),
+        ]
+        gap_with_jog = clickup_helper.SlotCandidate(
+            label='split',
+            slot_start=now + timedelta(hours=6),
+            slot_end=now + timedelta(hours=9, minutes=30),
+            list_key='experiment',
+            score=0.0,
+            segments=[
+                {
+                    'slot_start': (now + timedelta(hours=6)).isoformat(),
+                    'slot_end': (now + timedelta(hours=6, minutes=10)).isoformat(),
+                },
+                {
+                    'slot_start': (now + timedelta(hours=9)).isoformat(),
+                    'slot_end': (now + timedelta(hours=9, minutes=30)).isoformat(),
+                },
+            ],
+        )
+        gap_without_jog = clickup_helper.SlotCandidate(
+            label='split',
+            slot_start=now + timedelta(hours=1),
+            slot_end=now + timedelta(hours=1, minutes=40),
+            list_key='experiment',
+            score=0.0,
+            segments=[
+                {
+                    'slot_start': (now + timedelta(hours=1)).isoformat(),
+                    'slot_end': (now + timedelta(hours=1, minutes=10)).isoformat(),
+                },
+                {
+                    'slot_start': (now + timedelta(hours=1, minutes=30)).isoformat(),
+                    'slot_end': (now + timedelta(hours=1, minutes=40)).isoformat(),
+                },
+            ],
+        )
+        with_bonus = clickup_helper.compute_wait_task_jog_bonus(
+            gap_with_jog,
+            jog_intervals=jog_intervals,
+            window_minutes=180,
+        )
+        without_bonus = clickup_helper.compute_wait_task_jog_bonus(
+            gap_without_jog,
+            jog_intervals=jog_intervals,
+            window_minutes=180,
+        )
+        self.assertGreater(with_bonus, without_bonus)
 
     def test_rearrangement_includes_target_list_and_prioritizes_input(self):
         tz = ZoneInfo('Asia/Tokyo')
@@ -719,6 +821,25 @@ class ClickUpHelperLogicTests(unittest.TestCase):
         self.assertIsNotNone(rule)
         self.assertEqual(rule.get('id'), 'emm_prepare_collect')
 
+    def test_infer_split_task_rule_autoclave(self):
+        cfg = clickup_helper.HelperConfig()
+        for text in ['オートクレーブ', 'AC', 'チューブオークレ', 'autoclave']:
+            rule = clickup_helper.infer_split_task_rule(text, 'experiment', cfg)
+            self.assertIsNotNone(rule)
+            self.assertEqual(rule.get('id'), 'autoclave_prepare_collect')
+
+    def test_infer_split_task_rule_ac_boundary_safe(self):
+        cfg = clickup_helper.HelperConfig()
+        rule = clickup_helper.infer_split_task_rule('Macromolecular Crowdingの歴史を書く', 'experiment', cfg)
+        self.assertIsNone(rule)
+
+    def test_infer_split_task_rule_degas(self):
+        cfg = clickup_helper.HelperConfig()
+        for text in ['脱気', 'degas', 'degassing']:
+            rule = clickup_helper.infer_split_task_rule(text, 'experiment', cfg)
+            self.assertIsNotNone(rule)
+            self.assertEqual(rule.get('id'), 'degas_prepare_collect')
+
     def test_find_split_slots_glucose_min_gap_same_day(self):
         tz = ZoneInfo('Asia/Tokyo')
         cfg = clickup_helper.HelperConfig(
@@ -829,6 +950,82 @@ class ClickUpHelperLogicTests(unittest.TestCase):
         self.assertEqual((prep_end - prep_start).total_seconds(), 30 * 60)
         self.assertEqual((collect_end - collect_start).total_seconds(), 10 * 60)
         self.assertGreaterEqual((collect_start - prep_start).total_seconds(), 2 * 3600)
+        self.assertEqual(prep_start.date(), collect_start.date())
+
+    def test_find_split_slots_autoclave_min_gap_same_day(self):
+        tz = ZoneInfo('Asia/Tokyo')
+        cfg = clickup_helper.HelperConfig(
+            work_hours_start=9,
+            work_hours_end=22,
+            min_gap_minutes=0,
+        )
+        snap = clickup_helper.AgendaSnapshot(
+            start_date=date(2030, 3, 6),
+            end_date=date(2030, 3, 6),
+            timezone='Asia/Tokyo',
+            fetched_tasks=[],
+            scheduled_tasks=[],
+            unscheduled_tasks=[],
+            warnings=[],
+        )
+        rule = clickup_helper.infer_split_task_rule('オートクレーブ', 'experiment', cfg)
+        self.assertIsNotNone(rule)
+        slots = clickup_helper.find_split_slots(
+            snapshot=snap,
+            cfg=cfg,
+            list_key='experiment',
+            base_name='オートクレーブ',
+            split_rule=rule,
+            start_after=datetime(2030, 3, 6, 9, 0, tzinfo=tz),
+            max_slots=5,
+        )
+        self.assertGreaterEqual(len(slots), 1)
+        first = slots[0]
+        prep_start = datetime.fromisoformat(first.segments[0]['slot_start'])
+        collect_start = datetime.fromisoformat(first.segments[1]['slot_start'])
+        prep_end = datetime.fromisoformat(first.segments[0]['slot_end'])
+        collect_end = datetime.fromisoformat(first.segments[1]['slot_end'])
+        self.assertEqual((prep_end - prep_start).total_seconds(), 30 * 60)
+        self.assertEqual((collect_end - collect_start).total_seconds(), 30 * 60)
+        self.assertGreaterEqual((collect_start - prep_start).total_seconds(), 2 * 3600)
+        self.assertEqual(prep_start.date(), collect_start.date())
+
+    def test_find_split_slots_degas_min_gap_same_day(self):
+        tz = ZoneInfo('Asia/Tokyo')
+        cfg = clickup_helper.HelperConfig(
+            work_hours_start=9,
+            work_hours_end=22,
+            min_gap_minutes=0,
+        )
+        snap = clickup_helper.AgendaSnapshot(
+            start_date=date(2030, 3, 6),
+            end_date=date(2030, 3, 6),
+            timezone='Asia/Tokyo',
+            fetched_tasks=[],
+            scheduled_tasks=[],
+            unscheduled_tasks=[],
+            warnings=[],
+        )
+        rule = clickup_helper.infer_split_task_rule('脱気', 'experiment', cfg)
+        self.assertIsNotNone(rule)
+        slots = clickup_helper.find_split_slots(
+            snapshot=snap,
+            cfg=cfg,
+            list_key='experiment',
+            base_name='脱気',
+            split_rule=rule,
+            start_after=datetime(2030, 3, 6, 9, 0, tzinfo=tz),
+            max_slots=5,
+        )
+        self.assertGreaterEqual(len(slots), 1)
+        first = slots[0]
+        prep_start = datetime.fromisoformat(first.segments[0]['slot_start'])
+        collect_start = datetime.fromisoformat(first.segments[1]['slot_start'])
+        prep_end = datetime.fromisoformat(first.segments[0]['slot_end'])
+        collect_end = datetime.fromisoformat(first.segments[1]['slot_end'])
+        self.assertEqual((prep_end - prep_start).total_seconds(), 15 * 60)
+        self.assertEqual((collect_end - collect_start).total_seconds(), 15 * 60)
+        self.assertGreaterEqual((collect_start - prep_start).total_seconds(), 3600)
         self.assertEqual(prep_start.date(), collect_start.date())
 
 

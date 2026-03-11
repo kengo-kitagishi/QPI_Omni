@@ -33,8 +33,17 @@
     "授業",
     "学会",
     "発表",
-    "部活"
+    "部活",
+    "jog",
+    "ジョグ",
+    "大会"
   ],
+  "jog_keyword_patterns": [
+    "jog",
+    "ジョグ"
+  ],
+  "wait_task_use_jog_windows": true,
+  "wait_task_jog_window_minutes": 180,
   "deadline_keyword_patterns": [
     "feedback",
     "フィードバック",
@@ -96,7 +105,14 @@
       "検証",
       "validation",
       "analysis",
-      "解析"
+      "解析",
+      "autoclave",
+      "オートクレーブ",
+      "オークレ",
+      "ac",
+      "脱気",
+      "degas",
+      "degassing"
     ],
     "figure": [
       "figure",
@@ -400,6 +416,53 @@
           "min_offset_minutes": 120,
           "same_day": true,
           "duration_minutes": 10
+        }
+      ]
+    },
+    {
+      "id": "autoclave_prepare_collect",
+      "list_key": "experiment",
+      "keywords": [
+        "オートクレーブ",
+        "オークレ",
+        "チューブオークレ",
+        "チューブオートクレーブ",
+        "autoclave",
+        "ac"
+      ],
+      "segments": [
+        {
+          "label": "prepare",
+          "offset_minutes": 0,
+          "duration_minutes": 30
+        },
+        {
+          "label": "collect",
+          "min_offset_minutes": 120,
+          "same_day": true,
+          "duration_minutes": 30
+        }
+      ]
+    },
+    {
+      "id": "degas_prepare_collect",
+      "list_key": "experiment",
+      "keywords": [
+        "脱気",
+        "degas",
+        "degassing"
+      ],
+      "segments": [
+        {
+          "label": "prepare",
+          "offset_minutes": 0,
+          "duration_minutes": 15
+        },
+        {
+          "label": "collect",
+          "min_offset_minutes": 60,
+          "same_day": true,
+          "duration_minutes": 15
         }
       ]
     }

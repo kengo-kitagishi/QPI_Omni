@@ -1,0 +1,29 @@
+{
+  "created_at": "2026-03-08T13:52:23.844572",
+  "range": {
+    "start": "2026-03-17",
+    "end": "2026-03-17",
+    "near_days": 2
+  },
+  "counts": {
+    "fetched": 686,
+    "scheduled": 4,
+    "unscheduled": 0,
+    "overdue": 86,
+    "due_soon_unscheduled": 0,
+    "after_due": 0
+  },
+  "findings": [
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86ewvgray",
+      "task_name": "groupmeeting",
+      "list_key": "meeting",
+      "reason": "03-17 12:20 学振DC1｜深掘り執筆セッションC（仮説と検証設計） と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-17T15:00:00+09:00",
+      "suggested_slot_end": "2026-03-17T17:00:00+09:00"
+    }
+  ]
+}

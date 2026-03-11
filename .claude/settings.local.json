@@ -19,7 +19,22 @@
       "Bash(cmd //c \"C:\\\\Users\\\\QPI\\\\Documents\\\\QPI_Omni\\\\scripts\\\\sync\\\\sync_claude_logs.bat\")",
       "Read(//c/Users/QPI/.claude/**)",
       "Bash(date /t && time /t)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "mcp__claude_ai_Notion__notion-create-pages",
+      "Bash(cp:*)",
+      "Bash(mkdir:*)",
+      "Bash(git:*)",
+      "Bash(git -C:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(wc:*)",
+      "Write(*)",
+      "Edit(*)",
+      "Read(*)",
+      "WebFetch(domain:caymezon.com)",
+      "Bash(# Check state file to understand the incremental processing structure\ncat /Users/kitak/QPI_Omni/.figure_history/session_activity_state.json 2>/dev/null | python3 -c \"\nimport json, sys\nd = json.load\\(sys.stdin\\)\nprint\\('Keys:', list\\(d.keys\\(\\)\\)\\)\nprint\\('transcripts count:', len\\(d.get\\('transcripts', {}\\)\\)\\)\nprint\\('last_run:', d.get\\('last_run'\\)\\)\nprint\\('git head:', d.get\\('git', {}\\).get\\('head', 'none'\\)[:12]\\)\n\" 2>/dev/null)",
+      "Bash(head:*)",
+      "Bash(do:*)"
     ]
   }
 }

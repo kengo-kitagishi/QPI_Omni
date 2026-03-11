@@ -1,0 +1,40 @@
+{
+  "created_at": "2026-03-08T13:52:57.916841",
+  "range": {
+    "start": "2026-03-17",
+    "end": "2026-03-30",
+    "near_days": 2
+  },
+  "counts": {
+    "fetched": 686,
+    "scheduled": 25,
+    "unscheduled": 0,
+    "overdue": 86,
+    "due_soon_unscheduled": 0,
+    "after_due": 0
+  },
+  "findings": [
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86ewr0z90",
+      "task_name": "【実験】2%培地交換（T0+216h）",
+      "list_key": "experiment",
+      "reason": "03-18 09:00 Relevance and Regulation of Cell Density と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-18T15:00:00+09:00",
+      "suggested_slot_end": "2026-03-18T16:00:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86ewuzmqq",
+      "task_name": "学振DC1｜深掘り執筆セッションD（推敲・一貫性チェック）",
+      "list_key": "manuscript",
+      "reason": "03-18 10:00 【実験】2%培地交換（T0+216h） と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-18T15:00:00+09:00",
+      "suggested_slot_end": "2026-03-18T17:00:00+09:00"
+    }
+  ]
+}

@@ -766,6 +766,88 @@
   - `【実験】2%培地交換（T0+216h）` (86ewr0z90) -> 2026-03-18 10:00-11:00
 - note: review found overlaps with non-experiment tasks after enforcing T0 timing; follow-up rescheduling can be applied if requested
 
+## 2026-03-08 13:25 - applied by user request
+- user report: worked on grid_aliment fixes from 11:00 to 13:30
+- logged as done in `code`: `grid_alimentの修正` (86ewvgpn8), 2026-03-08 11:00-13:30, status=complete
+- moved `細胞導入` (86ewr092c) to tomorrow morning: 2026-03-09 08:30-10:00
+- re-anchored medium-exchange chain by T0 from new intro completion (10:00); resulting slots remained:
+  - 03/11 10:00-11:00 (T0+48h), 03/13 10:00-11:00 (T0+96h), 03/14 10:00-11:00 (T0+120h), 03/16 10:00-11:00 (T0+168h), 03/18 10:00-11:00 (T0+216h)
+
+## 2026-03-08 13:29 - applied by user approval (overlap cleanup)
+- moved overlap tasks (non-experiment side) to clear conflicts:
+  - `Macromolecular Crowdingの歴史を書く` (86evrwqv0) -> 2026-03-09 13:30-14:30
+  - `学振DC1 書き方の本を買って読む` (86ewqyvwr) -> 2026-03-09 14:30-15:00
+  - `ESどこに出せるか見る` (86ewuyegv) -> 2026-03-09 20:10-21:10
+  - `Physical properties ...` (86evu49dq) -> 2026-03-12 13:40-15:40
+- verification:
+  - overlap findings were cleared in 2026-03-08~03-12 range
+  - remaining review findings are workflow-order warnings only (no hard time overlap)
+
+## 2026-03-08 13:31 - applied by user request
+- user request: schedule execution of `41_.py` tonight
+- created in `code`: `41_.py実行` (86ewvgq2x)
+- time: 2026-03-08 19:30-20:30 JST
+- verification: same-day agenda shows no overlap around the new slot
+
+## 2026-03-08 13:33 - applied by user request
+- user request: add `光学系の調整` tomorrow morning
+- created in `experiment`: `光学系の調整` (86ewvgq5p)
+- time: 2026-03-09 07:30-08:20 JST
+- verification: agenda(2026-03-09) confirms no overlap with `細胞導入` (08:30-10:00)
+
+## 2026-03-08 13:36 - policy update
+- user rule: never overlap schedules with `部活` and `jog`
+- config updated: `fixed_keyword_patterns` includes `部活`, `jog`, `ジョグ`
+- effect: tasks matching these keywords are treated as fixed (`movable=False`) in advise/review/rearrange flows
+
+## 2026-03-08 13:44 - policy update
+- user preference: place wait-time tasks around jog to use gaps efficiently
+- scheduling logic update:
+  - detect wait-like tasks from split-task rules / wait keywords
+  - collect jog anchors from scheduled tasks using `jog_keyword_patterns`
+  - boost candidate ranking when wait tasks are adjacent to jog or when jog fits into split-task waiting gaps
+- config keys added:
+  - `jog_keyword_patterns`
+  - `wait_task_use_jog_windows`
+  - `wait_task_jog_window_minutes`
+
+## 2026-03-08 13:46 - applied by user request
+- user request: add `groupmeeting` on 2026-03-17 13:00-15:00
+- created in `meeting`: `groupmeeting` (86ewvgray)
+- verification: agenda(2026-03-17) confirms registration
+- note: overlap detected with `学振DC1｜深掘り執筆セッションC（仮説と検証設計）` (12:20-14:20)
+
+## 2026-03-08 13:52 - applied by user request
+- user request: push writing task later to avoid groupmeeting overlap
+- moved `学振DC1｜深掘り執筆セッションC（仮説と検証設計）` (86ewuzmqm)
+  from 2026-03-17 12:20-14:20 -> 2026-03-17 15:00-17:00
+- verification:
+  - day review (2026-03-17): findings=0
+  - 14-day review (2026-03-17..03-30): `after_due=0` (no deadline-late detected)
+
+## 2026-03-08 13:59 - policy update
+- user rule reinforced: never move/overlap `meeting`, `学会`, `大会`
+- fixed-keyword guard expanded with `大会` in runtime config + default keywords
+- validation: unit tests passed (`30` tests, includes fixed-keyword check for `groupmeeting` / `学会発表` / `春季大会`)
+
+## 2026-03-08 14:08 - applied by user request
+- user request: rename yesterday lunch task from generic `ご飯` to place name
+- target identified (closed/cancelled): 2026-03-07 12:30-14:30 `ご飯` (86ewqrpah)
+- renamed only task title -> `青龍門@渋谷` (status kept as `cancelled/closed`)
+
+## 2026-03-08 14:22 - policy update
+- user rule: `オートクレーブ / AC / チューブオークレ` is a split task
+- added split rule `autoclave_prepare_collect`:
+  - prepare: 30m
+  - collect: 30m
+  - constraint: collect >= 120m after prepare (same day)
+- matching robustness:
+  - short ASCII alias matching for split rules uses word-boundary style detection (prevents false positives like `Macromolecular` -> `ac`)
+  - experiment category keywords extended with `autoclave`, `オートクレーブ`, `オークレ`, `ac`
+- verification:
+  - tests passed (`33` total)
+  - `advise --text \"AC\"` now returns split candidates in `experiment` with 30m + 2h wait + 30m
+
 ## 2026-03-06 15:07 - advise consultation
 - text: molecular crowding review論文をinputする。2時間。優先度は低め
 - category=input priority=urgent bias=+0h
@@ -840,3 +922,164 @@
 - range: 2026-03-11->2026-03-18
 - pressure: overdue=85 due_soon_unscheduled=0
 - findings: 9 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260308-001146.json
+
+## 2026-03-08 13:28 - review check
+- range: 2026-03-08->2026-03-11
+- pressure: overdue=85 due_soon_unscheduled=0
+- findings: 5 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260308-132827.json
+
+## 2026-03-08 13:29 - review check
+- range: 2026-03-08->2026-03-12
+- pressure: overdue=85 due_soon_unscheduled=0
+- findings: 4 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260308-132922.json
+
+## 2026-03-08 13:45 - advise consultation
+- text: NH4Cl作成
+- category=general priority=normal bias=+0h
+- target_list=other due=(none) duration=120m
+- workflow=none
+- medium_flow=none
+- candidates=1 plan=/Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260308-134529.json
+- fixed_rules=meeting, competition
+- rearrange_scope=input
+- protect_experiment_structure=True
+
+## 2026-03-08 13:46 - review check
+- range: 2026-03-17->2026-03-17
+- pressure: overdue=86 due_soon_unscheduled=0
+- findings: 1 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260308-134658.json
+
+## 2026-03-08 13:52 - review check
+- range: 2026-03-17->2026-03-17
+- pressure: overdue=86 due_soon_unscheduled=0
+- findings: 1 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260308-135223.json
+
+## 2026-03-08 13:52 - review check
+- range: 2026-03-17->2026-03-17
+- pressure: overdue=86 due_soon_unscheduled=0
+- findings: 0 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260308-135254.json
+
+## 2026-03-08 13:52 - review check
+- range: 2026-03-17->2026-03-30
+- pressure: overdue=86 due_soon_unscheduled=0
+- findings: 2 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260308-135257.json
+
+## 2026-03-08 14:22 - advise consultation
+- text: AC
+- category=experiment priority=normal bias=+0h
+- target_list=experiment due=(none) duration=60m
+- workflow=exp_code/unspecified/order999
+- medium_flow=none
+- candidates=3 plan=/Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260308-142217.json
+- fixed_rules=meeting, competition
+- rearrange_scope=input
+- protect_experiment_structure=True
+
+## 2026-03-08 14:28 - advise consultation
+- text: 脱気
+- category=experiment priority=normal bias=+0h
+- target_list=experiment due=(none) duration=30m
+- workflow=exp_code/unspecified/order999
+- medium_flow=none
+- candidates=3 plan=/Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260308-142810.json
+- fixed_rules=meeting, competition
+- rearrange_scope=input
+- protect_experiment_structure=True
+
+## 2026-03-08 14:29 - policy update
+- split-task rule added: `degas_prepare_collect`
+- keywords: 脱気 / degas / degassing
+- constraint: 15m prepare -> >=1h wait (same day) -> 15m collect
+- validation: unit tests passed + advise live check ok
+
+## 2026-03-08 14:36 - applied by user request
+- user report: today's lunch was `マイバス寿司`
+- renamed lunch task on 2026-03-08 13:30-14:00 in `plan`:
+  - `ご飯` (86ewqrpb0) -> `マイバス寿司`
+- left dinner task unchanged:
+  - `ご飯` (86ewqrpbu) at 19:30-20:30
+
+## 2026-03-08 20:41 - applied by user request
+- user request: move `執筆デー` to tomorrow (2026-03-09)
+- moved:
+  - `執筆デー @ GRATBROWN Roast and Bake（駒場）` (86ewr34cy)
+  - from 2026-03-08 21:45-23:45 -> 2026-03-09 12:10-14:10
+- collision handling:
+  - moved conflicting manuscript task
+  - `学振DC1｜深掘り執筆セッションC-3/4（仮説と検証設計）` (86ewuzp8h)
+  - from 2026-03-09 12:00-14:30 -> 2026-03-12 10:10-12:40
+- verification:
+  - agenda(2026-03-09): overlap-free with `執筆デー` in place
+  - agenda(2026-03-12): moved manuscript task registered without overlap
+
+## 2026-03-08 14:34 - advise consultation
+- text: 脱気
+- category=experiment priority=normal bias=+0h
+- target_list=experiment due=(none) duration=30m
+- workflow=exp_code/unspecified/order999
+- medium_flow=none
+- candidates=3 plan=/Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260308-143454.json
+- fixed_rules=meeting, competition
+- rearrange_scope=input
+- protect_experiment_structure=True
+
+## 2026-03-08 14:35 - advise consultation
+- text: デバイス配合
+- category=general priority=normal bias=+0h
+- target_list=experiment due=(none) duration=30m
+- workflow=exp_code/unspecified/order999
+- medium_flow=none
+- candidates=1 plan=/Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260308-143551.json
+- fixed_rules=meeting, competition
+- rearrange_scope=input
+- protect_experiment_structure=True
+
+## 2026-03-08 14:44 - advise consultation
+- text: claude code for chromeでyoutubeの履歴を撮ってきてもらって分析してもらう
+- category=general priority=low bias=+12h
+- target_list=other due=(none) duration=120m
+- workflow=none
+- medium_flow=none
+- candidates=3 plan=/Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260308-144409.json
+- fixed_rules=meeting, competition
+- rearrange_scope=input
+- protect_experiment_structure=True
+
+## 2026-03-08 14:45 - advise consultation
+- text: リアルなOpticalsettingの図を作成する
+- category=figure priority=normal bias=+8h
+- target_list=manuscript due=(none) duration=120m
+- workflow=none
+- medium_flow=none
+- candidates=3 plan=/Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260308-144557.json
+- fixed_rules=meeting, competition
+- rearrange_scope=input
+- protect_experiment_structure=True
+
+## 2026-03-08 20:40 - advise consultation
+- text: 執筆デー @ GRATBROWN Roast and Bake（駒場）
+- category=writing priority=high bias=-14h
+- target_list=manuscript due=(none) duration=120m
+- workflow=none
+- medium_flow=none
+- candidates=3 plan=/Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260308-204047.json
+- fixed_rules=meeting, competition
+- rearrange_scope=input
+- protect_experiment_structure=True
+
+## 2026-03-08 20:42 - advise consultation
+- text: チューブオークレ
+- category=experiment priority=normal bias=+0h
+- target_list=experiment due=(none) duration=60m
+- workflow=exp_code/unspecified/order999
+- medium_flow=none
+- candidates=3 plan=/Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260308-204252.json
+- fixed_rules=meeting, competition
+- rearrange_scope=input
+- protect_experiment_structure=True
+
+## 2026-03-08 20:44 - applied by user request
+- user request: add `兄の奥さんと会う` on night of 2026-03-15
+- created in `daily`: `兄の奥さんと会う` (86eww81ra)
+- time: 2026-03-15 19:00-21:00 JST
+- verification: agenda(2026-03-15) confirms registration without overlap

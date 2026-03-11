@@ -45,6 +45,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import time
 import traceback
 import unicodedata
 import urllib.request
@@ -78,10 +79,13 @@ _SHARED_MANIFEST_BASENAME = "figure_inbox_manifest.jsonl"
 
 NOTION_DB_ID = "312eda96228e81659726cd75b221357a"
 
+_SCRIPT_START_TIME = time.monotonic()
+
 _RUN_CONTEXT = {
     "script": None,
     "run_id": None,
     "count": 0,
+    "start_mono": None,  # monotonic time at first save_figure call in this run
 }
 _INBOX_ENV_WARNING_SHOWN = False
 
@@ -201,6 +205,7 @@ def _ensure_run_context(script_name: str) -> tuple[str, int]:
         _RUN_CONTEXT["script"] = script_name
         _RUN_CONTEXT["run_id"] = _new_run_id(script_name)
         _RUN_CONTEXT["count"] = 0
+        _RUN_CONTEXT["start_mono"] = time.monotonic()
 
     _RUN_CONTEXT["count"] += 1
     return _RUN_CONTEXT["run_id"], int(_RUN_CONTEXT["count"])
@@ -221,6 +226,36 @@ def _save_history(script_name: str, params: dict) -> None:
     _HISTORY_DIR.mkdir(parents=True, exist_ok=True)
     p = _HISTORY_DIR / f"{script_name}.json"
     p.write_text(json.dumps(params, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _load_timing_history(script_name: str) -> list[float]:
+    """過去の実行時間（秒）リストを返す（最大5件）。"""
+    p = _HISTORY_DIR / f"{script_name}_timing.json"
+    if p.exists():
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            return data.get("elapsed_sec_history", [])
+        except Exception:
+            pass
+    return []
+
+
+def _save_timing_history(script_name: str, elapsed_sec: float) -> None:
+    """実行時間を履歴ファイルに追記する（最大5件保持）。"""
+    _HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    p = _HISTORY_DIR / f"{script_name}_timing.json"
+    history = _load_timing_history(script_name)
+    history.append(round(elapsed_sec, 1))
+    history = history[-5:]  # 直近5回分だけ保持
+    p.write_text(json.dumps({"elapsed_sec_history": history}, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _fmt_elapsed(seconds: float) -> str:
+    """秒数を人間が読みやすい文字列に変換する。"""
+    s = int(seconds)
+    if s < 60:
+        return f"{s}s"
+    return f"{s // 60}m {s % 60:02d}s"
 
 
 def _compute_diff(prev: dict, curr: dict) -> dict:
@@ -360,6 +395,7 @@ def _append_session_log(record: dict) -> None:
             "run_id": record.get("run_id", ""),
             "figure_index": record.get("figure_index", 0),
             "description": record.get("description", ""),
+            "elapsed_sec": record.get("elapsed_sec", 0),
             "inbox_file": record.get("inbox_file", ""),
             "published_file": record.get("published_file", ""),
         }
@@ -771,7 +807,23 @@ def save_figure(
 
     script = _sanitize_token(script_name or _detect_script_name())
     caller_file = _detect_caller_file()
+
+    is_first_figure = _RUN_CONTEXT["script"] != script or _RUN_CONTEXT["run_id"] is None
     run_id, fig_index = _ensure_run_context(script)
+
+    # 経過時間（スクリプト import 時点 or 初回 save_figure 時点からの時間）
+    elapsed_sec = round(time.monotonic() - (_RUN_CONTEXT["start_mono"] or _SCRIPT_START_TIME), 1)
+
+    # 初回図保存時に前回の実行時間を表示する
+    if is_first_figure or fig_index == 1:
+        timing_history = _load_timing_history(script)
+        if timing_history:
+            avg = sum(timing_history) / len(timing_history)
+            last = timing_history[-1]
+            print(
+                f"[figure_logger] ⏱ 前回: {_fmt_elapsed(last)}"
+                + (f"  / 平均({len(timing_history)}回): {_fmt_elapsed(avg)}" if len(timing_history) > 1 else "")
+            )
 
     now_local = datetime.now()
     date_local = now_local.strftime("%Y-%m-%d")
@@ -821,6 +873,7 @@ def save_figure(
         "diff_from_last": diff,
         "format": fmt,
         "dpi": dpi,
+        "elapsed_sec": elapsed_sec,
         "inbox_file": str(inbox_file.resolve()),
         "published_file": published_file,
         "manifest_file": str(manifest_path.resolve()),
@@ -860,9 +913,40 @@ def save_figure(
     if save_to_notion:
         _save_to_notion(meta)
 
+    _save_timing_history(script, elapsed_sec)
+
     print(f"[figure_logger] inbox saved: {inbox_file}")
     if published_file:
         print(f"[figure_logger] published copy: {published_file}")
     print(f"[figure_logger] manifest: {manifest_path}")
+    print(f"[figure_logger] ⏱ 経過時間: {_fmt_elapsed(elapsed_sec)}")
 
     return Path(published_file) if published_file else inbox_file
+
+
+# =============================================================================
+# CLI: python3 scripts/figure_logger.py [--stats]
+# =============================================================================
+if __name__ == "__main__":
+    import glob
+
+    timing_files = sorted(glob.glob(str(_HISTORY_DIR / "*_timing.json")))
+    if not timing_files:
+        print("実行時間の記録がまだありません。")
+        sys.exit(0)
+
+    print("\nスクリプト実行時間サマリー")
+    print("━" * 55)
+    print(f"{'スクリプト':<35} {'前回':>8}  {'平均':>8}  {'回数':>5}")
+    print("━" * 55)
+
+    for p in timing_files:
+        script_name = Path(p).stem.replace("_timing", "")
+        history = _load_timing_history(script_name)
+        if not history:
+            continue
+        avg = sum(history) / len(history)
+        last = history[-1]
+        print(f"{script_name:<35} {_fmt_elapsed(last):>8}  {_fmt_elapsed(avg):>8}  ({len(history)}回)")
+
+    print("━" * 55)

@@ -57,7 +57,8 @@ python3 /Users/kitak/QPI_Omni/scripts/clickup_helper.py advise \
 - `competition` list (大会) is treated as no-schedule-day anchor by default; other tasks are not placed on those dates.
 - Medium-exchange chain constraints are supported (`medium_flow_steps` / `medium_flow_rules`), including fixed day/hour gaps and review-time violation detection (e.g., `O/N culture -> +24h -> pre culture`).
 - `T0+xxh` task names are also supported for medium-flow step inference via `medium_flow_t0_offset_map` (default: `48/96/120/168/216h` mapping).
-- Split-task constraints are supported (`split_task_rules`). Examples: `glucose sln.作成` as `10m prepare + >=6h (same day) 30m collect`, `NH4Cl作成` as `30m prepare + >=1h (same day) 30m collect`, `EMM培地作成` as `30m prepare + >=2h (same day) 10m collect`.
+- Split-task constraints are supported (`split_task_rules`). Examples: `glucose sln.作成` as `10m prepare + >=6h (same day) 30m collect`, `NH4Cl作成` as `30m prepare + >=1h (same day) 30m collect`, `EMM培地作成` as `30m prepare + >=2h (same day) 10m collect`, `オートクレーブ/AC/チューブオークレ` as `30m prepare + >=2h (same day) 30m collect`, `脱気` as `15m prepare + >=1h (same day) 15m collect`.
+- For wait-like tasks (split-task/wait keywords), candidate ranking can prefer slots around jog events using `jog_keyword_patterns` + `wait_task_*` config.
 
 Plan JSON is saved in:
 
@@ -139,6 +140,7 @@ This file is meant to evolve your scheduling policy over time.
 Copy `clickup_helper_config.example.json` to `clickup_helper_config.json` and customize:
 
 - fixed schedules (`fixed_list_keys`, `fixed_keyword_patterns`)
+- jog-aware wait-task placement (`jog_keyword_patterns`, `wait_task_use_jog_windows`, `wait_task_jog_window_minutes`)
 - write blocks (`blocked_write_list_keys`)
 - rearrange scope (`rearrange_allowed_list_keys`)
 - experiment ordering guard (`protect_experiment_structure`)
