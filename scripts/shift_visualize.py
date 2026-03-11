@@ -168,7 +168,7 @@ def visualize_shifts(
 
     save_figure(fig, params=params, description=f"shift_timeseries {pos_name}",
                 data=_shift_data)
-    plt.show(block=False)
+    plt.close(fig)
 
     # 2Dトラジェクトリ（動きの軌跡）
     fig2, ax2 = plt.subplots(figsize=(6, 6))
@@ -181,7 +181,7 @@ def visualize_shifts(
     ax2.set_aspect("equal")
     save_figure(fig2, params=params, description=f"shift_trajectory {pos_name}",
                 data=_shift_data)
-    plt.show(block=False)
+    plt.close(fig2)
 
     # 引き算後(subtracted)画像の代表例を shift量に応じて個別保存（同一 run_id フォルダ）
     subtracted_dir = os.path.join(os.path.dirname(json_path), "subtracted")
