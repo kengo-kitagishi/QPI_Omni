@@ -30,6 +30,7 @@ ROI JSON フォーマット (channels/channel_rois.json):
 
 import argparse
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -37,6 +38,7 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import tifffile
+from figure_logger import save_figure
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
 
@@ -189,9 +191,29 @@ def run_detect(img_path: Path, crop_w: int, crop_h: int, out_dir: Path,
     ax_prof.legend(fontsize=8)
 
     plt.suptitle(str(img_path), fontsize=8)
+    logged_path = save_figure(
+        fig,
+        params={
+            "source_image": str(img_path),
+            "n_channels": len(rois),
+            "crop_w": int(crop_w),
+            "crop_h_default": int(crop_h),
+            "min_dist": int(min_dist),
+            "prominence_sigma": float(prominence_sigma),
+            "side": side,
+            "dark_threshold": float(dark_threshold),
+            "x_start": x_start,
+            "x_end": x_end,
+        },
+        description=f"channel_detection_preview {img_path.parent.name}",
+        publish=False,
+        dpi=150,
+        fmt="png",
+    )
     preview_path = out_dir / "channel_detection_preview.png"
-    plt.savefig(str(preview_path), dpi=150, bbox_inches="tight")
+    shutil.copy2(logged_path, preview_path)
     print(f"プレビュー保存: {preview_path}")
+    print(f"figure_logger 保存: {logged_path}")
     plt.close(fig)
 
     roi_path = out_dir / ROI_FILENAME
