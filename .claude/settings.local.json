@@ -17,7 +17,9 @@
       "mcp__notionApi__API-patch-block-children",
       "Bash(robocopy:*)",
       "Bash(cmd //c \"C:\\\\Users\\\\QPI\\\\Documents\\\\QPI_Omni\\\\scripts\\\\sync\\\\sync_claude_logs.bat\")",
-      "Read(//c/Users/QPI/.claude/**)"
+      "Read(//c/Users/QPI/.claude/**)",
+      "Bash(date /t && time /t)",
+      "Bash(git add:*)"
     ]
   }
 }

@@ -54,7 +54,7 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 # Pos番号 < POS_SPLIT → CROP_BEFORE / Pos番号 >= POS_SPLIT → CROP_AFTER
 POS_SPLIT    = 3
 CROP_BEFORE  = (0, 2048,   0, 2048)   # Pos0, Pos1, Pos2
-CROP_AFTER   = (0, 2048, 416, 2464)   # Pos3 以降
+CROP_AFTER   = (0, 2048, 400, 2448)   # Pos3 以降
 # -----------------------------------------------
 
 # 平均0調整の領域 (row_start, row_end, col_start, col_end)

@@ -1,0 +1,404 @@
+// ============================================================
+// realtime_drift_mda.bsh
+// Micro-Manager 1.4 real-time drift correction timelapse
+//
+// Usage:
+//   1. Run: python prepare_drift_session.py  (once before starting)
+//   2. Open this file in MM Script Panel
+//   3. Set CONFIG_FILE below to the drift_config.json path
+//   4. Click Run
+//   5. Click Stop to abort
+//
+// Notes:
+//   - Do NOT start MM's built-in MDA (conflicts with this script)
+//   - Manually set focus and exposure before running
+//   - prepare_drift_session.py must have been run first
+// ============================================================
+
+import java.io.*;
+import java.util.*;
+import java.text.*;
+import ij.*;
+import ij.process.*;
+import ij.io.*;
+import org.json.*;
+
+// ============================================================
+// ★ Change only this: path to drift_config.json
+// ============================================================
+String CONFIG_FILE = "C:/Users/QPI/Documents/QPI_Omni/drift_session/drift_config.json";
+// ============================================================
+
+
+// ---- Helper: zero-pad integer to given width ----
+String padLeft(int n, int width) {
+    String s = "" + n;
+    while (s.length() < width) s = "0" + s;
+    return s;
+}
+
+// ---- Helper: format double to N decimal places ----
+String fmtD(double v, int decimals) {
+    double factor = Math.pow(10, decimals);
+    long rounded = Math.round(v * factor);
+    String s = "" + Math.abs(rounded);
+    while (s.length() <= decimals) s = "0" + s;
+    String intPart  = s.substring(0, s.length() - decimals);
+    String fracPart = s.substring(s.length() - decimals);
+    String sign = (v < 0) ? "-" : "";
+    return sign + intPart + "." + fracPart;
+}
+
+
+// ---- Load JSON config ----
+print("Loading config: " + CONFIG_FILE);
+BufferedReader cfgReader = new BufferedReader(new FileReader(CONFIG_FILE));
+StringBuilder cfgSb = new StringBuilder();
+String cfgLine;
+while ((cfgLine = cfgReader.readLine()) != null) cfgSb.append(cfgLine);
+cfgReader.close();
+JSONObject cfg = new JSONObject(cfgSb.toString());
+
+String PYTHON_EXE     = cfg.getString("python_exe");
+String SCRIPT_DIR     = cfg.getString("script_dir");
+String SAVE_DIR       = cfg.getString("save_dir");
+String POSITIONS_CSV  = cfg.getString("positions_csv");
+String STATE_FILE     = cfg.getString("state_file");
+String LOG_FILE       = cfg.getString("log_file");
+int    N_TIMEPOINTS   = cfg.getInt("n_timepoints");
+long   INTERVAL_MS    = (long)(cfg.getDouble("interval_sec") * 1000);
+long   SETTLE_MS      = (long)cfg.getDouble("settle_ms");
+long   PFS_SETTLE_MS  = (long)cfg.getDouble("pfs_settle_ms");
+double EXPOSURE_MS    = cfg.getDouble("exposure_ms");
+int    REF_POS_INDEX  = cfg.getInt("ref_pos_index");
+int    BG_POS_INDEX   = cfg.getInt("bg_pos_index");
+String XY_STAGE       = cfg.getString("xy_stage_device");
+String Z_DEVICE       = cfg.getString("z_offset_device");
+String CHANNEL_NAME   = cfg.getString("channel_name");
+String CHANNEL_GROUP  = "TiChannel";
+String COMPUTE_SCRIPT = SCRIPT_DIR + "/compute_drift_online.py";
+
+print("Config loaded: N=" + N_TIMEPOINTS + " interval=" + (INTERVAL_MS/1000) + "s");
+
+// ---- Load positions.csv ----
+// Format: index,label,x,y,z_offset
+ArrayList posLabels = new ArrayList();
+double[]  baseX     = null;
+double[]  baseY     = null;
+double[]  baseZ     = null;
+
+BufferedReader csvReader = new BufferedReader(new FileReader(POSITIONS_CSV));
+String csvLine;
+csvReader.readLine();  // skip header
+ArrayList rows = new ArrayList();
+while ((csvLine = csvReader.readLine()) != null) {
+    String[] parts = csvLine.split(",");
+    rows.add(parts);
+}
+csvReader.close();
+
+int nPositions = rows.size();
+baseX = new double[nPositions];
+baseY = new double[nPositions];
+baseZ = new double[nPositions];
+
+for (int i = 0; i < nPositions; i++) {
+    String[] parts = (String[])rows.get(i);
+    posLabels.add(parts[1].trim());
+    baseX[i] = Double.parseDouble(parts[2].trim());
+    baseY[i] = Double.parseDouble(parts[3].trim());
+    baseZ[i] = Double.parseDouble(parts[4].trim());
+    print("  Pos[" + i + "] " + parts[1].trim() +
+          " x=" + baseX[i] + " y=" + baseY[i]);
+}
+print("Positions loaded: " + nPositions);
+
+// ---- Corrected positions (base + cumulative correction) ----
+double[] corrX = Arrays.copyOf(baseX, nPositions);
+double[] corrY = Arrays.copyOf(baseY, nPositions);
+
+// ---- Camera setup ----
+mmc.setExposure(EXPOSURE_MS);
+print("Exposure set: " + EXPOSURE_MS + " ms");
+
+int bytesPerPx = (int)mmc.getBytesPerPixel();
+print("Camera bit depth: " + (bytesPerPx * 8) + " bit");
+
+// ---- Helper: move stage and wait ----
+void moveToPosition(int posIdx) {
+    mmc.setXYPosition(XY_STAGE, corrX[posIdx], corrY[posIdx]);
+    mmc.setPosition(Z_DEVICE, baseZ[posIdx]);  // Z not corrected (PFS handles it)
+    mmc.waitForDevice(XY_STAGE);
+    mmc.waitForDevice(Z_DEVICE);
+    Thread.sleep(SETTLE_MS);
+    if (PFS_SETTLE_MS > 0) {
+        Thread.sleep(PFS_SETTLE_MS);
+    }
+}
+
+// ---- Helper: set channel to ph preset ----
+void setChannelPh() {
+    mmc.setConfig(CHANNEL_GROUP, CHANNEL_NAME);
+    mmc.waitForConfig(CHANNEL_GROUP, CHANNEL_NAME);
+}
+
+// ---- Helper: snap image and save as TIFF ----
+void snapAndSave(String savePath) {
+    mmc.snapImage();
+    Object rawImg = mmc.getImage();
+    int width  = (int)mmc.getImageWidth();
+    int height = (int)mmc.getImageHeight();
+    ImageProcessor ip;
+    if (bytesPerPx == 1) {
+        ip = new ByteProcessor(width, height, (byte[])rawImg, null);
+    } else {
+        ip = new ShortProcessor(width, height, (short[])rawImg, null);
+    }
+    ImagePlus imp = new ImagePlus("", ip);
+    new FileSaver(imp).saveAsTiff(savePath);
+}
+
+// ---- Helper: read drift_state.txt (key=value format) ----
+HashMap readState(String stateFile) {
+    HashMap m = new HashMap();
+    try {
+        BufferedReader br = new BufferedReader(new FileReader(stateFile));
+        String ln;
+        while ((ln = br.readLine()) != null) {
+            ln = ln.trim();
+            if (ln.startsWith("#") || !ln.contains("=")) continue;
+            String[] kv = ln.split("=", 2);
+            m.put(kv[0].trim(), kv[1].trim());
+        }
+        br.close();
+    } catch (Exception e) {
+        print("[WARN] Failed to read state file: " + e.getMessage());
+    }
+    return m;
+}
+
+// ---- Helper: call Python subprocess with timeout ----
+int callPython(String[] cmd, long timeoutMs) {
+    Process p = Runtime.getRuntime().exec(cmd);
+
+    final StringBuilder outBuf = new StringBuilder();
+    final StringBuilder errBuf = new StringBuilder();
+    Thread tOut = new Thread(new Runnable() {
+        public void run() {
+            try {
+                BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()));
+                String l;
+                while ((l = r.readLine()) != null) outBuf.append(l).append("\n");
+            } catch (Exception e) {}
+        }
+    });
+    Thread tErr = new Thread(new Runnable() {
+        public void run() {
+            try {
+                BufferedReader r = new BufferedReader(new InputStreamReader(p.getErrorStream()));
+                String l;
+                while ((l = r.readLine()) != null) errBuf.append(l).append("\n");
+            } catch (Exception e) {}
+        }
+    });
+    tOut.start();
+    tErr.start();
+
+    long start = System.currentTimeMillis();
+    boolean done = false;
+    int exitCode = -1;
+    while (!done && System.currentTimeMillis() - start < timeoutMs) {
+        Thread.sleep(500);
+        try {
+            exitCode = p.exitValue();
+            done = true;
+        } catch (IllegalThreadStateException e) {
+            // still running
+        }
+    }
+    if (!done) {
+        p.destroy();
+        print("[WARN] Python timeout (" + (timeoutMs/1000) + "s)");
+        exitCode = -2;
+    }
+    tOut.join(2000);
+    tErr.join(2000);
+
+    if (outBuf.length() > 0) print("[Python stdout]\n" + outBuf.toString());
+    if (errBuf.length() > 0) print("[Python stderr]\n" + errBuf.toString());
+    return exitCode;
+}
+
+
+// ============================================================
+// Main acquisition loop
+// ============================================================
+print("\n========================================");
+print(" Real-time drift correction timelapse");
+print(" N=" + N_TIMEPOINTS + "  interval=" + (INTERVAL_MS/1000) + "s");
+print("========================================\n");
+
+String bgLabel  = (String)posLabels.get(BG_POS_INDEX);
+String refLabel = (String)posLabels.get(REF_POS_INDEX);
+print("BG Pos:  [" + BG_POS_INDEX + "] " + bgLabel);
+print("Ref Pos: [" + REF_POS_INDEX + "] " + refLabel);
+
+double totalCorrX = 0.0;
+double totalCorrY = 0.0;
+int consecutiveFailures = 0;
+int MAX_CONSECUTIVE_FAILURES = 5;
+
+for (int t = 0; t < N_TIMEPOINTS; t++) {
+    long tpStart = System.currentTimeMillis();
+
+    print("\n-- Timepoint " + t + " / " + (N_TIMEPOINTS-1) + " ----------------");
+    print("  Start: " + new SimpleDateFormat("HH:mm:ss").format(new Date()));
+
+    // ---- Acquire all positions ----
+    String bgRawPath  = "";
+    String refRawPath = "";
+
+    for (int i = 0; i < nPositions; i++) {
+        String posLabel  = (String)posLabels.get(i);
+        String frameFile = "img_" + padLeft(t, 9) + "_ph_000.tif";
+        String savePath  = SAVE_DIR + "/" + posLabel + "/" + frameFile;
+
+        moveToPosition(i);
+        setChannelPh();
+        snapAndSave(savePath);
+        print("  [T=" + t + "] " + posLabel + " -> " + frameFile);
+
+        if (i == BG_POS_INDEX)  bgRawPath  = savePath;
+        if (i == REF_POS_INDEX) refRawPath = savePath;
+    }
+
+    // ---- Drift computation ----
+    if (t == 0) {
+        print("  T=0: initializing reference frame...");
+        String[] cmd = {
+            PYTHON_EXE, COMPUTE_SCRIPT,
+            "--timepoint", "0",
+            "--sample-raw", refRawPath,
+            "--bg-raw", bgRawPath,
+            "--config", CONFIG_FILE
+        };
+        int exitCode0 = callPython(cmd, 180000L);
+        if (exitCode0 == 0) {
+            HashMap state0 = readState(STATE_FILE);
+            boolean valid0 = "true".equals(state0.get("CORRECTION_VALID"));
+            boolean jump0  = "true".equals(state0.get("JUMP_DETECTED"));
+            double cumDx0 = 0.0, cumDy0 = 0.0;
+            try {
+                cumDx0 = Double.parseDouble((String)state0.get("CUMULATIVE_DX_UM"));
+                cumDy0 = Double.parseDouble((String)state0.get("CUMULATIVE_DY_UM"));
+            } catch (Exception e) {}
+            if (valid0 && !jump0) {
+                for (int i = 0; i < nPositions; i++) {
+                    corrX[i] = baseX[i] - cumDx0;
+                    corrY[i] = baseY[i] - cumDy0;
+                }
+                totalCorrX = -cumDx0;
+                totalCorrY = -cumDy0;
+                print("  T=0: pre-correction applied: cumDx=" + fmtD(cumDx0,3) + "um  cumDy=" + fmtD(cumDy0,3) + "um");
+            } else {
+                print("  T=0: reference initialized (jump detected or invalid, no correction)");
+            }
+        } else {
+            print("  T=0: reference initialized (Python failed, no correction)");
+        }
+
+    } else {
+        print("  Python drift computation...");
+        String[] cmd = {
+            PYTHON_EXE, COMPUTE_SCRIPT,
+            "--timepoint", String.valueOf(t),
+            "--sample-raw", refRawPath,
+            "--bg-raw",     bgRawPath,
+            "--config",     CONFIG_FILE
+        };
+        int exitCode = callPython(cmd, 180000L);
+
+        if (exitCode == 0) {
+            HashMap state = readState(STATE_FILE);
+            boolean valid = "true".equals(state.get("CORRECTION_VALID"));
+            boolean jump  = "true".equals(state.get("JUMP_DETECTED"));
+            double dx = 0.0, dy = 0.0;
+            try {
+                dx = Double.parseDouble((String)state.get("DX_UM"));
+                dy = Double.parseDouble((String)state.get("DY_UM"));
+            } catch (Exception e) {}
+
+            double cumDx = 0.0, cumDy = 0.0;
+            try {
+                cumDx = Double.parseDouble((String)state.get("CUMULATIVE_DX_UM"));
+                cumDy = Double.parseDouble((String)state.get("CUMULATIVE_DY_UM"));
+            } catch (Exception e) {}
+
+            double corrEcc = 0.0;
+            try {
+                corrEcc = Double.parseDouble((String)state.get("ECC_CORRELATION"));
+            } catch (Exception e) {}
+
+            if (valid && !jump) {
+                for (int i = 0; i < nPositions; i++) {
+                    corrX[i] = baseX[i] - cumDx;
+                    corrY[i] = baseY[i] - cumDy;
+                }
+                totalCorrX = -cumDx;
+                totalCorrY = -cumDy;
+                consecutiveFailures = 0;
+                print("  [OK] dx=" + fmtD(dx,3) + "um  dy=" + fmtD(dy,3) + "um  corr=" + fmtD(corrEcc,3));
+                print("  Cumulative: x=" + fmtD(totalCorrX,3) + "um  y=" + fmtD(totalCorrY,3) + "um");
+            } else if (jump) {
+                consecutiveFailures++;
+                print("  [JUMP] dx=" + fmtD(dx,3) + "um  dy=" + fmtD(dy,3) + "um -> skipped");
+            } else {
+                consecutiveFailures++;
+                print("  [FAIL] Correction invalid (ECC failed)");
+            }
+
+            if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                print("  [WARN] " + consecutiveFailures + " consecutive failures - check optics/sample");
+            }
+
+        } else {
+            consecutiveFailures++;
+            print("  [FAIL] Python exit code: " + exitCode);
+        }
+    }
+
+    // ---- Wait for next timepoint ----
+    long elapsed    = System.currentTimeMillis() - tpStart;
+    long waitTimeMs = INTERVAL_MS - elapsed;
+    if (waitTimeMs > 0) {
+        print("  Waiting " + fmtD(waitTimeMs / 1000.0, 1) + "s until T=" + (t+1));
+
+        long waitUntil = System.currentTimeMillis() + waitTimeMs;
+        boolean shownCountdown = false;
+        while (System.currentTimeMillis() < waitUntil) {
+            long remaining = waitUntil - System.currentTimeMillis();
+            if (remaining < 10000 && !shownCountdown) {
+                shownCountdown = true;
+            }
+            if (shownCountdown && remaining % 1000 < 100) {
+                print("    " + (remaining / 1000 + 1) + "s remaining...");
+            }
+            Thread.sleep(200);
+        }
+    } else {
+        print("  [WARN] Processing overran interval by " + (-waitTimeMs/1000) + "s");
+    }
+
+    print("  Timepoint " + t + " done (" + fmtD(elapsed/1000.0,1) + "s)");
+}
+
+// ============================================================
+// Done
+// ============================================================
+print("\n========================================");
+print(" Timelapse complete");
+print(" Total: " + N_TIMEPOINTS + " timepoints");
+print(" Final cumulative correction: x=" + fmtD(totalCorrX,3) + "um  y=" + fmtD(totalCorrY,3) + "um");
+print(" Saved to: " + SAVE_DIR);
+print("========================================");
+print("Run pipeline_full.py for post-processing.");

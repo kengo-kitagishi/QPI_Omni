@@ -21,7 +21,7 @@ img = Image.open(path)
 
 img_bg = Image.open(path_bg)
 img = np.array(img)
-#img = img[8:2056,416:2464]
+#img = img[8:2056,400:2448]
 img = img[8:2056,208:2256]
 
 #img= img[520:1544,512:1536]
@@ -29,7 +29,7 @@ img = img[8:2056,208:2256]
 #img = img[516:1540,500:1524]
 #img = img[500:1000,500:1000]
 img_bg = np.array(img_bg)
-#img_bg = img_bg[8:2056,416:2464]
+#img_bg = img_bg[8:2056,400:2448]
 img_bg = img_bg[8:2056,208:2256]
 #img_bg = img_bg[520:1544,512:1536]
 #img_bg = img_bg[0:2048, 0:2048]
@@ -1084,7 +1084,7 @@ for pos_idx in range(24,47): #251017 46,92 250910 44,91
             # 背景画像読み込み
             bg_img = Image.open(bg_filepath)
             bg_img = np.array(bg_img)
-            #bg_img = bg_img[8:2056,416:2464] #250712_crop #250801_crop
+            #bg_img = bg_img[8:2056,400:2448] #250712_crop #250801_crop
             bg_img = bg_img[0:2048,0:2048] #250815_crop
             
             
@@ -1103,7 +1103,7 @@ for pos_idx in range(24,47): #251017 46,92 250910 44,91
             # 対象画像読み込み
             img = Image.open(filepath)
             img = np.array(img)
-            #img = img[8:2056,416:2464] #250712_crop #250801_crop
+            #img = img[8:2056,400:2448] #250712_crop #250801_crop
             img = img[0:2048,0:2048] #250712_crop #250801_crop
 
 
@@ -1183,7 +1183,7 @@ for pos_idx in range(1,24): #251212 1,24 #251019 1,46 #250910 1,44
             # 背景画像読み込み
             bg_img = Image.open(bg_filepath)
             bg_img = np.array(bg_img)
-            bg_img = bg_img[0:2048,416:2464] #250712_crop #250801_crop
+            bg_img = bg_img[0:2048,400:2448] #250712_crop #250801_crop
             
 
             # パラメータ設定
@@ -1200,7 +1200,7 @@ for pos_idx in range(1,24): #251212 1,24 #251019 1,46 #250910 1,44
             # 対象画像読み込み
             img = Image.open(filepath)
             img = np.array(img)
-            img = img[0:2048,416:2464] #250712_crop #250801_crop
+            img = img[0:2048,400:2448] #250712_crop #250801_crop
 
             # QPI再構成
             field = get_field(img, params)
@@ -1370,7 +1370,7 @@ WAVELENGTH = 663e-9
 NA = 0.95
 PIXELSIZE = 3.45e-6 / 40
 offaxis_center = (1609, 1639)
-crop_slice = np.s_[8:2056,416:2464]
+crop_slice = np.s_[8:2056,400:2448]
 x_coord = 200
 
 # 出力ディレクトリ
@@ -1440,7 +1440,7 @@ WAVELENGTH = 663e-9
 NA = 0.95
 PIXELSIZE = 3.45e-6 / 40
 offaxis_center = (1623, 1621)
-crop_slice = np.s_[8:2056,416:2464]
+crop_slice = np.s_[8:2056,400:2448]
 x_coord = 200
 
 # 出力ディレクトリ
@@ -1556,7 +1556,7 @@ for pos_idx in range(1, 50):
 
     # 背景画像読み込み
     bg_img = np.array(Image.open(bg_filepath))
-    bg_img = bg_img[8:2056,416:2464] # crop
+    bg_img = bg_img[8:2056,400:2448] # crop
     
     params = QPIParameters(
         wavelength=WAVELENGTH,
@@ -1570,7 +1570,7 @@ for pos_idx in range(1, 50):
 
     # 対象画像読み込み
     img = np.array(Image.open(filepath))
-    img = img[8:2056,416:2464] # crop
+    img = img[8:2056,400:2448] # crop
 
     field = get_field(img, params)
     angle = unwrap_phase(np.angle(field))

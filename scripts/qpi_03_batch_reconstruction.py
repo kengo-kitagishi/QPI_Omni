@@ -20,7 +20,7 @@ from qpi_common import create_qpi_params, WAVELENGTH, NA, PIXELSIZE
 
 # 定数設定
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
-CROP = [8, 2056, 416, 2464]  # [y_start, y_end, x_start, x_end]
+CROP = [8, 2056, 400, 2448]  # [y_start, y_end, x_start, x_end]
 MEAN_REGION = [1, 507, 254, 507]  # 平均0調整の領域
 
 # ディレクトリ設定（使用時に変更）

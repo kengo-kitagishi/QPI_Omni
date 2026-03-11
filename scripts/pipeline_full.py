@@ -35,19 +35,20 @@ sys.path.insert(0, str(_script_dir))
 TIMELAPSE_DIRS = [
     r"E:\Acuisition\kitagishi\260301\movetest_9",
 ]
-GRID_DIR = r"E:\Acuisition\kitagishi\260301\multipos_test_1"
+GRID_DIR = r"D:\AquisitionData\Kitagishi\260310\grid_0p5_0p5_0p1_exp200ms_1pos_EMM2_1"
 
 
 # ============================================================
 # ★ 実行ステップ（False でスキップ）
 # ============================================================
-STEP_GRID_RECONSTRUCTION     = False
-STEP_TIMELAPSE_RECONSTRUCTION = True
+STEP_GRID_RECONSTRUCTION     = True
+STEP_TIMELAPSE_RECONSTRUCTION = False
 STEP_CHANNEL_CROP            = True
+STEP_GAUSSIAN_GRADIENT       = False   # NEW: large-sigma Gaussian gradient removal before channel_crop
 STEP_GAUSSIAN_BACKSUB        = True
 STEP_ALIGN_SIMPLE            = False   # 確認用（時間がかかる）
-STEP_COMPUTE_SHIFTS          = True    # shift_visualize も自動実行
-STEP_GRID_SUBTRACT           = True
+STEP_COMPUTE_SHIFTS          = False    # shift_visualize も自動実行
+STEP_GRID_SUBTRACT           = False
 
 # テストラン: None で全フレーム、整数で先頭 N フレームのみ処理
 TEST_N_FRAMES                = None
@@ -67,8 +68,9 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 # Pos 番号によるクロップ切り替え（grid / timelapse 共通）
 # ============================================================
 POS_SPLIT   = 3
-CROP_BEFORE = (0, 2048, 416, 2464)   # Pos0, Pos1, Pos2  → 右側 (416:2464)
-CROP_AFTER  = (0, 2048,   0, 2048)   # Pos3 以降        → 左側 (0:2048)
+CROP_BEFORE = (0, 2048, 400, 2448)   # pos_number < POS_SPLIT → 右側 (400:2448)  センサー幅2448
+CROP_AFTER  = (0, 2048,   0, 2048)   # pos_number >= POS_SPLIT → 左側 (0:2048)
+# ※ BG（Pos0）はターゲットのpos_numberで決まるcropを使う（常に右ではない）
 
 # ============================================================
 # 再構成パラメータ
@@ -86,14 +88,25 @@ TL_SKIP_IF_EXISTS         = True
 TL_MEAN_REGION            = None     # (r1, r2, c1, c2) or None
 
 # ============================================================
+# Gaussian gradient removal パラメータ（STEP_GAUSSIAN_GRADIENT=True 時のみ）
+# ============================================================
+# sigma はチャネル crop サイズ（CROP_W=40, CROP_H=120）より十分大きくすること。
+# alignment 用: sigma >= 150 推奨。可視化用: 50〜100 でも可。
+GRADIENT_SIGMA            = 150      # pixels; large-scale gradient removal
+# False → *_phase_bgsub.tif として保存（元ファイルを保持）
+# True  → *_phase.tif を上書き（元ファイルが消える・Step1から再生成可能）
+GRADIENT_INPLACE          = False
+
+# ============================================================
 # channel_crop パラメータ
 # ============================================================
 CROP_DETECT               = True     # channel_rois.json がなければ自動 detect
 CROP_FORCE_RECOMPUTE      = False    # True にすると channels/ を丸ごと削除して最初から再計算
 CROP_FORCE_DETECT         = False    # True にすると既存 channel_rois.json のみ削除して再検出
 CROP_APPLY                = True
+# STEP_GAUSSIAN_GRADIENT=True かつ GRADIENT_INPLACE=False のとき自動で *_phase_bgsub.tif に切り替わる
 CROP_IMG_PATTERN          = "*_phase.tif"  # output_phase/ 内の位相画像パターン
-CROP_W                    = 30
+CROP_W                    = 40
 CROP_H                    = 120
 CROP_MIN_DIST             = 35
 CROP_PROMINENCE           = 0.3
@@ -428,12 +441,55 @@ def step_timelapse_reconstruction(tl_dir: Path):
 
 
 # ===========================================================
+# Step 1.5: Gaussian gradient removal
+# ===========================================================
+def step_gaussian_gradient(phase_dir: Path) -> str:
+    """
+    output_phase/*_phase.tif に大きな sigma のガウスブラーを引いて
+    空間的バックグラウンドグラジェントを除去する。
+
+    GRADIENT_INPLACE=False のとき *_phase_bgsub.tif として保存し、
+    channel_crop が使うべきパターン文字列を返す。
+    GRADIENT_INPLACE=True のとき *_phase.tif を上書きし、元パターンを返す。
+    """
+    from scipy.ndimage import gaussian_filter
+
+    suffix = "_bgsub" if not GRADIENT_INPLACE else ""
+    img_pattern = "*_phase.tif"
+    tif_files = sorted(phase_dir.glob(img_pattern))
+    if not tif_files:
+        print(f"  [SKIP] *_phase.tif が見つかりません: {phase_dir}")
+        return CROP_IMG_PATTERN
+
+    already = 0
+    processed = 0
+    for path in tif_files:
+        if GRADIENT_INPLACE:
+            out_path = path
+        else:
+            out_path = phase_dir / (path.stem + "_bgsub.tif")
+            if out_path.exists():
+                already += 1
+                continue
+        img = tifffile.imread(str(path)).astype(np.float32)
+        bg  = gaussian_filter(img, sigma=GRADIENT_SIGMA, mode='nearest')
+        tifffile.imwrite(str(out_path), (img - bg).astype(np.float32))
+        processed += 1
+
+    print(f"  gaussian gradient removal: {processed} 処理, {already} スキップ  "
+          f"(sigma={GRADIENT_SIGMA}px, inplace={GRADIENT_INPLACE})")
+
+    return "*_phase_bgsub.tif" if not GRADIENT_INPLACE else "*_phase.tif"
+
+
+# ===========================================================
 # Step 2: channel_crop
 # ===========================================================
-def step_channel_crop(phase_dir: Path) -> bool:
+def step_channel_crop(phase_dir: Path, img_pattern: str = None) -> bool:
     from channel_crop import run_detect, run_apply
 
-    img_files = sorted(phase_dir.glob(CROP_IMG_PATTERN))
+    img_pattern = img_pattern or CROP_IMG_PATTERN
+    img_files = sorted(phase_dir.glob(img_pattern))
     if not img_files:
         print(f"  [SKIP] {CROP_IMG_PATTERN} が見つかりません: {phase_dir}")
         return False
@@ -466,7 +522,7 @@ def step_channel_crop(phase_dir: Path) -> bool:
             with open(roi_path, encoding="utf-8") as f:
                 rois = json.load(f)
         print(f"  [apply] {len(img_files)} フレーム × {len(rois)} チャネル")
-        run_apply(phase_dir, CROP_IMG_PATTERN, rois, out_dir)
+        run_apply(phase_dir, img_pattern, rois, out_dir)
 
     return True
 
@@ -650,10 +706,20 @@ def main():
 
             _section(f"{tl_dir.name} / {pos_dir.name}")
 
+            # Step 1.5: Gaussian gradient removal（channel_crop の前）
+            crop_pattern = CROP_IMG_PATTERN
+            if STEP_GAUSSIAN_GRADIENT:
+                try:
+                    crop_pattern = step_gaussian_gradient(phase_dir)
+                except Exception as e:
+                    import traceback; traceback.print_exc()
+                    errors.append(f"{pos_dir.name}: gaussian_gradient: {e}")
+                    # 失敗してもそのまま元パターンで続行
+
             # Step 2: channel_crop
             if STEP_CHANNEL_CROP:
                 try:
-                    ok = step_channel_crop(phase_dir)
+                    ok = step_channel_crop(phase_dir, img_pattern=crop_pattern)
                     if not ok:
                         errors.append(f"{pos_dir.name}: channel_crop failed")
                         continue

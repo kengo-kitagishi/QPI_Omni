@@ -13,12 +13,12 @@ import copy
 
 # ---- パラメータ ----
 INPUT_POS  = r"D:\AquisitionData\Kitagishi\260310\movetest.pos"
-OUTPUT_POS = r"D:\AquisitionData\Kitagishi\260310\movetest_grid_12_30.pos"
+OUTPUT_POS = r"D:\AquisitionData\Kitagishi\260310\movetest_grid_0p5_0p5_0p1.pos"
 
 X_STEP = 0.1   # μm
 Y_STEP = 0.1   # μm
-X_HALF = 12    # 片側 → 合計 25個（ステージX → 画像Y、±1.2 μm カバー）
-Y_HALF = 30    # 片側 → 合計 61個（ステージY → 画像X、±3.0 μm カバー）
+X_HALF = 5    # 片側 → 合計 11個（ステージX → 画像Y、±0.5 μm カバー）
+Y_HALF = 5    # 片側 → 合計 11個（ステージY → 画像X、±0.5 μm カバー）
 # --------------------
 
 with open(INPUT_POS, "r") as f:

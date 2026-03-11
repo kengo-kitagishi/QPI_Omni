@@ -165,13 +165,14 @@ def run_detect(img_path: Path, crop_w: int, crop_h: int, out_dir: Path,
     ax_img.set_title(f"検出チャネル ({len(rois)}本)", fontsize=12)
     colors = plt.cm.tab10(np.linspace(0, 1, max(len(rois), 1)))
     for i, roi in enumerate(rois):
+        actual_ch = roi["crop_h"]
         rect = mpatches.Rectangle(
-            (roi["cx"] - crop_h // 2, roi["cy"] - crop_w // 2),
-            crop_h, crop_w,
+            (roi["cx"] - actual_ch // 2, roi["cy"] - crop_w // 2),
+            actual_ch, crop_w,
             linewidth=1.5, edgecolor=colors[i % 10], facecolor="none",
         )
         ax_img.add_patch(rect)
-        ax_img.text(roi["cx"] - crop_h // 2 + 2,
+        ax_img.text(roi["cx"] - actual_ch // 2 + 2,
                     roi["cy"] - crop_w // 2 - 3,
                     f"ch{i:02d}", color=colors[i % 10], fontsize=6)
     ax_img.set_xlim(0, w)

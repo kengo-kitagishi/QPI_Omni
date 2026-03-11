@@ -155,8 +155,8 @@ def process_pos_folder(base_dir, bg_dir, pos_name, pos_split=44):
 
             # クロップ処理（Pos番号に応じて変更）
             if pos_number < pos_split:
-                # 前半: [0:2048, 416:2464]
-                bg_img = bg_img[0:2048, 416:2464]
+                # 前半: [0:2048, 400:2448]
+                bg_img = bg_img[0:2048, 400:2448]
             else:
                 # 後半: [0:2048, 0:2048]
                 bg_img = bg_img[0:2048, 0:2048]
@@ -178,8 +178,8 @@ def process_pos_folder(base_dir, bg_dir, pos_name, pos_split=44):
 
             # クロップ処理（Pos番号に応じて変更）
             if pos_number < pos_split:
-                # 前半: [0:2048, 416:2464]
-                img = img[0:2048, 416:2464]
+                # 前半: [0:2048, 400:2448]
+                img = img[0:2048, 400:2448]
             else:
                 # 後半: [0:2048, 0:2048]
                 img = img[0:2048, 0:2048]
