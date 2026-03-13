@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 from tqdm import tqdm
 from scipy.ndimage import median_filter
+import concurrent.futures
+import threading
 
 # ============================================================
 # 設定パラメータ
@@ -75,6 +77,8 @@ SECOND_PASS_HALF       = 'right' # 'right' or 'left'（前半Pos=right, 後半Po
 USE_THIRD_PASS_ECC     = False   # True で3回目ECC（pass2結果から最近傍grid再選択 → half ECC）
 # corr/shift データを NPZ + CSV に保存（True 推奨: subtract 画像との対応確認用）
 SAVE_CORR_DATA         = True
+# --- 並列処理 ---
+N_WORKERS = None               # None = os.cpu_count(). 1 = 直列（デバッグ用）
 # ============================================================
 
 
@@ -649,6 +653,10 @@ def main():
         grid_half_cache    = {}   # (xi, yi) → list of float crops (half crop, pass2用)
         grid_half_u8_cache = {}   # (xi, yi) → list of uint8 crops (half crop, pass2用)
 
+        _n_workers = N_WORKERS or os.cpu_count()
+        _cache_lock = threading.Lock()
+        print(f"並列ワーカー数: {_n_workers} (incremental / チャネル並列)")
+
         # pass1用: grid(0,0)の half or full crop（USE_SECOND_PASS_ECC 時は常にgrid(0,0)固定）
         if USE_SECOND_PASS_ECC:
             if FIRST_PASS_HALF:
@@ -683,7 +691,8 @@ def main():
                 xi, yi = 0, 0  # pass1 は常に grid(0,0)
 
             per_channel = []
-            for ch in range(n_channels):
+
+            def _compute_ch(ch):
                 frame = stacks[ch][t]
 
                 # ---- 1st pass ECC（grid(0,0) 固定 or nearest grid） ----
@@ -700,17 +709,14 @@ def main():
                     result1 = phase_align(p1_refs[ch], frame_p1)
 
                 if result1 is None:
-                    per_channel.append({
-                        "channel": ch, "shift_x": None, "shift_y": None,
-                        "correlation": None, "excluded": True,
-                        "exclude_reason": "alignment_failed",
-                        "grid_xi": xi, "grid_yi": yi,
-                    })
-                    corr_records.append({
-                        "t": t, "ch": ch, "shift_x": None, "shift_y": None,
-                        "corr": None, "grid_xi": xi, "grid_yi": yi, "failed": True,
-                    })
-                    continue
+                    return (
+                        {"channel": ch, "shift_x": None, "shift_y": None,
+                         "correlation": None, "excluded": True,
+                         "exclude_reason": "alignment_failed",
+                         "grid_xi": xi, "grid_yi": yi},
+                        {"t": t, "ch": ch, "shift_x": None, "shift_y": None,
+                         "corr": None, "grid_xi": xi, "grid_yi": yi, "failed": True},
+                    )
 
                 fine1_x, fine1_y, corr1 = result1
                 shift1_x = fine1_x + grid_offset_x
@@ -718,57 +724,52 @@ def main():
 
                 if not USE_SECOND_PASS_ECC:
                     low_ecc = ECC_MIN_CORR > 0 and corr1 < ECC_MIN_CORR
-                    per_channel.append({
-                        "channel": ch,
-                        "shift_x": shift1_x, "shift_y": shift1_y, "correlation": corr1,
-                        "excluded": low_ecc,
-                        "exclude_reason": "low_ecc_score" if low_ecc else None,
-                        "grid_xi": xi, "grid_yi": yi,
-                    })
-                    corr_records.append({
-                        "t": t, "ch": ch,
-                        "shift_x": shift1_x, "shift_y": shift1_y, "corr": corr1,
-                        "grid_xi": xi, "grid_yi": yi, "failed": False,
-                    })
-                    continue
+                    return (
+                        {"channel": ch,
+                         "shift_x": shift1_x, "shift_y": shift1_y, "correlation": corr1,
+                         "excluded": low_ecc,
+                         "exclude_reason": "low_ecc_score" if low_ecc else None,
+                         "grid_xi": xi, "grid_yi": yi},
+                        {"t": t, "ch": ch,
+                         "shift_x": shift1_x, "shift_y": shift1_y, "corr": corr1,
+                         "grid_xi": xi, "grid_yi": yi, "failed": False},
+                    )
 
                 # ---- 2nd pass ECC (half crop) ----
                 xi2, yi2 = _select_nearest_grid(shift1_x, shift1_y, grid_cal, pos_map, pixel_scale_um)
                 grid_offset_x2, grid_offset_y2 = _get_grid_offset(xi2, yi2, grid_cal, pixel_scale_um)
 
-                if (xi2, yi2) not in grid_half_cache:
-                    try:
-                        grid_half_cache[(xi2, yi2)] = load_grid_ref_mn_half(
-                            pos_map, xi2, yi2, rois_for_incremental, n_channels)
-                        if ALIGNMENT_METHOD == 'ecc':
-                            grid_half_u8_cache[(xi2, yi2)] = [
-                                to_uint8(r) for r in grid_half_cache[(xi2, yi2)]]
-                    except FileNotFoundError as e:
-                        print(f"\n[t={t},ch={ch}] half-crop ロード失敗: {e}  → pass1 結果を使用")
-                        low_ecc = ECC_MIN_CORR > 0 and corr1 < ECC_MIN_CORR
-                        per_channel.append({
-                            "channel": ch,
-                            "shift_x": shift1_x, "shift_y": shift1_y, "correlation": corr1,
-                            "excluded": low_ecc,
-                            "exclude_reason": "low_ecc_score" if low_ecc else None,
-                            "grid_xi": xi, "grid_yi": yi,
-                            "pass1_shift_x": shift1_x, "pass1_shift_y": shift1_y,
-                            "pass1_fine_x": fine1_x, "pass1_fine_y": fine1_y,
-                            "pass1_grid_offset_x": grid_offset_x, "pass1_grid_offset_y": grid_offset_y,
-                            "pass1_corr": corr1, "pass1_grid_xi": xi, "pass1_grid_yi": yi,
-                            "pass2_shift_x": None, "pass2_shift_y": None, "pass2_corr": None,
-                            "pass2_fine_x": None, "pass2_fine_y": None,
-                            "pass2_grid_offset_x": None, "pass2_grid_offset_y": None,
-                            "pass2_grid_xi": xi2, "pass2_grid_yi": yi2,
-                        })
-                        corr_records.append({
-                            "t": t, "ch": ch,
-                            "shift_x": shift1_x, "shift_y": shift1_y, "corr": corr1,
-                            "grid_xi": xi, "grid_yi": yi, "failed": False,
-                            "pass1_corr": corr1, "pass1_grid_xi": xi, "pass1_grid_yi": yi,
-                            "pass2_corr": None, "pass2_grid_xi": xi2, "pass2_grid_yi": yi2,
-                        })
-                        continue
+                with _cache_lock:
+                    if (xi2, yi2) not in grid_half_cache:
+                        try:
+                            grid_half_cache[(xi2, yi2)] = load_grid_ref_mn_half(
+                                pos_map, xi2, yi2, rois_for_incremental, n_channels)
+                            if ALIGNMENT_METHOD == 'ecc':
+                                grid_half_u8_cache[(xi2, yi2)] = [
+                                    to_uint8(r) for r in grid_half_cache[(xi2, yi2)]]
+                        except FileNotFoundError as e:
+                            print(f"\n[t={t},ch={ch}] half-crop ロード失敗: {e}  → pass1 結果を使用")
+                            low_ecc = ECC_MIN_CORR > 0 and corr1 < ECC_MIN_CORR
+                            return (
+                                {"channel": ch,
+                                 "shift_x": shift1_x, "shift_y": shift1_y, "correlation": corr1,
+                                 "excluded": low_ecc,
+                                 "exclude_reason": "low_ecc_score" if low_ecc else None,
+                                 "grid_xi": xi, "grid_yi": yi,
+                                 "pass1_shift_x": shift1_x, "pass1_shift_y": shift1_y,
+                                 "pass1_fine_x": fine1_x, "pass1_fine_y": fine1_y,
+                                 "pass1_grid_offset_x": grid_offset_x, "pass1_grid_offset_y": grid_offset_y,
+                                 "pass1_corr": corr1, "pass1_grid_xi": xi, "pass1_grid_yi": yi,
+                                 "pass2_shift_x": None, "pass2_shift_y": None, "pass2_corr": None,
+                                 "pass2_fine_x": None, "pass2_fine_y": None,
+                                 "pass2_grid_offset_x": None, "pass2_grid_offset_y": None,
+                                 "pass2_grid_xi": xi2, "pass2_grid_yi": yi2},
+                                {"t": t, "ch": ch,
+                                 "shift_x": shift1_x, "shift_y": shift1_y, "corr": corr1,
+                                 "grid_xi": xi, "grid_yi": yi, "failed": False,
+                                 "pass1_corr": corr1, "pass1_grid_xi": xi, "pass1_grid_yi": yi,
+                                 "pass2_corr": None, "pass2_grid_xi": xi2, "pass2_grid_yi": yi2},
+                            )
 
                 # half crop のフレーム側スライス（列方向の右半分 or 左半分）
                 roi_ch = rois_for_incremental[ch] if ch < len(rois_for_incremental) else rois_for_incremental[-1]
@@ -783,29 +784,26 @@ def main():
                 if result2 is None:
                     # pass2 失敗 → pass1 結果を採用
                     low_ecc = ECC_MIN_CORR > 0 and corr1 < ECC_MIN_CORR
-                    per_channel.append({
-                        "channel": ch,
-                        "shift_x": shift1_x, "shift_y": shift1_y, "correlation": corr1,
-                        "excluded": low_ecc,
-                        "exclude_reason": "low_ecc_score" if low_ecc else None,
-                        "grid_xi": xi, "grid_yi": yi,
-                        "pass1_shift_x": shift1_x, "pass1_shift_y": shift1_y,
-                        "pass1_fine_x": fine1_x, "pass1_fine_y": fine1_y,
-                        "pass1_grid_offset_x": grid_offset_x, "pass1_grid_offset_y": grid_offset_y,
-                        "pass1_corr": corr1, "pass1_grid_xi": xi, "pass1_grid_yi": yi,
-                        "pass2_shift_x": None, "pass2_shift_y": None, "pass2_corr": None,
-                        "pass2_fine_x": None, "pass2_fine_y": None,
-                        "pass2_grid_offset_x": grid_offset_x2, "pass2_grid_offset_y": grid_offset_y2,
-                        "pass2_grid_xi": xi2, "pass2_grid_yi": yi2,
-                    })
-                    corr_records.append({
-                        "t": t, "ch": ch,
-                        "shift_x": shift1_x, "shift_y": shift1_y, "corr": corr1,
-                        "grid_xi": xi, "grid_yi": yi, "failed": False,
-                        "pass1_corr": corr1, "pass1_grid_xi": xi, "pass1_grid_yi": yi,
-                        "pass2_corr": None, "pass2_grid_xi": xi2, "pass2_grid_yi": yi2,
-                    })
-                    continue
+                    return (
+                        {"channel": ch,
+                         "shift_x": shift1_x, "shift_y": shift1_y, "correlation": corr1,
+                         "excluded": low_ecc,
+                         "exclude_reason": "low_ecc_score" if low_ecc else None,
+                         "grid_xi": xi, "grid_yi": yi,
+                         "pass1_shift_x": shift1_x, "pass1_shift_y": shift1_y,
+                         "pass1_fine_x": fine1_x, "pass1_fine_y": fine1_y,
+                         "pass1_grid_offset_x": grid_offset_x, "pass1_grid_offset_y": grid_offset_y,
+                         "pass1_corr": corr1, "pass1_grid_xi": xi, "pass1_grid_yi": yi,
+                         "pass2_shift_x": None, "pass2_shift_y": None, "pass2_corr": None,
+                         "pass2_fine_x": None, "pass2_fine_y": None,
+                         "pass2_grid_offset_x": grid_offset_x2, "pass2_grid_offset_y": grid_offset_y2,
+                         "pass2_grid_xi": xi2, "pass2_grid_yi": yi2},
+                        {"t": t, "ch": ch,
+                         "shift_x": shift1_x, "shift_y": shift1_y, "corr": corr1,
+                         "grid_xi": xi, "grid_yi": yi, "failed": False,
+                         "pass1_corr": corr1, "pass1_grid_xi": xi, "pass1_grid_yi": yi,
+                         "pass2_corr": None, "pass2_grid_xi": xi2, "pass2_grid_yi": yi2},
+                    )
 
                 fine2_x, fine2_y, corr2 = result2
                 shift2_x = fine2_x + grid_offset_x2
@@ -821,16 +819,17 @@ def main():
                 if USE_THIRD_PASS_ECC:
                     xi3, yi3 = _select_nearest_grid(shift2_x, shift2_y, grid_cal, pos_map, pixel_scale_um)
                     grid_offset_x3, grid_offset_y3 = _get_grid_offset(xi3, yi3, grid_cal, pixel_scale_um)
-                    if (xi3, yi3) not in grid_half_cache:
-                        try:
-                            grid_half_cache[(xi3, yi3)] = load_grid_ref_mn_half(
-                                pos_map, xi3, yi3, rois_for_incremental, n_channels)
-                            if ALIGNMENT_METHOD == 'ecc':
-                                grid_half_u8_cache[(xi3, yi3)] = [
-                                    to_uint8(r) for r in grid_half_cache[(xi3, yi3)]]
-                        except FileNotFoundError as e:
-                            print(f"\n[t={t},ch={ch}] pass3 half-crop ロード失敗: {e}  → pass2 結果を使用")
-                            xi3, yi3 = xi2, yi2
+                    with _cache_lock:
+                        if (xi3, yi3) not in grid_half_cache:
+                            try:
+                                grid_half_cache[(xi3, yi3)] = load_grid_ref_mn_half(
+                                    pos_map, xi3, yi3, rois_for_incremental, n_channels)
+                                if ALIGNMENT_METHOD == 'ecc':
+                                    grid_half_u8_cache[(xi3, yi3)] = [
+                                        to_uint8(r) for r in grid_half_cache[(xi3, yi3)]]
+                            except FileNotFoundError as e:
+                                print(f"\n[t={t},ch={ch}] pass3 half-crop ロード失敗: {e}  → pass2 結果を使用")
+                                xi3, yi3 = xi2, yi2
                     if (xi3, yi3) in grid_half_cache:
                         if ALIGNMENT_METHOD == 'ecc':
                             result3 = ecc_align(grid_half_u8_cache[(xi3, yi3)][ch], to_uint8(frame_half))
@@ -882,8 +881,13 @@ def main():
                         "pass3_corr": corr3,
                         "pass3_grid_xi": xi3, "pass3_grid_yi": yi3,
                     })
-                per_channel.append(pc_entry)
-                corr_records.append(cr_entry)
+                return pc_entry, cr_entry
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=_n_workers) as ex_ch:
+                ch_results = list(ex_ch.map(_compute_ch, range(n_channels)))
+            for pc_e, cr_e in ch_results:
+                per_channel.append(pc_e)
+                corr_records.append(cr_e)
 
             frame_result, sx_avg, sy_avg = _frame_result_from_per_channel(t, per_channel)
 
@@ -904,46 +908,49 @@ def main():
             _save_corr_npz_csv(corr_records, channels_dir)
 
     else:
-        for t in tqdm(range(n_frames), desc="フレーム処理"):
-            per_channel = []
+        # ---- 非インクリメンタル: フレームをスレッドプールで並列処理 ----
+        def _run_frame(t):
+            pc, cr = [], []
             for ch in range(n_channels):
                 frame = stacks[ch][t]
                 if ALIGNMENT_METHOD == 'ecc':
-                    result = ecc_align(refs_u8[ch], to_uint8(frame))
+                    res = ecc_align(refs_u8[ch], to_uint8(frame))
                 else:
-                    result = phase_align(refs[ch], frame)
-
-                if result is None:
-                    per_channel.append({
-                        "channel": ch,
-                        "shift_x": None,
-                        "shift_y": None,
-                        "correlation": None,
-                        "excluded": True,
+                    res = phase_align(refs[ch], frame)
+                if res is None:
+                    pc.append({
+                        "channel": ch, "shift_x": None, "shift_y": None,
+                        "correlation": None, "excluded": True,
                         "exclude_reason": "alignment_failed"
                     })
-                    corr_records.append({
-                        "t": t, "ch": ch, "shift_x": None, "shift_y": None,
-                        "corr": None, "failed": True,
-                    })
+                    cr.append({"t": t, "ch": ch, "shift_x": None, "shift_y": None,
+                               "corr": None, "failed": True})
                 else:
-                    sx, sy, corr = result
+                    sx, sy, corr = res
                     low_ecc = ECC_MIN_CORR > 0 and corr < ECC_MIN_CORR
-                    per_channel.append({
-                        "channel": ch,
-                        "shift_x": sx,
-                        "shift_y": sy,
-                        "correlation": corr,
-                        "excluded": low_ecc,
+                    pc.append({
+                        "channel": ch, "shift_x": sx, "shift_y": sy,
+                        "correlation": corr, "excluded": low_ecc,
                         "exclude_reason": "low_ecc_score" if low_ecc else None
                     })
-                    corr_records.append({
-                        "t": t, "ch": ch, "shift_x": sx, "shift_y": sy,
-                        "corr": corr, "failed": False,
-                    })
+                    cr.append({"t": t, "ch": ch, "shift_x": sx, "shift_y": sy,
+                               "corr": corr, "failed": False})
+            return pc, cr
 
-            frame_result, _, _ = _frame_result_from_per_channel(t, per_channel)
+        _n_workers = N_WORKERS or os.cpu_count()
+        print(f"並列ワーカー数: {_n_workers} (non-incremental / フレーム並列)")
+        _frame_results_map = {}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=_n_workers) as ex:
+            fs = {ex.submit(_run_frame, t): t for t in range(n_frames)}
+            for fut in tqdm(concurrent.futures.as_completed(fs), total=n_frames, desc="フレーム処理"):
+                t = fs[fut]
+                _frame_results_map[t] = fut.result()
+
+        for t in range(n_frames):
+            pc, cr = _frame_results_map[t]
+            frame_result, _, _ = _frame_result_from_per_channel(t, pc)
             frame_results.append(frame_result)
+            corr_records.extend(cr)
 
         # ---- corr データ保存 ----
         if SAVE_CORR_DATA and corr_records:
