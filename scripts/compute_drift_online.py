@@ -27,6 +27,7 @@ import argparse
 import numpy as np
 import tifffile
 import cv2
+import concurrent.futures
 from pathlib import Path
 from datetime import datetime
 from scipy.ndimage import uniform_filter1d
@@ -290,23 +291,25 @@ def main():
         crop = crop + offset
         current_crops.append(crop)
 
-    # ---- チャネルごとに ECC ----
+    # ---- チャネルごとに ECC（並列）----
     tx_list, ty_list, corr_list = [], [], []
-    for ch_idx in range(min(n_channels, len(current_crops))):
-        ref_crop  = prev_crops[ch_idx] if ch_idx < len(prev_crops) else prev_crops[-1]
-        cur_crop  = current_crops[ch_idx]
+    n_ch = min(n_channels, len(current_crops))
 
-        ref_u8 = to_uint8(ref_crop, vmin, vmax)
-        cur_u8 = to_uint8(cur_crop, vmin, vmax)
-        result = ecc_align(ref_u8, cur_u8)
-        if result is not None:
-            tx, ty, corr = result
-            tx_list.append(tx)
-            ty_list.append(ty)
-            corr_list.append(corr)
-            print(f"    ch{ch_idx:02d}: tx={tx:+.3f}px ty={ty:+.3f}px corr={corr:.4f}")
-        else:
-            print(f"    ch{ch_idx:02d}: ECC failed")
+    def _align_ch(ch_idx):
+        ref_crop = prev_crops[ch_idx] if ch_idx < len(prev_crops) else prev_crops[-1]
+        cur_crop = current_crops[ch_idx]
+        return ch_idx, ecc_align(to_uint8(ref_crop, vmin, vmax), to_uint8(cur_crop, vmin, vmax))
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=n_ch) as ex:
+        for ch_idx, result in ex.map(_align_ch, range(n_ch)):
+            if result is not None:
+                tx, ty, corr = result
+                tx_list.append(tx)
+                ty_list.append(ty)
+                corr_list.append(corr)
+                print(f"    ch{ch_idx:02d}: tx={tx:+.3f}px ty={ty:+.3f}px corr={corr:.4f}")
+            else:
+                print(f"    ch{ch_idx:02d}: ECC failed")
 
     if not tx_list:
         print("ERROR: ECC failed on all channels")
