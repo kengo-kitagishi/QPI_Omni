@@ -165,6 +165,7 @@ def _load_holo(fname: str) -> np.ndarray:
 pair_nums       = []
 noise_rad_vals  = []   # [rad/frame]
 noise_nm_vals   = []   # [nm OPD/frame]
+diff_roi_stack  = []   # [pair, y, x] : temporal-axis diagnostics
 
 # 理論値は最初の有効ペアから 1 回だけ計算する
 sigma_shot_mrad   = None
@@ -195,6 +196,7 @@ for _i in selected_pair_idx:
     pair_nums.append(_i + 1)
     noise_rad_vals.append(noise_rad)
     noise_nm_vals.append(noise_nm)
+    diff_roi_stack.append(diff_roi.copy())
 
     # 理論値計算（最初のペアのみ）
     if sigma_shot_mrad is None:
@@ -238,6 +240,7 @@ pair_nums      = np.array(pair_nums)
 noise_rad_vals = np.array(noise_rad_vals)
 noise_nm_vals  = np.array(noise_nm_vals)
 noise_mrad_vals = noise_rad_vals * 1e3
+diff_roi_stack = np.stack(diff_roi_stack, axis=0)
 
 # ============================================================
 # 集計・stdout 出力
@@ -250,9 +253,31 @@ noise_std_mrad  = float(noise_mrad_vals.std())
 noise_mean_nm   = float(noise_nm_vals.mean())
 noise_std_nm    = float(noise_nm_vals.std())
 
+# 追加診断:
+# 1) pixel-wise temporal std: 各画素で pair 軸 std を計算し、ROI 内平均
+# 2) ROI-mean temporal std: 各 pair の ROI 平均値の時系列 std
+temporal_std_map_rad = np.std(diff_roi_stack, axis=0) / np.sqrt(2)
+temporal_std_map_mean_mrad = float(np.mean(temporal_std_map_rad) * 1e3)
+temporal_std_map_std_mrad  = float(np.std(temporal_std_map_rad) * 1e3)
+roi_mean_series_rad = np.mean(diff_roi_stack, axis=(1, 2))
+roi_mean_temporal_std_mrad = float(np.std(roi_mean_series_rad) / np.sqrt(2) * 1e3)
+
+print("\n--- 実測値の定義 ---")
+print(
+    "  main metric = mean_i[ std_xy( phi(2i+1)-phi(2i) ) / sqrt(2) ] "
+    "(ROI内・空間stdをペア平均)"
+)
 print("\n--- 実測値 ---")
-print(f"  noise [mrad/frame]: {noise_mean_mrad:.2f} ± {noise_std_mrad:.2f}")
-print(f"  noise [nm OPD/frame]: {noise_mean_nm:.3f} ± {noise_std_nm:.3f}")
+print(f"  main noise [mrad/frame]: {noise_mean_mrad:.2f} ± {noise_std_mrad:.2f}")
+print(f"  main noise [nm OPD/frame]: {noise_mean_nm:.3f} ± {noise_std_nm:.3f}")
+print(
+    f"  temporal pixel std mean [mrad/frame]: {temporal_std_map_mean_mrad:.2f} "
+    f"(ROI内pixel-wise temporal stdの平均, spatial std={temporal_std_map_std_mrad:.2f})"
+)
+print(
+    f"  ROI-mean temporal std [mrad/frame]: {roi_mean_temporal_std_mrad:.3f} "
+    f"(ROI平均位相差の時間ばらつき)"
+)
 
 print("\n--- 理論限界（最初のペアから算出）---")
 print(f"  σ_shot   : {sigma_shot_mrad:.3f} mrad  /  {sigma_shot_nm:.4f} nm  (eq. A.9)")
@@ -333,6 +358,9 @@ _params_common = dict(
     noise_std_mrad=round(noise_std_mrad, 3),
     noise_mean_nm=round(noise_mean_nm, 4),
     noise_std_nm=round(noise_std_nm, 4),
+    temporal_pixel_std_mean_mrad=round(temporal_std_map_mean_mrad, 3),
+    temporal_pixel_std_spatial_std_mrad=round(temporal_std_map_std_mrad, 3),
+    roi_mean_temporal_std_mrad=round(roi_mean_temporal_std_mrad, 3),
     sigma_shot_mrad=round(sigma_shot_mrad, 3),
     sigma_total_mrad=round(sigma_total_mrad, 3),
     sigma_shot_nm=round(sigma_shot_nm, 4),
@@ -347,6 +375,8 @@ _data_common = {
     "pair_nums":      pair_nums,
     "noise_mrad":     noise_mrad_vals,
     "noise_nm":       noise_nm_vals,
+    "roi_mean_series_rad": roi_mean_series_rad,
+    "temporal_std_map_rad": temporal_std_map_rad,
 }
 
 save_figure(
