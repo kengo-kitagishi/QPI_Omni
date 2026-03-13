@@ -190,10 +190,10 @@ def _detect_caller_file() -> str:
     return ""
 
 
-def _new_run_id(script_name: str) -> str:
+def _new_run_id() -> str:
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     suffix = uuid.uuid4().hex[:6]
-    return f"{_sanitize_token(script_name)}_{ts}_{suffix}"
+    return f"{ts}_{suffix}"
 
 
 def _ensure_run_context(script_name: str) -> tuple[str, int]:
@@ -203,7 +203,7 @@ def _ensure_run_context(script_name: str) -> tuple[str, int]:
     """
     if _RUN_CONTEXT["script"] != script_name or _RUN_CONTEXT["run_id"] is None:
         _RUN_CONTEXT["script"] = script_name
-        _RUN_CONTEXT["run_id"] = _new_run_id(script_name)
+        _RUN_CONTEXT["run_id"] = _new_run_id()
         _RUN_CONTEXT["count"] = 0
         _RUN_CONTEXT["start_mono"] = time.monotonic()
 
@@ -821,7 +821,7 @@ def save_figure(
             avg = sum(timing_history) / len(timing_history)
             last = timing_history[-1]
             print(
-                f"[figure_logger] ⏱ 前回: {_fmt_elapsed(last)}"
+                f"[figure_logger] [elapsed] 前回: {_fmt_elapsed(last)}"
                 + (f"  / 平均({len(timing_history)}回): {_fmt_elapsed(avg)}" if len(timing_history) > 1 else "")
             )
 
@@ -837,7 +837,11 @@ def save_figure(
     inbox_dir = inbox_root / date_local / script / run_id
     inbox_dir.mkdir(parents=True, exist_ok=True)
 
-    base = f"{script}__{run_id}__f{fig_index:03d}"
+    desc_slug = _sanitize_token(description)[:40] if description else ""
+    if desc_slug:
+        base = f"{script}__{desc_slug}__{run_id}__f{fig_index:03d}"
+    else:
+        base = f"{script}__{run_id}__f{fig_index:03d}"
     inbox_file = inbox_dir / f"{base}.{fmt}"
     fig.savefig(inbox_file, dpi=dpi, bbox_inches="tight")
 
@@ -919,7 +923,7 @@ def save_figure(
     if published_file:
         print(f"[figure_logger] published copy: {published_file}")
     print(f"[figure_logger] manifest: {manifest_path}")
-    print(f"[figure_logger] ⏱ 経過時間: {_fmt_elapsed(elapsed_sec)}")
+    print(f"[figure_logger] [elapsed] 経過時間: {_fmt_elapsed(elapsed_sec)}")
 
     return Path(published_file) if published_file else inbox_file
 
