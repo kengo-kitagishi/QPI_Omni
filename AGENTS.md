@@ -499,14 +499,15 @@ Description: その日の思考メモのまとめ（後から更新）
 
 ---
 
-## 「週次レポート」トリガー — 科学的ナラティブ形式で Obsidian に保存
+## 「週次レポート」トリガー — Obsidian に保存
 
 会話中にユーザーが **「週次レポート（作って/生成して）」** と言ったとき、以下を実行する。
 
 ### 基本方針
 
-- レポート形式の正本は `~/dotfiles/docs/WEEKLY_REPORT_SPEC.md` とする。
-- **Claudeが情報を収集・統合し、Kamei-sanスタイルの科学的ナラティブで書く**（タスクリスト禁止）。
+- レポート形式の正本は `QPI_Omni/docs/WEEKLY_LOG_SPEC.md` とする。
+- **トピック（内容）単位**でまとめ、**因果の流れ**（設計→実行→図→次にこう変更→...）を可視化する。
+- セッション単位で区切らず、各まとまりを **1セッション ≒ 1 Qiita 記事**程度の厚みで書く。
 - 保存先: `~/Documents/Obsidian Vault/04_WeeklyReports/YYYY-Www.md`
 - 特に指定がなければ **直近の月〜日（今週）** を対象とする。
 
@@ -525,54 +526,33 @@ week_label = today.strftime("%Y-W%V")
 
 **Step 2: 情報収集（以下の順で読む）**
 
-1. **Obsidian notion_sync** を読む:
+1. **週次索引**（`python3 scripts/weekly_report_hub.py` 出力）を読む。索引に列挙されたファイルを Read する。
+2. **Obsidian notion_sync** を読む:
    ```bash
    ls ~/Documents/Obsidian\ Vault/00_Inbox/notion_sync/api/YYYY-MM-DD/
-   # 対象週の各日ディレクトリを全て読む
    ```
-
-2. **figure-hub 新規図** を確認:
+3. **figure-hub 新規図** を確認:
    ```bash
    python3 ~/Desktop/figure-hub/scripts/figure_hub.py list
-   # 対象週中に registered_at が入っている図を抽出
    ```
+4. **thesis git log** を確認
+5. **figure_fix_inbox** を確認
+6. **JSONL** から notion_sync にない作業を補足（`~/.claude/projects` 内の対象週の .jsonl）
 
-3. **thesis git log** を確認:
-   ```bash
-   git -C ~/History-dependent-survival-and-adaptation-to-glucose-starvation-in-fission-yeast \
-     log --since="YYYY-MM-DD" --until="YYYY-MM-DD" --oneline
-   ```
-
-4. **figure_fix_inbox** を確認:
-   ```bash
-   cat ~/Documents/Obsidian\ Vault/00_Inbox/figures/figure_fix_inbox.md
-   ```
-
-5. **JSONL から notion_sync にない作業を補足**:
-   ```python
-   # 今週更新された JSONL ファイルを特定
-   import os, glob
-   from datetime import date, timedelta
-   today = date.today()
-   monday = today - timedelta(days=today.weekday())
-   projects_dir = os.path.expanduser("~/.claude/projects")
-   for jsonl in glob.glob(f"{projects_dir}/**/*.jsonl", recursive=True):
-       mtime = date.fromtimestamp(os.path.getmtime(jsonl))
-       if mtime >= monday:
-           print(jsonl)
-   ```
-   - 見つかったファイルを Bash で全文パースする（サイズ制限なし。全部読む）
-   - `tool_use` で Edit/Write/Bash を使った箇所 = 実際の作業。notion_sync に**ない**トピックを抽出する
-   - JSONL は補足情報。notion_sync にすでにある内容は重複して書かない
+claude_sessions .md のタイムライン（Edit/Bash の順）と figure inbox .md を突き合わせ、編集・実行・図の時刻から因果を推論する。
 
 **Step 3: レポート作成**
 
-収集した情報を読み、トピックを抽出してWEEKLY_REPORT_SPEC形式で書く。
+収集した情報を読み、**トピックを抽出**して `docs/WEEKLY_LOG_SPEC.md` 形式で書く。
 
-- **タスクリストにしない** — 科学的ナラティブ（問い → 手法 → 定量結果 → 解釈）で書く
-- **定量的に書く** — 「〇〇した」ではなく「〇〇の結果、XX% / N個 / p<0.05 が得られた」
-- **図を参照** — figure-hub に登録済みの図は `[fig_id vXXX]` で参照
-- **PI open questions** — 毎週必ず1–3件書く
+- **トピック（内容）単位**でまとめる。セッション単位で区切らない
+- 各トピックで「設計 → 実行 → 図 → 次にこう変更」の**因果の流れ**を記述
+- 1まとまりあたり **Qiita 記事相当の厚み**（背景・手順・コード抜粋・結果・学び）
+- 編集・Bash・図の時刻から因果を推論し、その順で記述
+- 「まとめ」「結論」などの形式張った見出しは使わない
+- **タスクリスト形式にしない**
+- 定量的に書く（可能なら「〇〇の結果、XX% / N個 が得られた」）
+- 図を参照（`![[filename]]` または `[fig_id vXXX]`）
 - 情報が少ないトピックは「解析中」と明記（でっち上げ禁止）
 
 **Step 4: Obsidian に保存**
@@ -591,8 +571,8 @@ week_label = today.strftime("%Y-W%V")
 
 ### Quality Gate（保存前に確認）
 
-- [ ] 各 Topic に Background → Analysis → Results → Interpretation → Next questions がある
-- [ ] Results に定量的数値がある（または「解析中」と明記）
-- [ ] figure-hub 登録図を参照している（ある場合）
-- [ ] PI open questions が1件以上ある
+- [ ] 各トピックに因果の流れ（設計→実行→結果→次の一手）がある
+- [ ] コード・コマンドの抜粋がある（再現できる程度）
+- [ ] 図を適切に参照している（ある場合）
 - [ ] タスクリスト形式になっていない
+- [ ] 定量的な記述または「解析中」の明記がある

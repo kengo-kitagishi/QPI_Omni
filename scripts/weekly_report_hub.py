@@ -834,18 +834,20 @@ def render_weekly_index(
     lines.append("")
     lines.append("## 週次レポート生成の指示")
     lines.append("")
-    lines.append("上記ファイルを全て読み終えたら、以下の手順でレポートを生成する：")
+    lines.append("上記ファイルを全て読み終えたら、`docs/WEEKLY_LOG_SPEC.md` に従ってレポートを生成する。")
     lines.append("")
-    lines.append(
-        f"1. 保存先: `~/Documents/Obsidian Vault/04_WeeklyReports/{week_label}.md`"
-    )
+    lines.append("**仕様の要点:**")
+    lines.append("- トピック（内容）単位でまとめる。セッション単位で区切らない")
+    lines.append("- 各トピックで「設計 → 実行 → 図 → 次にこう変更」の因果の流れを記述")
+    lines.append("- 1まとまりあたり Qiita 記事相当の厚み（背景・手順・コード抜粋・結果・学び）")
+    lines.append("- claude_sessions .md のタイムラインと figure inbox .md を突き合わせ、"
+                 "同じ日・近い時刻の Bash（script X）と図（script X）で因果を推論する")
+    lines.append("")
+    lines.append("**手順:**")
+    lines.append(f"1. 保存先: `~/Documents/Obsidian Vault/04_WeeklyReports/{week_label}.md`")
     lines.append("2. 既存ファイルがある場合は上書き確認をユーザーに求める")
-    lines.append("3. WEEKLY_REPORT_SPEC 形式（科学的ナラティブ・タスクリスト禁止）")
-    lines.append("4. 各トピックに Background → Analysis（コード変更・AI思考・試行錯誤） "
-                 "→ Results → Interpretation → Next questions")
-    lines.append("5. 図は `![[filename]]` 形式で埋め込む")
-    lines.append("6. PI open questions を1–3件書く")
-    lines.append("7. Notion メモの内容（背景・目的・数式）を Research context として活用する")
+    lines.append("3. 図は `![[filename]]` 形式で埋め込む")
+    lines.append("4. Notion メモの内容を Research context として活用する")
     lines.append("")
 
     return "\n".join(lines)
