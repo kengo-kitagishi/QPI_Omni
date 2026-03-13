@@ -34,6 +34,12 @@ from PIL import Image
 from pathlib import Path
 from skimage.restoration import unwrap_phase
 from tqdm import tqdm
+import os
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
 
 # ============================================================
 # 設定パラメータ
@@ -69,6 +75,8 @@ SAVE_PNG = False
 PNG_DPI  = 150
 PNG_VMIN = -2.0
 PNG_VMAX =  2.0
+# 並列処理ワーカー数（None = cpu_count(), 1 = 逐次実行でデバッグ向き）
+N_WORKERS = None
 # ============================================================
 
 # QPIインポート
@@ -139,6 +147,61 @@ def make_qpi_params(sample_img_path: Path, crop):
     )
 
 
+def _reconstruct_grid_point(args):
+    """ProcessPoolExecutor ワーカー: 1グリッドポイントの全 z スライスを再構成して保存。"""
+    xi, yi, target_dir_str, bg_dir_str, crop, pos_number = args
+    target_dir = Path(target_dir_str)
+    bg_dir     = Path(bg_dir_str)
+    out_dir    = target_dir / "output_phase"
+
+    z_files_target = {get_z_index(p): p for p in get_z_files(target_dir)}
+    z_files_bg     = {get_z_index(p): p for p in get_z_files(bg_dir)}
+
+    if not z_files_target:
+        return xi, yi, False, "z画像なし"
+
+    out_dir.mkdir(exist_ok=True)
+    sample_path = next(iter(z_files_target.values()))
+    try:
+        qpi_params = make_qpi_params(sample_path, crop)
+    except Exception as e:
+        return xi, yi, False, f"QPIParams: {e}"
+
+    folder_ok = True
+    for z_idx, tgt_path in sorted(z_files_target.items()):
+        out_path = out_dir / (tgt_path.stem + "_phase.tif")
+        if SKIP_IF_EXISTS and out_path.exists():
+            continue
+        if z_idx not in z_files_bg:
+            folder_ok = False
+            continue
+        try:
+            phase_target = reconstruct_image(tgt_path, qpi_params, crop)
+            phase_bg     = reconstruct_image(z_files_bg[z_idx], qpi_params, crop)
+            phase_diff   = phase_target - phase_bg
+            h, w = phase_diff.shape
+            if pos_number < POS_SPLIT:
+                region = phase_diff[1:h-1, 1:w//2]
+            else:
+                region = phase_diff[1:h-1, w//2:w-1]
+            if region.size > 0:
+                phase_diff -= np.mean(region)
+            tifffile.imwrite(str(out_path), phase_diff.astype(np.float32))
+            if SAVE_PNG:
+                import matplotlib.pyplot as plt
+                png_path = out_dir / (tgt_path.stem + ".png")
+                fig, ax = plt.subplots(figsize=(5, 5))
+                ax.imshow(phase_diff, cmap="RdBu_r", vmin=PNG_VMIN, vmax=PNG_VMAX)
+                ax.axis("off")
+                ax.set_title(f"{target_dir.name} z={z_idx}")
+                plt.tight_layout()
+                plt.savefig(str(png_path), dpi=PNG_DPI, bbox_inches="tight")
+                plt.close()
+        except Exception as e:
+            folder_ok = False
+    return xi, yi, folder_ok, None
+
+
 def main():
     grid_dir = Path(GRID_DIR)
     if not grid_dir.exists():
@@ -180,92 +243,43 @@ def main():
         print(f"  {base_label}  ({len(target_map)} フォルダ)  crop={crop}")
         print(f"{'='*60}")
 
-        # xi/yi でソートして処理
-        for (xi, yi) in tqdm(sorted(target_map.keys()), desc=base_label):
-            target_dir = target_map[(xi, yi)]
-            out_dir = target_dir / "output_phase"
-
-            # スキップ判定
+        # タスクリスト構築（スキップ・BG欠損チェック）
+        tasks = []
+        for (xi, yi) in sorted(target_map.keys()):
+            tgt_dir = target_map[(xi, yi)]
+            out_dir = tgt_dir / "output_phase"
             if SKIP_IF_EXISTS and out_dir.exists() and any(out_dir.glob("*.tif")):
                 total_skip += 1
                 continue
-
-            # 対応する BG フォルダ確認
             if (xi, yi) not in bg_map:
                 print(f"  [WARN] BG が見つかりません: {BG_BASE_LABEL}_x{xi:+d}_y{yi:+d}  → スキップ")
                 total_err += 1
                 continue
+            bg_d = bg_map[(xi, yi)]
+            tasks.append((xi, yi, str(tgt_dir), str(bg_d), crop, pos_number))
 
-            bg_dir = bg_map[(xi, yi)]
-            z_files_target = {get_z_index(p): p for p in get_z_files(target_dir)}
-            z_files_bg     = {get_z_index(p): p for p in get_z_files(bg_dir)}
+        if not tasks:
+            continue
 
-            if not z_files_target:
-                print(f"  [WARN] z 画像なし: {target_dir}")
-                total_err += 1
-                continue
+        n_workers_display = N_WORKERS if N_WORKERS is not None else os.cpu_count()
+        print(f"  並列処理: {len(tasks)} ポイント / {n_workers_display} ワーカー")
 
-            out_dir.mkdir(exist_ok=True)
+        if N_WORKERS == 1:
+            results = [_reconstruct_grid_point(args) for args in tqdm(tasks, desc=base_label)]
+        else:
+            results = []
+            with ProcessPoolExecutor(max_workers=N_WORKERS) as executor:
+                futures = {executor.submit(_reconstruct_grid_point, args): args for args in tasks}
+                for fut in tqdm(as_completed(futures), total=len(tasks), desc=base_label):
+                    results.append(fut.result())
 
-            # QPIParameters（最初の z から作成）
-            sample_path = next(iter(z_files_target.values()))
-            try:
-                qpi_params = make_qpi_params(sample_path, crop)
-            except Exception as e:
-                print(f"  [ERR] QPIParams 作成失敗 ({target_dir.name}): {e}")
-                total_err += 1
-                continue
-
-            folder_ok = True
-            for z_idx, tgt_path in sorted(z_files_target.items()):
-                out_path = out_dir / (tgt_path.stem + "_phase.tif")
-                if SKIP_IF_EXISTS and out_path.exists():
-                    continue
-
-                if z_idx not in z_files_bg:
-                    print(f"  [WARN] BG に z={z_idx} がありません: {bg_dir.name}")
-                    folder_ok = False
-                    continue
-
-                bg_path = z_files_bg[z_idx]
-
-                try:
-                    phase_target = reconstruct_image(tgt_path, qpi_params, crop)
-                    phase_bg     = reconstruct_image(bg_path,  qpi_params, crop)
-                    phase_diff   = phase_target - phase_bg
-
-                    # 平均0調整（10_batch_reconstruction_dual.py と同じロジック）
-                    h, w = phase_diff.shape
-                    if pos_number < POS_SPLIT:
-                        region = phase_diff[1:h-1, 1:w//2]
-                    else:
-                        region = phase_diff[1:h-1, w//2:w-1]
-                    if region.size > 0:
-                        phase_diff -= np.mean(region)
-
-                    # TIF 保存
-                    tifffile.imwrite(str(out_path), phase_diff.astype(np.float32))
-
-                    # PNG 保存（オプション）
-                    if SAVE_PNG:
-                        import matplotlib.pyplot as plt
-                        png_path = out_dir / (tgt_path.stem + ".png")
-                        fig, ax = plt.subplots(figsize=(5, 5))
-                        ax.imshow(phase_diff, cmap="RdBu_r", vmin=PNG_VMIN, vmax=PNG_VMAX)
-                        ax.axis("off")
-                        ax.set_title(f"{target_dir.name} z={z_idx}")
-                        plt.tight_layout()
-                        plt.savefig(str(png_path), dpi=PNG_DPI, bbox_inches="tight")
-                        plt.close()
-
-                except Exception as e:
-                    print(f"  [ERR] {target_dir.name} z={z_idx}: {e}")
-                    folder_ok = False
-
+        for xi, yi, folder_ok, err_msg in results:
             if folder_ok:
                 total_ok += 1
             else:
                 total_err += 1
+                if err_msg:
+                    print(f"  [ERR] ({xi:+d},{yi:+d}): {err_msg}")
 
     print(f"\n{'='*60}")
     print(f"完了")

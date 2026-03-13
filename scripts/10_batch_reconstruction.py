@@ -4,6 +4,9 @@
 wo_0_EMM_1とwo_2_EMM_1の両方を処理し、各フォルダ内のPos0を背景として使用
 """
 import os
+import sys
+from pathlib import Path
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
 import tifffile
 from PIL import Image
@@ -12,8 +15,15 @@ from qpi import QPIParameters, get_field
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
 # 定数設定
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
+
+# 並列処理ワーカー数（None = cpu_count(), 1 = 逐次実行でデバッグ向き）
+N_WORKERS = None
 
 # ベースディレクトリ設定
 BASE_DIRS = [
@@ -21,6 +31,65 @@ BASE_DIRS = [
     r"F:\wo_0_EMM_1",
     r"F:\wo_2_EMM_1"
 ]
+
+def _worker_batch_frame(args):
+    """ProcessPoolExecutor ワーカー: 1フレームを再構成して保存。"""
+    filepath, bg_filepath, output_dir, output_dir_colormap, base_name, pos_number, pos_split = args
+
+    if not os.path.exists(bg_filepath):
+        return base_name, "no_bg", None
+
+    try:
+        bg_img = np.array(Image.open(bg_filepath))
+        if pos_number < pos_split:
+            bg_img = bg_img[0:2048, 400:2448]
+        else:
+            bg_img = bg_img[0:2048, 0:2048]
+
+        params = QPIParameters(
+            wavelength=WAVELENGTH, NA=NA,
+            img_shape=bg_img.shape, pixelsize=PIXELSIZE,
+            offaxis_center=OFFAXIS_CENTER
+        )
+        field_bg = get_field(bg_img, params)
+        angle_bg = unwrap_phase(np.angle(field_bg))
+
+        img = np.array(Image.open(filepath))
+        if pos_number < pos_split:
+            img = img[0:2048, 400:2448]
+        else:
+            img = img[0:2048, 0:2048]
+
+        field = get_field(img, params)
+        angle = unwrap_phase(np.angle(field))
+        angle_nobg = angle - angle_bg
+
+        h, w = angle_nobg.shape
+        if pos_number < pos_split:
+            center_region = angle_nobg[1:h-1, 1:w//2]
+        else:
+            center_region = angle_nobg[1:h-1, w//2:w-1]
+        if center_region.size > 0:
+            angle_nobg -= np.mean(center_region)
+
+        outpath = os.path.join(output_dir, f"{base_name}_phase.tif")
+        tifffile.imwrite(outpath, angle_nobg.astype(np.float32))
+
+        if True:  # PNG保存
+            plt.figure(figsize=(6, 6))
+            plt.imshow(angle_nobg, cmap='viridis', vmin=-4, vmax=2)
+            plt.colorbar(label='Phase (rad)')
+            plt.title(f"Phase: {base_name}")
+            plt.axis('off')
+            plt.tight_layout()
+            png_outpath = os.path.join(output_dir_colormap, f"{base_name}_colormap.png")
+            plt.savefig(png_outpath, dpi=150)
+            plt.close()
+
+        return base_name, "ok", None
+    except Exception as e:
+        return base_name, "err", str(e)
+
 
 def process_folder(base_dir, pos_start=None, pos_end=None):
     """
@@ -136,97 +205,34 @@ def process_pos_folder(base_dir, bg_dir, pos_name, pos_split=24):
     
     print(f"  TIF画像: {len(tif_files)}枚")
     
-    # 各画像を処理
-    for filename in tqdm(tif_files, desc=f"  {pos_name}"):
-        try:
-            filepath = os.path.join(target_dir, filename)
-            bg_filepath = os.path.join(bg_dir, filename)  # 対応する背景画像
-            
-            # 背景画像の確認
-            if not os.path.exists(bg_filepath):
-                # 背景画像が見つからない場合はスキップ（最初の数枚だけ警告表示）
-                if tif_files.index(filename) < 3:
-                    print(f"\n  ⚠️ 背景画像が見つかりません: {filename} - スキップ")
-                continue
-            
-            # 背景画像読み込み
-            bg_img = Image.open(bg_filepath)
-            bg_img = np.array(bg_img)
-            
-            # クロップ処理（Pos番号に応じて変更）
-            if pos_number < pos_split:
-                # 前半: [0:2048, 400:2448]
-                bg_img = bg_img[0:2048, 400:2448]
-            else:
-                # 後半: [0:2048, 0:2048]
-                bg_img = bg_img[0:2048, 0:2048]
-            
-            # パラメータ設定
-            params = QPIParameters(
-                wavelength=WAVELENGTH,
-                NA=NA,
-                img_shape=bg_img.shape,
-                pixelsize=PIXELSIZE,
-                offaxis_center=OFFAXIS_CENTER
-            )
-            field_bg = get_field(bg_img, params)
-            angle_bg = unwrap_phase(np.angle(field_bg))
-            
-            # 対象画像読み込み
-            img = Image.open(filepath)
-            img = np.array(img)
-            
-            # クロップ処理（Pos番号に応じて変更）
-            if pos_number < pos_split:
-                # 前半: [0:2048, 400:2448]
-                img = img[0:2048, 400:2448]
-            else:
-                # 後半: [0:2048, 0:2048]
-                img = img[0:2048, 0:2048]
-            
-            # QPI再構成
-            field = get_field(img, params)
-            angle = unwrap_phase(np.angle(field))
-            
-            # 背景差分
-            angle_nobg = angle - angle_bg
-            
-            # 平均0調整（画像中央領域で調整）
-            # Pos番号に応じて調整領域を変更（端のピクセルを含まない）
-            h, w = angle_nobg.shape
-            if pos_number < pos_split:
-                # 前半（左半分、端を含まない）
-                center_region = angle_nobg[1:h-1, 1:w//2]
-            else:
-                # 後半（右半分、端を含まない）
-                center_region = angle_nobg[1:h-1, w//2:w-1]
-            
-            if center_region.size > 0:
-                angle_nobg -= np.mean(center_region)
-            
-            # TIF保存（位相画像）
-            base_name = os.path.splitext(filename)[0]
-            outpath = os.path.join(output_dir, f"{base_name}_phase.tif")
-            tifffile.imwrite(outpath, angle_nobg.astype(np.float32))
-            
-            # PNG保存（カラーマップ付き） - オプション
-            # 大量の画像を処理する場合はコメントアウトして高速化
-            if True:  # PNG保存が必要な場合はTrueに変更
-                plt.figure(figsize=(6, 6))
-                plt.imshow(angle_nobg, cmap='viridis', vmin=-4, vmax=2)
-                plt.colorbar(label='Phase (rad)')
-                plt.title(f"Phase: {filename}")
-                plt.axis('off')
-                plt.tight_layout()
-                png_outpath = os.path.join(output_dir_colormap, f"{base_name}_colormap.png")
-                plt.savefig(png_outpath, dpi=150)
-                plt.close()
-                
-        except Exception as e:
-            print(f"\n  ❌ エラー: {filename} - {e}")
-            import traceback
-            traceback.print_exc()
-            continue
+    # タスクリスト構築
+    tasks = []
+    for filename in tif_files:
+        filepath = os.path.join(target_dir, filename)
+        bg_filepath = os.path.join(bg_dir, filename)
+        base_name = os.path.splitext(filename)[0]
+        tasks.append((filepath, bg_filepath, output_dir, output_dir_colormap,
+                      base_name, pos_number, pos_split))
+
+    n_ok = n_err = 0
+    if N_WORKERS == 1:
+        raw_results = [_worker_batch_frame(args) for args in tqdm(tasks, desc=f"  {pos_name}")]
+    else:
+        raw_results = []
+        with ProcessPoolExecutor(max_workers=N_WORKERS) as executor:
+            futures = {executor.submit(_worker_batch_frame, args): args for args in tasks}
+            for fut in tqdm(as_completed(futures), total=len(tasks), desc=f"  {pos_name}"):
+                raw_results.append(fut.result())
+
+    for base_name, status, err_msg in raw_results:
+        if status == "ok":
+            n_ok += 1
+        elif status == "err":
+            n_err += 1
+            print(f"\n  ❌ エラー: {base_name} - {err_msg}")
+        # no_bg はサイレントスキップ
+
+    print(f"  {pos_name}: 完了={n_ok}, エラー={n_err}")
 
 
 def main():

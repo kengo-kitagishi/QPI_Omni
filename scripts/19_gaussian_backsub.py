@@ -108,79 +108,59 @@ def process_image(image_path, output_dir, save_png_data=False):
     
     print(f"\n処理中: {image_path.name}")
     print(f"画像範囲: {raw_image.min():.3f} ~ {raw_image.max():.3f} rad")
-    
+
     # 固定範囲でヒストグラム作成
     bin_edges = np.linspace(hist_min, hist_max, n_bins + 1)
     hist_counts, _ = np.histogram(raw_image.flatten(), bins=bin_edges)
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
     bin_width = bin_centers[1] - bin_centers[0]
-    
-    print(f"ヒストグラム範囲: {hist_min} ~ {hist_max} rad (ビン幅: {bin_width:.4f} rad)")
-    
+
     # スムージング
     smoothed_histo = uniform_filter1d(hist_counts, size=smooth_window, mode='nearest')
     smoothed_histo = uniform_filter1d(smoothed_histo, size=smooth_window, mode='nearest')
-    
-    # -1.1 rad以上の範囲でピーク検出
+
     valid_indices = np.where(bin_centers >= minPhase)[0]
-    
     if len(valid_indices) == 0:
         print(f"警告: {minPhase} rad以上のデータがありません")
-        return
-    
-    # 検索範囲を制限（最大値付近も除外、例えば上位95%まで）
+        return False
+
     max_search_idx = int(len(bin_centers) * 0.95)
     search_indices = valid_indices[valid_indices < max_search_idx]
-    
     if len(search_indices) == 0:
         print(f"警告: 有効な検索範囲がありません")
-        return
-    
-    search_range = smoothed_histo[search_indices]
-    peak_idx_relative = np.argmax(search_range)
-    peak_idx = search_indices[peak_idx_relative]
+        return False
+
+    peak_idx = search_indices[np.argmax(smoothed_histo[search_indices])]
     peak_value = bin_centers[peak_idx]
-    
     print(f"ピーク位置: {peak_value:.3f} rad")
-    
-    # ガウスフィット用のデータ準備（ピーク周辺±300ビン）
+
     fit_width = 300
     start_idx = max(0, peak_idx - fit_width)
     end_idx = min(len(bin_centers), peak_idx + fit_width)
-    
     x_data = bin_centers[start_idx:end_idx]
     y_data = smoothed_histo[start_idx:end_idx]
-    
-    # ガウスフィット
+
     try:
-        # 初期推定値
-        p0 = [np.max(y_data), peak_value, bin_width * 20]  # amp, mean, std
-        
+        p0 = [np.max(y_data), peak_value, bin_width * 20]
         popt, _ = curve_fit(gaussian, x_data, y_data, p0=p0, maxfev=5000)
-        
         amp, mean, std = popt
         print(f"ガウスフィット - 平均: {mean:.4f} rad")
         print(f"              標準偏差: {std:.4f} rad")
-        
-        # 背景補正（背景ピークを0ラジアンにシフト）
+
         correction_rad = 0.0 - mean
         final_image_rad = raw_image + correction_rad
-        
+
         print(f"補正値: {correction_rad:.4f} rad")
         print(f"補正後の範囲: {final_image_rad.min():.3f} ~ {final_image_rad.max():.3f} rad")
-        
-        # 32-bit float TIFFとして保存
+
         output_path = output_dir / f"{image_path.stem}_bg_corr.tif"
         tifffile.imwrite(str(output_path), final_image_rad.astype(np.float32))
         print(f"保存完了: {output_path.name}")
-        
-        # PNG用のデータを返す（オプション）
+
         if save_png_data:
-            # 補正後のヒストグラムを計算
             hist_corrected, _ = np.histogram(final_image_rad.flatten(), bins=bin_edges)
             smoothed_corrected = uniform_filter1d(hist_corrected, size=smooth_window, mode='nearest')
             smoothed_corrected = uniform_filter1d(smoothed_corrected, size=smooth_window, mode='nearest')
-            
             return {
                 'image_name': image_path.name,
                 'stem': image_path.stem,
@@ -193,9 +173,9 @@ def process_image(image_path, output_dir, save_png_data=False):
                 'mean': mean,
                 'minPhase': minPhase
             }
-        
+
         return True
-        
+
     except Exception as e:
         print(f"ガウスフィット失敗: {e}")
         import traceback

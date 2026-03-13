@@ -33,11 +33,11 @@ from tqdm import tqdm
 # ============================================================
 # 設定パラメータ
 # ============================================================
-GRID_DIR          = r"E:\Acuisition\kitagishi\260301\multipos_test_1"
-BASE_LABEL        = "Pos4"
+GRID_DIR          = r"D:\AquisitionData\Kitagishi\260310\grid_0p5_0p5_0p1_exp200ms_1pos_EMM2_1"
+BASE_LABEL        = "Pos1"
 GRID_Z_INDEX      = 5
 
-CHANNEL_ROIS_JSON = r"E:\Acuisition\kitagishi\260301\movetest_8\Pos4\channels\channel_rois.json"
+CHANNEL_ROIS_JSON = r"D:\AquisitionData\Kitagishi\260310\timelapse_11day_exp200ms_1pos_EMM2\Pos1\output_phase\channels\channel_rois.json"
 
 # ECC 正規化範囲（compute_pos_shifts.py の VMIN/VMAX と同値にする）
 VMIN = -5.0
@@ -45,7 +45,7 @@ VMAX =  2.0
 
 # ECC 収束パラメータ
 ECC_MAX_ITER = 10000
-ECC_EPSILON  = 1e-6
+ECC_EPSILON  = 1e-8
 
 # 光学パラメータ（名目値との比較用のみ。find_nearest には使わない）
 SENSOR_PIXEL_SIZE  = 3.45e-6   # [m]
@@ -393,7 +393,7 @@ def main():
             print(f"ECC 相関係数: mean={np.mean(corrs):.4f}  min={np.min(corrs):.4f}")
 
     # ---- 保存 ----
-    out_path = Path(OUTPUT_JSON) if OUTPUT_JSON else Path(GRID_DIR) / "grid_calibration.json"
+    out_path = Path(OUTPUT_JSON) if OUTPUT_JSON else Path(GRID_DIR) / f"grid_calibration_{BASE_LABEL}.json"
     # 保存順を (xi, yi) でソート
     positions_list = [results[k] for k in sorted(results.keys())]
     out_data = {
