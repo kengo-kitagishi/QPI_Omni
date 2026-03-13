@@ -44,6 +44,12 @@ import session_db
 # ────────────────────────────────────────────
 
 SESSION_DIR = Path.home() / ".claude/projects/-Users-kitak-QPI-Omni"
+SHARED_SESSION_DIR = Path(
+    "/Users/kitak/Library/CloudStorage/"
+    "GoogleDrive-kengo_kitagishi@cell.c.u-tokyo.ac.jp/"
+    "共有ドライブ/wakamotolab_meeting/kitagishi/claude_logs/QPI_Omni"
+)
+DEFAULT_SESSION_DIRS = [SESSION_DIR, SHARED_SESSION_DIR]
 OBSIDIAN_SESSIONS_DIR = Path("/Users/kitak/Documents/Obsidian Vault/00_Inbox/claude_sessions")
 
 # アクティブセッション（最終エントリが ACTIVE_THRESHOLD 分以内）はスキップ
@@ -839,18 +845,39 @@ def process_session(jsonl_path: Path, dry_run: bool) -> dict | None:
             "date_str": date_str, "mtime": mtime}
 
 
+def _collect_jsonl_targets(session_dirs: list[Path] | None) -> list[Path]:
+    """複数ディレクトリから JSONL を収集。同一 session_id は mtime が新しい方を優先。"""
+    dirs = session_dirs if session_dirs else DEFAULT_SESSION_DIRS
+    by_id: dict[str, tuple[Path, float]] = {}
+
+    for d in dirs:
+        path = Path(d) if not isinstance(d, Path) else d
+        if not path.exists():
+            continue
+        for p in path.glob("*.jsonl"):
+            try:
+                mtime = p.stat().st_mtime
+            except OSError:
+                continue
+            sid = p.stem
+            if sid not in by_id or mtime > by_id[sid][1]:
+                by_id[sid] = (p, mtime)
+
+    return [p for p, _ in sorted(by_id.values(), key=lambda x: x[1])]
+
+
 def run(args: argparse.Namespace) -> int:
     conn = session_db.open_db()
     run_id = session_db.start_processing_run(conn, "jsonl_to_obsidian")
-
-    session_dir = Path(args.session_dir)
 
     # 処理対象ファイルの収集
     if args.session:
         targets = [Path(args.session)]
     else:
-        targets = sorted(session_dir.glob("*.jsonl"),
-                         key=lambda p: p.stat().st_mtime)
+        dirs = None
+        if getattr(args, "session_dirs", None):
+            dirs = [Path(d) for d in args.session_dirs]
+        targets = _collect_jsonl_targets(dirs)
 
     processed = 0
     skipped = 0
@@ -886,6 +913,16 @@ def run(args: argparse.Namespace) -> int:
                         timeline=result["timeline"],
                         mtime=result["mtime"],
                     )
+                    # 共有フォルダ由来の JSONL は処理成功後に削除
+                    if (not getattr(args, "no_delete_shared", False)
+                        and str(jsonl_path.resolve()).startswith(
+                            str(SHARED_SESSION_DIR.resolve())
+                        )):
+                        try:
+                            jsonl_path.unlink()
+                            print(f"  → 削除: {jsonl_path.name}")
+                        except OSError as e:
+                            print(f"  → 削除失敗: {e}")
             else:
                 skipped += 1
 
@@ -918,14 +955,18 @@ def parse_args() -> argparse.Namespace:
                         help="処理済み含め全セッションを再変換")
     parser.add_argument(
         "--session-dir",
-        default=str(SESSION_DIR),
-        help=f"JSONL ファイルのあるディレクトリ (default: {SESSION_DIR})"
+        action="append",
+        dest="session_dirs",
+        help="JSONL ディレクトリ（複数指定可。未指定時はローカル+共有フォルダ）",
+    )
+    parser.add_argument(
+        "--no-delete-shared",
+        action="store_true",
+        help="共有フォルダの JSONL を処理後も削除しない（デフォルトは削除する）",
     )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    if args.session_dir != str(SESSION_DIR):
-        SESSION_DIR = Path(args.session_dir)
     raise SystemExit(run(args))

@@ -138,17 +138,17 @@ def extract_notion_summary(md_path: Path) -> dict:
         if end != -1:
             body = text[end + 4:].strip()
 
-    # 目的
+    # 目的（抜粋用・短い場合のみ）
     purpose = ""
     m = re.search(r"(?:^|\n)#{1,3}\s*目的\s*\n+(.*?)(?=\n#|\Z)", body, re.DOTALL)
     if m:
-        purpose = m.group(1).strip()[:200]
+        purpose = m.group(1).strip()
     if not purpose:
         m = re.search(r"\*\*目的\*\*:?\s*(.+)", body)
         if m:
-            purpose = m.group(1).strip()[:200]
+            purpose = m.group(1).strip()
 
-    # 背景（"背景" or "何が起きたか" or "経緯"）
+    # 背景（抜粋用）
     background = ""
     for heading in ("背景", "何が起きたか", "経緯", "概要"):
         m = re.search(
@@ -156,7 +156,7 @@ def extract_notion_summary(md_path: Path) -> dict:
             body, re.DOTALL
         )
         if m:
-            background = m.group(1).strip()[:300]
+            background = m.group(1).strip()
             break
 
     # ステップ名一覧（WORKLOG_SPEC: "#### Step N: ..." or "## Step N: ...")
@@ -197,7 +197,8 @@ def extract_notion_summary(md_path: Path) -> dict:
         "key_code": key_code_lines,
         "equations": equations[:3],
         "sections": sections[:10],
-        "raw_text": body[:1000],
+        "raw_text": body,
+        "full_body": body,
     }
 
 
@@ -230,6 +231,7 @@ def scan_notion_sync(monday: date, sunday: date) -> list[dict]:
                 "key_code": summary.get("key_code", []),
                 "equations": summary.get("equations", []),
                 "sections": summary.get("sections", []),
+                "full_body": summary.get("full_body", ""),
                 "path": str(md_path),
             })
 
@@ -565,14 +567,10 @@ def render_figure_block(fig: dict) -> list[str]:
 
 
 def render_notion_block(notion: dict) -> list[str]:
-    """1 Notion メモ分のサマリブロックを生成する。"""
+    """1 Notion メモ分のサマリブロックを生成する。全文を含め、解釈指示を付ける。"""
     title = notion.get("title", "（無題）")
     notion_url = notion.get("notion_url", "")
-    purpose = notion.get("purpose", "")
-    background = notion.get("background", "")
-    steps = notion.get("steps", [])
-    key_code = notion.get("key_code", [])
-    equations = notion.get("equations", [])
+    full_body = notion.get("full_body", "")
     path = notion.get("path", "")
 
     link_text = f"[Notion]({notion_url})" if notion_url else ""
@@ -584,36 +582,21 @@ def render_notion_block(notion: dict) -> list[str]:
         lines.append(f"**ファイル:** `{path}`")
         lines.append("")
 
-    if purpose:
-        lines.append(f"**目的:** {purpose}")
-        lines.append("")
-
-    if background:
-        lines.append("**背景・概要:**")
-        for bline in background.splitlines()[:5]:
-            lines.append(f"> {bline}")
-        lines.append("")
-
-    if steps:
-        lines.append("**主要ステップ:**")
-        steps_str = " → ".join(steps[:5])
-        lines.append(f"> {steps_str}")
-        lines.append("")
-
-    if equations:
-        lines.append("**数式・LaTeX:**")
-        for eq in equations:
-            lines.append(f"- `{eq}`")
-        lines.append("")
-
-    if key_code:
-        lines.append("**コード例:**")
-        lines.append("```python")
-        for line in key_code[:5]:
-            lines.append(line)
+    lines.append("**全文（このユーザーが考えていること・やりたいこと）:**")
+    lines.append("")
+    if full_body:
+        lines.append("```")
+        lines.append(full_body.strip())
         lines.append("```")
         lines.append("")
+        lines.append(
+            "> **Claude へ**: 上記を読み、「このユーザーは〇〇を考えている／〇〇を試したかった／〇〇が気になっている」"
+            "と解釈してレポートに織り込むこと。そのまま要約するのではなく、意図が伝わる形で書き直す。"
+        )
+    else:
+        lines.append("（本文なし）")
 
+    lines.append("")
     lines.append("---")
     lines.append("")
     return lines
@@ -847,7 +830,9 @@ def render_weekly_index(
     lines.append(f"1. 保存先: `~/Documents/Obsidian Vault/04_WeeklyReports/{week_label}.md`")
     lines.append("2. 既存ファイルがある場合は上書き確認をユーザーに求める")
     lines.append("3. 図は `![[filename]]` 形式で埋め込む")
-    lines.append("4. Notion メモの内容を Research context として活用する")
+    lines.append("4. **Notion メモ**: 索引に全文が含まれている。これを読み、"
+                 "「このユーザーは〇〇を考えている／〇〇を試したかった」と解釈して書き直し、"
+                 "レポートに織り込む。要約ではなく意図が伝わる形で。")
     lines.append("")
 
     return "\n".join(lines)

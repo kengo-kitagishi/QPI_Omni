@@ -202,22 +202,22 @@ for _i in selected_pair_idx:
     if sigma_shot_mrad is None:
         dc, ac = _get_dc_ac(holo0, params)
         vis    = _get_visibility(dc, ac)
+        vis_roi = vis[rs:re, cs:ce]
+        dc_abs_roi = np.abs(dc)[rs:re, cs:ce]
 
-        # σ_shot (eq. A.9) — _get_phase_noise が実装済み
-        N_electron_map = np.abs(dc) * SENSOR_CONVERSION_GAIN  # ADU → e⁻
+        # σ_shot (eq. A.9): 実測ホログラムから得た visibility/DC を
+        # 実測ノイズと同じ ROI (80x80) で評価する
+        N_electron_map = dc_abs_roi * SENSOR_CONVERSION_GAIN  # ADU → e⁻
         sigma_shot_map = _get_phase_noise(
-            vis, aperturesize, N_electron_map, img_shape
+            vis_roi, aperturesize, N_electron_map, img_shape
         )
-        # ROI 内で平均してスカラー化（測定 ROI と同じ領域で評価）
-        sigma_shot_scalar = float(np.mean(sigma_shot_map[rs:re, cs:ce]))
+        sigma_shot_scalar = float(np.mean(sigma_shot_map))
 
         # σ_sensor (eq. A.12)
         if sigma_s_adu is not None:
-            vis_mean  = float(np.mean(vis))
-            dc_abs    = np.abs(dc)
             sigma_sensor_map = np.sqrt(
                 2 * sigma_s_adu**2 * A_aperture
-                / (vis**2 * dc_abs**2 * A_sensor)
+                / (vis_roi**2 * dc_abs_roi**2 * A_sensor)
             )
             sigma_sensor_scalar = float(np.mean(sigma_sensor_map))
         else:
