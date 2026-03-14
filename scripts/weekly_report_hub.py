@@ -442,24 +442,27 @@ def _short_path(path: str) -> str:
 
 
 def render_session_block(conn, session: dict) -> list[str]:
-    """1セッション分のサマリブロックを生成する。"""
+    """1セッション分のサマリブロックを生成する。全情報を含む（制限なし）。"""
     sid = session["session_id"]
     sid8 = sid[:8]
     md_path = session.get("md_path", "")
-    first_msg = (session.get("first_user_message") or "")[:200]
+    first_msg = session.get("first_user_message") or ""
     thinking = session.get("thinking_blocks", 0)
     errors = session.get("error_count", 0)
     bash_n = session.get("bash_command_count", 0)
     tool_n = session.get("tool_call_count", 0)
     design_notes_json = session.get("design_notes") or "[]"
+    session_summary = session.get("session_summary") or ""
 
     # 編集ファイル
     edited_raw = session.get("edited_files_raw") or ""
     edited_files = [f for f in edited_raw.split("|||") if f]
 
-    # DB から bash コマンド取得
+    # DB から全データ取得
     bash_cmds = session_db.query_session_bash_commands(conn, sid)
     error_cmds = [bc for bc in bash_cmds if bc["is_error"]]
+    code_changes = session_db.query_session_code_changes(conn, sid)
+    error_details = session_db.query_session_errors(conn, sid)
 
     lines = [
         f"#### 🤖 セッション `{sid8}` [→ フルログ]",
@@ -470,28 +473,34 @@ def render_session_block(conn, session: dict) -> list[str]:
         lines.append(f"**ファイル:** `{md_path}`")
         lines.append("")
 
-    # 依頼内容
+    # 依頼内容（全文）
     if first_msg:
         lines.append("**依頼内容（最初のユーザー発言）:**")
-        lines.append(f"> {first_msg}")
+        for msg_line in first_msg.splitlines():
+            lines.append(f"> {msg_line}")
         lines.append("")
 
-    # 変更ファイル
+    # セッションサマリ
+    if session_summary:
+        lines.append("**セッションサマリ:**")
+        for sl in session_summary.splitlines():
+            lines.append(f"> {sl}")
+        lines.append("")
+
+    # 変更ファイル（全件）
     if edited_files:
         lines.append(f"**変更ファイル（{len(edited_files)} 件）:**")
-        for ef in edited_files[:8]:
+        for ef in edited_files:
             lines.append(f"- `{_short_path(ef)}`")
-        if len(edited_files) > 8:
-            lines.append(f"- ...（他 {len(edited_files) - 8} 件）")
         lines.append("")
 
-    # 再現コマンド（先頭 8 件）
+    # 再現コマンド（全件）
     if bash_cmds:
         err_summary = f" （エラー {len(error_cmds)} 件）" if error_cmds else ""
         lines.append(f"**再現コマンド（{len(bash_cmds)} 件{err_summary}）:**")
         lines.append("")
         lines.append("```bash")
-        for bc in bash_cmds[:8]:
+        for bc in bash_cmds:
             n = bc.get("event_order", "?")
             ts = _fmt_ts(bc.get("timestamp", ""))
             err_mark = "  # ⚠️ ERROR" if bc["is_error"] else ""
@@ -501,35 +510,93 @@ def render_session_block(conn, session: dict) -> list[str]:
             else:
                 lines.append(f"# [{n}] {ts}{err_mark}")
             lines.append(bc["command"])
-        if len(bash_cmds) > 8:
-            lines.append(f"# ...（他 {len(bash_cmds) - 8} コマンド）")
+            # 出力プレビュー（エラー時のみ表示 or 非エラーでも出力がある場合）
+            out = bc.get("output_preview") or ""
+            if out:
+                if bc["is_error"]:
+                    for oline in out.splitlines()[:10]:
+                        lines.append(f"#   {oline}")
+                else:
+                    preview = out[:200].replace("\n", " ↵ ")
+                    lines.append(f"# → {preview}")
         lines.append("```")
         lines.append("")
 
-    # 設計ノート（thinking 抜粋）
+    # 設計ノート（全ブロック・全文）
     try:
         design_notes = json.loads(design_notes_json)
     except Exception:
         design_notes = []
     if design_notes:
-        first_note = design_notes[0][:250]
-        has_math = bool(re.search(
-            r"[\\$∑∫≈×÷±∂π]|\\frac|\\sum|np\.|[a-z]\s*=\s*[\d\(]", first_note
-        ))
-        math_mark = " 🔢" if has_math else ""
-        lines.append(f"**設計ノート（AI 推論抜粋）{math_mark}:**")
-        for note_line in first_note.splitlines()[:8]:
-            lines.append(f"> {note_line}")
-        if len(design_notes[0]) > 250:
-            lines.append(f"> ...（{len(design_notes[0])} 文字 / フルログ参照）")
-        if len(design_notes) > 1:
-            lines.append(f"> *（他 {len(design_notes) - 1} ブロックあり）*")
+        lines.append(f"**設計ノート（AI 推論 / {len(design_notes)} ブロック）:**")
+        lines.append("")
+        for i, note in enumerate(design_notes, 1):
+            has_math = bool(re.search(
+                r"[\\$∑∫≈×÷±∂π]|\\frac|\\sum|np\.|[a-z]\s*=\s*[\d\(]", note
+            ))
+            math_mark = " 🔢" if has_math else ""
+            lines.append(f"> **[ブロック {i}]{math_mark}**")
+            for note_line in note.splitlines():
+                lines.append(f"> {note_line}")
+            lines.append(">")
+        lines.append("")
+
+    # コード変更詳細（全件）
+    if code_changes:
+        lines.append(f"**コード変更詳細（{len(code_changes)} 件）:**")
+        lines.append("")
+        for cc in code_changes:
+            fp = _short_path(cc.get("file_path", ""))
+            op = cc.get("operation", "")
+            ts = _fmt_ts(cc.get("timestamp", ""))
+            ext = cc.get("file_path", "").rsplit(".", 1)[-1].lower()
+            lang = {"py": "python", "js": "javascript", "ts": "typescript",
+                    "json": "json", "md": "markdown", "sh": "bash",
+                    "yaml": "yaml", "yml": "yaml"}.get(ext, "")
+            lines.append(f"##### `{fp}` — {op} [{ts}]")
+            old_p = cc.get("old_preview") or ""
+            new_p = cc.get("new_preview") or ""
+            if op == "Edit" and old_p:
+                lines.append("変更前:")
+                lines.append(f"```{lang}")
+                lines.append(old_p)
+                lines.append("```")
+                lines.append("変更後:")
+                lines.append(f"```{lang}")
+                lines.append(new_p)
+                lines.append("```")
+            elif new_p:
+                lines.append(f"```{lang}")
+                lines.append(new_p)
+                lines.append("```")
+            lines.append("")
+
+    # エラー詳細（全件）
+    if error_details:
+        lines.append(f"**⚠️ エラー詳細（{len(error_details)} 件）:**")
+        lines.append("")
+        for err in error_details:
+            n = err.get("event_order", "?")
+            ts = _fmt_ts(err.get("timestamp", ""))
+            tool = err.get("tool_name", "")
+            err_text = (err.get("error_text") or err.get("result_preview") or "")[:400]
+            lines.append(f"- `[{n}] {ts} {tool}`: {err_text[:120]}")
         lines.append("")
 
     # 指標
     err_mark = f" | **⚠️ エラー {errors}**" if errors > 0 else ""
     lines.append(f"*指標: thinking={thinking} | tools={tool_n} | bash={bash_n}{err_mark}*")
     lines.append("")
+
+    # セッション .md 全文を埋め込む（制限なし・タイムライン含む完全記録）
+    if md_path:
+        md_file = Path(md_path)
+        if md_file.exists():
+            lines.append(f"**セッション全文（タイムライン・コード変更・全ツール出力含む）:**")
+            lines.append("")
+            lines.extend(md_file.read_text(encoding="utf-8").splitlines())
+            lines.append("")
+
     lines.append("---")
     lines.append("")
 
@@ -602,6 +669,72 @@ def render_notion_block(notion: dict) -> list[str]:
     return lines
 
 
+def render_daily_index(
+    d_str: str,
+    week_label: str,
+    conn,
+    sessions: list[dict],
+    figures: list[dict],
+    notions: list[dict],
+    lib_entries: list[dict],
+) -> str:
+    """1日分の日次索引 Markdown を生成する。全情報を含む（制限なし）。"""
+    try:
+        d = date.fromisoformat(d_str)
+    except ValueError:
+        d = date.today()
+    weekday = WEEKDAY_JP[d.weekday()]
+
+    lines = [
+        "---",
+        "type: daily-index",
+        f"date: {d_str}",
+        f"week: {week_label}",
+        f'generated_at: "{datetime.now(JST).isoformat()}"',
+        "---",
+        "",
+        f"# {d_str}（{weekday}）日次索引",
+        "",
+        f"> **Claude へ**: この1ファイルに {d_str} の全情報が含まれている。"
+        " セッション .md ファイルを読む必要はない。",
+        "",
+    ]
+
+    # セッション
+    if sessions:
+        lines.append(f"## 🤖 Claude セッション（{len(sessions)} 件）")
+        lines.append("")
+        for s in sessions:
+            lines.extend(render_session_block(conn, s))
+
+    # 図
+    if figures:
+        lines.append(f"## 📊 図（{len(figures)} 件）")
+        lines.append("")
+        for fig in figures:
+            lines.extend(render_figure_block(fig))
+
+    # Notion メモ
+    if notions:
+        lines.append(f"## 📝 Notion メモ（{len(notions)} 件）")
+        lines.append("")
+        for notion in notions:
+            lines.extend(render_notion_block(notion))
+
+    # figure-hub library 登録
+    if lib_entries:
+        lines.append(f"## 🖼️ figure-hub Library 登録（{len(lib_entries)} 件）")
+        lines.append("")
+        for lb in lib_entries:
+            lines.append(f"### `{lb['fig_id']}` {lb['version']}")
+            if lb.get("note"):
+                lines.append(f"- note: {lb['note']}")
+            lines.append(f"- `{lb['path']}`")
+            lines.append("")
+
+    return "\n".join(lines)
+
+
 def render_weekly_index(
     week_label: str,
     monday: date,
@@ -611,8 +744,9 @@ def render_weekly_index(
     figures: list[dict],
     notions: list[dict],
     lib_entries: list[dict],
+    daily_files: list[tuple[str, str]],
 ) -> str:
-    """週次索引 Markdown を生成する。"""
+    """週次索引 Markdown を生成する（軽量サマリ + 日次ファイルへのリンク集）。"""
 
     stats = session_db.query_week_stats(conn, monday.isoformat(), sunday.isoformat())
     file_stats = session_db.query_week_file_stats(conn, monday.isoformat(), sunday.isoformat())
@@ -637,8 +771,28 @@ def render_weekly_index(
     )
     lines.append("")
     lines.append(
-        "**このファイルを読んだ後、下記の各ファイルを Read tool で読んで週次レポートを作成すること。**"
+        "> **Claude へ**: 週次レポートを書くには下記の **日次索引ファイルを日付順に Read** すること。"
+        " 日次索引1ファイルに1日分の全情報（bash・コード変更・設計ノート・Notionメモ全文）が含まれている。"
+        " Notion MCP は使わない。"
     )
+    lines.append("")
+
+    # ── 日次索引ファイル一覧 ──
+    lines.append("## 📅 日次索引ファイル（Read tool で日付順に読む）")
+    lines.append("")
+    for d_str, path in daily_files:
+        try:
+            d = date.fromisoformat(d_str)
+        except ValueError:
+            continue
+        weekday = WEEKDAY_JP[d.weekday()]
+        day_sessions = [s for s in sessions if s.get("date") == d_str]
+        day_figures = [f for f in figures if f.get("date") == d_str]
+        day_notions = [n for n in notions if n.get("date") == d_str]
+        lines.append(
+            f"- **{d_str}（{weekday}）** `{path}`"
+            f"  — セッション {len(day_sessions)} / 図 {len(day_figures)} / Notion {len(day_notions)}"
+        )
     lines.append("")
 
     # ── 週サマリ ──
@@ -657,78 +811,41 @@ def render_weekly_index(
     lines.append(f"| Notion メモ | {len(notions)} |")
     lines.append("")
 
+    # ── セッション一覧表 ──
+    if sessions:
+        lines.append("## 🤖 セッション一覧")
+        lines.append("")
+        lines.append("| 日付 | ID | 推論 | bash | エラー | files | 依頼 |")
+        lines.append("|------|-----|------|------|-------|-------|------|")
+        for s in sessions:
+            d_label = s.get("date", "")[-5:]
+            sid8 = s["session_id"][:8]
+            thinking = s.get("thinking_blocks", 0)
+            bash_n = s.get("bash_command_count", 0)
+            errs = s.get("error_count", 0)
+            err_mark = f"**{errs}**" if errs > 0 else str(errs)
+            edited_raw = s.get("edited_files_raw") or ""
+            file_n = len([f for f in edited_raw.split("|||") if f])
+            msg = (s.get("first_user_message") or "")[:40]
+            lines.append(
+                f"| {d_label} | `{sid8}` | {thinking} | {bash_n} | {err_mark} | {file_n} | {msg} |"
+            )
+        lines.append("")
+
     # ── エラーサマリ ──
     error_sessions = [s for s in sessions if s.get("error_count", 0) > 0]
     if error_sessions:
-        lines.append("## ⚠️ エラーサマリ（要注意セッション）")
+        lines.append("## ⚠️ エラーサマリ")
         lines.append("")
         lines.append("| セッション | 日付 | エラー数 | 最初のユーザー発言 |")
         lines.append("|----------|------|---------|----------------|")
         for s in error_sessions:
             sid8 = s["session_id"][:8]
-            d = s.get("date", "")
+            d_label = s.get("date", "")
             errs = s.get("error_count", 0)
             msg = (s.get("first_user_message") or "")[:50]
-            lines.append(f"| `{sid8}` | {d} | {errs} | {msg} |")
+            lines.append(f"| `{sid8}` | {d_label} | {errs} | {msg} |")
         lines.append("")
-
-    # ── 日別・セッション別サマリ ──
-    lines.append("## 📅 日別・セッション別サマリ")
-    lines.append("")
-
-    # 日付ごとにグループ化
-    sessions_by_date: dict[str, list] = {}
-    for s in sessions:
-        sessions_by_date.setdefault(s["date"], []).append(s)
-
-    figures_by_date: dict[str, list] = {}
-    for f in figures:
-        figures_by_date.setdefault(f["date"], []).append(f)
-
-    notions_by_date: dict[str, list] = {}
-    for n in notions:
-        notions_by_date.setdefault(n["date"], []).append(n)
-
-    libs_by_date: dict[str, list] = {}
-    for lb in lib_entries:
-        libs_by_date.setdefault(lb["date"], []).append(lb)
-
-    # 全日付を列挙
-    all_dates = sorted(set(
-        list(sessions_by_date.keys()) +
-        list(figures_by_date.keys()) +
-        list(notions_by_date.keys()) +
-        list(libs_by_date.keys())
-    ))
-
-    for d_str in all_dates:
-        try:
-            d = date.fromisoformat(d_str)
-        except ValueError:
-            continue
-        weekday = WEEKDAY_JP[d.weekday()]
-        lines.append(f"### {weekday}曜 {d_str}")
-        lines.append("")
-
-        # セッション
-        for s in sessions_by_date.get(d_str, []):
-            lines.extend(render_session_block(conn, s))
-
-        # 図
-        for fig in figures_by_date.get(d_str, []):
-            lines.extend(render_figure_block(fig))
-
-        # Notion メモ
-        for notion in notions_by_date.get(d_str, []):
-            lines.extend(render_notion_block(notion))
-
-        # figure-hub library 登録
-        for lb in libs_by_date.get(d_str, []):
-            lines.append(f"#### 🖼️ figure-hub 登録: `{lb['fig_id']}` {lb['version']}")
-            if lb.get("note"):
-                lines.append(f"- note: {lb['note']}")
-            lines.append(f"- `{lb['path']}`")
-            lines.append("")
 
     # ── 変更ファイル統計 ──
     if file_stats:
@@ -744,95 +861,19 @@ def render_weekly_index(
             )
         lines.append("")
 
-    # ── 読むべきファイル一覧 ──
-    lines.append("---")
-    lines.append("")
-    lines.append("## 読むべきファイル一覧（Read tool で読む順序）")
-    lines.append("")
-    lines.append(
-        "> **Claude へ**: 以下のファイルを上から順に Read tool で読んでから週次レポートを生成すること。"
-        " Notion MCP は使わない（notion_sync の .md を直接読む）。"
-    )
-    lines.append("")
-
-    # 1. Claude セッション
-    if sessions:
-        lines.append("### 🤖 Claude セッション（最優先・thinking ブロック・設計ノート含む）")
-        lines.append("")
-        lines.append("| 日付 | ID | 推論 | bash | エラー | files | 依頼 |")
-        lines.append("|------|-----|------|------|-------|-------|------|")
-        for s in sessions:
-            d = s.get("date", "")[-5:]  # MM-DD
-            sid8 = s["session_id"][:8]
-            thinking = s.get("thinking_blocks", 0)
-            bash_n = s.get("bash_command_count", 0)
-            errs = s.get("error_count", 0)
-            err_mark = f"**{errs}**" if errs > 0 else str(errs)
-            edited_raw = s.get("edited_files_raw") or ""
-            file_n = len([f for f in edited_raw.split("|||") if f])
-            msg = (s.get("first_user_message") or "")[:40]
-            lines.append(
-                f"| {d} | `{sid8}` | {thinking} | {bash_n} | {err_mark} | {file_n} | {msg} |"
-            )
-        lines.append("")
-        lines.append("フルパス一覧:")
-        for s in sessions:
-            mp = s.get("md_path", "")
-            if mp:
-                lines.append(f"- `{mp}`")
-        lines.append("")
-
-    # 2. Figure Inbox
-    if figures:
-        lines.append("### 📊 Figure Inbox（図と変更コードの因果関係）")
-        lines.append("")
-        for fig in figures:
-            mp = fig.get("md_path", "")
-            script = fig.get("script", "")
-            desc = (fig.get("description") or "")[:60]
-            if mp:
-                lines.append(f"- `{mp}`")
-                lines.append(f"  - script: `{script}` | {desc}")
-        lines.append("")
-
-    # 3. Notion 作業ログ
-    if notions:
-        lines.append("### 📝 Notion 作業ログ（本文を直接読む・Notion MCP 不要）")
-        lines.append("")
-        for n in notions:
-            lines.append(f"- `{n['path']}`")
-            lines.append(f"  - タイトル: {n['title']}")
-        lines.append("")
-
-    # 4. figure-hub library
-    if lib_entries:
-        lines.append("### 🖼️ Figure Hub Library（登録済み仕上げ図）")
-        lines.append("")
-        for lb in lib_entries:
-            lines.append(f"- `{lb['path']}` → {lb['fig_id']} {lb['version']}: {lb['note']}")
-        lines.append("")
-
     # ── 週次レポート生成指示 ──
     lines.append("---")
     lines.append("")
     lines.append("## 週次レポート生成の指示")
     lines.append("")
-    lines.append("上記ファイルを全て読み終えたら、`docs/WEEKLY_LOG_SPEC.md` に従ってレポートを生成する。")
+    lines.append("上記の日次索引ファイルを全て読み終えたら、`docs/WEEKLY_LOG_SPEC.md` に従ってレポートを生成する。")
     lines.append("")
     lines.append("**仕様の要点:**")
-    lines.append("- トピック（内容）単位でまとめる。セッション単位で区切らない")
+    lines.append("- トピック（内容）単位でまとめる。セッション単位・日付単位で区切らない")
     lines.append("- 各トピックで「設計 → 実行 → 図 → 次にこう変更」の因果の流れを記述")
     lines.append("- 1まとまりあたり Qiita 記事相当の厚み（背景・手順・コード抜粋・結果・学び）")
-    lines.append("- claude_sessions .md のタイムラインと figure inbox .md を突き合わせ、"
-                 "同じ日・近い時刻の Bash（script X）と図（script X）で因果を推論する")
     lines.append("")
-    lines.append("**手順:**")
-    lines.append(f"1. 保存先: `~/Documents/Obsidian Vault/04_WeeklyReports/{week_label}.md`")
-    lines.append("2. 既存ファイルがある場合は上書き確認をユーザーに求める")
-    lines.append("3. 図は `![[filename]]` 形式で埋め込む")
-    lines.append("4. **Notion メモ**: 索引に全文が含まれている。これを読み、"
-                 "「このユーザーは〇〇を考えている／〇〇を試したかった」と解釈して書き直し、"
-                 "レポートに織り込む。要約ではなく意図が伝わる形で。")
+    lines.append(f"**保存先:** `~/Documents/Obsidian Vault/04_WeeklyReports/{week_label}.md`")
     lines.append("")
 
     return "\n".join(lines)
@@ -881,31 +922,74 @@ def run(args: argparse.Namespace) -> int:
             print(f"\n--- Cross-reference enrichment ---")
             enrich_figure_mds(conn, sessions, figures)
 
+        # 日付ごとにグループ化
+        sessions_by_date: dict[str, list] = {}
+        for s in sessions:
+            sessions_by_date.setdefault(s["date"], []).append(s)
+        figures_by_date: dict[str, list] = {}
+        for f in figures:
+            figures_by_date.setdefault(f["date"], []).append(f)
+        notions_by_date: dict[str, list] = {}
+        for n in notions:
+            notions_by_date.setdefault(n["date"], []).append(n)
+        libs_by_date: dict[str, list] = {}
+        for lb in lib_entries:
+            libs_by_date.setdefault(lb["date"], []).append(lb)
+
+        all_dates = sorted(set(
+            list(sessions_by_date) + list(figures_by_date) +
+            list(notions_by_date) + list(libs_by_date)
+        ))
+
+        # 日次索引ファイルを生成
+        daily_files: list[tuple[str, str]] = []
+        inbox_dir = OBSIDIAN_ROOT / "00_Inbox"
+        inbox_dir.mkdir(parents=True, exist_ok=True)
+
+        for d_str in all_dates:
+            day_content = render_daily_index(
+                d_str, week_label, conn,
+                sessions_by_date.get(d_str, []),
+                figures_by_date.get(d_str, []),
+                notions_by_date.get(d_str, []),
+                libs_by_date.get(d_str, []),
+            )
+            day_path = inbox_dir / f"daily_index_{d_str}.md"
+            if not args.dry_run:
+                day_path.write_text(day_content, encoding="utf-8")
+                print(f"  日次索引: {day_path.name}"
+                      f" ({len(day_content.splitlines())} 行)")
+            else:
+                print(f"  [dry-run] would write: {day_path.name}"
+                      f" ({len(day_content.splitlines())} 行)")
+            daily_files.append((d_str, str(day_path)))
+
+        # 週次索引（軽量サマリ）を生成
         md_content = render_weekly_index(
             week_label, monday, sunday,
-            conn, sessions, figures, notions, lib_entries
+            conn, sessions, figures, notions, lib_entries,
+            daily_files=daily_files,
         )
 
-        out_path = OBSIDIAN_ROOT / "00_Inbox" / f"weekly_index_{week_label}.md"
+        out_path = inbox_dir / f"weekly_index_{week_label}.md"
 
         if args.dry_run:
             print(f"\n[dry-run] would write: {out_path}")
             total = len(sessions) + len(figures) + len(notions) + len(lib_entries)
             print(f"  total events: {total}")
-            print(md_content[:800])
             session_db.finish_processing_run(conn, run_id, success=True,
                                               notes="dry-run")
             return 0
 
-        out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(md_content, encoding="utf-8")
 
         total = len(sessions) + len(figures) + len(notions) + len(lib_entries)
         session_db.finish_processing_run(conn, run_id, processed=total, success=True)
 
-        print(f"\n索引ファイル出力: {out_path}")
+        print(f"\n週次索引（軽量）: {out_path}")
         print(f"  セッション: {len(sessions)} | 図: {len(figures)} |"
               f" Notion: {len(notions)} | Library: {len(lib_entries)}")
+        print(f"  日次索引: {len(daily_files)} ファイル")
         print(f"\n次のステップ:")
         print(f"  Claude Code で: 「週次レポートを書いて」"
               f" または「{week_label} の週次レポートを書いて」")

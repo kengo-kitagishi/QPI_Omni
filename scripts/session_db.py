@@ -520,7 +520,7 @@ def query_week_figures(conn: sqlite3.Connection, monday: str, sunday: str) -> li
         """SELECT * FROM figure_events
            WHERE date BETWEEN ? AND ?
              AND json_path NOT LIKE '(migrated:%'
-           ORDER BY date, script""",
+           ORDER BY created_at_utc""",
         (monday, sunday)
     ).fetchall()
     return [dict(r) for r in rows]

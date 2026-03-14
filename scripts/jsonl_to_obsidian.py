@@ -264,13 +264,13 @@ def extract_db_data(timeline: list) -> dict:
 
             # 設計ノート: thinking ブロックの先頭を抽出
             for tb in event.get("thinking", []):
-                design_notes_list.append(tb[:500])
+                design_notes_list.append(tb)
 
             # セッションサマリ: 最初の AI テキスト
             if session_summary is None:
                 for t in event.get("text", []):
                     if t.strip():
-                        session_summary = t[:300]
+                        session_summary = t
                         break
 
             # ツール呼び出し
@@ -307,10 +307,10 @@ def extract_db_data(timeline: list) -> dict:
                         old_prev = None
                         new_prev = None
                         if name == "Edit":
-                            old_prev = (inp.get("old_string", "") or "")[:400]
-                            new_prev = (inp.get("new_string", "") or "")[:400]
+                            old_prev = (inp.get("old_string", "") or "")[:1200]
+                            new_prev = (inp.get("new_string", "") or "")[:1200]
                         elif name == "Write":
-                            new_prev = (inp.get("content", "") or "")[:400]
+                            new_prev = (inp.get("content", "") or "")[:1200]
                         files.append({
                             "file_path": fp,
                             "operation": name,
@@ -325,7 +325,7 @@ def extract_db_data(timeline: list) -> dict:
                     bash_count += 1
                     cmd = inp.get("command", "")
                     desc = inp.get("description", "")
-                    out_prev = (tc.get("result_text", "") or "")[:500]
+                    out_prev = (tc.get("result_text", "") or "")[:800]
                     bash_cmds_db.append({
                         "event_order": event_order,
                         "timestamp": event["ts"],
@@ -335,7 +335,7 @@ def extract_db_data(timeline: list) -> dict:
                         "is_error": is_error,
                     })
 
-    design_notes_json = json.dumps(design_notes_list[:10], ensure_ascii=False) if design_notes_list else None
+    design_notes_json = json.dumps(design_notes_list, ensure_ascii=False) if design_notes_list else None
 
     return {
         "session_meta": {
@@ -403,8 +403,13 @@ def _render_tool_input(name: str, inp: dict) -> str:
 
     elif name == "Read":
         fp = inp.get("file_path", "")
-        limit = inp.get("limit", "")
-        offset = inp.get("offset", "")
+        def _to_int(v):
+            try:
+                return int(str(v).strip().lstrip(",").strip())
+            except (ValueError, TypeError):
+                return 0
+        limit = _to_int(inp.get("limit", 0))
+        offset = _to_int(inp.get("offset", 0))
         extra = f" (L{offset}-{offset+limit})" if offset else ""
         return f"`{fp}`{extra}"
 
@@ -450,8 +455,6 @@ def _render_design_notes_section(timeline: list) -> list[str]:
         for tb in event.get("thinking", []):
             if tb.strip():
                 excerpts.append((event["ts"], tb))
-        if len(excerpts) >= 5:
-            break
 
     if not excerpts:
         return []
@@ -469,12 +472,8 @@ def _render_design_notes_section(timeline: list) -> list[str]:
         math_mark = " 🔢" if has_math else ""
         lines.append(f"### [{i}] {ts_str}{math_mark}")
         lines.append("")
-        # thinking ブロックを引用形式で（最大600文字）
-        excerpt = tb[:600]
-        for tline in excerpt.splitlines()[:20]:
+        for tline in tb.splitlines():
             lines.append(f"> {tline}")
-        if len(tb) > 600:
-            lines.append(f"> ...（{len(tb)} 文字 / 先頭 600 文字を表示）")
         lines.append("")
 
     return lines
@@ -546,10 +545,10 @@ def _render_code_changes_section(timeline: list) -> list[str]:
                     "ts": ts_str,
                     "op": "Edit",
                     "file": fp,
-                    "old": old[:600],
-                    "new": new[:600],
-                    "old_truncated": len(old) > 600,
-                    "new_truncated": len(new) > 600,
+                    "old": old,
+                    "new": new,
+                    "old_truncated": False,
+                    "new_truncated": False,
                 })
             elif name == "Write":
                 content = inp.get("content", "") or ""
@@ -558,8 +557,8 @@ def _render_code_changes_section(timeline: list) -> list[str]:
                     "ts": ts_str,
                     "op": "Write",
                     "file": fp,
-                    "new": content[:600],
-                    "new_truncated": len(content) > 600,
+                    "new": content,
+                    "new_truncated": False,
                     "old": None,
                 })
 
@@ -612,7 +611,7 @@ def _render_code_changes_section(timeline: list) -> list[str]:
             lines.append(f"```{lang}")
             lines.append(ch["new"])
             if ch.get("new_truncated"):
-                lines.append(f"... (先頭 600 文字を表示・全 {len(ch['new'])} 文字)")
+                pass  # truncation removed — full content always shown
             lines.append("```")
 
         lines.append("")
@@ -635,7 +634,7 @@ def _render_error_section(timeline: list) -> list[str]:
                     "ts": _fmt_ts(event["ts"]),
                     "name": tc["name"],
                     "input": tc["input"],
-                    "result": (tc.get("result_text", "") or "")[:800],
+                    "result": (tc.get("result_text", "") or ""),
                 })
 
     if not errors:
@@ -776,8 +775,8 @@ def render_session_md(
                             for rline in result.splitlines()[:20]:
                                 lines.append(f"  > {rline}")
                         elif len(result) > 0:
-                            preview = result[:300].replace("\n", " ↵ ")
-                            lines.append(f"  → `{preview}`")
+                            for rline in result.splitlines():
+                                lines.append(f"  > {rline}")
                 lines.append("")
 
     return "\n".join(lines)
@@ -925,6 +924,31 @@ def run(args: argparse.Namespace) -> int:
                             print(f"  → 削除失敗: {e}")
             else:
                 skipped += 1
+                # empty-timeline / active セッションを DB に記録して次回から黙ってスキップ
+                if not args.dry_run:
+                    now_iso = datetime.now(JST).isoformat()
+                    date_str = get_session_date(load_entries(jsonl_path))
+                    session_db.upsert_session(conn, {
+                        "session_id": session_id,
+                        "date": date_str,
+                        "jsonl_path": str(jsonl_path),
+                        "md_path": None,
+                        "jsonl_mtime": mtime,
+                        "processed_at": now_iso,
+                        "thinking_blocks": 0,
+                        "user_message_count": 0,
+                        "assistant_message_count": 0,
+                        "tool_call_count": 0,
+                        "error_count": 0,
+                        "bash_command_count": 0,
+                        "is_active": 0,
+                        "needs_reprocess": 0,
+                        "reprocess_reason": "empty_timeline",
+                        "first_user_message": None,
+                        "design_notes": None,
+                        "session_summary": None,
+                    })
+                    conn.commit()
 
         session_db.finish_processing_run(
             conn, run_id, processed=processed, skipped=skipped, success=True

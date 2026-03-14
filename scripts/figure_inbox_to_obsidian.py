@@ -283,8 +283,12 @@ def process_json(json_path: Path, dry_run: bool) -> dict | None:
     out_name = f"{date_str}_{unique_key}.md"
     out_path = OBSIDIAN_FIGURE_INBOX_DIR / out_name
 
+    json_out_name = out_name.replace(".md", ".json")
+    json_out_path = OBSIDIAN_FIGURE_INBOX_DIR / json_out_name
+
     if dry_run:
         print(f"  [dry-run] would write: {out_path}")
+        print(f"  [dry-run] would write: {json_out_path}")
         if png_src:
             print(f"    PNG: {png_src.name} → {png_obsidian_name}")
         return {
@@ -298,8 +302,9 @@ def process_json(json_path: Path, dry_run: bool) -> dict | None:
 
     OBSIDIAN_FIGURE_INBOX_DIR.mkdir(parents=True, exist_ok=True)
     out_path.write_text(md_content, encoding="utf-8")
+    shutil.copy2(json_path, json_out_path)
     img_info = f", IMG→{png_obsidian_name}" if png_obsidian_name else ""
-    print(f"  → {out_name}{img_info}")
+    print(f"  → {out_name}{img_info}, JSON→{json_out_name}")
 
     return {
         "unique_key": unique_key,

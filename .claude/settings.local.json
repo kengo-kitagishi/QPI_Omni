@@ -38,7 +38,12 @@
       "WebFetch(domain:caymezon.com)",
       "Bash(# Check state file to understand the incremental processing structure\ncat /Users/kitak/QPI_Omni/.figure_history/session_activity_state.json 2>/dev/null | python3 -c \"\nimport json, sys\nd = json.load\\(sys.stdin\\)\nprint\\('Keys:', list\\(d.keys\\(\\)\\)\\)\nprint\\('transcripts count:', len\\(d.get\\('transcripts', {}\\)\\)\\)\nprint\\('last_run:', d.get\\('last_run'\\)\\)\nprint\\('git head:', d.get\\('git', {}\\).get\\('head', 'none'\\)[:12]\\)\n\" 2>/dev/null)",
       "Bash(head:*)",
-      "Bash(do:*)"
+      "Bash(do:*)",
+      "Bash(launchctl:*)",
+      "Bash(grep セッション\\\\`\\\\|error_count\\\\|bash_command_count\\\\|変更ファイル（:*)",
+      "Bash(~/.anthropic_api_key:*)",
+      "Bash(~/.zshenv:*)",
+      "Bash(xargs -I{} sh -c 'ls -la \"\"{}\"\"')"
     ]
   }
 }

@@ -505,7 +505,7 @@ Description: その日の思考メモのまとめ（後から更新）
 
 ### 基本方針
 
-- レポート形式の正本は `QPI_Omni/docs/WEEKLY_LOG_SPEC.md` とする。
+- レポート形式の正本は `docs/WEEKLY_LOG_SPEC.md` とする。
 - **トピック（内容）単位**でまとめ、**因果の流れ**（設計→実行→図→次にこう変更→...）を可視化する。
 - セッション単位で区切らず、各まとまりを **1セッション ≒ 1 Qiita 記事**程度の厚みで書く。
 - 保存先: `~/Documents/Obsidian Vault/04_WeeklyReports/YYYY-Www.md`
