@@ -146,3 +146,6 @@ htmlcov/
 .hypothesis/
 .claude/
 docs/EXPERIMENT_LOG.md
+.tmp.driveupload/
+*.bak.*
+[[]0, 380.025[]]
