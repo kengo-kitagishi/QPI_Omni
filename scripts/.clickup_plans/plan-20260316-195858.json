@@ -1,0 +1,75 @@
+{
+  "kind": "carryover",
+  "created_at": "2026-03-16T19:58:58.559435",
+  "from_date": "2026-03-15",
+  "window_start": "2026-03-16",
+  "window_days": 7,
+  "proposals": [
+    {
+      "task_id": "86ew9k34t",
+      "task_name": "image processingの概要ず",
+      "list_key": "slide",
+      "status": "proposed",
+      "from_start": "2026-03-15T09:00:00+09:00",
+      "from_end": "2026-03-15T10:00:00+09:00",
+      "to_start": "2026-03-17T17:10:00+09:00",
+      "to_end": "2026-03-17T18:10:00+09:00",
+      "task_url": "https://app.clickup.com/t/86ew9k34t"
+    },
+    {
+      "task_id": "86evu48w3",
+      "task_name": "Intracellular mass density increase is accompanying but not sufficient for stiffening and growth arrest of yeast cells",
+      "list_key": "input",
+      "status": "proposed",
+      "from_start": "2026-03-15T10:10:00+09:00",
+      "from_end": "2026-03-15T11:40:00+09:00",
+      "to_start": "2026-03-17T18:10:00+09:00",
+      "to_end": "2026-03-17T19:40:00+09:00",
+      "task_url": "https://app.clickup.com/t/86evu48w3"
+    },
+    {
+      "task_id": "86ew9k1x8",
+      "task_name": "Z-stack thickness mapを",
+      "list_key": "slide",
+      "status": "proposed",
+      "from_start": "2026-03-15T11:50:00+09:00",
+      "from_end": "2026-03-15T12:50:00+09:00",
+      "to_start": "2026-03-17T19:40:00+09:00",
+      "to_end": "2026-03-17T20:40:00+09:00",
+      "task_url": "https://app.clickup.com/t/86ew9k1x8"
+    },
+    {
+      "task_id": "86ew9k2vg",
+      "task_name": "single cell trajectoryを並べる",
+      "list_key": "slide",
+      "status": "proposed",
+      "from_start": "2026-03-15T13:40:00+09:00",
+      "from_end": "2026-03-15T14:40:00+09:00",
+      "to_start": "2026-03-18T15:00:00+09:00",
+      "to_end": "2026-03-18T16:00:00+09:00",
+      "task_url": "https://app.clickup.com/t/86ew9k2vg"
+    },
+    {
+      "task_id": "86ewuzp8e",
+      "task_name": "学振DC1｜深掘り執筆セッションC-2/4（仮説と検証設計）",
+      "list_key": "manuscript",
+      "status": "proposed",
+      "from_start": "2026-03-15T17:00:00+09:00",
+      "from_end": "2026-03-15T19:00:00+09:00",
+      "to_start": "2026-03-18T16:00:00+09:00",
+      "to_end": "2026-03-18T18:00:00+09:00",
+      "task_url": "https://app.clickup.com/t/86ewuzp8e"
+    },
+    {
+      "task_id": "86eww81ra",
+      "task_name": "兄の奥さんと会う",
+      "list_key": "daily",
+      "status": "proposed",
+      "from_start": "2026-03-15T19:00:00+09:00",
+      "from_end": "2026-03-15T21:00:00+09:00",
+      "to_start": "2026-03-18T18:00:00+09:00",
+      "to_end": "2026-03-18T20:00:00+09:00",
+      "task_url": "https://app.clickup.com/t/86eww81ra"
+    }
+  ]
+}

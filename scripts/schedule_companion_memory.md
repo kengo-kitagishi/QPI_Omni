@@ -1083,3 +1083,119 @@
 - created in `daily`: `兄の奥さんと会う` (86eww81ra)
 - time: 2026-03-15 19:00-21:00 JST
 - verification: agenda(2026-03-15) confirms registration without overlap
+
+## 2026-03-16 19:57 - review check
+- range: 2026-03-15->2026-03-28
+- pressure: overdue=122 due_soon_unscheduled=0
+- findings: 3 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260316-195744.json
+
+## 2026-03-16 19:58 - carryover planning
+- from: 2026-03-15 targets=6 proposed=6
+- committed: 0
+- plan: /Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260316-195858.json
+
+## 2026-03-16 20:00 - carryover planning
+- from: 2026-03-16 targets=6 proposed=5
+- committed: 0
+- plan: /Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260316-200033.json
+
+## 2026-03-16 20:03 - advise consultation
+- text: 学振DC1｜深掘り執筆セッションC-2/4（仮説と検証設計）
+- category=writing priority=high bias=-14h
+- target_list=manuscript due=(none) duration=120m
+- workflow=none
+- medium_flow=none
+- candidates=3 plan=/Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260316-200307.json
+- fixed_rules=meeting, competition
+- rearrange_scope=input
+- protect_experiment_structure=True
+
+## 2026-03-16 20:03 - advise consultation
+- text: 分裂様式について調べる。https://doi.org/10.1091/mbc.E14-10-1441
+- category=general priority=normal bias=+0h
+- target_list=manuscript due=(none) duration=180m
+- workflow=none
+- medium_flow=none
+- candidates=3 plan=/Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260316-200307.json
+- fixed_rules=meeting, competition
+- rearrange_scope=input
+- protect_experiment_structure=True
+
+## 2026-03-16 20:03 - advise consultation
+- text: image processingの概要ず
+- category=general priority=low bias=+12h
+- target_list=slide due=(none) duration=60m
+- workflow=none
+- medium_flow=none
+- candidates=3 plan=/Users/kitak/QPI_Omni/scripts/.clickup_plans/plan-20260316-200308.json
+- fixed_rules=meeting, competition
+- rearrange_scope=input
+- protect_experiment_structure=True
+
+## 2026-03-16 20:05 - review check
+- range: 2026-03-16->2026-03-29
+- pressure: overdue=130 due_soon_unscheduled=0
+- findings: 3 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260316-200507.json
+
+## 2026-03-16 20:10 - daily backfill from obsidian
+- sources:
+  - /Users/kitak/Documents/Obsidian Vault/01_Daily/2026-03-09.md
+  - /Users/kitak/Documents/Obsidian Vault/01_Daily/2026-03-10.md
+  - /Users/kitak/Documents/Obsidian Vault/01_Daily/2026-03-11.md
+  - /Users/kitak/Documents/Obsidian Vault/01_Daily/2026-03-12.md
+  - /Users/kitak/Documents/Obsidian Vault/01_Daily/2026-03-13.md
+  - /Users/kitak/Documents/Obsidian Vault/01_Daily/2026-03-14.md
+- action: evidence-based past work added to ClickUp and marked complete
+- added_done_tasks:
+  - 86ewygpk5 qpi_fig_01_reconstruction_procedure Windows対応と単体パネル保存
+  - 86ewygpke 逐次追跡モードとBFSグリッドキャリブレーション実装
+  - 86ewygpkr 週次ログシステムSQLiteキャッシュ層実装
+  - 86ewygpm1 W10週次レポート全面書き直し
+  - 86ewygpmc リアルタイムドリフト補正タイムラプス立ち上げ・ホットフィックス
+  - 86ewygpmm ECC外れ値フィルタ・MAD閾値調整・Pass3実装
+  - 86ewygpmt QPI再構成とシフト計算の並列化
+  - 86ewygpn1 日次ログ・週次レポート自動生成パイプライン構築
+- verification: each task fetched again and confirmed status=complete
+
+## 2026-03-16 20:18 - forward reschedule applied
+- principle:
+  - protect fixed events: meeting, competition, dinner, club
+  - protect experiment structure before rescuing lower-priority input backlog
+  - push low-priority input to 2026-03-23 instead of packing 2026-03-17..19
+- moved_tasks:
+  - 86ewr0z63 【実験】2%培地交換（T0+168h） -> 2026-03-17 09:00-10:00
+  - 86ewr0z90 【実験】2%培地交換（T0+216h） -> 2026-03-19 09:00-10:00
+  - 86ewr280b この2週間のログを読ませてどういうskill,rulesがいいかを考えてもらう。 -> 2026-03-19 10:10-13:10
+  - 86ewuzp8t 学振DC1｜深掘り執筆セッションD-2/4（推敲・一貫性チェック） -> 2026-03-19 13:30-15:30
+  - 86evw9qq1 分裂様式について調べる。https://doi.org/10.1091/mbc.E14-10-1441 -> 2026-03-23 09:00-12:00
+  - 86evuek76 Evangelidis GD, Psarakis EZ... -> 2026-03-23 13:30-15:00
+  - 86evu401t Nano Mid infra -> 2026-03-23 15:10-16:40
+  - 86evu46zv Cell Volume change through water efflux impacts cell stiffness and stem cell fate -> 2026-03-23 16:50-17:50
+- verification:
+  - agenda checked for 2026-03-17..2026-03-26
+  - review findings: 0
+  - report: /Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260316-201842.json
+
+## 2026-03-16 20:24 - overdue triage proposal
+- current scan:
+  - overdue tasks with past anchor and not done: 82
+  - movable: 80
+  - fixed: 2
+- user-policy reaffirmed:
+  - input and slide backlog should be deferred before squeezing writing or experiment-critical work
+  - stale experiment chains must not be blindly reinserted; if the dependency chain is already broken, treat as redesign candidates
+  - numbered writing workflow (A-3/4 -> A-4/4 etc.) should stay in order when possible
+- proposed buckets:
+  - rescue_this_month: recent manuscript/admin/figure work that supports DC1 and near-term deadlines
+  - postpone_to_april: input, slide, documentation, low-priority other/code backlog
+  - drop_or_redesign: December/January stale experiment chains, past-context daily tasks, outdated meeting leftovers
+
+## 2026-03-16 20:18 - review check
+- range: 2026-03-17->2026-03-26
+- pressure: overdue=127 due_soon_unscheduled=0
+- findings: 0 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260316-201842.json
+
+## 2026-03-16 20:22 - review check
+- range: 2026-03-24->2026-03-31
+- pressure: overdue=125 due_soon_unscheduled=0
+- findings: 0 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260316-202220.json

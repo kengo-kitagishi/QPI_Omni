@@ -1,0 +1,17 @@
+{
+  "created_at": "2026-03-16T20:18:42.219248",
+  "range": {
+    "start": "2026-03-17",
+    "end": "2026-03-26",
+    "near_days": 2
+  },
+  "counts": {
+    "fetched": 680,
+    "scheduled": 26,
+    "unscheduled": 0,
+    "overdue": 127,
+    "due_soon_unscheduled": 0,
+    "after_due": 0
+  },
+  "findings": []
+}

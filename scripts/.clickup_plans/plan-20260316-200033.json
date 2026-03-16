@@ -1,0 +1,72 @@
+{
+  "kind": "carryover",
+  "created_at": "2026-03-16T20:00:33.040085",
+  "from_date": "2026-03-16",
+  "window_start": "2026-03-16",
+  "window_days": 7,
+  "proposals": [
+    {
+      "task_id": "86evu46zv",
+      "task_name": "Cell Volume change through water efflux impacts cell stiffness and stem cell fate",
+      "list_key": "input",
+      "status": "proposed",
+      "from_start": "2026-03-16T09:00:00+09:00",
+      "from_end": "2026-03-16T10:00:00+09:00",
+      "to_start": "2026-03-17T17:10:00+09:00",
+      "to_end": "2026-03-17T18:10:00+09:00",
+      "task_url": "https://app.clickup.com/t/86evu46zv"
+    },
+    {
+      "task_id": "86ewr0z63",
+      "task_name": "【実験】2%培地交換（T0+168h）",
+      "list_key": "experiment",
+      "status": "no_slot",
+      "from_start": "2026-03-16T10:00:00+09:00",
+      "from_end": "2026-03-16T11:00:00+09:00"
+    },
+    {
+      "task_id": "86evu401t",
+      "task_name": " Nano Mid infra",
+      "list_key": "input",
+      "status": "proposed",
+      "from_start": "2026-03-16T10:10:00+09:00",
+      "from_end": "2026-03-16T11:40:00+09:00",
+      "to_start": "2026-03-17T18:10:00+09:00",
+      "to_end": "2026-03-17T19:40:00+09:00",
+      "task_url": "https://app.clickup.com/t/86evu401t"
+    },
+    {
+      "task_id": "86evw9qq1",
+      "task_name": "分裂様式について調べる。https://doi.org/10.1091/mbc.E14-10-1441",
+      "list_key": "manuscript",
+      "status": "proposed",
+      "from_start": "2026-03-16T12:00:00+09:00",
+      "from_end": "2026-03-16T15:00:00+09:00",
+      "to_start": "2026-03-18T15:00:00+09:00",
+      "to_end": "2026-03-18T18:00:00+09:00",
+      "task_url": "https://app.clickup.com/t/86evw9qq1"
+    },
+    {
+      "task_id": "86ewuzp8t",
+      "task_name": "学振DC1｜深掘り執筆セッションD-2/4（推敲・一貫性チェック）",
+      "list_key": "manuscript",
+      "status": "proposed",
+      "from_start": "2026-03-16T15:00:00+09:00",
+      "from_end": "2026-03-16T17:00:00+09:00",
+      "to_start": "2026-03-18T18:00:00+09:00",
+      "to_end": "2026-03-18T20:00:00+09:00",
+      "task_url": "https://app.clickup.com/t/86ewuzp8t"
+    },
+    {
+      "task_id": "86ewr280b",
+      "task_name": "この2週間のログを読ませてどういうskill,rulesがいいかを考えてもらう。",
+      "list_key": "plan",
+      "status": "proposed",
+      "from_start": "2026-03-16T17:10:00+09:00",
+      "from_end": "2026-03-16T20:10:00+09:00",
+      "to_start": "2026-03-19T09:00:00+09:00",
+      "to_end": "2026-03-19T12:00:00+09:00",
+      "task_url": "https://app.clickup.com/t/86ewr280b"
+    }
+  ]
+}
