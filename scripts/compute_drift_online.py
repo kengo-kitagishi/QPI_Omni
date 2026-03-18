@@ -156,6 +156,19 @@ def ecc_align(ref_u8, tl_u8, max_iter=10000, epsilon=1e-6):
         return None
 
 
+def _mad(arr):
+    m = np.median(arr)
+    return float(np.median(np.abs(arr - m)))
+
+
+def _remove_outliers_mad(values, thresh=2.5):
+    arr = np.array(values, dtype=np.float64)
+    md = _mad(arr)
+    if md == 0:
+        return np.zeros(len(arr), dtype=bool)
+    return np.abs(arr - np.median(arr)) > thresh * md
+
+
 def reconstruct_phase(raw_path: Path, cfg: dict, bg_path: Path = None) -> np.ndarray:
     """QPI 位相再構成。bg_path があれば差分を返す。"""
     script_dir = Path(cfg["script_dir"])
@@ -319,11 +332,28 @@ def main():
                     False, 0.0, False)
         sys.exit(0)
 
-    # チャネル平均
-    tx_avg  = float(np.mean(tx_list))
-    ty_avg  = float(np.mean(ty_list))
-    corr_avg = float(np.mean(corr_list))
-    print(f"  ECC平均: tx={tx_avg:+.4f}px  ty={ty_avg:+.4f}px  corr={corr_avg:.4f}")
+    # チャネル平均（MAD外れ値除去）
+    n_ch_raw = len(tx_list)
+    if n_ch_raw >= 3:
+        out_x = _remove_outliers_mad(tx_list)
+        out_y = _remove_outliers_mad(ty_list)
+        is_out = out_x | out_y
+        used_idx = [i for i, o in enumerate(is_out) if not o]
+        if len(used_idx) == 0:
+            used_idx = list(range(n_ch_raw))
+        excl = [i for i in range(n_ch_raw) if is_out[i]]
+        if excl:
+            print(f"  [外れ値除去] ch{excl}: {len(excl)}ch除外")
+    else:
+        used_idx = list(range(n_ch_raw))
+
+    tx_arr   = np.array(tx_list)
+    ty_arr   = np.array(ty_list)
+    corr_arr = np.array(corr_list)
+    tx_avg   = float(np.mean(tx_arr[used_idx]))
+    ty_avg   = float(np.mean(ty_arr[used_idx]))
+    corr_avg = float(np.mean(corr_arr[used_idx]))
+    print(f"  ECC平均: tx={tx_avg:+.4f}px  ty={ty_avg:+.4f}px  corr={corr_avg:.4f}  (使用{len(used_idx)}/{n_ch_raw}ch)")
 
     # ---- 符号・スケール変換（pixel → μm、画像軸 → ステージ軸）----
     # ECC findTransformECC(ref, current): templateImage ≈ warpAffine(inputImage, W)
@@ -382,7 +412,8 @@ def main():
         "sample_raw":           str(sample_raw),
         "bg_raw":               str(bg_raw) if bg_raw else None,
         "used_prev_frame":      use_prev,
-        "n_channels_used":      len(tx_list),
+        "n_channels_used":      len(used_idx),
+        "n_channels_raw":       n_ch_raw,
         "tx_avg_px":            tx_avg,
         "ty_avg_px":            ty_avg,
         "ecc_correlation":      corr_avg,

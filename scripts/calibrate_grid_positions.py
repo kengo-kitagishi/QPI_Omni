@@ -35,7 +35,7 @@ from tqdm import tqdm
 # ============================================================
 GRID_DIR          = r"D:\AquisitionData\Kitagishi\260310\grid_0p5_0p5_0p1_exp200ms_1pos_EMM2_1"
 BASE_LABEL        = "Pos1"
-GRID_Z_INDEX      = 5
+GRID_Z_INDEX      = 2
 
 CHANNEL_ROIS_JSON = r"D:\AquisitionData\Kitagishi\260310\timelapse_11day_exp200ms_1pos_EMM2\Pos1\output_phase\channels\channel_rois.json"
 

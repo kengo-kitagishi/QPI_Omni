@@ -30,7 +30,7 @@ CHANNEL_PATTERN = "channel_*.tif"      # backsub済みなら "channel_*_bg_corr.
 USE_GRID_REFERENCE  = True
 GRID_DIR            = r"E:\Acuisition\kitagishi\260301\multipos_test_1"
 GRID_BASE_LABEL     = "Pos4"           # PosX_x+0_y+0 の PosX 部分
-GRID_Z_INDEX        = 5               # img_000000000_ph_{Z_INDEX:03d}.tif
+GRID_Z_INDEX        = 2               # img_000000000_ph_{Z_INDEX:03d}.tif
 CHANNEL_ROIS_JSON   = r"E:\Acuisition\kitagishi\260301\movetest_8\Pos4\channels\channel_rois.json"
 
 REFERENCE_FRAME = 150                  # USE_GRID_REFERENCE=False の場合のみ使用（1始まり）

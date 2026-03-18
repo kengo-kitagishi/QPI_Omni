@@ -27,8 +27,11 @@ N_WORKERS = None
 
 # ベースディレクトリ設定
 BASE_DIRS = [
-    r"E:\Acuisition\kitagishi\260301\movetest_8"
+    r"E:\Acuisition\kitagishi\260301\movetest_9"
 ]
+
+# Pos0 も output_phase / output_phase_raw を生成するか（True: Pos0 を自分自身をBGとして処理）
+INCLUDE_POS0 = True
 
 def _worker_batch_frame(args):
     """ProcessPoolExecutor ワーカー: 1フレームを再構成して保存（dual出力版）。"""
@@ -116,24 +119,27 @@ def process_folder(base_dir, pos_start=None, pos_end=None):
         print(f"❌ エラー: 背景ディレクトリが見つかりません: {bg_dir}")
         return
 
-    # Posフォルダを検索（Pos1以降）
+    # Posフォルダを検索（INCLUDE_POS0 時は Pos0 も、通常は Pos1 以降）
     pos_folders = []
     for item in sorted(os.listdir(base_dir)):
         item_path = os.path.join(base_dir, item)
-        if os.path.isdir(item_path) and item.startswith("Pos") and item != "Pos0":
-            # Pos番号を取得
-            try:
-                pos_num = int(item.replace("Pos", ""))
-            except:
-                continue
-
-            # 範囲チェック
-            if pos_start is not None and pos_num < pos_start:
-                continue
-            if pos_end is not None and pos_num > pos_end:
-                continue
-
-            pos_folders.append(item)
+        if not (os.path.isdir(item_path) and item.startswith("Pos")):
+            continue
+        if item == "Pos0":
+            if INCLUDE_POS0:
+                pos_folders.append(item)
+            continue
+        # Pos番号を取得
+        try:
+            pos_num = int(item.replace("Pos", ""))
+        except:
+            continue
+        # 範囲チェック
+        if pos_start is not None and pos_num < pos_start:
+            continue
+        if pos_end is not None and pos_num > pos_end:
+            continue
+        pos_folders.append(item)
 
     if len(pos_folders) == 0:
         print(f"⚠️ 警告: Pos1以降のフォルダが見つかりません")
@@ -189,7 +195,7 @@ def process_pos_folder(base_dir, bg_dir, pos_name, pos_split=44):
     os.makedirs(output_dir_raw, exist_ok=True)  # 追加
     os.makedirs(output_dir_colormap, exist_ok=True)
 
-    print(f"\n▶ 処理中: {pos_name}")
+    print(f"\n>> 処理中: {pos_name}")
 
     # TIFファイルを取得
     tif_files = []

@@ -801,7 +801,7 @@ def save_figure(
         raise TypeError("params must be a dict")
 
     if publish is None:
-        publish = _env_bool("QPI_FIGURE_LOGGER_PUBLISH", True)
+        publish = _env_bool("QPI_FIGURE_LOGGER_PUBLISH", False)
     if save_to_notion is None:
         save_to_notion = _env_bool("QPI_FIGURE_LOGGER_NOTION", False)
 

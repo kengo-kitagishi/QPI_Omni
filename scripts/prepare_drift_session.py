@@ -35,7 +35,7 @@ POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\260310\movetest_test_Pos1.pos"
 # グリッド撮影ディレクトリ（小規模グリッドでよい）
 GRID_DIR         = r"D:\AquisitionData\Kitagishi\260310\grid_0p5_0p5_0p1_exp200ms_1pos_EMM2_1"
 GRID_BASE_LABEL  = "Pos1"   # ドリフト推定に使う Pos のラベル（タイムラプスと同じ）
-GRID_Z_INDEX     = 5        # グリッド画像の z インデックス
+GRID_Z_INDEX     = 2        # グリッド画像の z インデックス
 
 # channel_rois.json（事前に pipeline_full.py などで生成済みのもの）
 CHANNEL_ROIS_JSON = r"D:\AquisitionData\Kitagishi\260310\grid_0p5_0p5_0p1_exp200ms_1pos_EMM2_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
@@ -53,7 +53,7 @@ BG_POS_INDEX     = 0   # BG Pos（Pos0: 細胞なし、位相補正用）
 # MM1.4 撮影パラメータ
 N_TIMEPOINTS     = 3168     # 11日間 × 5分間隔 (11*24*60/5)
 INTERVAL_SEC     = 300       # タイムポイント間隔 [秒]（5分）
-EXPOSURE_MS      = 200.0     # カメラ露光時間 [ms]
+EXPOSURE_MS      = 60.0      # カメラ露光時間 [ms]
 SETTLE_MS        = 150      # ステージ移動後の待機時間 [ms]
 PFS_SETTLE_MS    = 200      # PFS ロック待機時間 [ms]（不要なら 0）
 
@@ -227,6 +227,10 @@ def main():
         rois = json.load(f)
     n_channels = len(rois)
     print(f"チャネル数: {n_channels}")
+    if n_channels == 0:
+        print(f"ERROR: channel_rois.json にチャネルが登録されていません: {rois_path}")
+        print("  calibrate_grid_positions.py --detect で検出し直すか、ROI を手動で設定して --apply を実行してください。")
+        sys.exit(1)
 
     # ---- 3. grid(0,0) の位相画像を読んでリファレンスcropを生成 ----
     grid_ref_path = (

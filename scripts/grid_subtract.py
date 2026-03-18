@@ -39,7 +39,7 @@ BASE_LABEL = "Pos4"               # グリッドPosのベースラベル → Pos
 # タイムラプスの z インデックス（img_*_ph_{TL_Z_INDEX:03d}_phase.tif）
 TL_Z_INDEX   = 0
 # グリッドの z インデックス
-GRID_Z_INDEX = 5
+GRID_Z_INDEX = 2
 
 # グリッドステップ [μm]（generate_grid_pos.py の X_STEP / Y_STEP と合わせる）
 X_STEP = 0.1

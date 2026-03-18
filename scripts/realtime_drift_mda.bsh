@@ -272,6 +272,10 @@ for (int t = 0; t < N_TIMEPOINTS; t++) {
         if (i == REF_POS_INDEX) refRawPath = savePath;
     }
 
+    // ---- Return to Pos0 (standby during drift computation + wait) ----
+    moveToPosition(0);
+    print("  Returned to Pos[0] (standby)");
+
     // ---- Drift computation ----
     if (t == 0) {
         print("  T=0: initializing reference frame...");

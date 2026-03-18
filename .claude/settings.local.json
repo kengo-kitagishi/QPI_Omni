@@ -43,7 +43,9 @@
       "Bash(grep セッション\\\\`\\\\|error_count\\\\|bash_command_count\\\\|変更ファイル（:*)",
       "Bash(~/.anthropic_api_key:*)",
       "Bash(~/.zshenv:*)",
-      "Bash(xargs -I{} sh -c 'ls -la \"\"{}\"\"')"
+      "Bash(xargs -I{} sh -c 'ls -la \"\"{}\"\"')",
+      "Read(//e/Acuisition/kitagishi/260301/movetest_9/**)",
+      "Bash(set PYTHONIOENCODING=utf-8)"
     ]
   }
 }

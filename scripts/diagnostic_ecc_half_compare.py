@@ -34,7 +34,7 @@ from figure_logger import save_figure
 TL_CHANNEL = r"D:\AquisitionData\Kitagishi\260310\timelapse_11day_exp200ms_1pos_EMM2\Pos1\output_phase\channels\channel_02_bg_corr.tif"
 GRID_DIR   = r"D:\AquisitionData\Kitagishi\260310\grid_0p5_0p5_0p1_exp200ms_1pos_EMM2_1"
 GRID_LABEL = "Pos1"
-GRID_Z     = 5
+GRID_Z     = 2
 ROIS_JSON  = r"D:\AquisitionData\Kitagishi\260310\timelapse_11day_exp200ms_1pos_EMM2\Pos1\output_phase\channels\channel_rois.json"
 CH_INDEX   = 2        # channel_02
 

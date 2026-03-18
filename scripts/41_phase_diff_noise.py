@@ -48,7 +48,8 @@ SENSOR_READ_NOISE_E = None       # e.g. 3.0
 
 # --- データ設定 ---
 
-DATA_DIR          = r"D:\AquisitionData\Kitagishi\basler_image_seq\exp10ms_int100ms_300frame_1\Pos0" # ホログラム TIFF が並ぶディレクトリ
+DATA_DIR          = r"F:\basler\exp200ms_int1000ms_300frame\Pos0"   # ホログラム TIFF が並ぶディレクトリ
+FRAME_INTERVAL_S  = 1.0     # [s] フレーム間隔（時間軸変換用）。5分=300, 1s=1.0
 CROP_SIDE         = None         # "right" → 右端, "left" → 左端, None → CROP_REGION を直接使う
 CROP_SIZE         = 2048         # CROP_SIDE 使用時の正方形サイズ [px]
 CROP_REGION       = None         # None or (r0, r1, c0, c1)（CROP_SIDE=None のときだけ参照）
@@ -237,6 +238,8 @@ for _i in selected_pair_idx:
         sigma_total_nm    = sigma_total_scalar  * WAVELENGTH / (2 * np.pi) * 1e9
 
 pair_nums      = np.array(pair_nums)
+# pair k (1-based) uses frames 2k-2 and 2k-1; x-axis = start time of the pair
+time_min       = (pair_nums - 1) * 2 * FRAME_INTERVAL_S / 60
 noise_rad_vals = np.array(noise_rad_vals)
 noise_nm_vals  = np.array(noise_nm_vals)
 noise_mrad_vals = noise_rad_vals * 1e3
@@ -302,7 +305,7 @@ print(f"  実測 / σ_total = {ratio_total:.2f}x")
 fig_combined, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
 
 # 上段: mrad
-axes[0].plot(pair_nums, noise_mrad_vals, lw=0.8, color="steelblue", label="measured")
+axes[0].plot(time_min, noise_mrad_vals, lw=0.8, color="steelblue", label="measured")
 axes[0].axhline(noise_mean_mrad, color="red",   ls="--",
                 label=f"mean = {noise_mean_mrad:.2f} mrad")
 axes[0].axhline(sigma_shot_mrad, color="green", ls=":",
@@ -319,7 +322,7 @@ axes[0].legend(fontsize=8)
 axes[0].grid(True, alpha=0.4)
 
 # 下段: nm OPD
-axes[1].plot(pair_nums, noise_nm_vals, lw=0.8, color="darkorange", label="measured")
+axes[1].plot(time_min, noise_nm_vals, lw=0.8, color="darkorange", label="measured")
 axes[1].axhline(noise_mean_nm, color="red",   ls="--",
                 label=f"mean = {noise_mean_nm:.3f} nm")
 axes[1].axhline(sigma_shot_nm, color="green", ls=":",
@@ -329,7 +332,8 @@ if sigma_s_adu is not None:
                     label=f"σ_total = {sigma_total_nm:.4f} nm  (eq. A.14)")
 axes[1].set_ylabel("OPD noise [nm/frame]")
 axes[1].set_xlabel(
-    f"Pair number  (N={n_pairs}, selected {PAIR_START_1BASED}-{PAIR_END_1BASED} / total {n_pairs_total})"
+    f"Time [min]  (interval={FRAME_INTERVAL_S}s/frame, "
+    f"N={n_pairs}, pair {PAIR_START_1BASED}-{PAIR_END_1BASED} / {n_pairs_total})"
 )
 axes[1].legend(fontsize=8)
 axes[1].grid(True, alpha=0.4)
@@ -369,6 +373,7 @@ _params_common = dict(
     measured_over_total=round(float(ratio_total), 3),
     read_noise_e=SENSOR_READ_NOISE_E,
     conversion_gain=round(SENSOR_CONVERSION_GAIN, 4),
+    frame_interval_s=FRAME_INTERVAL_S,
 )
 
 _data_common = {
@@ -397,7 +402,7 @@ save_figure(
 # --- 図2: mrad のみ ---
 
 fig_mrad, ax_mrad = plt.subplots(figsize=(10, 4))
-ax_mrad.plot(pair_nums, noise_mrad_vals, lw=0.8, color="steelblue", label="measured")
+ax_mrad.plot(time_min, noise_mrad_vals, lw=0.8, color="steelblue", label="measured")
 ax_mrad.axhline(noise_mean_mrad, color="red",   ls="--",
                 label=f"mean = {noise_mean_mrad:.2f} mrad")
 ax_mrad.axhline(sigma_shot_mrad, color="green", ls=":",
@@ -407,7 +412,8 @@ if sigma_s_adu is not None:
                     label=f"σ_total = {sigma_total_mrad:.2f} mrad  (eq. A.14)")
 ax_mrad.set_ylabel("Phase noise [mrad/frame]")
 ax_mrad.set_xlabel(
-    f"Pair number  (N={n_pairs}, selected {PAIR_START_1BASED}-{PAIR_END_1BASED} / total {n_pairs_total})"
+    f"Time [min]  (interval={FRAME_INTERVAL_S}s/frame, "
+    f"N={n_pairs}, pair {PAIR_START_1BASED}-{PAIR_END_1BASED} / {n_pairs_total})"
 )
 ax_mrad.set_title(
     f"Phase reconstruction temporal noise [mrad]  |  "
@@ -432,7 +438,7 @@ save_figure(
 # --- 図3: nm OPD のみ ---
 
 fig_nm, ax_nm = plt.subplots(figsize=(10, 4))
-ax_nm.plot(pair_nums, noise_nm_vals, lw=0.8, color="darkorange", label="measured")
+ax_nm.plot(time_min, noise_nm_vals, lw=0.8, color="darkorange", label="measured")
 ax_nm.axhline(noise_mean_nm, color="red",   ls="--",
               label=f"mean = {noise_mean_nm:.3f} nm")
 ax_nm.axhline(sigma_shot_nm, color="green", ls=":",
@@ -442,7 +448,8 @@ if sigma_s_adu is not None:
                   label=f"σ_total = {sigma_total_nm:.4f} nm  (eq. A.14)")
 ax_nm.set_ylabel("OPD noise [nm/frame]")
 ax_nm.set_xlabel(
-    f"Pair number  (N={n_pairs}, selected {PAIR_START_1BASED}-{PAIR_END_1BASED} / total {n_pairs_total})"
+    f"Time [min]  (interval={FRAME_INTERVAL_S}s/frame, "
+    f"N={n_pairs}, pair {PAIR_START_1BASED}-{PAIR_END_1BASED} / {n_pairs_total})"
 )
 ax_nm.set_title(
     f"Phase reconstruction temporal noise [nm OPD]  |  "

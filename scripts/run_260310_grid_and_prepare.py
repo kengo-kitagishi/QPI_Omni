@@ -16,6 +16,7 @@ run_260310_grid_and_prepare.py
 """
 # %%
 import sys
+import json
 from pathlib import Path
 
 _script_dir = Path(__file__).parent
@@ -26,20 +27,25 @@ sys.path.insert(0, str(_script_dir))
 # ============================================================
 
 # グリッド撮影ディレクトリ
-GRID_DIR        = r"D:\AquisitionData\Kitagishi\260310\realtime_drift_cancel_timelapse_exp200ms_fullpos_EMM2_1"
+GRID_DIR        = r"E:\Acuisition\kitagishi\260317_0p0055\grid_0p5_0p5_0p1_exp60ms_allpos_EMM2_1"
 GRID_BASE_LABEL = "Pos1"   # ドリフト推定・channel_crop に使う Pos ラベル
-GRID_Z_INDEX    = 5        # grid_ref_crops に使う z スライス番号
+GRID_Z_INDEX    = 0        # grid_ref_crops に使う z スライス番号
+
+# チャネルクロップ設定（検出後に自動で上書きされる）
+CHANNEL_CROP_W  = 40   # y 方向サイズ [px]（チャネル高さ）
+CHANNEL_CX      = 340  # x 中心 [px]（ピーク位置の中心）
+CHANNEL_CROP_H  = 80   # x 方向サイズ [px]（ピーク幅）
 
 # タイムラプス撮影設定
 POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\260310\movetest.pos"
-SAVE_DIR         = r"D:\AquisitionData\Kitagishi\260310\timelapse_11day_exp200ms_all_pos_EMM2"
+SAVE_DIR         = r"C:\ph_1"
 REF_POS_INDEX    = 1    # ドリフト推定用 Pos（サンプルがいる Pos）
 BG_POS_INDEX     = 0    # BG Pos（細胞なし、位相補正用）
 N_TIMEPOINTS     = 3168  # 11日間 × 5分間隔 (11*24*60/5)
 INTERVAL_SEC     = 300   # タイムポイント間隔 [秒]
-EXPOSURE_MS      = 200.0
-SETTLE_MS        = 1500
-PFS_SETTLE_MS    = 2000
+EXPOSURE_MS      = 60.0
+SETTLE_MS        = 150
+PFS_SETTLE_MS    = 200
 
 # セッションファイルの出力先
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
@@ -84,21 +90,37 @@ if __name__ == "__main__":
         print(f"ERROR: output_phase not found: {phase_dir}")
         sys.exit(1)
 
-    pf.CROP_W              = 40
-    pf.CROP_H              = 120
-    pf.CROP_FORCE_RECOMPUTE = True   # channels/ を削除して再検出
-    pf.CROP_DETECT         = True
-    pf.CROP_APPLY          = True
+    channel_rois_json = phase_dir / "channels" / "channel_rois.json"
+
+    # 検出（cy を自動取得）→ cx/crop_h を設定値で上書き
+    pf.CROP_W               = CHANNEL_CROP_W
+    pf.CROP_H               = 120
+    pf.CROP_FORCE_RECOMPUTE = False
+    pf.CROP_FORCE_DETECT    = True   # 常に cy を再検出して最新の位置を取得
+    pf.CROP_DETECT          = True
+    pf.CROP_APPLY           = False  # apply は cx/crop_h 上書き後にまとめて行う
 
     ok = pf.step_channel_crop(phase_dir)
     if not ok:
         print("ERROR: channel_crop failed")
         sys.exit(1)
 
-    channel_rois_json = phase_dir / "channels" / "channel_rois.json"
-    if not channel_rois_json.exists():
-        print(f"ERROR: channel_rois.json not generated: {channel_rois_json}")
-        sys.exit(1)
+    # cy はそのまま、cx と crop_h を設定値で上書き
+    with open(channel_rois_json, encoding="utf-8") as f:
+        rois = json.load(f)
+    for roi in rois:
+        roi["cx"]     = CHANNEL_CX
+        roi["crop_w"] = CHANNEL_CROP_W
+        roi["crop_h"] = CHANNEL_CROP_H
+    with open(channel_rois_json, "w", encoding="utf-8") as f:
+        json.dump(rois, f, indent=2)
+    print(f"  ROI 上書き: cx={CHANNEL_CX}, crop_w={CHANNEL_CROP_W}, crop_h={CHANNEL_CROP_H}")
+
+    # apply（上書き後の ROI で実行）
+    pf.CROP_FORCE_DETECT = False
+    pf.CROP_DETECT       = False
+    pf.CROP_APPLY        = True
+    pf.step_channel_crop(phase_dir)
 
     print(f"channel_rois.json: {channel_rois_json}")
     print("\nStep 2 done\n")
