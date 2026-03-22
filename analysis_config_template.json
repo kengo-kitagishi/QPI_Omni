@@ -1,0 +1,42 @@
+{
+  "_note": "この実験でのチューニングメモ（例: grid_z=2がフォーカス良好、crop小さめが安定）",
+
+  "timelapse_dirs": [
+    "C:\\ph_1"
+  ],
+  "grid_dir": "E:\\Acuisition\\kitagishi\\YYMMDD_xxx\\grid_xxxxx",
+
+  "_section_steps": "--- 実行ステップ（不要なら削除）---",
+  "step_grid_reconstruction":      false,
+  "step_timelapse_reconstruction": false,
+  "step_calibrate_grid":           false,
+  "step_channel_crop":             true,
+  "step_gaussian_gradient":        false,
+  "step_gaussian_backsub":         true,
+  "step_align_simple":             false,
+  "step_compute_shifts":           true,
+  "step_grid_subtract":            true,
+
+  "_section_crop": "--- channel_crop: ECCのために細胞の急峻構造の割合を最大化 ---",
+  "crop_w": 40,
+  "crop_h": 120,
+  "crop_min_dist": 35,
+  "crop_prominence": 0.3,
+  "crop_force_recompute": false,
+
+  "_section_shifts": "--- compute_pos_shifts ---",
+  "shifts_grid_z_index": 2,
+  "shifts_vmin": -5.0,
+  "shifts_vmax": 2.0,
+  "shifts_ecc_min_corr": 0.9,
+
+  "_section_ecc_passes": "--- ECC pass数（試行錯誤する項目）---",
+  "shifts_use_incremental_tracking": true,
+  "shifts_use_second_pass_ecc": true,
+  "shifts_use_third_pass_ecc": true,
+
+  "_section_gsub": "--- grid_subtract ---",
+  "gsub_z_index": 2,
+  "gsub_x_step": 0.1,
+  "gsub_y_step": 0.1
+}

@@ -35,9 +35,9 @@ sys.path.insert(0, str(_script_dir))
 # ★ データパス
 # ============================================================
 TIMELAPSE_DIRS = [
-    r"D:\AquisitionData\Kitagishi\260310\timelapse_11day_exp200ms_1pos_EMM2",
+    r"D:\AquisitionData\Kitagishi\260321\_cal_grid_0pergluc_60ms_1",
 ]
-GRID_DIR = r"D:\AquisitionData\Kitagishi\260310\grid_0p5_0p5_0p1_exp200ms_1pos_EMM2_1"
+GRID_DIR = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
 
 
 # ============================================================
@@ -46,12 +46,12 @@ GRID_DIR = r"D:\AquisitionData\Kitagishi\260310\grid_0p5_0p5_0p1_exp200ms_1pos_E
 STEP_GRID_RECONSTRUCTION     = False
 STEP_TIMELAPSE_RECONSTRUCTION = False
 STEP_CALIBRATE_GRID          = False   # True で各Posのgridキャリブレーションを実行
-STEP_CHANNEL_CROP            = True   # 完了済み
-STEP_GAUSSIAN_GRADIENT       = False   # NEW: large-sigma Gaussian gradient removal before channel_crop
-STEP_GAUSSIAN_BACKSUB        = True   # 完了済み
-STEP_ALIGN_SIMPLE            = False   # 確認用（時間がかかる）
-STEP_COMPUTE_SHIFTS          = True    # shift_visualize も自動実行
-STEP_GRID_SUBTRACT           = True
+STEP_CHANNEL_CROP            = False
+STEP_GAUSSIAN_GRADIENT       = False
+STEP_GAUSSIAN_BACKSUB        = False
+STEP_ALIGN_SIMPLE            = False
+STEP_COMPUTE_SHIFTS          = False    # shift_visualize も自動実行
+STEP_GRID_SUBTRACT           = False
 
 # テストラン: None で全フレーム、整数で先頭 N フレームのみ処理
 TEST_N_FRAMES                = None
@@ -64,7 +64,7 @@ N_WORKERS_TL   = None   # Step 1 timelapse reconstruction 用
 # Pos フィルタ（タイムラプス側）
 # ============================================================
 # None で全 Pos。["Pos1", "Pos3"] のように指定も可
-POS_FILTER = None
+POS_FILTER = ["Pos1"]
 
 # ============================================================
 # QPI 光学パラメータ
@@ -192,6 +192,37 @@ GSUB_SHIFT_SIGN_Y              = 1
 GSUB_APPLY_INVERSE_SHIFT       = False
 GSUB_APPLY_BACKSUB_TO_GRID     = True   # グリッド画像に backsub を適用
 GSUB_APPLY_SUBPIXEL_CORRECTION = True   # サブピクセル残差 warp をフレームに適用
+# ============================================================
+
+# ============================================================
+# ★ 外部 analysis_config.json による上書き（--config 引数）
+# ============================================================
+def _apply_config(config_path: str):
+    """analysis_config.json を読んで global パラメータを上書きする。
+    JSON キー（小文字）→ PYTHON 変数名（大文字）に対応。
+    _note など _ で始まるキーはスキップ。
+    """
+    with open(config_path, encoding="utf-8") as _f:
+        _cfg = json.load(_f)
+    _g = globals()
+    for _k, _v in _cfg.items():
+        if _k.startswith("_"):
+            continue
+        _var = _k.upper()
+        if _var in _g:
+            _g[_var] = _v
+            print(f"  [config] {_var} = {_v!r}")
+        else:
+            print(f"  [config] WARNING: unknown key '{_k}' (skipped)")
+
+_cfg_path = None
+for _i, _arg in enumerate(sys.argv):
+    if _arg == "--config" and _i + 1 < len(sys.argv):
+        _cfg_path = sys.argv[_i + 1]
+        break
+if _cfg_path:
+    print(f"Loading analysis_config: {_cfg_path}")
+    _apply_config(_cfg_path)
 # ============================================================
 
 

@@ -1,0 +1,21 @@
+[
+  {
+    "timepoint": 550,
+    "timestamp": "2026-03-20T13:45:26.731515",
+    "sample_raw": "C:\\ph_1\\Pos1\\img_000000550_ph_000.tif",
+    "bg_raw": "C:\\ph_1\\Pos0\\img_000000550_ph_000.tif",
+    "used_prev_frame": false,
+    "n_channels_used": 8,
+    "n_channels_raw": 12,
+    "tx_avg_px": -0.4594692765478639,
+    "ty_avg_px": -0.284759760203272,
+    "ecc_correlation": 0.9633981375062335,
+    "correction_stage_x_um": -0.0984343719027514,
+    "correction_stage_y_um": -0.15882710960746513,
+    "cumulative_dx_um": -0.0984343719027514,
+    "cumulative_dy_um": -0.15882710960746513,
+    "jump_detected": false,
+    "correction_valid": true,
+    "two_pass_ecc": true
+  }
+]

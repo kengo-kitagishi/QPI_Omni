@@ -41,6 +41,7 @@ def get_tif_files(directory):
         f for f in os.listdir(directory)
         if not f.startswith("._")
         and f.lower().endswith(('.tif', '.tiff'))
+        and '_ecc_sub' not in f
     ])
     return [os.path.join(directory, f) for f in files]
 
@@ -225,7 +226,7 @@ def main():
     # ========================================
 
     # タイムラプス画像のディレクトリ（.tifが入ったフォルダ）
-    TIMELAPSE_DIR = r"D:\AquisitionData\Kitagishi\260310\timelapse_11day_exp200ms_1pos_EMM2\Pos1\cropped"
+    TIMELAPSE_DIR = r"C:\ph_1\Pos1\output_phase"
     # 基準画像の指定（優先度: REFERENCE_IMAGE_PATH > REFERENCE_DIR+INDEX > TIMELAPSE_DIR+INDEX）
     # 方法1: 直接パスを指定
     #   例: r"E:\Acuisition\kitagishi\260216\move_test_1\Pos1\img_000000200_ph_000.tif"
@@ -233,7 +234,7 @@ def main():
     # 方法2: 基準画像のディレクトリ + N番目（1始まり）
     #   REFERENCE_DIR=None の場合は TIMELAPSE_DIR 内のN番目を使用
     REFERENCE_DIR = None
-    REFERENCE_INDEX = 2
+    REFERENCE_INDEX = 1
 
     # 処理設定
     ALIGNMENT_METHOD = 'ecc'  # 'ecc' or 'phase_correlation'

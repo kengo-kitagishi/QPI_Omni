@@ -45,7 +45,12 @@
       "Bash(~/.zshenv:*)",
       "Bash(xargs -I{} sh -c 'ls -la \"\"{}\"\"')",
       "Read(//e/Acuisition/kitagishi/260301/movetest_9/**)",
-      "Bash(set PYTHONIOENCODING=utf-8)"
+      "Bash(set PYTHONIOENCODING=utf-8)",
+      "Bash(\"C:\\\\Users\\\\QPI\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe\" scripts/ecc_channel_inspect.py --sample \"C:\\\\ph_1\\\\Pos1\\\\output_phase\\\\img_000000000_ph_000_phase.tif\" --config \"drift_session\\\\drift_config.json\")",
+      "Bash(pip install:*)",
+      "Bash(cmd /c \"dir F:\" \")",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); pages=[r for r in data if ''''[思考] 2026-03-20'''' in str\\(r\\)]; print\\(json.dumps\\(pages[:3], ensure_ascii=False, indent=2\\)\\)\")",
+      "Bash(grep -o \"\"id\"\":\"\"[^\"\"]*\"\" C:/Users/QPI/.claude/projects/C--Users-QPI-Documents-QPI-Omni/664fec5a-6952-4c4a-a8f2-34669d671707/tool-results/mcp-notionApi-API-post-search-1774007855059.txt)"
     ]
   }
 }

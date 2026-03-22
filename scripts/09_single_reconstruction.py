@@ -15,8 +15,8 @@ setup_autosave()
 path = r"/Volumes/QPI3/250910_kk/ph_1/Pos1/img_000000000_Default_000.tif"
 path_bg = r"/Volumes/QPI3/250910_kk/ph_1/Pos1/img_000000000_Default_000.tif"
 """
-path = r"E:\Acuisition\kitagishi\260301\movetest_8\Pos2\img_000000004_ph_000.tif"
-path_bg = r"E:\Acuisition\kitagishi\260301\movetest_8\Pos0\img_000000004_ph_000.tif"
+path = r"D:\AquisitionData\Kitagishi\basler_image_seq\vis_60ms_1s_1\Pos0\img_000000000_ph_000.tif"
+path_bg = r"D:\AquisitionData\Kitagishi\basler_image_seq\vis_60ms_1s_1\Pos0\img_000000000_ph_000.tif"
 
 img = Image.open(path)
 

@@ -15,7 +15,7 @@ WAVELENGTH / NA / PIXELSIZE はハード変更のない限り触らない。
 # ★ 実験前に更新するパラメータ
 # ============================================================
 
-OFFAXIS_CENTER = (1710, 644)   # (row, col) — 2026-02-28 更新
+OFFAXIS_CENTER = (1634, 532)   # (row, col) — 2026-03-21 更新
 
 # クロップ領域 (row_start, row_end, col_start, col_end)
 # カメラ位置を変えた場合は要更新
@@ -39,6 +39,7 @@ PIXELSIZE    = 3.45e-6 / 40     # m/px  (センサー 3.45 µm, 40x 対物)
 # 新しい実験を行うたびに先頭に追加する
 
 OFFAXIS_HISTORY = [
+    {"date": "2026-03-21", "center": (1634,  532), "note": "回折格子変更後"},
     {"date": "2026-02-28", "center": (1712,  532), "note": ""},
     {"date": "2025-12-12", "center": (1664,  485), "note": "ph_1 / Pos20"},
     {"date": "unknown",    "center": (1642,  443), "note": "realtime monitor時の値"},

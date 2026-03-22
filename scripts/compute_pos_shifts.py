@@ -72,13 +72,30 @@ RECONSTRUCTED_DIM          = 511
 GRID_CALIBRATION_JSON      = None
 # --- 2段階ECC（USE_INCREMENTAL_TRACKING=True 時のみ有効） ---
 USE_SECOND_PASS_ECC    = False   # True で2回目ECCを有効化
-FIRST_PASS_HALF        = False   # True で1回目ECCもhalf cropで実施（pass1精度向上用）
-SECOND_PASS_HALF       = 'right' # 'right' or 'left'（前半Pos=right, 後半Pos=left）
+FIRST_PASS_HALF        = False   # (無効化済み: pass1/2/3 ともに full crop を使用)
+SECOND_PASS_HALF       = 'right' # (無効化済み: full crop に統一)
 USE_THIRD_PASS_ECC     = False   # True で3回目ECC（pass2結果から最近傍grid再選択 → half ECC）
 # corr/shift データを NPZ + CSV に保存（True 推奨: subtract 画像との対応確認用）
 SAVE_CORR_DATA         = True
 # --- 並列処理 ---
 N_WORKERS = None               # None = os.cpu_count(). 1 = 直列（デバッグ用）
+
+# ============================================================
+# ★ シフト適用＋引き算＋最終 crop 出力
+# ============================================================
+APPLY_SHIFT_AND_CROP    = True     # False でこのステップをスキップ
+
+# タイムラプスの z インデックス（img_*_ph_{Z}_phase.tif のZZZ部分）
+APPLY_TL_Z_INDEX        = 0        # 通常 0 (ph_000)
+
+# 最終 crop パラメータ（横長: 40行 × 440列）
+FINAL_CROP_CY           = 256      # Y中心（ユーザーが設定）
+FINAL_CROP_CX           = 256      # X中心（crop_h=440 で cx±220 が画像内に収まるよう設定）
+FINAL_CROP_W            = 40       # Y方向行数（高さ）
+FINAL_CROP_H            = 440      # X方向列数（幅）
+
+# 出力先（None なら channels_dir/crop_subtracted/ に自動設定）
+APPLY_OUT_DIR           = None
 # ============================================================
 
 
@@ -308,12 +325,7 @@ def load_grid_ref_mn(pos_map, xi, yi, rois, n_channels):
 
 
 def load_grid_ref_mn_half(pos_map, xi, yi, rois, n_channels):
-    """
-    grid(xi, yi) の各チャネル ROI crop を半分サイズで返す（2段階ECC用）。
-    SECOND_PASS_HALF='right': cx_half = cx + crop_h//4 → 右寄り crop
-    SECOND_PASS_HALF='left':  cx_half = cx - crop_h//4 → 左寄り crop
-    crop サイズは crop_h//2 に縮小。
-    """
+    """grid(xi, yi) の各チャネル ROI full crop を返す（2段階ECC用）。"""
     from channel_crop import extract_rect_roi
     pos_dir = pos_map[(xi, yi)]
     fname = f"img_000000000_ph_{GRID_Z_INDEX:03d}_phase.tif"
@@ -324,16 +336,13 @@ def load_grid_ref_mn_half(pos_map, xi, yi, rois, n_channels):
     refs_out = []
     for ch in range(n_channels):
         roi = rois[ch] if ch < len(rois) else rois[-1]
-        crop_h_half = roi["crop_h"] // 2
-        cx_half = (roi["cx"] + roi["crop_h"] // 4 if SECOND_PASS_HALF == 'right'
-                   else roi["cx"] - roi["crop_h"] // 4)
-        cropped = extract_rect_roi(grid_img, roi["cy"], cx_half, roi["crop_w"], crop_h_half)
+        cropped = extract_rect_roi(grid_img, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"])
         if APPLY_BACKSUB_TO_GRID_REF:
             offset = compute_backsub_offset(cropped)
             cropped = cropped + offset
-            print(f"  ch{ch:02d} ROI crop (half): {cropped.shape}  backsub offset={offset:+.4f} rad")
+            print(f"  ch{ch:02d} ROI crop (full): {cropped.shape}  backsub offset={offset:+.4f} rad")
         else:
-            print(f"  ch{ch:02d} ROI crop (half): {cropped.shape}")
+            print(f"  ch{ch:02d} ROI crop (full): {cropped.shape}")
         refs_out.append(cropped)
     return refs_out
 
@@ -546,6 +555,66 @@ def _frame_result_from_per_channel(t, per_channel):
     }, sx_avg, sy_avg
 
 
+def apply_shifts_and_crop(channels_dir, frame_results, grid_ref_path_str=None):
+    """
+    pos_shifts.json で求めたシフトを output_phase 全フレームに適用し、
+    参照引き算 → 40×440 crop → channels_dir/crop_subtracted/ に保存。
+    """
+    from channel_crop import extract_rect_roi
+
+    tl_dir = Path(channels_dir).parent          # = output_phase/
+    out_dir = Path(APPLY_OUT_DIR) if APPLY_OUT_DIR else Path(channels_dir) / "crop_subtracted"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # タイムラプスフレーム一覧
+    tl_frames = sorted(tl_dir.glob(f"img_*_ph_{APPLY_TL_Z_INDEX:03d}_phase.tif"))
+    if not tl_frames:
+        print(f"[APPLY] output_phase フレームが見つかりません: {tl_dir}")
+        return
+
+    # 参照画像（フル解像度）
+    if grid_ref_path_str and Path(grid_ref_path_str).exists():
+        ref_full = tifffile.imread(str(grid_ref_path_str)).astype(np.float64)
+        print(f"[APPLY] 参照: グリッド {Path(grid_ref_path_str).name}")
+    else:
+        ref_full = tifffile.imread(str(tl_frames[0])).astype(np.float64)
+        print(f"[APPLY] 参照: タイムラプス 1フレーム目 {tl_frames[0].name}")
+
+    # シフト辞書 {frame_index: (sx, sy)}
+    shift_map = {
+        r["frame_index"]: (r["shift_x_avg"] or 0.0, r["shift_y_avg"] or 0.0)
+        for r in frame_results
+    }
+
+    h, w = ref_full.shape
+    for i, fp in enumerate(tqdm(tl_frames, desc="apply+crop")):
+        sx, sy = shift_map.get(i, (0.0, 0.0))
+        frame = tifffile.imread(str(fp)).astype(np.float64)
+
+        # warpAffine でシフト補正
+        warp_matrix = np.eye(2, 3, dtype=np.float32)
+        warp_matrix[0, 2] = float(sx)
+        warp_matrix[1, 2] = float(sy)
+        aligned = cv2.warpAffine(
+            frame.astype(np.float32), warp_matrix, (w, h),
+            flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP
+        ).astype(np.float64)
+
+        # 参照引き算
+        subtracted = aligned - ref_full
+
+        # 40×440 crop
+        crop = extract_rect_roi(
+            subtracted, FINAL_CROP_CY, FINAL_CROP_CX,
+            FINAL_CROP_W, FINAL_CROP_H
+        )
+
+        tifffile.imwrite(str(out_dir / fp.name), crop.astype(np.float32))
+
+    print(f"[APPLY] {len(tl_frames)} フレーム保存完了 → {out_dir}")
+    print(f"[APPLY] crop shape: ({FINAL_CROP_W}, {FINAL_CROP_H})")
+
+
 def main():
     channels_dir = Path(CHANNELS_DIR)
     if not channels_dir.exists():
@@ -650,8 +719,8 @@ def main():
         prev_shift_x, prev_shift_y = 0.0, 0.0
         refs_dict      = {(0, 0): refs}           # (xi,yi) → full crop refs (非2段階ECC用)
         refs_u8_dict   = {(0, 0): refs_u8}        # (xi,yi) → full crop refs uint8
-        grid_half_cache    = {}   # (xi, yi) → list of float crops (half crop, pass2用)
-        grid_half_u8_cache = {}   # (xi, yi) → list of uint8 crops (half crop, pass2用)
+        grid_half_cache    = {}   # (xi, yi) → list of float crops (full crop, pass2用)
+        grid_half_u8_cache = {}   # (xi, yi) → list of uint8 crops (full crop, pass2用)
 
         _n_workers = N_WORKERS or os.cpu_count()
         _cache_lock = threading.Lock()
@@ -696,12 +765,7 @@ def main():
                 frame = stacks[ch][t]
 
                 # ---- 1st pass ECC（grid(0,0) 固定 or nearest grid） ----
-                if USE_SECOND_PASS_ECC and FIRST_PASS_HALF:
-                    roi_ch = rois_for_incremental[ch] if ch < len(rois_for_incremental) else rois_for_incremental[-1]
-                    crop_h = roi_ch["crop_h"]
-                    frame_p1 = frame[:, crop_h // 2:] if SECOND_PASS_HALF == 'right' else frame[:, :crop_h // 2]
-                else:
-                    frame_p1 = frame
+                frame_p1 = frame
 
                 if ALIGNMENT_METHOD == 'ecc':
                     result1 = ecc_align(p1_refs_u8[ch], to_uint8(frame_p1))
@@ -735,7 +799,7 @@ def main():
                          "grid_xi": xi, "grid_yi": yi, "failed": False},
                     )
 
-                # ---- 2nd pass ECC (half crop) ----
+                # ---- 2nd pass ECC (full crop) ----
                 xi2, yi2 = _select_nearest_grid(shift1_x, shift1_y, grid_cal, pos_map, pixel_scale_um)
                 grid_offset_x2, grid_offset_y2 = _get_grid_offset(xi2, yi2, grid_cal, pixel_scale_um)
 
@@ -748,7 +812,7 @@ def main():
                                 grid_half_u8_cache[(xi2, yi2)] = [
                                     to_uint8(r) for r in grid_half_cache[(xi2, yi2)]]
                         except FileNotFoundError as e:
-                            print(f"\n[t={t},ch={ch}] half-crop ロード失敗: {e}  → pass1 結果を使用")
+                            print(f"\n[t={t},ch={ch}] full-crop ロード失敗: {e}  → pass1 結果を使用")
                             low_ecc = ECC_MIN_CORR > 0 and corr1 < ECC_MIN_CORR
                             return (
                                 {"channel": ch,
@@ -771,15 +835,10 @@ def main():
                                  "pass2_corr": None, "pass2_grid_xi": xi2, "pass2_grid_yi": yi2},
                             )
 
-                # half crop のフレーム側スライス（列方向の右半分 or 左半分）
-                roi_ch = rois_for_incremental[ch] if ch < len(rois_for_incremental) else rois_for_incremental[-1]
-                crop_h = roi_ch["crop_h"]
-                frame_half = frame[:, crop_h // 2:] if SECOND_PASS_HALF == 'right' else frame[:, :crop_h // 2]
-
                 if ALIGNMENT_METHOD == 'ecc':
-                    result2 = ecc_align(grid_half_u8_cache[(xi2, yi2)][ch], to_uint8(frame_half))
+                    result2 = ecc_align(grid_half_u8_cache[(xi2, yi2)][ch], to_uint8(frame))
                 else:
-                    result2 = phase_align(grid_half_cache[(xi2, yi2)][ch], frame_half)
+                    result2 = phase_align(grid_half_cache[(xi2, yi2)][ch], frame)
 
                 if result2 is None:
                     # pass2 失敗 → pass1 結果を採用
@@ -812,7 +871,7 @@ def main():
                 final_corr = corr2
                 final_xi, final_yi = xi2, yi2
 
-                # ---- 3rd pass ECC (pass2結果から最近傍grid再選択 → half crop ECC) ----
+                # ---- 3rd pass ECC (pass2結果から最近傍grid再選択 → full crop ECC) ----
                 fine3_x = fine3_y = corr3 = None
                 xi3, yi3 = xi2, yi2
                 grid_offset_x3, grid_offset_y3 = grid_offset_x2, grid_offset_y2
@@ -828,13 +887,13 @@ def main():
                                     grid_half_u8_cache[(xi3, yi3)] = [
                                         to_uint8(r) for r in grid_half_cache[(xi3, yi3)]]
                             except FileNotFoundError as e:
-                                print(f"\n[t={t},ch={ch}] pass3 half-crop ロード失敗: {e}  → pass2 結果を使用")
+                                print(f"\n[t={t},ch={ch}] pass3 full-crop ロード失敗: {e}  → pass2 結果を使用")
                                 xi3, yi3 = xi2, yi2
                     if (xi3, yi3) in grid_half_cache:
                         if ALIGNMENT_METHOD == 'ecc':
-                            result3 = ecc_align(grid_half_u8_cache[(xi3, yi3)][ch], to_uint8(frame_half))
+                            result3 = ecc_align(grid_half_u8_cache[(xi3, yi3)][ch], to_uint8(frame))
                         else:
-                            result3 = phase_align(grid_half_cache[(xi3, yi3)][ch], frame_half)
+                            result3 = phase_align(grid_half_cache[(xi3, yi3)][ch], frame)
                         if result3 is not None:
                             fine3_x, fine3_y, corr3 = result3
                             final_shift_x = fine3_x + grid_offset_x3
@@ -1035,6 +1094,11 @@ def main():
             visualize_exclusion_summary(str(excl_csv), str(out_path))
     except Exception as e:
         print(f"[shift_visualize] スキップ: {e}")
+
+    # ---- シフト適用＋最終 crop 出力 ----
+    if APPLY_SHIFT_AND_CROP:
+        _grid_ref_path = reference_info.get("grid_reference_path") if USE_GRID_REFERENCE else None
+        apply_shifts_and_crop(str(channels_dir), frame_results, _grid_ref_path)
 
 
 if __name__ == "__main__":
