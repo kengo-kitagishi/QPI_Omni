@@ -1190,6 +1190,41 @@
   - postpone_to_april: input, slide, documentation, low-priority other/code backlog
   - drop_or_redesign: December/January stale experiment chains, past-context daily tasks, outdated meeting leftovers
 
+## 2026-03-16 22:20 - last-week carryover applied with cell-introduction priority
+- user override:
+  - fix `細胞導入` at 2026-03-17 morning as highest priority
+  - move last week's unfinished work into this week or later
+- manual reschedule highlights:
+  - 86ewr092c 細胞導入 -> 2026-03-17 07:00-08:30
+  - 86ewr0z00 / 86ewr0z29 / 86ewr0z4d / 86ewr0z63 / 86ewr0z90 -> re-anchored to the new T0 chain on 03-19 / 03-21 / 03-22 / 03-24 / 03-26
+  - 学振 backlog A/B/C sessions inserted before or around existing A-4/B-4/C-4 blocks
+  - admin/figure tasks moved to 03-19 and 03-27
+- auto carryover applied:
+  - 26 tasks from 2026-03-09..2026-03-15 moved into 2026-03-17..2026-04-01
+  - low-priority input/slide/documentation deferred mainly to 2026-03-30..2026-04-01
+- intentionally not moved:
+  - 86ewuyzyk 福原と夜ご飯
+  - 86eww81ra 兄の奥さんと会う
+  - reason: past social events should not be blindly rescheduled
+- validation:
+  - custom club check after final adjustment: 0 conflicts
+  - clickup review report: /Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260316-222043.json
+  - note: review reported 4 workflow_order heuristics for experiment tasks, but no overlap findings; treated as workflow-tag overreach rather than timing conflict
+
+## 2026-03-17 21:39 - competition days added
+- added competition anchors:
+  - 86ewyyzuc 学生個人選手権 -> 2026-04-25
+  - 86ewyyzug 学生個人選手権 -> 2026-04-26
+- rule applied:
+  - competition days must stay otherwise empty
+- conflict resolved:
+  - 86ewv05bv Q-Microbio｜ポスター草案を教授に共有（レビュー①）
+  - moved from 2026-04-25 10:00-11:00 to 2026-04-27 09:00-10:00
+- verification:
+  - 2026-04-25 and 2026-04-26 appear as blocked no-schedule days
+  - review findings: 0
+  - report: /Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260317-213954.json
+
 ## 2026-03-16 20:18 - review check
 - range: 2026-03-17->2026-03-26
 - pressure: overdue=127 due_soon_unscheduled=0
@@ -1199,3 +1234,23 @@
 - range: 2026-03-24->2026-03-31
 - pressure: overdue=125 due_soon_unscheduled=0
 - findings: 0 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260316-202220.json
+
+## 2026-03-16 21:32 - review check
+- range: 2026-03-17->2026-04-05
+- pressure: overdue=103 due_soon_unscheduled=0
+- findings: 0 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260316-213223.json
+
+## 2026-03-16 22:20 - review check
+- range: 2026-03-17->2026-04-05
+- pressure: overdue=82 due_soon_unscheduled=0
+- findings: 4 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260316-222043.json
+
+## 2026-03-17 21:38 - review check
+- range: 2026-04-23->2026-04-28
+- pressure: overdue=89 due_soon_unscheduled=0
+- findings: 1 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260317-213855.json
+
+## 2026-03-17 21:39 - review check
+- range: 2026-04-23->2026-04-28
+- pressure: overdue=89 due_soon_unscheduled=0
+- findings: 0 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260317-213954.json

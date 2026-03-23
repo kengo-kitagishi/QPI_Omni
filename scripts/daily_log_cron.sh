@@ -33,7 +33,8 @@ mkdir -p "$(dirname "$LOG_FILE")"
     python3 "$SCRIPT_DIR/weekly_report_hub.py" --week "$WEEK_LABEL" --no-preprocess
 
     # 3. 今日の日次ログを生成（Anthropic API 経由、1コールで完結）
-    python3 "$SCRIPT_DIR/generate_daily_log.py" --overwrite
+    # --backend api: launchd 環境では claude CLI の OAuth が使えないため API キーを強制使用
+    python3 "$SCRIPT_DIR/generate_daily_log.py" --overwrite --backend api
 
     echo "=== 完了: $(date '+%Y-%m-%d %H:%M:%S') ==="
 } 2>&1 | tee "$LOG_FILE"

@@ -729,6 +729,7 @@ def save_figure(
     data_source: Optional[dict] = None,
     copy_files: Optional[list] = None,
     data: Optional[dict] = None,
+    source_tifs: Optional[list] = None,
 ) -> Path:
     """
     Save a matplotlib Figure with inbox-first workflow.
@@ -790,6 +791,18 @@ def save_figure(
             import numpy as np
             d = np.load("path/to/figure__f001_data.npz")
             noise = d["noise_mrad"]
+
+    source_tifs : list of str or Path, optional
+        TIF files used to generate this figure. They are copied to
+        ``<inbox_dir>/tifs/`` so that colormap/visualization tweaks can be
+        done without the original external drive.  Paths in the metadata JSON
+        are recorded under ``tif_copies``.
+
+        Example::
+            save_figure(
+                fig,
+                source_tifs=[subtracted_path, mask_path],
+            )
 
     Returns
     -------
@@ -865,6 +878,37 @@ def save_figure(
     else:
         pub_path = None
 
+    if copy_files:
+        for item in copy_files:
+            if isinstance(item, (list, tuple)):
+                src, dst_name = item[0], item[1]
+            else:
+                src, dst_name = item, os.path.basename(item)
+            dst = inbox_dir / dst_name
+            shutil.copy2(src, dst)
+            print(f"[figure_logger] inbox copy: {dst}")
+
+    tif_copies: list[str] = []
+    if source_tifs:
+        tif_dir = inbox_dir / "tifs"
+        tif_dir.mkdir(parents=True, exist_ok=True)
+        for src in source_tifs:
+            src_path = Path(src)
+            if not src_path.exists():
+                print(f"[figure_logger] warn: source_tif not found, skip: {src_path}")
+                continue
+            dst = tif_dir / src_path.name
+            # 同名ファイルが複数あるときは _001, _002, ... を付ける
+            if dst.exists():
+                stem, suffix = src_path.stem, src_path.suffix
+                counter = 1
+                while dst.exists():
+                    dst = tif_dir / f"{stem}_{counter:03d}{suffix}"
+                    counter += 1
+            shutil.copy2(src_path, dst)
+            tif_copies.append(str(dst.resolve()))
+            print(f"[figure_logger] tif copied: {dst}")
+
     meta = {
         "created_at_utc": _utc_now_iso(),
         "date_local": date_local,
@@ -883,6 +927,7 @@ def save_figure(
         "manifest_file": str(manifest_path.resolve()),
         "data_file": data_file,
         "data_keys": list(data.keys()) if data else [],
+        "tif_copies": tif_copies,
         "data_info": {**_detect_data_info(), **(data_source or {})},
         "git": _git_snapshot(),
         "runtime": {
@@ -895,16 +940,6 @@ def save_figure(
     }
     if extra_meta:
         meta["extra_meta"] = extra_meta
-
-    if copy_files:
-        for item in copy_files:
-            if isinstance(item, (list, tuple)):
-                src, dst_name = item[0], item[1]
-            else:
-                src, dst_name = item, os.path.basename(item)
-            dst = inbox_dir / dst_name
-            shutil.copy2(src, dst)
-            print(f"[figure_logger] inbox copy: {dst}")
 
     meta_path = inbox_file.with_suffix(".json")
     _json_dump(meta_path, meta)
