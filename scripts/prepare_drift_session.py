@@ -30,28 +30,28 @@ sys.path.insert(0, str(_script_dir))
 # ============================================================
 
 # タイムラプスで使う .pos ファイル（グリッドなし、実際に撮影するポジションリスト）
-POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\260310\movetest_test_Pos1.pos"
+POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\260321\focused_timelapse.pos"
 
 # グリッド撮影ディレクトリ（小規模グリッドでよい）
-GRID_DIR         = r"D:\AquisitionData\Kitagishi\260310\grid_0p5_0p5_0p1_exp200ms_1pos_EMM2_1"
+GRID_DIR         = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
 GRID_BASE_LABEL  = "Pos1"   # ドリフト推定に使う Pos のラベル（タイムラプスと同じ）
-GRID_Z_INDEX     = 2        # グリッド画像の z インデックス
+GRID_Z_INDEX     = 0        # グリッド画像の z インデックス（単z → 0）
 
 # channel_rois.json（事前に pipeline_full.py などで生成済みのもの）
-CHANNEL_ROIS_JSON = r"D:\AquisitionData\Kitagishi\260310\grid_0p5_0p5_0p1_exp200ms_1pos_EMM2_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
+CHANNEL_ROIS_JSON = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
 
 # セッション作業ディレクトリ（ここに設定ファイルと状態ファイルが保存される）
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # タイムラプス画像の保存先（MM1.4 で撮影した画像の保存先）
-SAVE_DIR         = r"D:\AquisitionData\Kitagishi\260310\timelapse_11day_exp200ms_1pos_EMM2"
+SAVE_DIR         = r"C:\ph"
 
 # .pos ファイル内の各 Pos のインデックス（0始まり）
 REF_POS_INDEX    = 1   # ドリフト推定に使う Pos（サンプルがいる Pos）
 BG_POS_INDEX     = 0   # BG Pos（Pos0: 細胞なし、位相補正用）
 
 # MM1.4 撮影パラメータ
-N_TIMEPOINTS     = 3168     # 11日間 × 5分間隔 (11*24*60/5)
+N_TIMEPOINTS     = 2304     # 260321実験
 INTERVAL_SEC     = 300       # タイムポイント間隔 [秒]（5分）
 EXPOSURE_MS      = 60.0      # カメラ露光時間 [ms]
 SETTLE_MS        = 150      # ステージ移動後の待機時間 [ms]
@@ -76,7 +76,7 @@ ORIGINAL_DIM         = 2048
 RECONSTRUCTED_DIM    = 511
 
 # 位置クロップ設定（pipeline_full.py と同値）
-POS_SPLIT    = 3
+POS_SPLIT    = 31
 CROP_BEFORE  = (0, 2048, 400, 2448)   # pos_number < POS_SPLIT → 右側
 CROP_AFTER   = (0, 2048,   0, 2048)   # Pos3 以降
 

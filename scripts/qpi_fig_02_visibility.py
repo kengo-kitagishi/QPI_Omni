@@ -33,6 +33,7 @@ from skimage.restoration import unwrap_phase
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent))
 from qpi import QPIParameters, get_field, make_disk, crop_array
+from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 from figure_logger import save_figure
 
 # ============================================================
@@ -40,25 +41,21 @@ from figure_logger import save_figure
 # ============================================================
 
 DEFAULT_HOLOGRAM_PATH = (
-    r"E:\Acuisition\kitagishi\260301\movetest_3\Pos2"
-    r"\img_000000000_Default_000.tif"
+    r"D:\AquisitionData\Kitagishi\260321\_cal_grid_0pergluc_60ms_1"
+    r"\Pos1\img_000000000_ph_000.tif"
 )
 
-WAVELENGTH     = 658e-9          # [m]
-NA             = 0.95
-PIXELSIZE      = 3.45e-6 / 40   # [m/px]
-OFFAXIS_CENTER = (1712,  532)     # (row, col) — FFT空間でのサイドバンド位置
-CROP           = (8, 2056, 208, 2256)  # (row_start, row_end, col_start, col_end)
+# 右チャンネル (260321 Pos < 31): col 400-2448
+# optical_config.py の CROP_REGION (208-2256) は汎用値なので使わない
+CROP = (0, 2048, 400, 2448)
 DEFAULT_EXPORT_SINGLE_PANELS = True
 DEFAULT_SINGLE_PANEL_TIF_BASE = (
     Path(__file__).resolve().parents[1] / "results" / "figures" / "visibility_single_panels"
 )
-HOLOGRAM_VMIN = float(np.percentile(holo, 1))
-HOLOGRAM_VMAX = float(np.percentile(holo, 99))
 INTERFERO_AMP_VMIN = 0.0
-INTERFERO_AMP_VMAX = 250.0
+INTERFERO_AMP_VMAX = 16000.0   # 250 × 64
 NON_INTERFERO_AMP_VMIN = 0.0
-NON_INTERFERO_AMP_VMAX = 500.0
+NON_INTERFERO_AMP_VMAX = 32000.0  # 500 × 64
 VISIBILITY_VMIN = 0.3
 VISIBILITY_VMAX = 1.0
 
@@ -87,11 +84,17 @@ def _parse_args():
         action="store_true",
         help="Disable single panel TIF/PNG export.",
     )
+    parser.add_argument(
+        "--background-path",
+        default=None,
+        help="Background hologram .tif path for OPD subtraction (panel e).",
+    )
     return parser.parse_args()
 
 
 _args = _parse_args()
 HOLOGRAM_PATH = _args.hologram_path
+BACKGROUND_PATH = _args.background_path
 SINGLE_PANEL_TIF_BASE = Path(_args.single_panel_out_dir).expanduser()
 EXPORT_SINGLE_PANELS = DEFAULT_EXPORT_SINGLE_PANELS and (not _args.no_single_panel_export)
 RUN_TAG_OVERRIDE = _args.run_tag
@@ -114,6 +117,8 @@ def load_hologram(path, crop):
 if os.path.exists(HOLOGRAM_PATH):
     holo = load_hologram(HOLOGRAM_PATH, CROP)
     print(f"Loaded hologram: shape={holo.shape}, dtype={holo.dtype}")
+    HOLOGRAM_VMIN = float(np.percentile(holo, 1))
+    HOLOGRAM_VMAX = float(np.percentile(holo, 99))
 else:
     print(f"[WARNING] File not found: {HOLOGRAM_PATH}")
     print("  → プレースホルダー（ランダムフリンジ）を使用します")
@@ -127,6 +132,8 @@ else:
         + 50 * rng.standard_normal((H, W))
     )
     holo = np.clip(holo, 0, 4096)
+    HOLOGRAM_VMIN = float(np.percentile(holo, 1))
+    HOLOGRAM_VMAX = float(np.percentile(holo, 99))
 
 H, W = holo.shape
 
@@ -163,6 +170,17 @@ sb_field   = np.fft.ifft2(np.fft.ifftshift(sb_cropped))
 
 beta       = np.abs(sb_field)                        # 干渉項振幅
 opd        = unwrap_phase(np.angle(sb_field))        # 位相 [rad]
+
+# BG 引き算（--background-path が指定された場合）
+_OPD_BG_SUBTRACTED = False
+if BACKGROUND_PATH and os.path.exists(BACKGROUND_PATH):
+    _holo_bg   = load_hologram(BACKGROUND_PATH, CROP)
+    _fft_bg    = np.fft.fftshift(np.fft.fft2(_holo_bg))
+    _sb_bg     = crop_array(_fft_bg * sb_mask, OFFAXIS_CENTER, ap)
+    _field_bg  = np.fft.ifft2(np.fft.ifftshift(_sb_bg))
+    opd        = unwrap_phase(np.angle(sb_field) - np.angle(_field_bg))
+    _OPD_BG_SUBTRACTED = True
+    print(f"  BG-subtracted OPD: {BACKGROUND_PATH}")
 
 # ============================================================
 # 非干渉項（DC / 0次光）抽出 → α
@@ -300,7 +318,7 @@ ax_d.set_axis_off()
 opd_centered = opd - np.median(opd)
 vlim_e = _finite_percentile(np.abs(opd_centered), 98, 1.0)
 im_e = ax_e.imshow(opd_centered, cmap="viridis", vmin=-vlim_e, vmax=vlim_e, origin="upper")
-ax_e.set_title("Interferometric term\nOPD", **FONT)
+ax_e.set_title("Interferometric term\nOPD" + (" (BG sub)" if _OPD_BG_SUBTRACTED else ""), **FONT)
 plt.colorbar(im_e, ax=ax_e, fraction=0.046, pad=0.04).set_label("(rad)", fontsize=7)
 ax_e.set_axis_off()
 

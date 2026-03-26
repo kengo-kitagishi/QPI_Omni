@@ -34,16 +34,16 @@ if str(_SCRIPT_DIR) not in sys.path:
 # パラメータ（ここを編集して使う）
 # ===========================================================================
 
-DO_RECONSTRUCTION = False
-GRID_DIR    = r"E:\Acuisition\kitagishi\260317_0p0055\grid_0p5_0p5_0p1_exp60ms_allpos_EMM2_1"   # Pos{N}_x+0_y+0 を含む親ディレクトリ
-FOCUS_DIR   = r"E:\Acuisition\kitagishi\260317_0p0055\focus_test_1"  # Pos0..PosN を含む親ディレクトリ
+DO_RECONSTRUCTION = True
+GRID_DIR    = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"   # Pos{N}_x+0_y+0 を含む親ディレクトリ
+FOCUS_DIR   = r"D:\AquisitionData\Kitagishi\260321\focus_test_4"  # Pos0..PosN を含む親ディレクトリ
 GRID_SUFFIX = "x+0_y+0"           # 背景参照グリッド位置のサフィックス
 
-POS_LABELS  = None                 # None=自動検出, 例: ["Pos1", "Pos2"]（Pos0=BG は自動除外）
+POS_LABELS  = ["Pos1", "Pos2"]     # None=自動検出, 例: ["Pos1", "Pos2"]（Pos0=BG は自動除外）
 ALIGN_Z     = 0                    # ECC アライメントに使う z インデックス
 
 CROP_OUTPUT = False                # True=channel ROI でクロップ, False=全体画像
-OUTPUT_DIR  = r"E:\Acuisition\kitagishi\260317_0p0055\focus_check_subtracted"
+OUTPUT_DIR  = r"D:\AquisitionData\Kitagishi\260321\focus_check_subtracted_4"
 
 N_WORKERS   = 4                    # 再構成時の並列数（DO_RECONSTRUCTION=True 時のみ）
 
@@ -57,8 +57,8 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 # 物理的な対応:
 #   小Pos番号（< POS_SPLIT）= 右チャンネル → col 400:2448
 #   大Pos番号（>= POS_SPLIT）= 左チャンネル → col 0:2048
-# ⚠ データセットによって左右が入れ替わる場合あり。必ず実データで確認すること。
-POS_SPLIT    = 15
+# [!] データセットによって左右が入れ替わる場合あり。必ず実データで確認すること。
+POS_SPLIT    = 31
 CROP_BEFORE  = (0, 2048, 400, 2448)   # pos < POS_SPLIT  → 右チャンネル（col 400-2448）
 CROP_AFTER   = (0, 2048,   0, 2048)   # pos >= POS_SPLIT → 左チャンネル（col 0-2048）
 
@@ -231,7 +231,7 @@ def reconstruct_dir(raw_dir: Path, recon_params: dict, pos_number: int, n_worker
         if not f.name.startswith("._") and "output" not in f.name.lower()
     ]
     if not raw_files:
-        print(f"  ⚠ 生 TIFF が見つかりません: {raw_dir}")
+        print(f"  [!] 生 TIFF が見つかりません: {raw_dir}")
         return
 
     tasks = []
@@ -258,7 +258,7 @@ def reconstruct_dir(raw_dir: Path, recon_params: dict, pos_number: int, n_worker
             n_skip += 1
         else:
             n_err += 1
-            print(f"  ❌ {name}: {status}")
+            print(f"  [x] {name}: {status}")
 
     print(f"  完了={n_ok}, スキップ={n_skip}, エラー={n_err}")
 
@@ -284,20 +284,20 @@ def process_pos(pos_label: str,
     grid_pos_dir  = grid_dir / grid_pos_name
 
     if not focus_pos_dir.exists():
-        print(f"  ⚠ スキップ: {focus_pos_dir} が存在しない")
+        print(f"  [!] スキップ: {focus_pos_dir} が存在しない")
         return None
     if not grid_pos_dir.exists():
-        print(f"  ⚠ スキップ: {grid_pos_dir} が存在しない")
+        print(f"  [!] スキップ: {grid_pos_dir} が存在しない")
         return None
 
     focus_phase_dir = focus_pos_dir / "output_phase"
     grid_phase_dir  = grid_pos_dir  / "output_phase"
 
     if not focus_phase_dir.exists():
-        print(f"  ⚠ output_phase が見つかりません: {focus_phase_dir}")
+        print(f"  [!] output_phase が見つかりません: {focus_phase_dir}")
         return None
     if not grid_phase_dir.exists():
-        print(f"  ⚠ output_phase が見つかりません: {grid_phase_dir}")
+        print(f"  [!] output_phase が見つかりません: {grid_phase_dir}")
         return None
 
     # スタック読込
@@ -307,10 +307,10 @@ def process_pos(pos_label: str,
     grid_stack  = _load_phase_stack(grid_phase_dir)
 
     if not focus_stack:
-        print(f"  ⚠ focus phase ファイルが見つかりません")
+        print(f"  [!] focus phase ファイルが見つかりません")
         return None
     if not grid_stack:
-        print(f"  ⚠ grid phase ファイルが見つかりません")
+        print(f"  [!] grid phase ファイルが見つかりません")
         return None
 
     z_list = sorted(focus_stack.keys())
@@ -326,14 +326,16 @@ def process_pos(pos_label: str,
     # channel_rois.json を読み込み（ECC + 出力クロップ共用）
     # grid の output_phase/channels/ に置かれている（focus_test 側ではなく grid 側）
     ecc_rois_path = grid_pos_dir / "output_phase" / "channels" / "channel_rois.json"
-    if not ecc_rois_path.exists():
-        print(f"  ❌ channel_rois.json が見つかりません: {ecc_rois_path}")
-        return None
-    with open(ecc_rois_path) as fp:
-        rois = json.load(fp)
+    if ecc_rois_path.exists():
+        with open(ecc_rois_path) as fp:
+            rois = json.load(fp)
+    else:
+        print(f"  channel_rois.json not found; falling back to full-frame ECC")
+        rois = []
 
-    print(f"  ECC アライメント計算 (focus z={actual_align_z}, grid z={actual_grid_z})...")
+    print(f"  ECC alignment (focus z={actual_align_z}, grid z={actual_grid_z})...")
 
+    warp_matrix = np.eye(2, 3, dtype=np.float32)
     if rois:
         # チャンネルごとに ROI クロップ → backsub → ECC → MAD 外れ値除去
         from compute_pos_shifts import compute_backsub_offset, remove_outliers_mad
@@ -357,7 +359,7 @@ def process_pos(pos_label: str,
                 print(f"    ch{ch_idx}: corr={corr_ch:.4f}, tx={warp_ch[0,2]:.2f}, ty={warp_ch[1,2]:.2f}")
 
         if len(tx_list) == 0:
-            print("  ⚠ 全チャンネルで ECC 失敗。アライメントなしで続行")
+            print("  [!] 全チャンネルで ECC 失敗。アライメントなしで続行")
             warp_matrix = np.eye(2, 3, dtype=np.float32)
         else:
             valid_mask = np.ones(len(tx_list), dtype=bool)
@@ -367,7 +369,7 @@ def process_pos(pos_label: str,
                 valid_mask = ~(out_x | out_y)
                 removed = [ch_names[i] for i, v in enumerate(valid_mask) if not v]
                 if removed:
-                    print(f"  ⚠ outlier removed: {removed}")
+                    print(f"  [!] outlier removed: {removed}")
             valid_tx = [tx_list[i] for i in range(len(tx_list)) if valid_mask[i]]
             valid_ty = [ty_list[i] for i in range(len(ty_list)) if valid_mask[i]]
             tx_mean = float(np.mean(valid_tx))
@@ -375,7 +377,17 @@ def process_pos(pos_label: str,
             warp_matrix = np.eye(2, 3, dtype=np.float32)
             warp_matrix[0, 2] = -tx_mean
             warp_matrix[1, 2] = -ty_mean
-            print(f"  ECC 完了: tx={tx_mean:.2f} px, ty={ty_mean:.2f} px  ({len(valid_tx)}/{len(tx_list)} ch 使用)")
+            print(f"  ECC done: tx={tx_mean:.2f} px, ty={ty_mean:.2f} px  ({len(valid_tx)}/{len(tx_list)} ch used)")
+    else:
+        warp_ff, corr_ff = compute_ecc_warp(ref_img, src_img)
+        if warp_ff is not None:
+            warp_matrix[0, 2] = -warp_ff[0, 2]
+            warp_matrix[1, 2] = -warp_ff[1, 2]
+            print(f"  ECC (full-frame): corr={corr_ff:.4f}, tx={warp_ff[0,2]:.2f}, ty={warp_ff[1,2]:.2f}")
+        else:
+            print("  [!] Full-frame ECC failed; using identity")
+
+    rois_for_focus = rois  # フォーカス評価用に保持（crop_output=False でも使う）
 
     if not crop_output:
         rois = None
@@ -410,7 +422,7 @@ def process_pos(pos_label: str,
         else:
             tifffile.imwrite(str(pos_out_dir / f"z{z:03d}.tif"), diff.astype(np.float32))
 
-    return z_list, diff_frames
+    return z_list, diff_frames, rois_for_focus
 
 
 # ---------------------------------------------------------------------------
@@ -452,6 +464,129 @@ def make_montage(z_list, diff_frames, pos_label: str):
 
 
 # ---------------------------------------------------------------------------
+# フォーカス検出
+# ---------------------------------------------------------------------------
+
+def _focus_metrics(frames: list) -> tuple:
+    """フレームリストから (lap_vars, stds) を計算して返す。"""
+    lap_vars, stds = [], []
+    for frame in frames:
+        f32 = frame.astype(np.float32)
+        lap = cv2.Laplacian(f32, cv2.CV_32F)
+        lap_vars.append(float(np.var(lap)))
+        stds.append(float(np.std(f32)))
+    return lap_vars, stds
+
+
+def _best_z_from_metrics(z_list, lap_vars, stds):
+    lap_rank = np.argsort(np.argsort(lap_vars))
+    std_rank  = np.argsort(np.argsort(stds))
+    combined  = (lap_rank + std_rank).astype(float)
+    return z_list[int(np.argmin(combined))], combined
+
+
+def find_best_focus_z(z_list: list, diff_frames: list, pos_label: str,
+                      rois: list = None) -> dict:
+    """background引き算済み位相フレームから最良フォーカスzをチャンネル別に検出する。
+
+    rois が指定された場合はチャンネルROIごとに評価し、指定がなければ全体フレームで評価する。
+
+    指標: Laplacian分散（エッジの鮮鋭さ）+ 標準偏差（位相コントラスト量）の平均ランク。
+
+    Returns
+    -------
+    results : dict   {"ch0": best_z, "ch1": best_z, ...}  または {"full": best_z}
+    """
+    try:
+        from figure_logger import save_figure
+    except ImportError:
+        save_figure = None
+
+    from channel_crop import extract_rect_roi
+
+    # チャンネルごとのフレームリストを作成
+    if rois:
+        channels = {}
+        for ch_idx, roi_info in enumerate(rois):
+            cy     = roi_info["cy"]
+            cx     = roi_info["cx"]
+            crop_w = roi_info.get("crop_w", 256)
+            crop_h = roi_info.get("crop_h", 256)
+            channels[f"ch{ch_idx}"] = [
+                extract_rect_roi(f, cy, cx, crop_w, crop_h) for f in diff_frames
+            ]
+    else:
+        channels = {"full": diff_frames}
+
+    results = {}
+    all_metrics = {}  # プロット用
+
+    print(f"\n  === フォーカス検出結果: {pos_label} ===")
+    for ch_name, frames in channels.items():
+        lap_vars, stds = _focus_metrics(frames)
+        best_z, combined = _best_z_from_metrics(z_list, lap_vars, stds)
+        results[ch_name] = best_z
+        all_metrics[ch_name] = {"lap_vars": lap_vars, "stds": stds, "combined": combined}
+
+        print(f"\n  [{ch_name}]")
+        header = f"{'z':>4}  {'Lap分散':>12}  {'std':>10}  {'スコア':>6}"
+        print(f"  {header}")
+        best_idx = z_list.index(best_z)
+        for i, z in enumerate(z_list):
+            marker = " <-- best" if i == best_idx else ""
+            print(f"  {z:>4}  {lap_vars[i]:>12.4f}  {stds[i]:>10.4f}  {combined[i]:>6.0f}{marker}")
+        print(f"  => best z = {best_z}")
+
+    # フォーカスカーブをプロット（チャンネル数 × 2 パネル）
+    if save_figure is not None:
+        n_ch = len(channels)
+        fig, axes = plt.subplots(n_ch, 2, figsize=(9, 2.2 * n_ch), squeeze=False)
+
+        # 列ごとの共通 ylim を事前計算
+        all_lap = [v for m in all_metrics.values() for v in m["lap_vars"]]
+        all_std = [v for m in all_metrics.values() for v in m["stds"]]
+        margin = 0.05
+        lap_ylim = (min(all_lap) * (1 - margin), max(all_lap) * (1 + margin))
+        std_ylim = (min(all_std) * (1 - margin), max(all_std) * (1 + margin))
+        col_ylims = [lap_ylim, std_ylim]
+
+        for row, (ch_name, metrics) in enumerate(all_metrics.items()):
+            best_z = results[ch_name]
+            for col, (vals, ylabel) in enumerate([
+                (metrics["lap_vars"], "Laplacian variance"),
+                (metrics["stds"],     "Std dev (phase)"),
+            ]):
+                ax = axes[row][col]
+                ax.plot(z_list, vals, marker="o", linewidth=1.5, markersize=5, color="steelblue")
+                ax.axvline(best_z, color="tomato", linestyle="--", linewidth=1.5,
+                           label=f"best z={best_z}")
+                ax.set_xlabel("z index", fontsize=11)
+                ax.set_ylabel(ylabel, fontsize=11)
+                ax.set_title(ch_name, fontsize=10)
+                ax.set_ylim(col_ylims[col])
+                ax.tick_params(direction="in", labelsize=10)
+                ax.spines["top"].set_visible(False)
+                ax.spines["right"].set_visible(False)
+                ax.legend(fontsize=9, frameon=False)
+        fig.suptitle(f"Focus curve: {pos_label}", fontsize=12)
+        fig.tight_layout()
+        data_dict = {"z_list": np.array(z_list)}
+        for ch_name, metrics in all_metrics.items():
+            data_dict[f"{ch_name}_lap_vars"] = np.array(metrics["lap_vars"])
+            data_dict[f"{ch_name}_stds"]     = np.array(metrics["stds"])
+        save_figure(
+            fig,
+            params={"pos": pos_label, "best_z_per_ch": results,
+                    "focus_dir": FOCUS_DIR, "grid_dir": GRID_DIR},
+            description=f"Focus curve per channel: {pos_label}, best_z={results}",
+            data=data_dict,
+        )
+        plt.close(fig)
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
 
@@ -464,7 +599,7 @@ def main():
     # Pos ラベル検出
     pos_labels = POS_LABELS if POS_LABELS is not None else _detect_pos_labels(focus_dir)
     if not pos_labels:
-        print("❌ Pos ディレクトリが見つかりません")
+        print("[x] Pos ディレクトリが見つかりません")
         return
     print(f"対象 Pos: {pos_labels}")
 
@@ -486,12 +621,12 @@ def main():
         if focus_bg_dir.exists():
             print(f"  Pos0 BG (focus): {focus_bg_dir}")
         else:
-            print(f"  ⚠ Pos0 BG が見つかりません（引き算なし）: {focus_bg_dir}")
+            print(f"  [!] Pos0 BG が見つかりません（引き算なし）: {focus_bg_dir}")
             focus_bg_dir = None
         if grid_bg_dir.exists():
             print(f"  Pos0 BG (grid ): {grid_bg_dir}")
         else:
-            print(f"  ⚠ Pos0 BG が見つかりません（引き算なし）: {grid_bg_dir}")
+            print(f"  [!] Pos0 BG が見つかりません（引き算なし）: {grid_bg_dir}")
             grid_bg_dir = None
 
         for pos_label in pos_labels:
@@ -512,7 +647,10 @@ def main():
         result = process_pos(pos_label, focus_dir, grid_dir, ALIGN_Z, CROP_OUTPUT, output_dir)
         if result is None:
             continue
-        z_list, diff_frames = result
+        z_list, diff_frames, rois = result
+
+        # フォーカス検出（全 Pos、チャンネル別）
+        best_z_per_ch = find_best_focus_z(z_list, diff_frames, pos_label, rois=rois)
 
         # モンタージュは先頭 Pos のみ
         if pos_label == pos_labels[0]:

@@ -44,7 +44,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 # ============================================================
 # 設定パラメータ
 # ============================================================
-GRID_DIR = r"D:\AquisitionData\Kitagishi\260310\grid_0p5_0p5_0p1_exp200ms_allpos_EMM0_1"
+GRID_DIR = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
 
 # BG として使うベースラベル（通常 "Pos0"）
 BG_BASE_LABEL = "Pos0"
@@ -61,9 +61,9 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 #   小Pos番号（< POS_SPLIT）= 右チャンネル → col 400:2448
 #   大Pos番号（>= POS_SPLIT）= 左チャンネル → col 0:2048
 # ※ CROP_BEFORE/AFTER の「前後」は取得順であり左右ではない。左右はコメントを必ず確認。
-POS_SPLIT    = 15
-CROP_BEFORE  = (0, 2048,   0, 2048)   # pos < POS_SPLIT  → 左チャンネル（col 0-2048）
-CROP_AFTER   = (0, 2048, 400, 2448)   # pos >= POS_SPLIT → 右チャンネル（col 400-2448）
+POS_SPLIT    = 31
+CROP_BEFORE  = (0, 2048, 400, 2448)   # pos < POS_SPLIT  → 右チャンネル（col 400-2448）
+CROP_AFTER   = (0, 2048,   0, 2048)   # pos >= POS_SPLIT → 左チャンネル（col 0-2048）
 # ⚠ データセットによって左右が入れ替わる場合あり。必ず実データで確認すること。
 # -----------------------------------------------
 

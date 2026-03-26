@@ -1,15 +1,15 @@
 {
   "python_exe": "C:\\Users\\QPI\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
-  "script_dir": "c:\\Users\\QPI\\Documents\\QPI_Omni\\scripts",
+  "script_dir": "C:\\Users\\QPI\\Documents\\QPI_Omni\\scripts",
   "session_dir": "C:\\Users\\QPI\\Documents\\QPI_Omni\\drift_session",
-  "save_dir": "C:\\ph_1",
+  "save_dir": "C:\\ph",
   "positions_csv": "C:\\Users\\QPI\\Documents\\QPI_Omni\\drift_session\\positions.csv",
   "grid_ref_crops_tif": "C:\\Users\\QPI\\Documents\\QPI_Omni\\drift_session\\grid_ref_crops.tif",
   "state_file": "C:\\Users\\QPI\\Documents\\QPI_Omni\\drift_session\\drift_state.txt",
   "log_file": "C:\\Users\\QPI\\Documents\\QPI_Omni\\drift_session\\drift_log.json",
   "prev_frame_crops_tif": "C:\\Users\\QPI\\Documents\\QPI_Omni\\drift_session\\prev_frame_crops.tif",
-  "channel_rois_json": "E:\\Acuisition\\kitagishi\\260317_0p0055\\grid_0p5_0p5_0p1_exp60ms_allpos_EMM2_1\\Pos1_x+0_y+0\\output_phase\\channels\\channel_rois.json",
-  "n_timepoints": 3168,
+  "channel_rois_json": "D:\\AquisitionData\\Kitagishi\\260321\\grid_2pergluc_60ms_1\\Pos1_x+0_y+0\\output_phase\\channels\\channel_rois.json",
+  "n_timepoints": 2304,
   "interval_sec": 300,
   "exposure_ms": 60.0,
   "settle_ms": 150,
@@ -25,7 +25,7 @@
   "shift_sign_x": 1,
   "shift_sign_y": 1,
   "pixel_scale_um": 0.34567514677103717,
-  "pos_split": 3,
+  "pos_split": 31,
   "crop_before": [
     0,
     2048,
@@ -50,7 +50,7 @@
   "magnification": 40,
   "original_dim": 2048,
   "reconstructed_dim": 511,
-  "grid_dir": "E:\\Acuisition\\kitagishi\\260317_0p0055\\grid_0p5_0p5_0p1_exp60ms_allpos_EMM2_1",
+  "grid_dir": "D:\\AquisitionData\\Kitagishi\\260321\\grid_2pergluc_60ms_1",
   "grid_base_label": "Pos1",
   "grid_z_index": 0
 }

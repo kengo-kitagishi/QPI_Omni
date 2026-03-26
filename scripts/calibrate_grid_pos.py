@@ -47,14 +47,14 @@ from scipy.optimize import curve_fit
 # ============================================================
 
 # キャリブレーション撮影フォルダ（timelapse.pos で1タイムポイント撮影したもの）
-CALIB_DIR      = r"D:\AquisitionData\Kitagishi\260321\_cal_grid_0pergluc_60ms_1"
+CALIB_DIR      = r"E:\Acuisition\kitagishi\_calib_grid_0p00525pergluc_60ms_1"
 CALIB_LABEL    = "Pos1"   # ECC に使うポジション（温度ドリフト計算用）
 CALIB_BG_LABEL = "Pos0"   # BG（再構成時に使用、"none" でスキップ）
 # キャリブは timelapse.pos で撮影 → z-stack なし → 常に ph_000 の1枚
 CALIB_Z_INDEX  = 0
 
 # ---- 出力 — CONDITION だけ変えて繰り返し使う ----
-CONDITION = "0pergluc"
+CONDITION = "0p00525pergluc"
 BASE_DIR  = r"D:\AquisitionData\Kitagishi\260321"
 # 補正後 timelapse.pos（グリッド展開前の小さいファイル）
 OUTPUT_POS_CORRECTED = rf"{BASE_DIR}\timelapse_{CONDITION}.pos"
@@ -88,8 +88,8 @@ DRIFT_CONFIG = r"C:\Users\QPI\Documents\QPI_Omni\drift_session\drift_config.json
 # ---- generate_grid_pos パラメータ（generate_grid_pos.py と合わせる） ----
 X_STEP = 0.1   # μm（ステージ X 方向、画像 Y 方向）
 Y_STEP = 0.1   # μm（ステージ Y 方向、画像 X 方向）
-X_HALF = 5     # 片側グリッド数 → 合計 2*X_HALF+1 点
-Y_HALF = 5     # 片側グリッド数 → 合計 2*Y_HALF+1 点
+X_HALF = 3     # 片側グリッド数 → 合計 2*X_HALF+1 点
+Y_HALF = 3     # 片側グリッド数 → 合計 2*Y_HALF+1 点
 
 # ============================================================
 

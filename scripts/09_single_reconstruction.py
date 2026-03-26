@@ -15,26 +15,14 @@ setup_autosave()
 path = r"/Volumes/QPI3/250910_kk/ph_1/Pos1/img_000000000_Default_000.tif"
 path_bg = r"/Volumes/QPI3/250910_kk/ph_1/Pos1/img_000000000_Default_000.tif"
 """
-path = r"D:\AquisitionData\Kitagishi\basler_image_seq\vis_60ms_1s_1\Pos0\img_000000000_ph_000.tif"
-path_bg = r"D:\AquisitionData\Kitagishi\basler_image_seq\vis_60ms_1s_1\Pos0\img_000000000_ph_000.tif"
+path    = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1\Pos1_x+0_y+0\img_000000000_ph_005.tif"
+path_bg = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1\Pos0_x+0_y+0\img_000000000_ph_005.tif"
 
 img = Image.open(path)
 
 img_bg = Image.open(path_bg)
-img = np.array(img)
-#img = img[8:2056,416:2464]
-#img = img[8:2056,208:2256]
-#img= img[520:1544,512:1536]
-#img = img[0:2048,0:2048]
-#img = img[516:1540,500:1524]
-#img = img[500:1000,500:1000]
-img_bg = np.array(img_bg)
-#img_bg = img_bg[8:2056,416:2464]
-#img_bg = img_bg[8:2056,208:2256]
-#img_bg = img_bg[520:1544,512:1536]
-#img_bg = img_bg[0:2048, 0:2048]
-#img_bg = img_bg[0:1024, 0:1024]
-#img_bg = img_bg[500:1000,500:1000]
+img    = np.array(img)   [0:2048, 400:2448]   # 右チャンネル
+img_bg = np.array(img_bg)[0:2048, 400:2448]   # 右チャンネル
 
 plt.imshow(img)
 plt.show()

@@ -363,6 +363,43 @@ def _detect_data_info() -> dict:
         return {}
 
 
+def _extract_figure_info(fig) -> dict:
+    """
+    Extract axis labels, units, limits, legend, and title from a matplotlib Figure.
+    Non-fatal: returns {} on failure.
+    """
+    try:
+        axes_info = []
+        for ax in fig.get_axes():
+            ax_data: dict[str, Any] = {}
+            xlabel = ax.get_xlabel()
+            ylabel = ax.get_ylabel()
+            title = ax.get_title()
+            if xlabel:
+                ax_data["xlabel"] = xlabel
+            if ylabel:
+                ax_data["ylabel"] = ylabel
+            if title:
+                ax_data["title"] = title
+            ax_data["xlim"] = [round(v, 6) for v in ax.get_xlim()]
+            ax_data["ylim"] = [round(v, 6) for v in ax.get_ylim()]
+            handles, labels = ax.get_legend_handles_labels()
+            if labels:
+                ax_data["legend"] = labels
+            axes_info.append(ax_data)
+
+        result: dict[str, Any] = {}
+        if axes_info:
+            result["axes"] = axes_info
+        # figure-level suptitle
+        suptitles = [t.get_text() for t in fig.texts if t.get_text().strip()]
+        if suptitles:
+            result["suptitle"] = suptitles[0]
+        return result
+    except Exception:
+        return {}
+
+
 def _json_dump(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -730,6 +767,7 @@ def save_figure(
     copy_files: Optional[list] = None,
     data: Optional[dict] = None,
     source_tifs: Optional[list] = None,
+    related: Optional[list] = None,
 ) -> Path:
     """
     Save a matplotlib Figure with inbox-first workflow.
@@ -798,10 +836,19 @@ def save_figure(
         done without the original external drive.  Paths in the metadata JSON
         are recorded under ``tif_copies``.
 
+    related : list, optional
+        References to figures this one is related to — comparison targets,
+        baselines, or sequential analyses. Each entry can be a string
+        (free-form note or run_id) or a dict with keys ``run_id`` / ``note``.
+
         Example::
             save_figure(
                 fig,
                 source_tifs=[subtracted_path, mask_path],
+                related=[
+                    {"run_id": "20260322T130000Z_abc123", "note": "baseline (no treatment)"},
+                    "20260320T110000Z_def456",
+                ],
             )
 
     Returns
@@ -929,6 +976,7 @@ def save_figure(
         "data_keys": list(data.keys()) if data else [],
         "tif_copies": tif_copies,
         "data_info": {**_detect_data_info(), **(data_source or {})},
+        "figure_info": _extract_figure_info(fig),
         "git": _git_snapshot(),
         "runtime": {
             "python": sys.version.split()[0],
@@ -938,6 +986,8 @@ def save_figure(
             "repo_root": str(_REPO_ROOT.resolve()),
         },
     }
+    if related:
+        meta["related"] = related
     if extra_meta:
         meta["extra_meta"] = extra_meta
 
