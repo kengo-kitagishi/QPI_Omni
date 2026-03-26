@@ -4,10 +4,10 @@ compute_drift_online_v2.py
 compute_drift_online.py の精度向上版。
 
 変更点 (v1 → v2):
-  1. ECC 収束基準: max_iter 10,000→100,000, epsilon 1e-6→1e-7
+  1. ECC 収束基準: max_iter 10,000→100,000, epsilon 1e-6→1e-7→1e-8
   2. 2-pass ECC:
        Pass 1: grid(0,0) full-crop で粗いシフト量を取得
-       Pass 2: shift1 から最近傍グリッド (xi,yi) を選択 → half-crop ECC で精密化
+       Pass 2: shift1 から最近傍グリッド (xi,yi) を選択 → full-crop ECC で精密化
        最終出力は常に grid(0,0) 基準の絶対シフト量
   3. per-channel backsub は v1 と同じ（既にヒストグラムベース per-ROI）
 
@@ -147,10 +147,10 @@ def to_uint8(img, vmin, vmax):
 
 def ecc_align(ref_u8, tl_u8):
     """ECC アライメント。(tx, ty, correlation) を返す。失敗時は None。
-    v2: max_iter=100000, epsilon=1e-7（v1 より高精度）
+    v2: max_iter=100000, epsilon=1e-8（v1 より高精度）
     """
     warp_matrix = np.eye(2, 3, dtype=np.float32)
-    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-7)
+    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-8)
     try:
         corr, warp_matrix = cv2.findTransformECC(
             ref_u8, tl_u8, warp_matrix, cv2.MOTION_TRANSLATION, criteria
@@ -301,8 +301,9 @@ def main():
     grid_dir       = cfg.get("grid_dir", None)
     grid_base_label = cfg.get("grid_base_label", None)
     grid_z_index   = cfg.get("grid_z_index", 0)
+    enable_third_pass = cfg.get("enable_third_pass", True)
 
-    print(f"[T={t}] compute_drift_online_v2.py start  (2-pass ECC)")
+    print(f"[T={t}] compute_drift_online_v2.py start  ({'3' if enable_third_pass else '2'}-pass ECC)")
     print(f"  sample: {sample_raw.name}")
     print(f"  bg:     {bg_raw.name if bg_raw else 'none'}")
 
@@ -399,14 +400,18 @@ def main():
         # ---- Pass 1: grid(0,0) full-crop ECC ----
         result1 = ecc_align(ref_u8_p1, to_uint8(cur_crop, vmin, vmax))
         if result1 is None:
-            return ch_idx, None, "pass1_failed"
+            return ch_idx, None, "pass1_failed", {}
 
         fine1_x, fine1_y, corr1 = result1
         # Pass 1 offset は (0,0) なので shift1 = fine1
         shift1_x, shift1_y = fine1_x, fine1_y
 
         if not use_second_pass:
-            return ch_idx, (shift1_x, shift1_y, corr1), "pass1_only"
+            return ch_idx, (shift1_x, shift1_y, corr1), "pass1_only", {
+                "tx1": shift1_x, "ty1": shift1_y, "corr1": corr1,
+                "xi": 0, "yi": 0,
+                "tx2": shift1_x, "ty2": shift1_y, "corr2": corr1,
+            }
 
         # ---- Pass 2: nearest grid half-crop ECC ----
         xi2, yi2 = _select_nearest_grid(
@@ -430,7 +435,11 @@ def main():
                     print(f"    [grid cache] ({xi2:+d},{yi2:+d}) loaded")
                 except FileNotFoundError as ex:
                     print(f"    [WARNING] ch{ch_idx:02d} half-crop load failed: {ex} → pass1 result")
-                    return ch_idx, (shift1_x, shift1_y, corr1), "pass2_load_failed"
+                    return ch_idx, (shift1_x, shift1_y, corr1), "pass2_load_failed", {
+                        "tx1": shift1_x, "ty1": shift1_y, "corr1": corr1,
+                        "xi": xi2, "yi": yi2,
+                        "tx2": shift1_x, "ty2": shift1_y, "corr2": corr1,
+                    }
 
         ref_u8_p2 = grid_half_u8_cache[(xi2, yi2)][ch_idx]
         result2 = ecc_align(ref_u8_p2, to_uint8(cur_crop, vmin, vmax))
@@ -439,30 +448,125 @@ def main():
             # Pass 2 失敗 → Pass 1 結果を採用
             print(f"    ch{ch_idx:02d}: Pass2 ECC failed → using pass1  "
                   f"shift=({shift1_x:+.3f},{shift1_y:+.3f})px  corr1={corr1:.4f}")
-            return ch_idx, (shift1_x, shift1_y, corr1), "pass2_ecc_failed"
+            return ch_idx, (shift1_x, shift1_y, corr1), "pass2_ecc_failed", {
+                "tx1": shift1_x, "ty1": shift1_y, "corr1": corr1,
+                "xi": xi2, "yi": yi2,
+                "tx2": shift1_x, "ty2": shift1_y, "corr2": corr1,
+            }
 
         fine2_x, fine2_y, corr2 = result2
         # grid(xi2,yi2) からのfineシフト + grid(0,0)基準オフセット → 絶対シフト
         shift2_x = fine2_x + offset_x2
         shift2_y = fine2_y + offset_y2
 
+        # ---- Pass 3: shift2 から再グリッド選択 ----
+        if enable_third_pass:
+            xi3, yi3 = _select_nearest_grid(
+                shift2_x, shift2_y, pos_map,
+                sx_sign, sy_sign, x_step, y_step, pixel_scale_um
+            )
+
+            if (xi3, yi3) == (xi2, yi2):
+                print(f"    ch{ch_idx:02d}: "
+                      f"pass1=({shift1_x:+.3f},{shift1_y:+.3f})px corr1={corr1:.4f}  "
+                      f"grid2=({xi2:+d},{yi2:+d})  "
+                      f"pass2=({shift2_x:+.3f},{shift2_y:+.3f})px corr2={corr2:.4f}  "
+                      f"[pass3=skip]")
+                return ch_idx, (shift2_x, shift2_y, corr2), "pass2_ok", {
+                    "tx1": shift1_x, "ty1": shift1_y, "corr1": corr1,
+                    "xi": xi2, "yi": yi2,
+                    "tx2": shift2_x, "ty2": shift2_y, "corr2": corr2,
+                    "xi3": xi3, "yi3": yi3,
+                    "tx3": shift2_x, "ty3": shift2_y, "corr3": corr2,
+                }
+
+            offset_x3, offset_y3 = _get_grid_offset_px(
+                xi3, yi3, sx_sign, sy_sign, x_step, y_step, pixel_scale_um
+            )
+
+            with _cache_lock:
+                if (xi3, yi3) not in grid_half_cache:
+                    try:
+                        halves3 = _load_grid_ref_full(
+                            pos_map, xi3, yi3, rois, n_channels,
+                            grid_z_index, cfg
+                        )
+                        grid_half_cache[(xi3, yi3)]    = halves3
+                        grid_half_u8_cache[(xi3, yi3)] = [to_uint8(h, vmin, vmax) for h in halves3]
+                        print(f"    [grid cache] ({xi3:+d},{yi3:+d}) loaded")
+                    except FileNotFoundError as ex:
+                        print(f"    [WARNING] ch{ch_idx:02d} pass3 load failed: {ex} → pass2 result")
+                        print(f"    ch{ch_idx:02d}: "
+                              f"pass1=({shift1_x:+.3f},{shift1_y:+.3f})px corr1={corr1:.4f}  "
+                              f"grid2=({xi2:+d},{yi2:+d})  "
+                              f"pass2=({shift2_x:+.3f},{shift2_y:+.3f})px corr2={corr2:.4f}  "
+                              f"[pass3=load_failed]")
+                        return ch_idx, (shift2_x, shift2_y, corr2), "pass3_load_failed", {
+                            "tx1": shift1_x, "ty1": shift1_y, "corr1": corr1,
+                            "xi": xi2, "yi": yi2,
+                            "tx2": shift2_x, "ty2": shift2_y, "corr2": corr2,
+                            "xi3": xi3, "yi3": yi3,
+                            "tx3": shift2_x, "ty3": shift2_y, "corr3": corr2,
+                        }
+
+            ref_u8_p3 = grid_half_u8_cache[(xi3, yi3)][ch_idx]
+            result3 = ecc_align(ref_u8_p3, to_uint8(cur_crop, vmin, vmax))
+
+            if result3 is None:
+                print(f"    ch{ch_idx:02d}: Pass3 ECC failed → using pass2  "
+                      f"shift=({shift2_x:+.3f},{shift2_y:+.3f})px  corr2={corr2:.4f}")
+                return ch_idx, (shift2_x, shift2_y, corr2), "pass3_ecc_failed", {
+                    "tx1": shift1_x, "ty1": shift1_y, "corr1": corr1,
+                    "xi": xi2, "yi": yi2,
+                    "tx2": shift2_x, "ty2": shift2_y, "corr2": corr2,
+                    "xi3": xi3, "yi3": yi3,
+                    "tx3": shift2_x, "ty3": shift2_y, "corr3": corr2,
+                }
+
+            fine3_x, fine3_y, corr3 = result3
+            shift3_x = fine3_x + offset_x3
+            shift3_y = fine3_y + offset_y3
+
+            print(f"    ch{ch_idx:02d}: "
+                  f"pass1=({shift1_x:+.3f},{shift1_y:+.3f})px corr1={corr1:.4f}  "
+                  f"grid2=({xi2:+d},{yi2:+d})  "
+                  f"pass2=({shift2_x:+.3f},{shift2_y:+.3f})px corr2={corr2:.4f}  "
+                  f"grid3=({xi3:+d},{yi3:+d})  "
+                  f"pass3=({shift3_x:+.3f},{shift3_y:+.3f})px corr3={corr3:.4f}")
+            return ch_idx, (shift3_x, shift3_y, corr3), "pass3_ok", {
+                "tx1": shift1_x, "ty1": shift1_y, "corr1": corr1,
+                "xi": xi2, "yi": yi2,
+                "tx2": shift2_x, "ty2": shift2_y, "corr2": corr2,
+                "xi3": xi3, "yi3": yi3,
+                "tx3": shift3_x, "ty3": shift3_y, "corr3": corr3,
+            }
+
+        # enable_third_pass=False → pass2 をそのまま使用
         print(f"    ch{ch_idx:02d}: "
               f"pass1=({shift1_x:+.3f},{shift1_y:+.3f})px corr1={corr1:.4f}  "
               f"grid=({xi2:+d},{yi2:+d})  "
               f"pass2=({shift2_x:+.3f},{shift2_y:+.3f})px corr2={corr2:.4f}")
-        return ch_idx, (shift2_x, shift2_y, corr2), "pass2_ok"
+        return ch_idx, (shift2_x, shift2_y, corr2), "pass2_ok", {
+            "tx1": shift1_x, "ty1": shift1_y, "corr1": corr1,
+            "xi": xi2, "yi": yi2,
+            "tx2": shift2_x, "ty2": shift2_y, "corr2": corr2,
+        }
 
     n_ch = min(n_channels, len(current_crops))
     with concurrent.futures.ThreadPoolExecutor(max_workers=n_ch) as ex:
         ch_results = list(ex.map(_align_ch, range(n_ch)))
 
     tx_list, ty_list, corr_list = [], [], []
-    for ch_idx, result, status in ch_results:
+    valid_ch_indices = []  # tx_list の各要素に対応する ch_idx
+    ch_detail_map = {}     # ch_idx -> detail dict
+    for ch_idx, result, status, detail in ch_results:
+        ch_detail_map[ch_idx] = dict(detail, status=status)
         if result is not None:
             tx, ty, corr = result
             tx_list.append(tx)
             ty_list.append(ty)
             corr_list.append(corr)
+            valid_ch_indices.append(ch_idx)
         else:
             print(f"    ch{ch_idx:02d}: ECC failed ({status})")
 
@@ -495,6 +599,26 @@ def main():
     tx_avg   = float(np.mean(tx_arr[used_idx]))
     ty_avg   = float(np.mean(ty_arr[used_idx]))
     corr_avg = float(np.mean(corr_arr[used_idx]))
+
+    # channel_details: valid_ch_indices の順序で outlier フラグを付与
+    is_out_arr = is_out if n_ch_raw >= 3 else np.zeros(n_ch_raw, dtype=bool)
+    channel_details = []
+    for list_idx, ch_idx in enumerate(valid_ch_indices):
+        d = ch_detail_map.get(ch_idx, {})
+        channel_details.append({
+            "ch": ch_idx,
+            "tx1": round(d.get("tx1", 0.0), 6), "ty1": round(d.get("ty1", 0.0), 6),
+            "corr1": round(d.get("corr1", 0.0), 6),
+            "xi": d.get("xi", 0), "yi": d.get("yi", 0),
+            "tx2": round(d.get("tx2", 0.0), 6), "ty2": round(d.get("ty2", 0.0), 6),
+            "corr2": round(d.get("corr2", 0.0), 6),
+            "outlier": bool(is_out_arr[list_idx]),
+            "status": d.get("status", ""),
+        })
+    # ECC failed チャネルも記録
+    for ch_idx in sorted(set(ch_detail_map) - set(valid_ch_indices)):
+        d = ch_detail_map[ch_idx]
+        channel_details.append({"ch": ch_idx, "outlier": True, "status": d.get("status", "failed")})
     print(f"  ECC平均: tx={tx_avg:+.4f}px  ty={ty_avg:+.4f}px  corr={corr_avg:.4f}  "
           f"(使用{len(used_idx)}/{n_ch_raw}ch)")
 
@@ -554,6 +678,7 @@ def main():
         "jump_detected":         jump,
         "correction_valid":      not jump,
         "two_pass_ecc":          use_second_pass,
+        "channel_details":       sorted(channel_details, key=lambda x: x["ch"]),
     }
     try:
         with open(log_path, encoding="utf-8") as f:

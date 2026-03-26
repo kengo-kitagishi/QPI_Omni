@@ -45,12 +45,12 @@ from figure_logger import save_figure
 # ============================================================
 # 設定パラメータ
 # ============================================================
-TL_DIR     = Path(r"F:\timelapse_11day_exp200ms_1pos_EMM2\Pos1")
-GRID_DIR   = Path(r"F:\grid_0p5_0p5_0p1_exp200ms_1pos_EMM2_1")
+TL_DIR     = Path(r"C:\ph\Pos1")
+GRID_DIR   = Path(r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1")
 BASE_LABEL = "Pos1"
 
 TL_Z_INDEX   = 0   # img_*_ph_000_phase.tif
-GRID_Z_INDEX = 5   # グリッド参照の z インデックス
+GRID_Z_INDEX = 0   # グリッド参照の z インデックス
 
 # 光学パラメータ
 SENSOR_PIXEL_SIZE = 3.45e-6

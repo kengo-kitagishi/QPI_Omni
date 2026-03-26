@@ -35,7 +35,7 @@ sys.path.insert(0, str(_script_dir))
 # ★ データパス
 # ============================================================
 TIMELAPSE_DIRS = [
-    r"D:\AquisitionData\Kitagishi\260321\_cal_grid_0pergluc_60ms_1",
+    r"C:\ph",
 ]
 GRID_DIR = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
 
@@ -74,7 +74,7 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 # ============================================================
 # Pos 番号によるクロップ切り替え（grid / timelapse 共通）
 # ============================================================
-POS_SPLIT   = 15
+POS_SPLIT   = 31
 CROP_BEFORE = (0, 2048, 400, 2448)   # pos_number < POS_SPLIT → 右側 (400:2448)  センサー幅2448
 CROP_AFTER  = (0, 2048,   0, 2048)   # pos_number >= POS_SPLIT → 左側 (0:2048)
 # ※ BG（Pos0）はターゲットのpos_numberで決まるcropを使う（常に右ではない）
@@ -176,11 +176,12 @@ SHIFTS_FIRST_PASS_HALF     = True   # True で1回目ECCもhalf cropで実施
 # None → pos_number < POS_SPLIT なら 'right'、>= POS_SPLIT なら 'left'
 SHIFTS_SECOND_PASS_HALF    = None
 SHIFTS_USE_THIRD_PASS_ECC  = True   # True で3段階ECC有効化（pass2結果から最近傍grid再選択）
+SHIFTS_APPLY_SHIFT_AND_CROP      = False   # True で crop_subtracted を出力（通常不要）
 
 # ============================================================
 # grid_subtract パラメータ
 # ============================================================
-GSUB_Z_INDEX              = 2        # グリッド画像のz番号（SHIFTS_GRID_Z_INDEX と同じでよい）
+GSUB_Z_INDEX              = 9        # グリッド画像のz番号（SHIFTS_GRID_Z_INDEX と同じでよい）
 GSUB_X_STEP               = 0.1     # μm
 GSUB_Y_STEP               = 0.1     # μm
 GSUB_SENSOR_PIXEL_SIZE    = 3.45e-6
@@ -192,6 +193,8 @@ GSUB_SHIFT_SIGN_Y              = 1
 GSUB_APPLY_INVERSE_SHIFT       = False
 GSUB_APPLY_BACKSUB_TO_GRID     = True   # グリッド画像に backsub を適用
 GSUB_APPLY_SUBPIXEL_CORRECTION = True   # サブピクセル残差 warp をフレームに適用
+GSUB_OUTPUT_CROP_H             = 440    # 出力クロップ長（None → channel_rois.json の crop_h をそのまま使用）
+GSUB_OUTPUT_DIR                = None   # 出力ディレクトリ（None → channels_dir/grid_subtracted/）
 # ============================================================
 
 # ============================================================
@@ -777,6 +780,7 @@ def step_compute_shifts(channels_dir: Path, base_label: str):
     cps.ORIGINAL_DIM                   = GSUB_ORIGINAL_DIM
     cps.RECONSTRUCTED_DIM              = GSUB_RECONSTRUCTED_DIM
     cps.MAX_FRAMES                     = TEST_N_FRAMES
+    cps.APPLY_SHIFT_AND_CROP           = SHIFTS_APPLY_SHIFT_AND_CROP
     cps.main()
 
 
@@ -812,6 +816,8 @@ def step_grid_subtract(channels_dir: Path, base_label: str):
     gs.APPLY_INVERSE_SHIFT       = GSUB_APPLY_INVERSE_SHIFT
     gs.APPLY_BACKSUB_TO_GRID     = GSUB_APPLY_BACKSUB_TO_GRID
     gs.APPLY_SUBPIXEL_CORRECTION = GSUB_APPLY_SUBPIXEL_CORRECTION
+    gs.OUTPUT_CROP_H             = GSUB_OUTPUT_CROP_H
+    gs.OUTPUT_DIR                = GSUB_OUTPUT_DIR
     gs.GRID_CALIBRATION_JSON     = GRID_CALIBRATION_JSON
     gs.MAX_FRAMES                = TEST_N_FRAMES
     gs.main()

@@ -35,7 +35,7 @@ POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\260321\focused_timelapse.pos"
 # グリッド撮影ディレクトリ（小規模グリッドでよい）
 GRID_DIR         = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
 GRID_BASE_LABEL  = "Pos1"   # ドリフト推定に使う Pos のラベル（タイムラプスと同じ）
-GRID_Z_INDEX     = 0        # グリッド画像の z インデックス（単z → 0）
+GRID_Z_INDEX     = 9        # グリッド画像の z インデックス（合焦スライス）
 
 # channel_rois.json（事前に pipeline_full.py などで生成済みのもの）
 CHANNEL_ROIS_JSON = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"

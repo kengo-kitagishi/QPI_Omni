@@ -21,23 +21,23 @@ import threading
 # ============================================================
 # 設定パラメータ
 # ============================================================
-CHANNELS_DIR = r"E:\Acuisition\kitagishi\260301\movetest_8\Pos4\channels"
+CHANNELS_DIR = r"C:\ph\Pos1\output_phase\channels"
 CHANNEL_PATTERN = "channel_*.tif"      # backsub済みなら "channel_*_bg_corr.tif"
 
 # --- 基準画像の選択 ---
 # USE_GRID_REFERENCE = True  : グリッドの x+0_y+0 画像をcropして各チャネルの基準にする（推奨）
 # USE_GRID_REFERENCE = False : タイムラプスの REFERENCE_FRAME 番目を基準にする（従来方式）
 USE_GRID_REFERENCE  = True
-GRID_DIR            = r"E:\Acuisition\kitagishi\260301\multipos_test_1"
-GRID_BASE_LABEL     = "Pos4"           # PosX_x+0_y+0 の PosX 部分
-GRID_Z_INDEX        = 2               # img_000000000_ph_{Z_INDEX:03d}.tif
-CHANNEL_ROIS_JSON   = r"E:\Acuisition\kitagishi\260301\movetest_8\Pos4\channels\channel_rois.json"
+GRID_DIR            = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
+GRID_BASE_LABEL     = "Pos1"           # PosX_x+0_y+0 の PosX 部分
+GRID_Z_INDEX        = 0               # img_000000000_ph_{Z_INDEX:03d}.tif
+CHANNEL_ROIS_JSON   = r"C:\ph\Pos1\output_phase\channels\channel_rois.json"
 
 REFERENCE_FRAME = 150                  # USE_GRID_REFERENCE=False の場合のみ使用（1始まり）
 
 ALIGNMENT_METHOD = 'ecc'              # 'ecc' or 'phase_correlation'
 VMIN = -5.0
-VMAX = 1.0                            # to_uint8の正規化範囲（ECC精度に影響）
+VMAX = 2.0                            # to_uint8の正規化範囲（ECC精度に影響）
 OUTLIER_MAD_THRESH = 2.5              # チャネル間外れ値除去のMAD閾値
 OUTLIER_TIMESERIES_WINDOW = 11        # 時系列外れ値検出のメジアンフィルタ幅（奇数）
 OUTLIER_TIMESERIES_THRESH = 3.0       # 時系列MAD閾値（0で無効）
@@ -153,7 +153,7 @@ def compute_backsub_offset(img: np.ndarray) -> float:
 def ecc_align(ref_u8, tl_u8):
     """ECC アライメントで (shift_x, shift_y, correlation) を返す。失敗時は None。"""
     warp_matrix = np.eye(2, 3, dtype=np.float32)
-    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-7)
+    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-8)
     try:
         correlation, warp_matrix = cv2.findTransformECC(
             ref_u8, tl_u8, warp_matrix, cv2.MOTION_TRANSLATION, criteria
