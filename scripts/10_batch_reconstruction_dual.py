@@ -27,11 +27,15 @@ N_WORKERS = None
 
 # ベースディレクトリ設定
 BASE_DIRS = [
-    r"E:\Acuisition\kitagishi\260301\movetest_9"
+    r"D:\AquisitionData\Kitagishi\basler_image_seq\ph_3"
 ]
 
 # Pos0 も output_phase / output_phase_raw を生成するか（True: Pos0 を自分自身をBGとして処理）
 INCLUDE_POS0 = True
+
+# 全フレーム共通の BG ファイルを外部指定する場合のパス
+# None にすれば通常動作（同名ファイルを bg_dir/Pos0 から取得）に戻る
+BG_OVERRIDE_PATH = r"D:\AquisitionData\Kitagishi\basler_image_seq\ph_4\Pos0\img_000000000_ph_000.tif"
 
 def _worker_batch_frame(args):
     """ProcessPoolExecutor ワーカー: 1フレームを再構成して保存（dual出力版）。"""
@@ -218,7 +222,7 @@ def process_pos_folder(base_dir, bg_dir, pos_name, pos_split=44):
     tasks = []
     for filename in tif_files:
         filepath = os.path.join(target_dir, filename)
-        bg_filepath = os.path.join(bg_dir, filename)
+        bg_filepath = BG_OVERRIDE_PATH if BG_OVERRIDE_PATH else os.path.join(bg_dir, filename)
         base_name = os.path.splitext(filename)[0]
         tasks.append((filepath, bg_filepath, output_dir, output_dir_raw,
                       output_dir_colormap, base_name, pos_number, pos_split))

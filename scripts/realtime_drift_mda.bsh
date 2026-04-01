@@ -27,6 +27,14 @@ import org.json.*;
 // ★ Change only this: path to drift_config.json
 // ============================================================
 String CONFIG_FILE = "C:/Users/QPI/Documents/QPI_Omni/drift_session/drift_config.json";
+
+// Resume to a different save directory (leave empty to use config's save_dir)
+// Example: "E:/ph_260327_continued"
+String RESUME_SAVE_DIR = "";
+
+// Set to true to force start from T=0 even if previous state exists.
+// Normally false: fresh start is triggered by running prepare_drift_session.py
+boolean FORCE_FRESH_START = false;
 // ============================================================
 
 
@@ -62,6 +70,10 @@ JSONObject cfg = new JSONObject(cfgSb.toString());
 String PYTHON_EXE     = cfg.getString("python_exe");
 String SCRIPT_DIR     = cfg.getString("script_dir");
 String SAVE_DIR       = cfg.getString("save_dir");
+if (RESUME_SAVE_DIR != null && !RESUME_SAVE_DIR.trim().isEmpty()) {
+    SAVE_DIR = RESUME_SAVE_DIR.trim();
+    print("Save dir overridden: " + SAVE_DIR);
+}
 String POSITIONS_CSV  = cfg.getString("positions_csv");
 String STATE_FILE     = cfg.getString("state_file");
 String LOG_FILE       = cfg.getString("log_file");
@@ -248,7 +260,40 @@ double totalCorrY = 0.0;
 int consecutiveFailures = 0;
 int MAX_CONSECUTIVE_FAILURES = 5;
 
-for (int t = 0; t < N_TIMEPOINTS; t++) {
+// ---- Resume detection ----
+int startT = 0;
+File stateFileObj = new File(STATE_FILE);
+if (!FORCE_FRESH_START && stateFileObj.exists()) {
+    HashMap resumeState = readState(STATE_FILE);
+    String status = (String)resumeState.get("STATUS");
+    String tpStr  = (String)resumeState.get("TIMEPOINT");
+    if (tpStr != null && !"idle".equals(status)) {
+        int lastTP = Integer.parseInt(tpStr);
+        if (lastTP >= 0 && lastTP < N_TIMEPOINTS - 1) {
+            startT = lastTP + 1;
+            double resumeCumDx = 0.0, resumeCumDy = 0.0;
+            try {
+                resumeCumDx = Double.parseDouble((String)resumeState.get("CUMULATIVE_DX_UM"));
+                resumeCumDy = Double.parseDouble((String)resumeState.get("CUMULATIVE_DY_UM"));
+            } catch (Exception e) {}
+            for (int i = 0; i < nPositions; i++) {
+                corrX[i] = baseX[i] - resumeCumDx;
+                corrY[i] = baseY[i] - resumeCumDy;
+            }
+            totalCorrX = -resumeCumDx;
+            totalCorrY = -resumeCumDy;
+            print("[RESUME] Resuming from T=" + startT +
+                  "  cumDx=" + fmtD(resumeCumDx,3) + "um  cumDy=" + fmtD(resumeCumDy,3) + "um");
+            print("[RESUME] Save dir: " + SAVE_DIR);
+        }
+    }
+}
+// ---- Ensure position subdirectories exist ----
+for (int i = 0; i < nPositions; i++) {
+    new File(SAVE_DIR + "/" + (String)posLabels.get(i)).mkdirs();
+}
+
+for (int t = startT; t < N_TIMEPOINTS; t++) {
     long tpStart = System.currentTimeMillis();
 
     print("\n-- Timepoint " + t + " / " + (N_TIMEPOINTS-1) + " ----------------");

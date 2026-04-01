@@ -1,23 +1,24 @@
 """
 Micro-Manager .pos ファイルにグリッドを展開するスクリプト
-入力: movetest.pos（元ポジション）
-出力: movetest_grid.pos（各ポジションを中心にグリッド展開）
+入力: timelapse.pos（元ポジション）
+出力: timelapse_grid.pos（各ポジションを中心にグリッド展開）
 
 軸対応:
-  ステージ X (xi) → 画像 Y 方向   観測ドリフト ±1 μm → X_HALF = 12 (±1.2 μm)
-  ステージ Y (yi) → 画像 X 方向   観測ドリフト ±3 μm → Y_HALF = 35 (±3.5 μm)
-  合計: 25 × 71 = 1775 点/Pos
+  ステージ X (xi) → 画像 Y 方向   X_HALF = 4 (±0.4 μm)
+  ステージ Y (yi) → 画像 X 方向   Y_HALF = 4 (±0.4 μm)
+  合計: 9 × 9 = 81 点/Pos
+  走査: Snake scan（行ごとに yi の向きを交互反転）
 """
 import json
 import copy
 
 # ---- パラメータ ----
-INPUT_POS  = r"D:\AquisitionData\Kitagishi\260321\timelapse.pos"
-OUTPUT_POS = r"D:\AquisitionData\Kitagishi\260321\timelapse_grid_0pergluc_60ms_1.pos"
+INPUT_POS  = r"D:\AquisitionData\Kitagishi\260331\timelapse.pos"
+OUTPUT_POS = r"D:\AquisitionData\Kitagishi\260331\timelapse_grid_260331.pos"
 X_STEP = 0.1   # μm
 Y_STEP = 0.1   # μm
-X_HALF = 5    # 片側 → 合計 11個（ステージX → 画像Y、±0.5 μm カバー）
-Y_HALF = 5    # 片側 → 合計 11個（ステージY → 画像X、±0.5 μm カバー）
+X_HALF = 4    # 片側 → 合計 9個（ステージX → 画像Y、±0.4 μm カバー）
+Y_HALF = 4    # 片側 → 合計 9個（ステージY → 画像X、±0.4 μm カバー）
 # --------------------
 
 with open(INPUT_POS, "r") as f:
@@ -37,9 +38,11 @@ for orig in orig_positions:
         elif dev["DEVICE"] == "TIPFSOffset":
             base_z_offset = dev["X"]
 
-    # グリッド展開
+    # グリッド展開（Snake scan: xi 行ごとに yi の向きを反転）
     for xi in range(-X_HALF, X_HALF + 1):
-        for yi in range(-Y_HALF, Y_HALF + 1):
+        row = xi + X_HALF  # 0-indexed
+        yi_range = range(-Y_HALF, Y_HALF + 1) if row % 2 == 0 else range(Y_HALF, -Y_HALF - 1, -1)
+        for yi in yi_range:
             new_pos = copy.deepcopy(orig)
             new_pos["LABEL"] = f"{base_label}_x{xi:+d}_y{yi:+d}"
 

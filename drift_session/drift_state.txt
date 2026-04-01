@@ -1,11 +1,10 @@
-# drift_state.txt - written by compute_drift_online_v2.py
-STATUS=correction_ready
-TIMEPOINT=5
-DX_UM=0.089680
-DY_UM=0.034647
-CUMULATIVE_DX_UM=0.544572
-CUMULATIVE_DY_UM=0.617571
-CORRECTION_VALID=true
-ECC_CORRELATION=0.980717
+# drift_state.txt - realtime_drift_mda.bsh / compute_drift_online.py
+STATUS=idle
+TIMEPOINT=-1
+DX_UM=0.0
+DY_UM=0.0
+CUMULATIVE_DX_UM=0.0
+CUMULATIVE_DY_UM=0.0
+CORRECTION_VALID=false
+ECC_CORRELATION=0.0
 JUMP_DETECTED=false
-TIMESTAMP=2026-03-26T20:09:41.184595

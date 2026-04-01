@@ -1,0 +1,204 @@
+// ============================================================
+// test_stage_repeatability.bsh
+// ステージ再現性テスト
+//
+// 目的:
+//   タイムラプス残差(±0.1um)の原因がステージ位置決めノイズか
+//   ECC自体の誤差かを切り分ける。
+//
+// やること:
+//   BG Pos → REF Pos を N_REPS 回繰り返す。
+//   毎回 ECC vs. grid_ref を計算して std を出す。
+//   - std ≈ 27nm → ステージは精確 → 原因はKF/生物学的
+//   - std ≈ 100nm → ステージ位置決めノイズが支配的
+//
+// 使い方:
+//   1. タイムラプス終了後に実行
+//   2. 事前に drift_config.json が有効なままであること
+//   3. Script Panel に読み込んで Run
+// ============================================================
+
+import java.io.*;
+import java.util.*;
+import java.text.*;
+import ij.*;
+import ij.process.*;
+import ij.io.*;
+import org.json.*;
+
+// ============================================================
+// ★ ここだけ変更
+// ============================================================
+String CONFIG_FILE = "C:/Users/QPI/Documents/QPI_Omni/drift_session/drift_config.json";
+int    N_REPS      = 20;
+String TEST_DIR    = "C:/stage_repeatability_test";
+// ============================================================
+
+// ---- Load config ----
+BufferedReader cfgReader = new BufferedReader(new FileReader(CONFIG_FILE));
+StringBuilder cfgSb = new StringBuilder();
+String cfgLine;
+while ((cfgLine = cfgReader.readLine()) != null) cfgSb.append(cfgLine);
+cfgReader.close();
+JSONObject cfg = new JSONObject(cfgSb.toString());
+
+String PYTHON_EXE    = cfg.getString("python_exe");
+String SCRIPT_DIR    = cfg.getString("script_dir");
+String POSITIONS_CSV = cfg.getString("positions_csv");
+double EXPOSURE_MS   = cfg.getDouble("exposure_ms");
+long   SETTLE_MS     = (long)cfg.getDouble("settle_ms");
+long   PFS_SETTLE_MS = (long)cfg.getDouble("pfs_settle_ms");
+int    REF_POS_INDEX = cfg.getInt("ref_pos_index");
+int    BG_POS_INDEX  = cfg.getInt("bg_pos_index");
+String XY_STAGE      = cfg.getString("xy_stage_device");
+String Z_DEVICE      = cfg.getString("z_offset_device");
+String CHANNEL_NAME  = cfg.getString("channel_name");
+String CHANNEL_GROUP = "TiChannel";
+
+print("Config loaded. REF=[" + REF_POS_INDEX + "]  BG=[" + BG_POS_INDEX + "]");
+
+// ---- Load positions.csv ----
+BufferedReader csvReader = new BufferedReader(new FileReader(POSITIONS_CSV));
+csvReader.readLine();
+ArrayList csvRows = new ArrayList();
+String csvLine;
+while ((csvLine = csvReader.readLine()) != null) csvRows.add(csvLine.split(","));
+csvReader.close();
+
+int nPos = csvRows.size();
+double[] posX = new double[nPos];
+double[] posY = new double[nPos];
+double[] posZ = new double[nPos];
+ArrayList posLabels = new ArrayList();
+for (int i = 0; i < nPos; i++) {
+    String[] p = (String[])csvRows.get(i);
+    posLabels.add(p[1].trim());
+    posX[i] = Double.parseDouble(p[2].trim());
+    posY[i] = Double.parseDouble(p[3].trim());
+    posZ[i] = Double.parseDouble(p[4].trim());
+}
+print("Positions: " + nPos + " loaded");
+
+// ---- Camera ----
+mmc.setExposure(EXPOSURE_MS);
+int bytesPerPx = (int)mmc.getBytesPerPixel();
+
+// ---- Create output directories ----
+new File(TEST_DIR + "/Pos_ref").mkdirs();
+new File(TEST_DIR + "/Pos_bg").mkdirs();
+
+// ---- Helper: zero-pad ----
+String padLeft(int n, int width) {
+    String s = "" + n;
+    while (s.length() < width) s = "0" + s;
+    return s;
+}
+
+// ---- Helper: move to position ----
+void moveTo(int posIdx) {
+    mmc.setXYPosition(XY_STAGE, posX[posIdx], posY[posIdx]);
+    mmc.setPosition(Z_DEVICE, posZ[posIdx]);
+    mmc.waitForDevice(XY_STAGE);
+    mmc.waitForDevice(Z_DEVICE);
+    Thread.sleep(SETTLE_MS);
+    if (PFS_SETTLE_MS > 0) Thread.sleep(PFS_SETTLE_MS);
+}
+
+// ---- Helper: snap and save ----
+void snapAndSave(String savePath) {
+    mmc.setConfig(CHANNEL_GROUP, CHANNEL_NAME);
+    mmc.waitForConfig(CHANNEL_GROUP, CHANNEL_NAME);
+    mmc.snapImage();
+    Object rawImg = mmc.getImage();
+    int width  = (int)mmc.getImageWidth();
+    int height = (int)mmc.getImageHeight();
+    ImageProcessor ip;
+    if (bytesPerPx == 1) {
+        ip = new ByteProcessor(width, height, (byte[])rawImg, null);
+    } else {
+        ip = new ShortProcessor(width, height, (short[])rawImg, null);
+    }
+    new FileSaver(new ImagePlus("", ip)).saveAsTiff(savePath);
+}
+
+// ---- Helper: call Python with stdout/stderr ----
+int callPython(String[] cmd, long timeoutMs) {
+    Process p = Runtime.getRuntime().exec(cmd);
+    final StringBuilder outBuf = new StringBuilder();
+    final StringBuilder errBuf = new StringBuilder();
+    Thread tOut = new Thread(new Runnable() {
+        public void run() {
+            try {
+                BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()));
+                String l;
+                while ((l = r.readLine()) != null) outBuf.append(l).append("\n");
+            } catch (Exception e) {}
+        }
+    });
+    Thread tErr = new Thread(new Runnable() {
+        public void run() {
+            try {
+                BufferedReader r = new BufferedReader(new InputStreamReader(p.getErrorStream()));
+                String l;
+                while ((l = r.readLine()) != null) errBuf.append(l).append("\n");
+            } catch (Exception e) {}
+        }
+    });
+    tOut.start(); tErr.start();
+    long start = System.currentTimeMillis();
+    boolean done = false; int exitCode = -1;
+    while (!done && System.currentTimeMillis() - start < timeoutMs) {
+        Thread.sleep(500);
+        try { exitCode = p.exitValue(); done = true; }
+        catch (IllegalThreadStateException e) {}
+    }
+    if (!done) { p.destroy(); print("[WARN] Python timeout"); exitCode = -2; }
+    tOut.join(2000); tErr.join(2000);
+    if (outBuf.length() > 0) print(outBuf.toString());
+    if (errBuf.length() > 0) print("[stderr]\n" + errBuf.toString());
+    return exitCode;
+}
+
+// ============================================================
+// Acquisition
+// ============================================================
+print("\n=== Stage Repeatability Test ===");
+print("N_REPS = " + N_REPS);
+print("BG  Pos [" + BG_POS_INDEX + "]: " + (String)posLabels.get(BG_POS_INDEX));
+print("REF Pos [" + REF_POS_INDEX + "]: " + (String)posLabels.get(REF_POS_INDEX));
+print("Save: " + TEST_DIR + "\n");
+
+for (int rep = 0; rep < N_REPS; rep++) {
+    print("Rep " + (rep+1) + "/" + N_REPS + " ...");
+
+    // Move AWAY (BG pos) then BACK (REF pos) to test repositioning
+    moveTo(BG_POS_INDEX);
+    String bgPath  = TEST_DIR + "/Pos_bg/img_"  + padLeft(rep, 9) + "_ph_000.tif";
+    snapAndSave(bgPath);
+
+    moveTo(REF_POS_INDEX);
+    String refPath = TEST_DIR + "/Pos_ref/img_" + padLeft(rep, 9) + "_ph_000.tif";
+    snapAndSave(refPath);
+
+    print("  saved");
+}
+
+print("\nAcquisition complete. Running analysis...\n");
+
+// ============================================================
+// Analysis
+// ============================================================
+String[] cmd = {
+    PYTHON_EXE,
+    SCRIPT_DIR + "/analyze_stage_repeatability.py",
+    "--test-dir",  TEST_DIR,
+    "--config",    CONFIG_FILE,
+    "--n-reps",    "" + N_REPS
+};
+int exitCode = callPython(cmd, 600000L);
+
+if (exitCode == 0) {
+    print("\nDone. Results: " + TEST_DIR + "/repeatability_results.json");
+} else {
+    print("[FAIL] Python exit code: " + exitCode);
+}

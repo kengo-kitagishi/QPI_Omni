@@ -30,21 +30,21 @@ sys.path.insert(0, str(_script_dir))
 # ============================================================
 
 # タイムラプスで使う .pos ファイル（グリッドなし、実際に撮影するポジションリスト）
-POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\260321\focused_timelapse.pos"
+POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\260331\timelapse.pos"
 
 # グリッド撮影ディレクトリ（小規模グリッドでよい）
-GRID_DIR         = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
+GRID_DIR         = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
 GRID_BASE_LABEL  = "Pos1"   # ドリフト推定に使う Pos のラベル（タイムラプスと同じ）
-GRID_Z_INDEX     = 9        # グリッド画像の z インデックス（合焦スライス）
+GRID_Z_INDEX     = 10       # グリッド画像の z インデックス（合焦スライス）
 
 # channel_rois.json（事前に pipeline_full.py などで生成済みのもの）
-CHANNEL_ROIS_JSON = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
+CHANNEL_ROIS_JSON = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
 
 # セッション作業ディレクトリ（ここに設定ファイルと状態ファイルが保存される）
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # タイムラプス画像の保存先（MM1.4 で撮影した画像の保存先）
-SAVE_DIR         = r"C:\ph"
+SAVE_DIR         = r"C:\ph_260331"
 
 # .pos ファイル内の各 Pos のインデックス（0始まり）
 REF_POS_INDEX    = 1   # ドリフト推定に使う Pos（サンプルがいる Pos）
@@ -64,10 +64,17 @@ CHANNEL_NAME     = "ph"            # MM チャンネルグループ名
 PYTHON_EXE       = r"C:\Users\QPI\AppData\Local\Programs\Python\Python311\python.exe"
 
 # ドリフト補正パラメータ
-JUMP_THRESH_UM       = 1.0    # これを超えるドリフトは外れ値として無視 [μm]
+JUMP_THRESH_UM       = None   # 1ステップの閾値 [μm]。None ならステップ閾値チェックを無効化
 MAX_TOTAL_CORR_UM    = 15.0   # 累積補正量の上限 [μm]（安全弁）
 SHIFT_SIGN_X         = 1      # 符号（実データで確認して変更）
 SHIFT_SIGN_Y         = 1
+
+# EMA / Kalman フィルタ設定
+CORRECTION_EMA_ALPHA = 0.3    # EMA の平滑化係数
+USE_KALMAN_FILTER    = True   # Adaptive Kalman フィルタを使う
+KF_Q_POS_NM2         = 400.0  # プロセスノイズ: 位置 [nm^2]
+KF_Q_VEL_NM2         = 400.0  # プロセスノイズ: 速度 [nm^2]
+KF_R_NM2             = 12100.0  # 観測ノイズ [nm^2]（= 110nm 相当）
 
 # 光学パラメータ
 SENSOR_PIXEL_SIZE    = 3.45e-6   # [m]
@@ -76,7 +83,7 @@ ORIGINAL_DIM         = 2048
 RECONSTRUCTED_DIM    = 511
 
 # 位置クロップ設定（pipeline_full.py と同値）
-POS_SPLIT    = 31
+POS_SPLIT    = 33
 CROP_BEFORE  = (0, 2048, 400, 2448)   # pos_number < POS_SPLIT → 右側
 CROP_AFTER   = (0, 2048,   0, 2048)   # Pos3 以降
 
@@ -95,6 +102,15 @@ GRADIENT_SIGMA = 0
 # ECC パラメータ
 VMIN = -5.0
 VMAX =  2.0
+
+# tilt 補正パラメータ（calibrate_grid_positions.py / compute_pos_shifts.py と同値）
+# 0 に設定するとフォールバック（backsub のみ）になる
+TILT_CROP_H = 270    # X 方向の big crop 幅 [px]
+ECC_CROP_H  = 80     # ECC に使う中央 crop 幅 [px]
+
+# グリッドキャリブレーション JSON（calibrate_grid_positions.py の出力）
+# None → compute_drift_online.py でステージ名目値にフォールバック
+GRID_CALIBRATION_JSON = None  # 例: r"D:\path\to\grid_calibration_Pos1.json"
 
 # ============================================================
 
@@ -142,6 +158,22 @@ def extract_rect_roi(img, cy, cx, crop_w, crop_h):
     if any([pad_y0, pad_y1, pad_x0, pad_x1]):
         crop = np.pad(crop, ((pad_y0, pad_y1), (pad_x0, pad_x1)), mode="constant")
     return crop
+
+
+def _tilt_correct(img_f64, cy, cx, crop_w, tilt_crop_h, ecc_crop_h):
+    """
+    フル位相画像から tilt_crop_h px 幅の crop を取り、
+    左1/3 で slope+intercept fit → 補正 → 中央 ecc_crop_h px を返す。
+    calibrate_grid_positions.py / compute_pos_shifts.py と同じ処理。
+    """
+    big   = extract_rect_roi(img_f64, cy, cx, crop_w, tilt_crop_h).astype(np.float64)
+    x     = np.arange(tilt_crop_h, dtype=np.float64)
+    prof  = big.mean(axis=0)
+    fit_n = max(1, tilt_crop_h // 3)
+    a, b  = np.polyfit(x[:fit_n], prof[:fit_n], 1)
+    corrected = big - (a * x + b)[np.newaxis, :]
+    start = (tilt_crop_h - ecc_crop_h) // 2
+    return corrected[:, start : start + ecc_crop_h]
 
 
 def get_crop_for_pos_index(pos_index):
@@ -259,14 +291,21 @@ def main():
         grid_img = grid_img - bg.astype(np.float64)
         print(f"  Gaussian gradient removal: sigma={GRADIENT_SIGMA}px applied to grid ref")
 
-    # チャネルごとに crop + backsub
+    # チャネルごとに crop（tilt 補正 or backsub）
+    use_tilt = TILT_CROP_H > 0 and ECC_CROP_H > 0
     ref_crops = []
     for ch_idx, roi in enumerate(rois):
-        crop = extract_rect_roi(grid_img, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"])
-        offset = compute_backsub_offset(crop)
-        crop = crop + offset
-        ref_crops.append(crop.astype(np.float32))
-        print(f"  ch{ch_idx:02d}: crop shape={crop.shape}, backsub offset={offset:+.4f}")
+        if use_tilt:
+            crop = _tilt_correct(grid_img, roi["cy"], roi["cx"], roi["crop_w"],
+                                 TILT_CROP_H, ECC_CROP_H)
+            ref_crops.append(crop.astype(np.float32))
+            print(f"  ch{ch_idx:02d}: tilt-corrected crop shape={crop.shape}")
+        else:
+            crop = extract_rect_roi(grid_img, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"])
+            offset = compute_backsub_offset(crop)
+            crop = crop + offset
+            ref_crops.append(crop.astype(np.float32))
+            print(f"  ch{ch_idx:02d}: crop shape={crop.shape}, backsub offset={offset:+.4f}")
 
     # grid_ref_crops.tif として保存（shape: n_channels, H, W）
     ref_crops_arr = np.stack(ref_crops, axis=0)  # (C, H, W)
@@ -312,6 +351,9 @@ def main():
         "backsub_n_bins":     BACKSUB_N_BINS,
         "backsub_smooth_window": BACKSUB_SMOOTH_WINDOW,
         "gradient_sigma":     GRADIENT_SIGMA,
+        "tilt_crop_h":        TILT_CROP_H,
+        "ecc_crop_h":         ECC_CROP_H,
+        "grid_calibration_json": GRID_CALIBRATION_JSON,
         "ecc_vmin":           VMIN,
         "ecc_vmax":           VMAX,
         "sensor_pixel_size":  SENSOR_PIXEL_SIZE,
@@ -321,6 +363,12 @@ def main():
         "grid_dir":           GRID_DIR,
         "grid_base_label":    GRID_BASE_LABEL,
         "grid_z_index":       GRID_Z_INDEX,
+        "correction_ema_alpha": CORRECTION_EMA_ALPHA,
+        "use_kalman_filter":  USE_KALMAN_FILTER,
+        "kf_Q_pos_nm2":       KF_Q_POS_NM2,
+        "kf_Q_vel_nm2":       KF_Q_VEL_NM2,
+        "kf_R_nm2":           KF_R_NM2,
+        "kf_state_file":      str(session_dir / "drift_kf_state.json"),
     }
     config_path = session_dir / "drift_config.json"
     with open(config_path, "w", encoding="utf-8") as f:
@@ -342,11 +390,24 @@ def main():
         f.write("JUMP_DETECTED=false\n")
     print(f"drift_state.txt 初期化: {state_path}")
 
-    # ---- 6. drift_log.json 初期化 ----
+    # ---- 6. drift_log.json 初期化（旧ログはアーカイブ保存） ----
+    import shutil
+    from datetime import datetime
     log_path = session_dir / "drift_log.json"
+    if log_path.exists():
+        timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+        archive_path = session_dir / f"drift_log_{timestamp}.json"
+        shutil.copy2(log_path, archive_path)
+        print(f"旧 drift_log.json をアーカイブ: {archive_path}")
     with open(log_path, "w", encoding="utf-8") as f:
         json.dump([], f)
     print(f"drift_log.json 初期化: {log_path}")
+
+    # ---- 6b. drift_kf_state.json をリセット ----
+    kf_state_path = session_dir / "drift_kf_state.json"
+    if kf_state_path.exists():
+        kf_state_path.unlink()
+        print(f"drift_kf_state.json 削除（Kalman 状態リセット）: {kf_state_path}")
 
     # ---- 7. 保存ディレクトリ作成 ----
     save_dir = Path(SAVE_DIR)

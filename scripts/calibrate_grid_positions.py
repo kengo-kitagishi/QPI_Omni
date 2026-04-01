@@ -33,11 +33,11 @@ from tqdm import tqdm
 # ============================================================
 # 設定パラメータ
 # ============================================================
-GRID_DIR          = r"D:\AquisitionData\Kitagishi\260310\grid_0p5_0p5_0p1_exp200ms_1pos_EMM2_1"
+GRID_DIR          = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
 BASE_LABEL        = "Pos1"
-GRID_Z_INDEX      = 2
+GRID_Z_INDEX      = 9
 
-CHANNEL_ROIS_JSON = r"D:\AquisitionData\Kitagishi\260310\timelapse_11day_exp200ms_1pos_EMM2\Pos1\output_phase\channels\channel_rois.json"
+CHANNEL_ROIS_JSON = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
 
 # ECC 正規化範囲（compute_pos_shifts.py の VMIN/VMAX と同値にする）
 VMIN = -5.0
@@ -47,6 +47,10 @@ VMAX =  2.0
 ECC_MAX_ITER = 10000
 ECC_EPSILON  = 1e-8
 
+# tilt 補正パラメータ（compute_pos_shifts.py と同値）
+TILT_CROP_H = 270   # X 方向の big crop 幅 [px]
+ECC_CROP_H  = 80    # ECC に使う中央 crop 幅 [px]
+
 # 光学パラメータ（名目値との比較用のみ。find_nearest には使わない）
 SENSOR_PIXEL_SIZE  = 3.45e-6   # [m]
 MAGNIFICATION      = 40
@@ -54,8 +58,8 @@ ORIGINAL_DIM       = 2048
 RECONSTRUCTED_DIM  = 511
 X_STEP             = 0.1       # グリッドステップ [μm]
 Y_STEP             = 0.1
-SHIFT_SIGN_X       = 1
-SHIFT_SIGN_Y       = 1
+SHIFT_SIGN_X       = -1
+SHIFT_SIGN_Y       = -1
 
 # None → GRID_DIR/grid_calibration.json
 OUTPUT_JSON = None
@@ -120,10 +124,25 @@ def extract_rect_roi(img, cy, cx, crop_w, crop_h):
     return crop
 
 
-def get_crops_u8(img, rois, n_channels):
-    """1枚の画像から全チャネルの ROI crop (uint8) を返す。"""
-    return [to_uint8(extract_rect_roi(img, rois[ch]["cy"], rois[ch]["cx"],
-                                      rois[ch]["crop_w"], rois[ch]["crop_h"]))
+def _tilt_correct(img_f64, cy, cx, crop_w, crop_h_out):
+    """
+    compute_pos_shifts.py の _tilt_correct と同じ処理。
+    big crop (TILT_CROP_H cols) → 左1/3 slope+intercept fit → 補正 → 中央 crop_h_out cols。
+    """
+    big   = extract_rect_roi(img_f64, cy, cx, crop_w, TILT_CROP_H).astype(np.float64)
+    x     = np.arange(TILT_CROP_H, dtype=np.float64)
+    prof  = big.mean(axis=0)
+    fit_n = max(1, TILT_CROP_H // 3)
+    a, b  = np.polyfit(x[:fit_n], prof[:fit_n], 1)
+    corrected = big - (a * x + b)[np.newaxis, :]
+    start = (TILT_CROP_H - crop_h_out) // 2
+    return corrected[:, start : start + crop_h_out]
+
+
+def get_crops_u8(img_f64, rois, n_channels):
+    """1枚の画像から全チャネルの ROI crop (uint8) を返す。tilt補正後に ECC_CROP_H に中央crop。"""
+    return [to_uint8(_tilt_correct(img_f64, rois[ch]["cy"], rois[ch]["cx"],
+                                   rois[ch]["crop_w"], ECC_CROP_H))
             for ch in range(n_channels)]
 
 

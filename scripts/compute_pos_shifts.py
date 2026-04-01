@@ -21,7 +21,7 @@ import threading
 # ============================================================
 # 設定パラメータ
 # ============================================================
-CHANNELS_DIR = r"C:\ph\Pos1\output_phase\channels"
+CHANNELS_DIR = r"C:\ph_260327\Pos1\output_phase\channels"
 CHANNEL_PATTERN = "channel_*.tif"      # backsub済みなら "channel_*_bg_corr.tif"
 
 # --- 基準画像の選択 ---
@@ -30,19 +30,22 @@ CHANNEL_PATTERN = "channel_*.tif"      # backsub済みなら "channel_*_bg_corr.
 USE_GRID_REFERENCE  = True
 GRID_DIR            = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
 GRID_BASE_LABEL     = "Pos1"           # PosX_x+0_y+0 の PosX 部分
-GRID_Z_INDEX        = 0               # img_000000000_ph_{Z_INDEX:03d}.tif
-CHANNEL_ROIS_JSON   = r"C:\ph\Pos1\output_phase\channels\channel_rois.json"
+GRID_Z_INDEX        = 9               # img_000000000_ph_{Z_INDEX:03d}.tif
+CHANNEL_ROIS_JSON   = r"C:\ph_260327\Pos1\output_phase\channels\channel_rois.json"
 
 REFERENCE_FRAME = 150                  # USE_GRID_REFERENCE=False の場合のみ使用（1始まり）
 
 ALIGNMENT_METHOD = 'ecc'              # 'ecc' or 'phase_correlation'
 VMIN = -5.0
 VMAX = 2.0                            # to_uint8の正規化範囲（ECC精度に影響）
+USE_PERCENTILE_NORM = True
+PERCENTILE_LO       = 5
+PERCENTILE_HI       = 95
 OUTLIER_MAD_THRESH = 2.5              # チャネル間外れ値除去のMAD閾値
 OUTLIER_TIMESERIES_WINDOW = 11        # 時系列外れ値検出のメジアンフィルタ幅（奇数）
 OUTLIER_TIMESERIES_THRESH = 3.0       # 時系列MAD閾値（0で無効）
 ECC_MIN_CORR = 0.0                    # ECC スコアがこれ未満のチャネルを除外（0.0 = 無効、pipeline から上書き）
-OUTPUT_JSON = "pos_shifts.json"
+OUTPUT_JSON = "pos_shifts_cal.json"
 
 # --- グリッド基準画像への gaussian_backsub 適用 ---
 # True にするとグリッド基準画像にも timelapse と同じ backsub を適用する
@@ -55,13 +58,13 @@ BACKSUB_SMOOTH_WINDOW = 20
 
 # --- 逐次追跡モード ---
 # True にすると前フレームのシフトから最近傍 grid(xi,yi) を基準に選ぶ
-USE_INCREMENTAL_TRACKING   = False   # デフォルト False（後から pipeline で上書き）
+USE_INCREMENTAL_TRACKING   = True    # デフォルト True（後から pipeline で上書き）
 X_STEP                     = 0.1    # グリッドステップ [μm]
 Y_STEP                     = 0.1    # グリッドステップ [μm]
 SHIFT_SIGN_X               = 1      # シフト符号（1 or -1）
 SHIFT_SIGN_Y               = 1
 JUMP_THRESH_UM             = 1.0   # 前フレームとのシフト差がこれ [μm] を超えたら外れ値（0で無効）
-MAX_FRAMES                 = None  # テストラン用: None で全フレーム、整数で先頭 N フレームのみ
+MAX_FRAMES                 = None # テストラン用: None で全フレーム、整数で先頭 N フレームのみ
 # 光学パラメータ（pixel scale 計算用）
 SENSOR_PIXEL_SIZE          = 3.45e-6  # [m]
 MAGNIFICATION              = 40
@@ -69,12 +72,12 @@ ORIGINAL_DIM               = 2048
 RECONSTRUCTED_DIM          = 511
 # グリッドキャリブレーション（calibrate_grid_positions.py の出力 JSON）
 # None → 名目値 (xi*X_STEP/pixel_scale_um) を使用
-GRID_CALIBRATION_JSON      = None
+GRID_CALIBRATION_JSON      = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1\grid_calibration_Pos1.json"
 # --- 2段階ECC（USE_INCREMENTAL_TRACKING=True 時のみ有効） ---
-USE_SECOND_PASS_ECC    = False   # True で2回目ECCを有効化
+USE_SECOND_PASS_ECC    = True    # True で2回目ECCを有効化
 FIRST_PASS_HALF        = False   # (無効化済み: pass1/2/3 ともに full crop を使用)
 SECOND_PASS_HALF       = 'right' # (無効化済み: full crop に統一)
-USE_THIRD_PASS_ECC     = False   # True で3回目ECC（pass2結果から最近傍grid再選択 → half ECC）
+USE_THIRD_PASS_ECC     = True    # True で3回目ECC（pass2結果から最近傍grid再選択 → half ECC）
 # corr/shift データを NPZ + CSV に保存（True 推奨: subtract 画像との対応確認用）
 SAVE_CORR_DATA         = True
 # --- 並列処理 ---
@@ -96,10 +99,40 @@ FINAL_CROP_H            = 440      # X方向列数（幅）
 
 # 出力先（None なら channels_dir/crop_subtracted/ に自動設定）
 APPLY_OUT_DIR           = None
+
+# ============================================================
+# X-tilt補正（gaussian_backsub の代替）
+# True にすると channel stacks を読まず output_phase/ のフル位相画像から
+# TILT_CROP_H px 幅の crop を取り、左1/3 で slope+intercept をフィットして
+# 補正した中央 crop_h px を ECC に使う。STEP_GAUSSIAN_BACKSUB は不要になる。
+# ============================================================
+USE_SLOPE_CORRECTION = True    # True: bg_corr不要・フル位相画像を直接使用
+TILT_CROP_H          = 270     # 補正用横幅（左1/3 ≈ 90px が背景フィット領域）
+ECC_CROP_H           = 80      # ECC に使う crop の X 幅（TILT_CROP_H の中央から切り出す）
 # ============================================================
 
 
+def _tilt_correct(img_f64, cy, cx, crop_w, crop_h_out):
+    """
+    フル位相画像から TILT_CROP_H px 幅の crop を取り、
+    左1/3 で slope+intercept fit → 補正 → 中央 crop_h_out px を返す。
+    USE_SLOPE_CORRECTION=True 時に grid ref / timelapse stack 両方で使用。
+    """
+    from channel_crop import extract_rect_roi
+    big   = extract_rect_roi(img_f64, cy, cx, crop_w, TILT_CROP_H).astype(np.float64)
+    x     = np.arange(TILT_CROP_H, dtype=np.float64)
+    prof  = big.mean(axis=0)
+    fit_n = max(1, TILT_CROP_H // 3)
+    a, b  = np.polyfit(x[:fit_n], prof[:fit_n], 1)
+    corrected = big - (a * x + b)[np.newaxis, :]
+    start = (TILT_CROP_H - crop_h_out) // 2
+    return corrected[:, start : start + crop_h_out]
+
+
 def to_uint8(img, vmin=VMIN, vmax=VMAX):
+    if USE_PERCENTILE_NORM:
+        vmin = float(np.percentile(img, PERCENTILE_LO))
+        vmax = float(np.percentile(img, PERCENTILE_HI))
     clipped = np.clip(img, vmin, vmax)
     normalized = (clipped - vmin) / (vmax - vmin)
     return (normalized * 255).astype(np.uint8)
@@ -249,13 +282,17 @@ def load_grid_refs(channels_dir, n_channels):
     refs = []
     for ch in range(n_channels):
         roi = rois[ch] if ch < len(rois) else rois[-1]
-        cropped = extract_rect_roi(grid_img, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"])
-        if APPLY_BACKSUB_TO_GRID_REF:
-            offset = compute_backsub_offset(cropped)
-            cropped = cropped + offset
-            print(f"  ch{ch:02d} ROI crop (full): {cropped.shape}  backsub offset={offset:+.4f} rad")
+        if USE_SLOPE_CORRECTION:
+            cropped = _tilt_correct(grid_img, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H)
+            print(f"  ch{ch:02d} tilt-corrected crop: {cropped.shape}")
         else:
-            print(f"  ch{ch:02d} ROI crop (full): {cropped.shape}")
+            cropped = extract_rect_roi(grid_img, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H)
+            if APPLY_BACKSUB_TO_GRID_REF:
+                offset = compute_backsub_offset(cropped)
+                cropped = cropped + offset
+                print(f"  ch{ch:02d} ROI crop (full): {cropped.shape}  backsub offset={offset:+.4f} rad")
+            else:
+                print(f"  ch{ch:02d} ROI crop (full): {cropped.shape}")
         refs.append(cropped)
 
     return refs, str(grid_ref_path)
@@ -263,15 +300,19 @@ def load_grid_refs(channels_dir, n_channels):
 
 def load_grid_calibration(json_path):
     """
-    grid_calibration.json を読み込み、(xi, yi) → (actual_dx_px, actual_dy_px) の dict を返す。
+    grid_calibration.json を読み込み、(xi, yi) → (cal_dx_px, cal_dy_px) の dict を返す。
+
+    calibrate_grid_positions.py は actual_dx_px = -tx（コンテンツ変位）で保存するが、
+    compute_pos_shifts.py の shift_x = +tx（ECC warp_matrix 生値）。
+    符号を揃えるため、ロード時に符号反転する。
     """
     with open(json_path, encoding="utf-8") as f:
         data = json.load(f)
     cal = {}
     for entry in data.get("positions", []):
         cal[(entry["xi"], entry["yi"])] = (
-            entry["actual_dx_px"],
-            entry["actual_dy_px"],
+            -entry["actual_dx_px"],   # actual_dx = -tx → cal_dx = +tx (shift_x 規約に合わせる)
+            -entry["actual_dy_px"],
         )
     return cal
 
@@ -317,9 +358,12 @@ def load_grid_ref_mn(pos_map, xi, yi, rois, n_channels):
     refs_out = []
     for ch in range(n_channels):
         roi = rois[ch] if ch < len(rois) else rois[-1]
-        cropped = extract_rect_roi(grid_img, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"])
-        if APPLY_BACKSUB_TO_GRID_REF:
-            cropped = cropped + compute_backsub_offset(cropped)
+        if USE_SLOPE_CORRECTION:
+            cropped = _tilt_correct(grid_img, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H)
+        else:
+            cropped = extract_rect_roi(grid_img, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H)
+            if APPLY_BACKSUB_TO_GRID_REF:
+                cropped = cropped + compute_backsub_offset(cropped)
         refs_out.append(cropped)
     return refs_out
 
@@ -336,13 +380,16 @@ def load_grid_ref_mn_half(pos_map, xi, yi, rois, n_channels):
     refs_out = []
     for ch in range(n_channels):
         roi = rois[ch] if ch < len(rois) else rois[-1]
-        cropped = extract_rect_roi(grid_img, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"])
-        if APPLY_BACKSUB_TO_GRID_REF:
-            offset = compute_backsub_offset(cropped)
-            cropped = cropped + offset
-            print(f"  ch{ch:02d} ROI crop (full): {cropped.shape}  backsub offset={offset:+.4f} rad")
+        if USE_SLOPE_CORRECTION:
+            cropped = _tilt_correct(grid_img, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H)
         else:
-            print(f"  ch{ch:02d} ROI crop (full): {cropped.shape}")
+            cropped = extract_rect_roi(grid_img, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H)
+            if APPLY_BACKSUB_TO_GRID_REF:
+                offset = compute_backsub_offset(cropped)
+                cropped = cropped + offset
+                print(f"  ch{ch:02d} ROI crop (full): {cropped.shape}  backsub offset={offset:+.4f} rad")
+            else:
+                print(f"  ch{ch:02d} ROI crop (full): {cropped.shape}")
         refs_out.append(cropped)
     return refs_out
 
@@ -563,7 +610,7 @@ def apply_shifts_and_crop(channels_dir, frame_results, grid_ref_path_str=None):
     from channel_crop import extract_rect_roi
 
     tl_dir = Path(channels_dir).parent          # = output_phase/
-    out_dir = Path(APPLY_OUT_DIR) if APPLY_OUT_DIR else Path(channels_dir) / "crop_subtracted"
+    out_dir = Path(APPLY_OUT_DIR) if APPLY_OUT_DIR else Path(channels_dir) / f"crop_sub_ecc{ECC_CROP_H:03d}_pct{PERCENTILE_HI}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # タイムラプスフレーム一覧
@@ -586,6 +633,23 @@ def apply_shifts_and_crop(channels_dir, frame_results, grid_ref_path_str=None):
         for r in frame_results
     }
 
+    # channel_rois.json を読んでチャネルごとの ROI を取得
+    rois_path = Path(channels_dir) / "channel_rois.json"
+    if not rois_path.exists():
+        print(f"[APPLY] ERROR: channel_rois.json が見つかりません: {rois_path}")
+        return
+    rois = json.load(rois_path.open(encoding="utf-8"))
+    n_ch = len(rois)
+    print(f"[APPLY] channel_rois: {n_ch} channels")
+
+    # 既存の出力をクリア（ch00/ ～ ch{n_ch-1}/ サブフォルダごと削除して再作成）
+    import shutil
+    for ch_dir in out_dir.glob("ch*/"):
+        shutil.rmtree(ch_dir)
+    # 旧フォーマット（フラット配置）のファイルも削除
+    for old in out_dir.glob("img_*.tif"):
+        old.unlink()
+
     h, w = ref_full.shape
     for i, fp in enumerate(tqdm(tl_frames, desc="apply+crop")):
         sx, sy = shift_map.get(i, (0.0, 0.0))
@@ -603,16 +667,20 @@ def apply_shifts_and_crop(channels_dir, frame_results, grid_ref_path_str=None):
         # 参照引き算
         subtracted = aligned - ref_full
 
-        # 40×440 crop
-        crop = extract_rect_roi(
-            subtracted, FINAL_CROP_CY, FINAL_CROP_CX,
-            FINAL_CROP_W, FINAL_CROP_H
-        )
+        # チャネルごとに ROI でクロップして保存（ch00/ ～ ch11/ フォルダに振り分け）
+        for ch, roi in enumerate(rois):
+            if USE_SLOPE_CORRECTION:
+                # tilt補正後の全幅（TILT_CROP_H=270）をそのまま出力
+                ch_crop = _tilt_correct(subtracted, roi["cy"], roi["cx"], roi["crop_w"], TILT_CROP_H)
+            else:
+                ch_crop = extract_rect_roi(subtracted, roi["cy"], roi["cx"], roi["crop_w"], TILT_CROP_H)
+            ch_dir = out_dir / f"ch{ch:02d}"
+            ch_dir.mkdir(exist_ok=True)
+            tifffile.imwrite(str(ch_dir / fp.name), ch_crop.astype(np.float32))
 
-        tifffile.imwrite(str(out_dir / fp.name), crop.astype(np.float32))
-
-    print(f"[APPLY] {len(tl_frames)} フレーム保存完了 → {out_dir}")
-    print(f"[APPLY] crop shape: ({FINAL_CROP_W}, {FINAL_CROP_H})")
+    crop_h_out = TILT_CROP_H if USE_SLOPE_CORRECTION else TILT_CROP_H
+    print(f"[APPLY] {len(tl_frames)} フレーム × {n_ch} ch 保存完了 → {out_dir}")
+    print(f"[APPLY] crop shape per ch: ({rois[0]['crop_w']}, {crop_h_out})")
 
 
 def main():
@@ -621,30 +689,51 @@ def main():
         print(f"ERROR: CHANNELS_DIR が見つかりません: {channels_dir}")
         sys.exit(1)
 
-    # チャネルスタック一覧
-    stacks_paths = sorted(channels_dir.glob(CHANNEL_PATTERN))
-    if not stacks_paths:
-        print(f"ERROR: {CHANNEL_PATTERN} に合うファイルが見つかりません: {channels_dir}")
-        sys.exit(1)
-    print(f"チャネル数: {len(stacks_paths)}")
-    for p in stacks_paths:
-        print(f"  {p.name}")
-
-    # スタック読み込み
-    stacks = []
-    for p in stacks_paths:
-        arr = tifffile.imread(str(p))
-        if arr.ndim == 2:
-            arr = arr[np.newaxis, ...]  # 1フレームの場合
-        stacks.append(arr.astype(np.float64))
-        print(f"  {p.name}: shape={arr.shape}")
-
-    n_frames = stacks[0].shape[0]
-    n_channels = len(stacks)
-    if MAX_FRAMES is not None and MAX_FRAMES < n_frames:
-        stacks = [s[:MAX_FRAMES] for s in stacks]
-        n_frames = MAX_FRAMES
-        print(f"[TEST] フレームを {n_frames} に制限")
+    if USE_SLOPE_CORRECTION:
+        # ===== slope補正モード: output_phase/ のフル位相画像から直接構築 =====
+        tl_dir = channels_dir.parent
+        phase_paths = sorted(tl_dir.glob(f"img_*_ph_{APPLY_TL_Z_INDEX:03d}_phase.tif"))
+        if not phase_paths:
+            print(f"ERROR: 位相画像が見つかりません: {tl_dir}")
+            sys.exit(1)
+        rois_path_sc = Path(CHANNEL_ROIS_JSON)
+        if not rois_path_sc.exists():
+            print(f"ERROR: CHANNEL_ROIS_JSON が見つかりません: {rois_path_sc}")
+            sys.exit(1)
+        with open(rois_path_sc, encoding="utf-8") as f:
+            rois_sc = json.load(f)
+        n_channels = len(rois_sc)
+        if MAX_FRAMES is not None:
+            phase_paths = phase_paths[:MAX_FRAMES]
+        n_frames = len(phase_paths)
+        print(f"チャネル数: {n_channels}  フレーム数: {n_frames}  [slope補正モード / TILT_CROP_H={TILT_CROP_H}]")
+        stacks = [np.zeros((n_frames, roi["crop_w"], ECC_CROP_H), dtype=np.float64) for roi in rois_sc]
+        for t, pp in enumerate(tqdm(phase_paths, desc="slope-correct")):
+            full_img = tifffile.imread(str(pp)).astype(np.float64)
+            for ch, roi in enumerate(rois_sc):
+                stacks[ch][t] = _tilt_correct(full_img, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H)
+    else:
+        # ===== 既存モード: channel stacks（bg_corr済み等）から読む =====
+        stacks_paths = sorted(channels_dir.glob(CHANNEL_PATTERN))
+        if not stacks_paths:
+            print(f"ERROR: {CHANNEL_PATTERN} に合うファイルが見つかりません: {channels_dir}")
+            sys.exit(1)
+        print(f"チャネル数: {len(stacks_paths)}")
+        for p in stacks_paths:
+            print(f"  {p.name}")
+        stacks = []
+        for p in stacks_paths:
+            arr = tifffile.imread(str(p))
+            if arr.ndim == 2:
+                arr = arr[np.newaxis, ...]
+            stacks.append(arr.astype(np.float64))
+            print(f"  {p.name}: shape={arr.shape}")
+        n_frames = stacks[0].shape[0]
+        n_channels = len(stacks)
+        if MAX_FRAMES is not None and MAX_FRAMES < n_frames:
+            stacks = [s[:MAX_FRAMES] for s in stacks]
+            n_frames = MAX_FRAMES
+            print(f"[TEST] フレームを {n_frames} に制限")
     print(f"\nフレーム数: {n_frames}")
     print(f"アライメント手法: {ALIGNMENT_METHOD}")
     print(f"外れ値MAD閾値: {OUTLIER_MAD_THRESH}")

@@ -1,0 +1,13 @@
+{
+  "_note": "260327 09:00 JST スケジュール実行用 / 再構成済みPos1のchannel_crop以降",
+  "step_grid_reconstruction": false,
+  "step_timelapse_reconstruction": false,
+  "step_calibrate_grid": false,
+  "step_channel_crop": true,
+  "step_gaussian_gradient": false,
+  "step_gaussian_backsub": true,
+  "step_align_simple": false,
+  "step_compute_shifts": true,
+  "step_grid_subtract": true,
+  "pos_filter": ["Pos1"]
+}

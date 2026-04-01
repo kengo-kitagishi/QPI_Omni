@@ -37,7 +37,7 @@ sys.path.insert(0, str(_script_dir))
 TIMELAPSE_DIRS = [
     r"C:\ph",
 ]
-GRID_DIR = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
+GRID_DIR = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
 
 
 # ============================================================
@@ -74,7 +74,7 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 # ============================================================
 # Pos 番号によるクロップ切り替え（grid / timelapse 共通）
 # ============================================================
-POS_SPLIT   = 31
+POS_SPLIT   = 33
 CROP_BEFORE = (0, 2048, 400, 2448)   # pos_number < POS_SPLIT → 右側 (400:2448)  センサー幅2448
 CROP_AFTER  = (0, 2048,   0, 2048)   # pos_number >= POS_SPLIT → 左側 (0:2048)
 # ※ BG（Pos0）はターゲットのpos_numberで決まるcropを使う（常に右ではない）
@@ -119,6 +119,7 @@ CROP_MIN_DIST             = 35
 CROP_PROMINENCE           = 0.3
 CROP_X_START              = 40
 CROP_X_END                = 480
+CROP_USE_GRID_ROIS        = True   # True → grid base Pos の channel_rois.json をコピーして使う（再detect しない）
 
 # ============================================================
 # gaussian_backsub パラメータ
@@ -147,7 +148,7 @@ ALIGN_VMAX                =  1.7
 SHIFTS_CHANNEL_PATTERN    = "channel_*_bg_corr.tif"
 SHIFTS_USE_GRID_REFERENCE = True     # False → タイムラプスの SHIFTS_REFERENCE_FRAME 基準
 SHIFTS_REFERENCE_FRAME    = 150      # USE_GRID_REFERENCE=False 時のみ使用
-SHIFTS_GRID_Z_INDEX       = 2        # グリッド基準画像の z 番号
+SHIFTS_GRID_Z_INDEX       = 10       # グリッド基準画像の z 番号
 SHIFTS_METHOD             = 'ecc'
 SHIFTS_VMIN               = -5.0
 SHIFTS_VMAX               =  2.0
@@ -177,11 +178,16 @@ SHIFTS_FIRST_PASS_HALF     = True   # True で1回目ECCもhalf cropで実施
 SHIFTS_SECOND_PASS_HALF    = None
 SHIFTS_USE_THIRD_PASS_ECC  = True   # True で3段階ECC有効化（pass2結果から最近傍grid再選択）
 SHIFTS_APPLY_SHIFT_AND_CROP      = False   # True で crop_subtracted を出力（通常不要）
+# True にすると STEP_GAUSSIAN_BACKSUB 不要。output_phase/ のフル位相画像から
+# 270px wide crop → slope+intercept 補正 → 中央 80px → ECC を行う。
+SHIFTS_USE_SLOPE_CORRECTION      = False
+SHIFTS_TILT_CROP_H               = 270
+SHIFTS_ECC_CROP_H                = 160     # ECC に使う crop の X 幅
 
 # ============================================================
 # grid_subtract パラメータ
 # ============================================================
-GSUB_Z_INDEX              = 9        # グリッド画像のz番号（SHIFTS_GRID_Z_INDEX と同じでよい）
+GSUB_Z_INDEX              = 10       # グリッド画像のz番号（SHIFTS_GRID_Z_INDEX と同じでよい）
 GSUB_X_STEP               = 0.1     # μm
 GSUB_Y_STEP               = 0.1     # μm
 GSUB_SENSOR_PIXEL_SIZE    = 3.45e-6
@@ -193,8 +199,9 @@ GSUB_SHIFT_SIGN_Y              = 1
 GSUB_APPLY_INVERSE_SHIFT       = False
 GSUB_APPLY_BACKSUB_TO_GRID     = True   # グリッド画像に backsub を適用
 GSUB_APPLY_SUBPIXEL_CORRECTION = True   # サブピクセル残差 warp をフレームに適用
-GSUB_OUTPUT_CROP_H             = 440    # 出力クロップ長（None → channel_rois.json の crop_h をそのまま使用）
+GSUB_OUTPUT_CROP_H             = 240    # 出力クロップ長（None → channel_rois.json の crop_h をそのまま使用）
 GSUB_OUTPUT_DIR                = None   # 出力ディレクトリ（None → channels_dir/grid_subtracted/）
+GSUB_OUTPUT_SAVE_FULL_FRAME    = True   # True → crop前のフルフレームも full_frame_grid_sub.tif として保存
 # ============================================================
 
 # ============================================================
@@ -227,6 +234,33 @@ if _cfg_path:
     print(f"Loading analysis_config: {_cfg_path}")
     _apply_config(_cfg_path)
 # ============================================================
+
+
+def _save_run_params():
+    """実行時の全パラメータを run_logs/run_params_YYYYMMDD_HHMMSS.json に保存する。"""
+    import datetime
+    g = globals()
+    params = {}
+    for k, v in g.items():
+        if not k.isupper():
+            continue
+        if isinstance(v, (str, int, float, bool, list, dict, type(None))):
+            params[k] = v
+        elif isinstance(v, Path):
+            params[k] = str(v)
+        elif isinstance(v, np.ndarray):
+            params[k] = v.tolist()
+    snap = {
+        "timestamp": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "config_file": _cfg_path,
+        "params": params,
+    }
+    out_dir = _script_dir / "run_logs"
+    out_dir.mkdir(exist_ok=True)
+    fname = "run_params_" + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + ".json"
+    out_path = out_dir / fname
+    out_path.write_text(json.dumps(snap, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"[run_params] saved: {out_path}")
 
 
 # -----------------------------------------------------------
@@ -579,7 +613,7 @@ def step_gaussian_gradient(phase_dir: Path) -> str:
 # ===========================================================
 # Step 2: channel_crop
 # ===========================================================
-def step_channel_crop(phase_dir: Path, img_pattern: str = None) -> bool:
+def step_channel_crop(phase_dir: Path, base_label: str = "Pos1", img_pattern: str = None) -> bool:
     from channel_crop import run_detect, run_apply
 
     img_pattern = img_pattern or CROP_IMG_PATTERN
@@ -600,16 +634,37 @@ def step_channel_crop(phase_dir: Path, img_pattern: str = None) -> bool:
         roi_path.unlink()
 
     rois = None
-    if CROP_DETECT and not roi_path.exists():
-        print(f"  [detect] {img_files[0].name}")
-        rois = run_detect(
-            img_files[0], CROP_W, CROP_H, out_dir,
-            min_dist=CROP_MIN_DIST, prominence_sigma=CROP_PROMINENCE,
-            x_start=CROP_X_START, x_end=CROP_X_END,
-        )
-    elif not roi_path.exists():
-        print(f"  [ERROR] channel_rois.json なし・detect もスキップ")
-        return False
+    if not roi_path.exists():
+        if CROP_USE_GRID_ROIS and GRID_DIR:
+            import shutil as _shutil
+            grid_rois_path = Path(GRID_DIR) / f"{base_label}_x+0_y+0" / "output_phase" / "channels" / "channel_rois.json"
+            if not grid_rois_path.exists():
+                # grid base Pos でまだ detect していない → grid 画像から detect して保存
+                grid_img = Path(GRID_DIR) / f"{base_label}_x+0_y+0" / "output_phase" / f"img_000000000_ph_{SHIFTS_GRID_Z_INDEX:03d}_phase.tif"
+                if grid_img.exists():
+                    grid_rois_path.parent.mkdir(exist_ok=True)
+                    print(f"  [grid detect] {grid_img}")
+                    run_detect(
+                        grid_img, CROP_W, CROP_H, grid_rois_path.parent,
+                        min_dist=CROP_MIN_DIST, prominence_sigma=CROP_PROMINENCE,
+                        x_start=CROP_X_START, x_end=CROP_X_END,
+                    )
+                else:
+                    print(f"  [WARN] grid 基準画像なし: {grid_img} → timelapse から detect")
+            if grid_rois_path.exists():
+                _shutil.copy2(grid_rois_path, roi_path)
+                print(f"  [grid rois] コピー: {grid_rois_path.name} → {roi_path}")
+        if not roi_path.exists():
+            if CROP_DETECT:
+                print(f"  [detect] {img_files[0].name}")
+                rois = run_detect(
+                    img_files[0], CROP_W, CROP_H, out_dir,
+                    min_dist=CROP_MIN_DIST, prominence_sigma=CROP_PROMINENCE,
+                    x_start=CROP_X_START, x_end=CROP_X_END,
+                )
+            else:
+                print(f"  [ERROR] channel_rois.json なし・detect もスキップ")
+                return False
 
     if CROP_APPLY:
         if rois is None:
@@ -781,6 +836,9 @@ def step_compute_shifts(channels_dir: Path, base_label: str):
     cps.RECONSTRUCTED_DIM              = GSUB_RECONSTRUCTED_DIM
     cps.MAX_FRAMES                     = TEST_N_FRAMES
     cps.APPLY_SHIFT_AND_CROP           = SHIFTS_APPLY_SHIFT_AND_CROP
+    cps.USE_SLOPE_CORRECTION           = SHIFTS_USE_SLOPE_CORRECTION
+    cps.TILT_CROP_H                    = SHIFTS_TILT_CROP_H
+    cps.ECC_CROP_H                     = SHIFTS_ECC_CROP_H
     cps.main()
 
 
@@ -818,6 +876,7 @@ def step_grid_subtract(channels_dir: Path, base_label: str):
     gs.APPLY_SUBPIXEL_CORRECTION = GSUB_APPLY_SUBPIXEL_CORRECTION
     gs.OUTPUT_CROP_H             = GSUB_OUTPUT_CROP_H
     gs.OUTPUT_DIR                = GSUB_OUTPUT_DIR
+    gs.OUTPUT_SAVE_FULL_FRAME    = GSUB_OUTPUT_SAVE_FULL_FRAME
     gs.GRID_CALIBRATION_JSON     = GRID_CALIBRATION_JSON
     gs.MAX_FRAMES                = TEST_N_FRAMES
     gs.main()
@@ -827,6 +886,7 @@ def step_grid_subtract(channels_dir: Path, base_label: str):
 # メイン
 # ===========================================================
 def main():
+    _save_run_params()
     errors = []
 
     # ── Step -1: calibrate_grid_positions ────────────────────
@@ -895,7 +955,7 @@ def main():
             # Step 2: channel_crop
             if STEP_CHANNEL_CROP:
                 try:
-                    ok = step_channel_crop(phase_dir, img_pattern=crop_pattern)
+                    ok = step_channel_crop(phase_dir, base_label=base_label, img_pattern=crop_pattern)
                     if not ok:
                         errors.append(f"{pos_dir.name}: channel_crop failed")
                         continue
