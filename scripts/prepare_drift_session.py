@@ -30,7 +30,7 @@ sys.path.insert(0, str(_script_dir))
 # ============================================================
 
 # タイムラプスで使う .pos ファイル（グリッドなし、実際に撮影するポジションリスト）
-POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\260331\timelapse.pos"
+POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\260331\_per_pos_ecc_corrected.pos"
 
 # グリッド撮影ディレクトリ（小規模グリッドでよい）
 GRID_DIR         = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
@@ -44,14 +44,14 @@ CHANNEL_ROIS_JSON = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1\Pos1_x
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # タイムラプス画像の保存先（MM1.4 で撮影した画像の保存先）
-SAVE_DIR         = r"C:\ph_260331"
+SAVE_DIR         = r"D:\AquisitionData\Kitagishi\260403\ph_260403"
 
 # .pos ファイル内の各 Pos のインデックス（0始まり）
 REF_POS_INDEX    = 1   # ドリフト推定に使う Pos（サンプルがいる Pos）
 BG_POS_INDEX     = 0   # BG Pos（Pos0: 細胞なし、位相補正用）
 
 # MM1.4 撮影パラメータ
-N_TIMEPOINTS     = 2304     # 260321実験
+N_TIMEPOINTS     = 2592     # 260403実験
 INTERVAL_SEC     = 300       # タイムポイント間隔 [秒]（5分）
 EXPOSURE_MS      = 60.0      # カメラ露光時間 [ms]
 SETTLE_MS        = 150      # ステージ移動後の待機時間 [ms]

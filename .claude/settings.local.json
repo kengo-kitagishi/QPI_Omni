@@ -72,7 +72,22 @@
       "Bash(dir \"E:\\\\Acuisition\\\\kitagishi\\\\260331\\\\grid_2pergluc_60ms_1\\\\Pos1_x+0_y+0\")",
       "Bash(dir \"E:\\\\Acuisition\\\\kitagishi\\\\260331\\\\grid_2pergluc_60ms_1\" /b)",
       "Bash(C:UsersQPIAppDataLocalProgramsPythonPython311python.exe scriptspipeline_full.py)",
-      "Bash(\"/c/Users/QPI/AppData/Local/Programs/Python/Python311/python.exe\" scripts/pipeline_full.py)"
+      "Bash(\"/c/Users/QPI/AppData/Local/Programs/Python/Python311/python.exe\" scripts/pipeline_full.py)",
+      "Bash(find /c/Users/QPI/Documents/QPI_Omni -type f \\\\\\(-name *.pos -o -name *grid*calibration*.json \\\\\\))",
+      "Bash(\"C:/Users/QPI/AppData/Local/Programs/Python/Python311/python.exe\" batch_reconstruction_grid.py)",
+      "Bash(\"C:/Users/QPI/AppData/Local/Programs/Python/Python311/python.exe\" channel_crop.py --dir \"E:/Acuisition/kitagishi/260331/grid_2pergluc_60ms_1/Pos1_x-0_y-0/output_phase\" --detect --crop-h 120)",
+      "Bash(\"C:/Users/QPI/AppData/Local/Programs/Python/Python311/python.exe\" channel_crop.py --dir \"E:/Acuisition/kitagishi/260331/grid_2pergluc_60ms_1/Pos1_x-0_y-0/output_phase\" --detect --crop-h 120 --pattern \"img_*_ph_010_phase.tif\")",
+      "Bash(\"C:/Users/QPI/AppData/Local/Programs/Python/Python311/python.exe\" prepare_drift_session.py)",
+      "Bash(\"C:/Users/QPI/AppData/Local/Programs/Python/Python311/python.exe\" analyze_stage_repeatability.py --test-dir \"C:/stage_repeatability_test\" --config \"C:/Users/QPI/Documents/QPI_Omni/drift_session/drift_config.json\" --n-reps 20)",
+      "Bash(\"C:\\\\Users\\\\QPI\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe\" scripts/prep_channel_rois.py)",
+      "Bash(sed 's/_x.*//')",
+      "Read(//c/Temp/grid_ecc_snaps/**)",
+      "Bash(C:\\\\Users\\\\QPI\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python311\\\\python.exe:*)",
+      "Bash(/c/Users/QPI/AppData/Local/Programs/Python/Python311/python.exe:*)",
+      "Bash(\"/c/Users/QPI/AppData/Local/Programs/Python/Python311/python.exe\" scripts/analyze_tilt_correct_precision.py)",
+      "Bash(\"/c/Users/QPI/AppData/Local/Programs/Python/Python311/python.exe\" scripts/diagnose_tilt_correct_ecc.py)",
+      "Bash(\"C:/Temp/calib_all_log.txt\")",
+      "Bash(xargs -I{} basename {})"
     ]
   }
 }

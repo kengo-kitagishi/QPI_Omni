@@ -35,15 +35,15 @@ if str(_SCRIPT_DIR) not in sys.path:
 # ===========================================================================
 
 DO_RECONSTRUCTION = True
-GRID_DIR    = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"   # Pos{N}_x+0_y+0 を含む親ディレクトリ
-FOCUS_DIR   = r"D:\AquisitionData\Kitagishi\260321\focus_test_4"  # Pos0..PosN を含む親ディレクトリ
+GRID_DIR    = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"   # Pos{N}_x+0_y+0 を含む親ディレクトリ
+FOCUS_DIR   = r"E:\Acuisition\kitagishi\260331\focus_check_3"  # Pos0..PosN を含む親ディレクトリ
 GRID_SUFFIX = "x+0_y+0"           # 背景参照グリッド位置のサフィックス
 
-POS_LABELS  = ["Pos1", "Pos2"]     # None=自動検出, 例: ["Pos1", "Pos2"]（Pos0=BG は自動除外）
+POS_LABELS  = None     # None=自動検出, 例: ["Pos1", "Pos2"]（Pos0=BG は自動除外）
 ALIGN_Z     = 0                    # ECC アライメントに使う z インデックス
 
 CROP_OUTPUT = False                # True=channel ROI でクロップ, False=全体画像
-OUTPUT_DIR  = r"D:\AquisitionData\Kitagishi\260321\focus_check_subtracted_4"
+OUTPUT_DIR  = r"E:\Acuisition\kitagishi\260331\focus_check_subtracted_3"
 
 N_WORKERS   = 4                    # 再構成時の並列数（DO_RECONSTRUCTION=True 時のみ）
 
@@ -58,15 +58,20 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 #   小Pos番号（< POS_SPLIT）= 右チャンネル → col 400:2448
 #   大Pos番号（>= POS_SPLIT）= 左チャンネル → col 0:2048
 # [!] データセットによって左右が入れ替わる場合あり。必ず実データで確認すること。
-POS_SPLIT    = 31
+POS_SPLIT    = 33
 CROP_BEFORE  = (0, 2048, 400, 2448)   # pos < POS_SPLIT  → 右チャンネル（col 400-2448）
 CROP_AFTER   = (0, 2048,   0, 2048)   # pos >= POS_SPLIT → 左チャンネル（col 0-2048）
 
-FORCE_RECONSTRUCT = True             # True: 既存 output_phase を上書き再構成
+FORCE_RECONSTRUCT = False            # True: 既存 output_phase を上書き再構成
 
 # ECC 正規化範囲
 ECC_VMIN = -5.0
 ECC_VMAX =  2.0
+
+# tilt 補正（compute_pos_shifts.py と同一設定）
+USE_SLOPE_CORRECTION = True   # True: _tilt_correct を使う（backsub 不要）
+TILT_CROP_H = 270             # 傾き補正用横幅 [px]
+ECC_CROP_H  = 80              # ECC・フォーカスメトリクス用 crop 幅 [px]
 
 # ===========================================================================
 
@@ -272,7 +277,8 @@ def process_pos(pos_label: str,
                 grid_dir: Path,
                 align_z: int,
                 crop_output: bool,
-                output_dir: Path):
+                output_dir: Path,
+                pos_number: int = 1):
     """1 Pos の ECC アライメント + 引き算処理。
 
     Returns
@@ -337,20 +343,17 @@ def process_pos(pos_label: str,
 
     warp_matrix = np.eye(2, 3, dtype=np.float32)
     if rois:
-        # チャンネルごとに ROI クロップ → backsub → ECC → MAD 外れ値除去
-        from compute_pos_shifts import compute_backsub_offset, remove_outliers_mad
-        from channel_crop import extract_rect_roi
+        # チャンネルごとに tilt_correct → ECC → MAD 外れ値除去（compute_pos_shifts と同一パターン）
+        from compute_pos_shifts import _tilt_correct, remove_outliers_mad
 
+        fit_right = pos_number >= POS_SPLIT
         tx_list, ty_list, ch_names = [], [], []
         for ch_idx, roi_info in enumerate(rois):
             cy     = roi_info["cy"]
             cx     = roi_info["cx"]
             crop_w = roi_info.get("crop_w", 256)
-            crop_h = roi_info.get("crop_h", 256)
-            ref_crop = extract_rect_roi(ref_img, cy, cx, crop_w, crop_h)
-            src_crop = extract_rect_roi(src_img, cy, cx, crop_w, crop_h)
-            ref_crop = ref_crop + compute_backsub_offset(ref_crop)
-            src_crop = src_crop + compute_backsub_offset(src_crop)
+            ref_crop = _tilt_correct(ref_img.astype(np.float64), cy, cx, crop_w, ECC_CROP_H, fit_right)
+            src_crop = _tilt_correct(src_img.astype(np.float64), cy, cx, crop_w, ECC_CROP_H, fit_right)
             warp_ch, corr_ch = compute_ecc_warp(ref_crop, src_crop)
             if warp_ch is not None:
                 tx_list.append(warp_ch[0, 2])
@@ -364,8 +367,8 @@ def process_pos(pos_label: str,
         else:
             valid_mask = np.ones(len(tx_list), dtype=bool)
             if len(tx_list) >= 3:
-                out_x = remove_outliers_mad(tx_list, 2.5)
-                out_y = remove_outliers_mad(ty_list, 2.5)
+                out_x = remove_outliers_mad(tx_list, 5.0)
+                out_y = remove_outliers_mad(ty_list, 5.0)
                 valid_mask = ~(out_x | out_y)
                 removed = [ch_names[i] for i, v in enumerate(valid_mask) if not v]
                 if removed:
@@ -387,10 +390,7 @@ def process_pos(pos_label: str,
         else:
             print("  [!] Full-frame ECC failed; using identity")
 
-    rois_for_focus = rois  # フォーカス評価用に保持（crop_output=False でも使う）
-
-    if not crop_output:
-        rois = None
+    rois_for_focus = rois  # フォーカス評価用に保持
 
     # 出力ディレクトリ
     pos_out_dir = output_dir / pos_label
@@ -408,19 +408,19 @@ def process_pos(pos_label: str,
         diff = warped_focus - grid_frame
         diff_frames.append(diff)
 
-        if rois:
-            from channel_crop import extract_rect_roi
-            for ch_idx, roi_info in enumerate(rois):
+        # 全体フレームを保存
+        tifffile.imwrite(str(pos_out_dir / f"z{z:03d}.tif"), diff.astype(np.float32))
+
+        # channel ROI crop を保存（tilt 補正済み crop_w × TILT_CROP_H = 40 × 270）
+        if rois_for_focus:
+            for ch_idx, roi_info in enumerate(rois_for_focus):
                 cy     = roi_info["cy"]
                 cx     = roi_info["cx"]
                 crop_w = roi_info.get("crop_w", 256)
-                crop_h = roi_info.get("crop_h", 256)
-                cropped = extract_rect_roi(diff, cy, cx, crop_w, crop_h)
-                ch_dir = pos_out_dir / f"ch{ch_idx}"
+                cropped = _tilt_correct(diff.astype(np.float64), cy, cx, crop_w, TILT_CROP_H, fit_right)
+                ch_dir = pos_out_dir / f"ch{ch_idx:02d}"
                 ch_dir.mkdir(exist_ok=True)
                 tifffile.imwrite(str(ch_dir / f"z{z:03d}.tif"), cropped.astype(np.float32))
-        else:
-            tifffile.imwrite(str(pos_out_dir / f"z{z:03d}.tif"), diff.astype(np.float32))
 
     return z_list, diff_frames, rois_for_focus
 
@@ -486,7 +486,7 @@ def _best_z_from_metrics(z_list, lap_vars, stds):
 
 
 def find_best_focus_z(z_list: list, diff_frames: list, pos_label: str,
-                      rois: list = None) -> dict:
+                      rois: list = None, pos_number: int = 1) -> dict:
     """background引き算済み位相フレームから最良フォーカスzをチャンネル別に検出する。
 
     rois が指定された場合はチャンネルROIごとに評価し、指定がなければ全体フレームで評価する。
@@ -502,18 +502,19 @@ def find_best_focus_z(z_list: list, diff_frames: list, pos_label: str,
     except ImportError:
         save_figure = None
 
-    from channel_crop import extract_rect_roi
+    from compute_pos_shifts import _tilt_correct
 
-    # チャンネルごとのフレームリストを作成
+    # チャンネルごとのフレームリストを作成（compute_pos_shifts と同一パターン）
     if rois:
+        fit_right = pos_number >= POS_SPLIT
         channels = {}
         for ch_idx, roi_info in enumerate(rois):
             cy     = roi_info["cy"]
             cx     = roi_info["cx"]
             crop_w = roi_info.get("crop_w", 256)
-            crop_h = roi_info.get("crop_h", 256)
             channels[f"ch{ch_idx}"] = [
-                extract_rect_roi(f, cy, cx, crop_w, crop_h) for f in diff_frames
+                _tilt_correct(f.astype(np.float64), cy, cx, crop_w, ECC_CROP_H, fit_right)
+                for f in diff_frames
             ]
     else:
         channels = {"full": diff_frames}
@@ -644,13 +645,16 @@ def main():
     print("\n=== 引き算フェーズ ===")
     for pos_label in pos_labels:
         print(f"\n[{pos_label}]")
-        result = process_pos(pos_label, focus_dir, grid_dir, ALIGN_Z, CROP_OUTPUT, output_dir)
+        pos_number = int(re.search(r'\d+', pos_label).group())
+        result = process_pos(pos_label, focus_dir, grid_dir, ALIGN_Z, CROP_OUTPUT, output_dir,
+                             pos_number=pos_number)
         if result is None:
             continue
         z_list, diff_frames, rois = result
 
         # フォーカス検出（全 Pos、チャンネル別）
-        best_z_per_ch = find_best_focus_z(z_list, diff_frames, pos_label, rois=rois)
+        best_z_per_ch = find_best_focus_z(z_list, diff_frames, pos_label, rois=rois,
+                                          pos_number=pos_number)
 
         # モンタージュは先頭 Pos のみ
         if pos_label == pos_labels[0]:

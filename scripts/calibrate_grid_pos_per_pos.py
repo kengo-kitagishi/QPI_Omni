@@ -47,7 +47,7 @@ from pathlib import Path
 # ============================================================
 
 # 出力先ディレクトリ
-BASE_DIR = r"D:\AquisitionData\Kitagishi\260403"
+BASE_DIR = r"D:\AquisitionData\Kitagishi\260331"
 
 # 補正する timelapse.pos（base positions のみ含む）
 TIMELAPSE_POS = r"D:\AquisitionData\Kitagishi\260331\timelapse.pos"
@@ -56,7 +56,7 @@ TIMELAPSE_POS = r"D:\AquisitionData\Kitagishi\260331\timelapse.pos"
 # grid データ（Pos1_x+0_y+0）のとき CALIB_SUFFIX = "x+0_y+0"
 # focus/timelapse データ（Pos1）のとき CALIB_SUFFIX = ""
 CALIB_SUFFIX   = ""
-CALIB_GRID_DIR = r"E:\Acuisition\kitagishi\260331\_for_focus_1"
+CALIB_GRID_DIR = r"E:\Acuisition\kitagishi\260331\focus_check_3"
 
 # Day-1 固定参照 grid フォルダ
 # PosN_x+0_y+0/output_phase/*_phase.tif が再構成済みであること
@@ -64,16 +64,12 @@ REF_GRID_DIR   = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
 
 # z インデックス（img_000000000_ph_{Z:03d}_phase.tif）
 REF_Z_INDEX   = 10   # REF 側（再構成済みファイルに合わせる）
-CALIB_Z_INDEX = 0    # CALIB 側（focus 単一フレームは ph_000）
+CALIB_Z_INDEX = 10   # CALIB 側（z=0=index10 の in-focus フレーム）
 
 # CALIB_GRID の BG base label（再構成時の BG 差し引きに使う Pos0_x+0_y+0）
 CALIB_BG_BASE_LABEL = "Pos0"
 
-# channel_rois.json（Day-1 固定、全 PosN 共通）
-CHANNEL_ROIS_JSON = (
-    r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
-    r"\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
-)
+# channel_rois.json が per-pos に存在しない場合は channel_crop.py --detect を自動実行する
 
 # drift_config.json（光学パラメータ・符号・ECC vmin/vmax・crop 設定）
 DRIFT_CONFIG = r"C:\Users\QPI\Documents\QPI_Omni\drift_session\drift_config.json"
@@ -117,16 +113,20 @@ def extract_rect_roi(img, cy, cx, crop_w, crop_h):
     return crop
 
 
-def _tilt_correct(img_f64, cy, cx, crop_w, crop_h_out):
+def _tilt_correct(img_f64, cy, cx, crop_w, crop_h_out, fit_right: bool = False):
     """
-    compute_pos_shifts.py / calibrate_grid_positions.py と同一実装。
-    big crop (TILT_CROP_H cols) → 左1/3 slope+intercept fit → 補正 → 中央 crop_h_out cols。
+    compute_pos_shifts.py と同一実装。
+    big crop (TILT_CROP_H cols) → 背景側1/3 slope+intercept fit → 補正 → 中央 crop_h_out cols。
+    fit_right=False: 左1/3（Pos_num < POS_SPLIT）、True: 右1/3（Pos_num >= POS_SPLIT）。
     """
     big   = extract_rect_roi(img_f64, cy, cx, crop_w, TILT_CROP_H).astype(np.float64)
     x     = np.arange(TILT_CROP_H, dtype=np.float64)
     prof  = big.mean(axis=0)
     fit_n = max(1, TILT_CROP_H // 3)
-    a, b  = np.polyfit(x[:fit_n], prof[:fit_n], 1)
+    if fit_right:
+        a, b = np.polyfit(x[-fit_n:], prof[-fit_n:], 1)
+    else:
+        a, b = np.polyfit(x[:fit_n], prof[:fit_n], 1)
     corrected = big - (a * x + b)[np.newaxis, :]
     start = (TILT_CROP_H - crop_h_out) // 2
     return corrected[:, start : start + crop_h_out]
@@ -163,12 +163,12 @@ def _remove_outliers_mad(values, thresh):
     return np.abs(arr - np.median(arr)) > thresh * md
 
 
-def get_crops_u8(img_f64, rois, n_channels, vmin, vmax):
+def get_crops_u8(img_f64, rois, n_channels, vmin, vmax, fit_right: bool = False):
     """全チャネルの tilt 補正済み uint8 crop を返す。"""
     return [
         to_uint8_fixed(
             _tilt_correct(img_f64, rois[ch]["cy"], rois[ch]["cx"],
-                          rois[ch]["crop_w"], ECC_CROP_H),
+                          rois[ch]["crop_w"], ECC_CROP_H, fit_right),
             vmin, vmax,
         )
         for ch in range(n_channels)
@@ -277,14 +277,14 @@ def ensure_center_reconstructed(calib_grid_dir: str, label: str, z_index: int,
 # 中心補正 ECC
 # ============================================================
 
-def center_ecc(ref_img, calib_img, rois, n_channels, vmin, vmax):
+def center_ecc(ref_img, calib_img, rois, n_channels, vmin, vmax, fit_right: bool = False):
     """
     ECC → MAD 外れ値除去 → 平均。
     Returns: (tx_avg, ty_avg, per_ch_list) | (None, None, per_ch_list) 全失敗時。
     tx: 画像 X (col) [px], ty: 画像 Y (row) [px]
     """
-    ref_crops   = get_crops_u8(ref_img,   rois, n_channels, vmin, vmax)
-    calib_crops = get_crops_u8(calib_img, rois, n_channels, vmin, vmax)
+    ref_crops   = get_crops_u8(ref_img,   rois, n_channels, vmin, vmax, fit_right)
+    calib_crops = get_crops_u8(calib_img, rois, n_channels, vmin, vmax, fit_right)
 
     tx_list, ty_list, corr_list = [], [], []
     per_ch = []
@@ -335,6 +335,24 @@ def center_ecc(ref_img, calib_img, rois, n_channels, vmin, vmax):
 # メイン
 # ============================================================
 
+def _run_channel_detect(pos_dir: Path):
+    """channel_crop.py --detect を output_phase/ の phase 画像に対して実行する。
+    out_dir = img_dir / "channels" なので --dir に output_phase/ を渡すことで
+    output_phase/channels/channel_rois.json に出力される。
+    """
+    import subprocess
+    script = Path(__file__).resolve().parent / "channel_crop.py"
+    output_phase_dir = pos_dir / "output_phase"
+    cmd = [sys.executable, str(script),
+           "--dir", str(output_phase_dir),
+           "--pattern", "img_*_ph_000_phase.tif",
+           "--detect"]
+    print(f"  実行: {' '.join(cmd)}")
+    result = subprocess.run(cmd, capture_output=False)
+    if result.returncode != 0:
+        print(f"  [!] channel_crop.py --detect が失敗 (returncode={result.returncode})")
+
+
 def main():
     cfg            = load_config(DRIFT_CONFIG)
     vmin           = cfg.get("ecc_vmin", -5.0)
@@ -342,15 +360,9 @@ def main():
     pixel_scale_um = cfg["pixel_scale_um"]
     sx_sign        = cfg.get("shift_sign_x", 1)
     sy_sign        = cfg.get("shift_sign_y", 1)
+    pos_split      = cfg.get("pos_split", 33)
 
-    rois_path = Path(CHANNEL_ROIS_JSON)
-    if not rois_path.exists():
-        print(f"ERROR: channel_rois.json が見つかりません: {rois_path}")
-        sys.exit(1)
-    with open(rois_path, encoding="utf-8") as f:
-        rois = json.load(f)
-    n_channels = len(rois)
-    print(f"channel_rois: {n_channels} ch  vmin={vmin}  vmax={vmax}")
+    print(f"vmin={vmin}  vmax={vmax}")
     print(f"pixel_scale: {pixel_scale_um:.5f} μm/px  sx_sign={sx_sign}  sy_sign={sy_sign}")
 
     with open(TIMELAPSE_POS, "r") as f:
@@ -400,7 +412,28 @@ def main():
                                  "error": str(e)})
             continue
 
-        tx_avg, ty_avg, per_ch = center_ecc(ref_img, calib_img, rois, n_channels, vmin, vmax)
+        pos_num   = int(re.match(r"Pos(\d+)", base_label).group(1))
+        fit_right = pos_num >= pos_split
+
+        # per-pos channel_rois.json を REF_GRID_DIR から読む
+        # 存在しなければ channel_crop.py --detect を自動実行して生成する
+        perpos_rois_path = (Path(REF_GRID_DIR) / ref_label
+                            / "output_phase" / "channels" / "channel_rois.json")
+        if not perpos_rois_path.exists():
+            print(f"  [channel_detect] channel_rois.json なし → 自動 detect: {ref_label}")
+            _run_channel_detect(Path(REF_GRID_DIR) / ref_label)
+        if not perpos_rois_path.exists():
+            raise FileNotFoundError(
+                f"channel_rois.json の生成に失敗しました: {perpos_rois_path}\n"
+                f"手動で実行: python scripts/channel_crop.py --dir \"{Path(REF_GRID_DIR) / ref_label}\" --detect"
+            )
+        with open(perpos_rois_path, encoding="utf-8") as f:
+            rois = json.load(f)
+        print(f"  channel_rois: {len(rois)} ch ({ref_label})")
+        n_ch = len(rois)
+
+        tx_avg, ty_avg, per_ch = center_ecc(ref_img, calib_img, rois, n_ch, vmin, vmax,
+                                            fit_right=fit_right)
 
         if tx_avg is None:
             print(f"  [中心補正] 全チャネル ECC 失敗 → スキップ")
@@ -428,7 +461,7 @@ def main():
             "drift_stage_y_um": drift_stage_y_um,
             "pos_correct_x_um": pos_correct_x_um,
             "pos_correct_y_um": pos_correct_y_um,
-            "n_channels_total": n_channels,
+            "n_channels_total": n_ch,
             "per_channel": per_ch,
         }
         correction_by_label[base_label] = correction

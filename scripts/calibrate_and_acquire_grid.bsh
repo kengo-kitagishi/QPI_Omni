@@ -21,7 +21,7 @@
 // Settings -- edit here for each experiment
 // ============================================================
 TIMELAPSE_POS   = "D:\\AquisitionData\\Kitagishi\\260331\\timelapse.pos";
-CALIB_GRID_DIR  = "D:\\AquisitionData\\Kitagishi\\260331\\grid_0p00525pergluc_60ms_1";
+CALIB_GRID_DIR  = "C:\\grid_0pergluc_60ms_1";
 ECC_SNAP_DIR    = "C:\\Temp\\grid_ecc_snaps";
 
 PYTHON_EXE      = "C:\\Users\\QPI\\AppData\\Local\\Programs\\Python\\Python311\\python.exe";
@@ -39,8 +39,8 @@ N_Z             = 19;       // number of z planes
 Z_START_UM      = -4.0;     // TIPFSOffset offset for z-index 0 [um]
 Z_STEP_UM       = 0.4;      // z step [um]
 
-XY_SETTLE_MS    = 800;
-Z_SETTLE_MS     = 100;
+XY_SETTLE_MS    = 400;
+Z_SETTLE_MS     = 50;
 
 BG_LABELS       = new String[]{"Pos0"};
 BG_SOURCES      = new String[]{"Pos1"};
