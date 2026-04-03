@@ -33,11 +33,11 @@ from tqdm import tqdm
 # ============================================================
 # 設定パラメータ
 # ============================================================
-GRID_DIR          = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
+GRID_DIR          = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
 BASE_LABEL        = "Pos1"
-GRID_Z_INDEX      = 9
+GRID_Z_INDEX      = 10
 
-CHANNEL_ROIS_JSON = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
+CHANNEL_ROIS_JSON = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
 
 # ECC 正規化範囲（compute_pos_shifts.py の VMIN/VMAX と同値にする）
 VMIN = -5.0
@@ -58,8 +58,9 @@ ORIGINAL_DIM       = 2048
 RECONSTRUCTED_DIM  = 511
 X_STEP             = 0.1       # グリッドステップ [μm]
 Y_STEP             = 0.1
-SHIFT_SIGN_X       = -1
-SHIFT_SIGN_Y       = -1
+SHIFT_SIGN_X       = 1
+SHIFT_SIGN_Y       = 1
+POS_SPLIT          = 33    # Pos < POS_SPLIT: 左1/3 fit, Pos >= POS_SPLIT: 右1/3 fit
 
 # None → GRID_DIR/grid_calibration.json
 OUTPUT_JSON = None
@@ -124,25 +125,29 @@ def extract_rect_roi(img, cy, cx, crop_w, crop_h):
     return crop
 
 
-def _tilt_correct(img_f64, cy, cx, crop_w, crop_h_out):
+def _tilt_correct(img_f64, cy, cx, crop_w, crop_h_out, fit_right: bool = False):
     """
     compute_pos_shifts.py の _tilt_correct と同じ処理。
-    big crop (TILT_CROP_H cols) → 左1/3 slope+intercept fit → 補正 → 中央 crop_h_out cols。
+    big crop (TILT_CROP_H cols) → 背景側1/3 slope+intercept fit → 補正 → 中央 crop_h_out cols。
+    fit_right=False: 左1/3（Pos < POS_SPLIT）、True: 右1/3（Pos >= POS_SPLIT）。
     """
     big   = extract_rect_roi(img_f64, cy, cx, crop_w, TILT_CROP_H).astype(np.float64)
     x     = np.arange(TILT_CROP_H, dtype=np.float64)
     prof  = big.mean(axis=0)
     fit_n = max(1, TILT_CROP_H // 3)
-    a, b  = np.polyfit(x[:fit_n], prof[:fit_n], 1)
+    if fit_right:
+        a, b = np.polyfit(x[-fit_n:], prof[-fit_n:], 1)
+    else:
+        a, b = np.polyfit(x[:fit_n], prof[:fit_n], 1)
     corrected = big - (a * x + b)[np.newaxis, :]
     start = (TILT_CROP_H - crop_h_out) // 2
     return corrected[:, start : start + crop_h_out]
 
 
-def get_crops_u8(img_f64, rois, n_channels):
+def get_crops_u8(img_f64, rois, n_channels, fit_right: bool = False):
     """1枚の画像から全チャネルの ROI crop (uint8) を返す。tilt補正後に ECC_CROP_H に中央crop。"""
     return [to_uint8(_tilt_correct(img_f64, rois[ch]["cy"], rois[ch]["cx"],
-                                   rois[ch]["crop_w"], ECC_CROP_H))
+                                   rois[ch]["crop_w"], ECC_CROP_H, fit_right=fit_right))
             for ch in range(n_channels)]
 
 
@@ -169,6 +174,12 @@ def main():
     pixel_scale_um = SENSOR_PIXEL_SIZE / MAGNIFICATION * ORIGINAL_DIM / RECONSTRUCTED_DIM * 1e6
     print(f"Pixel scale: {pixel_scale_um:.4f} μm/px")
 
+    # Pos番号に基づいて fit_right を決定（compute_pos_shifts.py と同一ロジック）
+    m_label = re.match(r"Pos(\d+)", BASE_LABEL)
+    pos_num = int(m_label.group(1)) if m_label else 1
+    fit_right = pos_num >= POS_SPLIT
+    print(f"BASE_LABEL: {BASE_LABEL}  pos_num={pos_num}  fit_right={fit_right}")
+
     # ROI 読み込み
     rois_path = Path(CHANNEL_ROIS_JSON)
     if not rois_path.exists():
@@ -194,40 +205,17 @@ def main():
         print("ERROR: grid(0,0) が見つかりません")
         sys.exit(1)
 
-    # グリッド画像キャッシュ（読み込み済み crops を保持）
-    crops_cache = {}   # (xi,yi) → list of uint8 crops
+    # (0,0) 基準画像の crops を一度読み込む
+    ref_img = load_grid_image(pos_map[(0, 0)], GRID_Z_INDEX)
+    ref_crops = get_crops_u8(ref_img, rois, n_channels, fit_right=fit_right)
+    print(f"基準画像 (0,0) 読み込み完了")
 
-    def get_or_load_crops(xi, yi):
-        if (xi, yi) not in crops_cache:
-            img = load_grid_image(pos_map[(xi, yi)], GRID_Z_INDEX)
-            crops_cache[(xi, yi)] = get_crops_u8(img, rois, n_channels)
-        return crops_cache[(xi, yi)]
-
-    # ---- BFS チェーン キャリブレーション ----
-    # calibrated: (xi,yi) → (actual_dx_px, actual_dy_px)
-    calibrated = {(0, 0): (0.0, 0.0)}
-
-    # BFS: (0,0) から Manhattan 距離の昇順に処理
-    # visited = キューに追加済みか
-    visited = {(0, 0)}
-    queue = deque()
-
-    def enqueue_neighbors(xi, yi):
-        for dxi, dyi in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-            nb = (xi + dxi, yi + dyi)
-            if nb in pos_map and nb not in visited:
-                queue.append(nb)
-                visited.add(nb)
-
-    enqueue_neighbors(0, 0)
-
-    results = {}   # (xi,yi) → result dict（最後に list 化して保存）
+    # ---- 直接比較キャリブレーション ----
+    # 各 (xi,yi) を (0,0) と直接 ECC して actual_dx/dy を求める
+    results = {}
     n_failed = 0
 
-    print("\nBFS チェーン キャリブレーション開始...")
-    pbar = tqdm(total=len(pos_map), desc="計測")
-
-    # grid(0,0) は基準なので先に登録
+    # (0,0) は基準なので先に登録
     results[(0, 0)] = {
         "xi": 0, "yi": 0,
         "actual_dx_px": 0.0,
@@ -242,118 +230,48 @@ def main():
         "mean_correlation": 1.0,
         "failed": False,
     }
-    pbar.update(1)
 
-    while queue:
-        xi, yi = queue.popleft()
+    print("\n直接比較キャリブレーション開始（各点を (0,0) と直接 ECC）...")
+    other_positions = sorted((k, v) for k, v in pos_map.items() if k != (0, 0))
 
-        # ---- 最近傍の既キャリブレーション済み 4-隣接点を探す ----
-        # BFS 順なので必ず 1 つ以上ある。複数ある場合は全部使って平均する。
-        calibrated_neighbors = []
-        for dxi, dyi in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
-            nb = (xi + dxi, yi + dyi)
-            if nb in calibrated:
-                calibrated_neighbors.append(nb)
-
-        if not calibrated_neighbors:
-            # BFS 上あり得ないが念のため
-            print(f"\n  [{xi},{yi}] キャリブレーション済み隣接点なし → スキップ")
-            n_failed += 1
-            pbar.update(1)
-            enqueue_neighbors(xi, yi)
-            continue
-
-        # ---- 対象画像の crops を取得 ----
-        try:
-            cur_crops = get_or_load_crops(xi, yi)
-        except FileNotFoundError as e:
-            print(f"\n  [{xi},{yi}] 画像なし → 名目値で代替: {e}")
-            nominal_dx = SHIFT_SIGN_Y * yi * Y_STEP / pixel_scale_um
-            nominal_dy = SHIFT_SIGN_X * xi * X_STEP / pixel_scale_um
-            # 隣接点の平均から補間（名目ステップを加算）
-            ref_xi, ref_yi = calibrated_neighbors[0]
-            ref_dx, ref_dy = calibrated[calibrated_neighbors[0]]
-            # 1 step 分の名目変位を加算
-            step_dx = SHIFT_SIGN_Y * (yi - ref_yi) * Y_STEP / pixel_scale_um
-            step_dy = SHIFT_SIGN_X * (xi - ref_xi) * X_STEP / pixel_scale_um
-            actual_dx = ref_dx + step_dx
-            actual_dy = ref_dy + step_dy
-            results[(xi, yi)] = {
-                "xi": xi, "yi": yi,
-                "actual_dx_px": actual_dx,
-                "actual_dy_px": actual_dy,
-                "nominal_dx_px": nominal_dx,
-                "nominal_dy_px": nominal_dy,
-                "error_dx_px": actual_dx - nominal_dx,
-                "error_dy_px": actual_dy - nominal_dy,
-                "ref_xi": ref_xi, "ref_yi": ref_yi,
-                "n_channels_used": 0,
-                "mean_correlation": None,
-                "failed": True,
-            }
-            calibrated[(xi, yi)] = (actual_dx, actual_dy)
-            n_failed += 1
-            pbar.update(1)
-            enqueue_neighbors(xi, yi)
-            continue
-
-        # ---- 全キャリブレーション済み隣接点との ECC を実行して平均 ----
-        dx_estimates, dy_estimates, corr_estimates = [], [], []
-        best_ref = None
-
-        for ref_nb in calibrated_neighbors:
-            ref_xi, ref_yi = ref_nb
-            ref_actual_dx, ref_actual_dy = calibrated[ref_nb]
-            try:
-                ref_crops = get_or_load_crops(ref_xi, ref_yi)
-            except FileNotFoundError:
-                continue
-
-            res = ecc_relative(ref_crops, cur_crops, n_channels)
-            if res is not None:
-                rel_dx, rel_dy, corr = res
-                dx_estimates.append(ref_actual_dx + rel_dx)
-                dy_estimates.append(ref_actual_dy + rel_dy)
-                corr_estimates.append(corr)
-                if best_ref is None:
-                    best_ref = ref_nb
-
+    for (xi, yi), pos_dir in tqdm(other_positions, desc="計測"):
         nominal_dx = SHIFT_SIGN_Y * yi * Y_STEP / pixel_scale_um
         nominal_dy = SHIFT_SIGN_X * xi * X_STEP / pixel_scale_um
 
-        if not dx_estimates:
-            # 全隣接点との ECC が失敗 → 名目値で代替
-            print(f"\n  [{xi},{yi}] 全隣接ECC失敗 → 名目値で代替")
-            ref_xi, ref_yi = calibrated_neighbors[0]
-            ref_dx, ref_dy = calibrated[(ref_xi, ref_yi)]
-            step_dx = SHIFT_SIGN_Y * (yi - ref_yi) * Y_STEP / pixel_scale_um
-            step_dy = SHIFT_SIGN_X * (xi - ref_xi) * X_STEP / pixel_scale_um
-            actual_dx = ref_dx + step_dx
-            actual_dy = ref_dy + step_dy
+        try:
+            cur_img = load_grid_image(pos_dir, GRID_Z_INDEX)
+            cur_crops = get_crops_u8(cur_img, rois, n_channels, fit_right=fit_right)
+        except FileNotFoundError as e:
+            print(f"\n  [{xi},{yi}] 画像なし → 名目値で代替: {e}")
             results[(xi, yi)] = {
                 "xi": xi, "yi": yi,
-                "actual_dx_px": actual_dx,
-                "actual_dy_px": actual_dy,
-                "nominal_dx_px": nominal_dx,
-                "nominal_dy_px": nominal_dy,
-                "error_dx_px": actual_dx - nominal_dx,
-                "error_dy_px": actual_dy - nominal_dy,
-                "ref_xi": ref_xi, "ref_yi": ref_yi,
-                "n_channels_used": 0,
-                "mean_correlation": None,
+                "actual_dx_px": nominal_dx, "actual_dy_px": nominal_dy,
+                "nominal_dx_px": nominal_dx, "nominal_dy_px": nominal_dy,
+                "error_dx_px": 0.0, "error_dy_px": 0.0,
+                "ref_xi": 0, "ref_yi": 0,
+                "n_channels_used": 0, "mean_correlation": None,
                 "failed": True,
             }
-            calibrated[(xi, yi)] = (actual_dx, actual_dy)
             n_failed += 1
-            pbar.update(1)
-            enqueue_neighbors(xi, yi)
             continue
 
-        # 複数の推定値がある場合は平均
-        actual_dx = float(np.mean(dx_estimates))
-        actual_dy = float(np.mean(dy_estimates))
-        calibrated[(xi, yi)] = (actual_dx, actual_dy)
+        res = ecc_relative(ref_crops, cur_crops, n_channels)
 
+        if res is None:
+            print(f"\n  [{xi},{yi}] 全チャネル ECC 失敗 → 名目値で代替")
+            results[(xi, yi)] = {
+                "xi": xi, "yi": yi,
+                "actual_dx_px": nominal_dx, "actual_dy_px": nominal_dy,
+                "nominal_dx_px": nominal_dx, "nominal_dy_px": nominal_dy,
+                "error_dx_px": 0.0, "error_dy_px": 0.0,
+                "ref_xi": 0, "ref_yi": 0,
+                "n_channels_used": 0, "mean_correlation": None,
+                "failed": True,
+            }
+            n_failed += 1
+            continue
+
+        actual_dx, actual_dy, corr = res
         results[(xi, yi)] = {
             "xi": xi, "yi": yi,
             "actual_dx_px": actual_dx,
@@ -362,37 +280,12 @@ def main():
             "nominal_dy_px": nominal_dy,
             "error_dx_px": actual_dx - nominal_dx,
             "error_dy_px": actual_dy - nominal_dy,
-            "ref_xi": best_ref[0], "ref_yi": best_ref[1],
-            "n_calibrated_refs": len(dx_estimates),
+            "ref_xi": 0,
+            "ref_yi": 0,
             "n_channels_used": n_channels,
-            "mean_correlation": float(np.mean(corr_estimates)),
+            "mean_correlation": corr,
             "failed": False,
         }
-        pbar.update(1)
-        enqueue_neighbors(xi, yi)
-
-    pbar.close()
-
-    # BFS で到達できなかったグリッド点（孤立島など）を名目値で補完
-    for key in pos_map:
-        if key not in results:
-            xi, yi = key
-            nominal_dx = SHIFT_SIGN_Y * yi * Y_STEP / pixel_scale_um
-            nominal_dy = SHIFT_SIGN_X * xi * X_STEP / pixel_scale_um
-            results[key] = {
-                "xi": xi, "yi": yi,
-                "actual_dx_px": nominal_dx,
-                "actual_dy_px": nominal_dy,
-                "nominal_dx_px": nominal_dx,
-                "nominal_dy_px": nominal_dy,
-                "error_dx_px": 0.0,
-                "error_dy_px": 0.0,
-                "ref_xi": None, "ref_yi": None,
-                "n_channels_used": 0,
-                "mean_correlation": None,
-                "failed": True,
-            }
-            n_failed += 1
 
     # ---- 統計 ----
     successful = [r for r in results.values()
@@ -411,9 +304,27 @@ def main():
         if corrs:
             print(f"ECC 相関係数: mean={np.mean(corrs):.4f}  min={np.min(corrs):.4f}")
 
+    # ---- 経験的 pixel_scale 推定（yi=0 軸: actual_dy vs xi, xi=0 軸: actual_dx vs yi） ----
+    # actual_dy_px[xi, yi=0] の xi への傾き ≈ X_STEP / pixel_scale → pixel_scale = X_STEP / slope
+    pts_yi0 = [(r["xi"], r["actual_dy_px"]) for r in results.values()
+               if r["yi"] == 0 and not r["failed"] and r["xi"] != 0]
+    pts_xi0 = [(r["yi"], r["actual_dx_px"]) for r in results.values()
+               if r["xi"] == 0 and not r["failed"] and r["yi"] != 0]
+    if len(pts_yi0) >= 3:
+        xs, dys = zip(*sorted(pts_yi0))
+        slope_x = float(np.polyfit(xs, dys, 1)[0])
+        psc_est_x = X_STEP / abs(slope_x) if slope_x != 0 else float("nan")
+        print(f"経験的 pixel_scale（xi軸/actual_dy）: {psc_est_x:.4f} μm/px  "
+              f"(理論値: {pixel_scale_um:.4f}, 比: {psc_est_x/pixel_scale_um:.3f})")
+    if len(pts_xi0) >= 3:
+        ys, dxs = zip(*sorted(pts_xi0))
+        slope_y = float(np.polyfit(ys, dxs, 1)[0])
+        psc_est_y = Y_STEP / abs(slope_y) if slope_y != 0 else float("nan")
+        print(f"経験的 pixel_scale（yi軸/actual_dx）: {psc_est_y:.4f} μm/px  "
+              f"(理論値: {pixel_scale_um:.4f}, 比: {psc_est_y/pixel_scale_um:.3f})")
+
     # ---- 保存 ----
     out_path = Path(OUTPUT_JSON) if OUTPUT_JSON else Path(GRID_DIR) / f"grid_calibration_{BASE_LABEL}.json"
-    # 保存順を (xi, yi) でソート
     positions_list = [results[k] for k in sorted(results.keys())]
     out_data = {
         "grid_dir": str(GRID_DIR),

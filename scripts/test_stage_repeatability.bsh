@@ -29,9 +29,12 @@ import org.json.*;
 // ============================================================
 // ★ ここだけ変更
 // ============================================================
-String CONFIG_FILE = "C:/Users/QPI/Documents/QPI_Omni/drift_session/drift_config.json";
-int    N_REPS      = 20;
-String TEST_DIR    = "C:/stage_repeatability_test";
+String CONFIG_FILE  = "C:/Users/QPI/Documents/QPI_Omni/drift_session/drift_config.json";
+int    N_REPS       = 20;
+String TEST_DIR     = "C:/stage_repeatability_test";
+// FULL_LOOP_MODE = true  → 全Posを一周してからREFに戻る（実タイムラプスに近い）
+// FULL_LOOP_MODE = false → BGとREFの2点往復（従来）
+boolean FULL_LOOP_MODE = true;
 // ============================================================
 
 // ---- Load config ----
@@ -164,6 +167,7 @@ int callPython(String[] cmd, long timeoutMs) {
 // ============================================================
 print("\n=== Stage Repeatability Test ===");
 print("N_REPS = " + N_REPS);
+print("Mode: " + (FULL_LOOP_MODE ? "FULL LOOP (" + nPos + " pos)" : "2-point (BG/REF only)"));
 print("BG  Pos [" + BG_POS_INDEX + "]: " + (String)posLabels.get(BG_POS_INDEX));
 print("REF Pos [" + REF_POS_INDEX + "]: " + (String)posLabels.get(REF_POS_INDEX));
 print("Save: " + TEST_DIR + "\n");
@@ -171,10 +175,22 @@ print("Save: " + TEST_DIR + "\n");
 for (int rep = 0; rep < N_REPS; rep++) {
     print("Rep " + (rep+1) + "/" + N_REPS + " ...");
 
-    // Move AWAY (BG pos) then BACK (REF pos) to test repositioning
-    moveTo(BG_POS_INDEX);
-    String bgPath  = TEST_DIR + "/Pos_bg/img_"  + padLeft(rep, 9) + "_ph_000.tif";
-    snapAndSave(bgPath);
+    if (FULL_LOOP_MODE) {
+        // 全Posを一周（REF以外） → REFに戻る
+        for (int p = 0; p < nPos; p++) {
+            if (p == REF_POS_INDEX) continue;
+            moveTo(p);
+            if (p == BG_POS_INDEX) {
+                String bgPath = TEST_DIR + "/Pos_bg/img_" + padLeft(rep, 9) + "_ph_000.tif";
+                snapAndSave(bgPath);
+            }
+        }
+    } else {
+        // 従来: BGとREFの2点往復
+        moveTo(BG_POS_INDEX);
+        String bgPath  = TEST_DIR + "/Pos_bg/img_"  + padLeft(rep, 9) + "_ph_000.tif";
+        snapAndSave(bgPath);
+    }
 
     moveTo(REF_POS_INDEX);
     String refPath = TEST_DIR + "/Pos_ref/img_" + padLeft(rep, 9) + "_ph_000.tif";

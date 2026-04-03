@@ -44,7 +44,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 # ============================================================
 # 設定パラメータ
 # ============================================================
-GRID_DIR = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
+GRID_DIR = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
 
 # BG として使うベースラベル（通常 "Pos0"）
 BG_BASE_LABEL = "Pos0"
@@ -52,6 +52,10 @@ BG_BASE_LABEL = "Pos0"
 # 再構成対象のベースラベル（None で Pos0 以外の全 PosX_x*_y* を処理）
 # 特定のPosだけ回したい場合: TARGET_BASE_LABELS = ["Pos1", "Pos2"]
 TARGET_BASE_LABELS = None
+
+# 再構成対象の (xi, yi) 座標を絞る（None = すべて処理）
+# 例: TARGET_COORDS = [(0, 0)]  → 中心点のみ
+TARGET_COORDS = None
 
 # QPI 光学パラメータ
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
@@ -250,6 +254,8 @@ def main():
         # タスクリスト構築（スキップ・BG欠損チェック）
         tasks = []
         for (xi, yi) in sorted(target_map.keys()):
+            if TARGET_COORDS is not None and (xi, yi) not in TARGET_COORDS:
+                continue
             tgt_dir = target_map[(xi, yi)]
             out_dir = tgt_dir / "output_phase"
             if SKIP_IF_EXISTS and out_dir.exists() and any(out_dir.glob("*.tif")):

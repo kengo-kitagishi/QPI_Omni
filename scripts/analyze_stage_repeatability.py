@@ -30,6 +30,7 @@ from compute_drift_online import (
     reconstruct_phase,
     compute_backsub_offset,
     extract_rect_roi,
+    _tilt_correct,
     to_uint8,
     ecc_align,
     _remove_outliers_mad,
@@ -58,14 +59,15 @@ def run_ecc_one_rep(phase: np.ndarray, rois: list, grid_ref_crops: np.ndarray,
     """
     vmin = cfg.get("ecc_vmin", -5.0)
     vmax = cfg.get("ecc_vmax",  2.0)
+    tilt_crop_h = cfg.get("tilt_crop_h", 270)
+    ecc_crop_h  = cfg.get("ecc_crop_h",  80)
     n_ch = min(len(rois), len(grid_ref_crops))
 
     tx_list, ty_list, corr_list = [], [], []
     for ch_idx in range(n_ch):
         roi = rois[ch_idx]
-        crop = extract_rect_roi(phase, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"])
-        offset = compute_backsub_offset(crop, cfg)
-        crop = crop + offset
+        crop = _tilt_correct(phase, roi["cy"], roi["cx"], roi["crop_w"],
+                             tilt_crop_h, ecc_crop_h)
 
         ref_u8 = to_uint8(grid_ref_crops[ch_idx], vmin, vmax)
         cur_u8 = to_uint8(crop, vmin, vmax)
@@ -204,7 +206,7 @@ def main():
     print(f"  image Y (stage X): {verdict(ratio_ty)}")
     print()
     timelapse_residual_nm = 112.0  # from previous drift_log analysis
-    print(f"  [参考] タイムラプス残差 std ≈ {timelapse_residual_nm:.0f} nm")
+    print(f"  [参考] タイムラプス残差 std ~= {timelapse_residual_nm:.0f} nm")
     print(f"  今回の temporal std     = {std_repo_tx_nm:.1f} nm")
     if std_repo_tx_nm > 80:
         print(f"  → 一致。ステージノイズがタイムラプス振動の主因と確認。")

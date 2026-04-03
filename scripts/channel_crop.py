@@ -78,17 +78,11 @@ def detect_channels(img: np.ndarray, min_distance: int = 35,
 def detect_channel_edge_x(img: np.ndarray, cy: int, crop_w: int,
                            side: str = "left",
                            dark_threshold: float = 0.4) -> int:
-    """チャネルのX方向エッジ位置を検出する。
-
-    チャネル行（cy付近）の水平輝度プロファイルで暗い領域の端を探す。
-    side='left'  → 暗い領域の左端（最小X）
-    side='right' → 暗い領域の右端（最大X）
-    戻り値が crop の cx（長方形の中心）になる。
-    """
+    """チャネルのX方向エッジ位置を検出する（raw 輝度画像向け・旧実装）。"""
     y1 = max(0, cy - crop_w // 2)
     y2 = min(img.shape[0], cy + crop_w // 2)
     strip = img[y1:y2, :].astype(np.float32)
-    col_profile = np.mean(strip, axis=0)  # shape: (W,)
+    col_profile = np.mean(strip, axis=0)
 
     lo, hi = col_profile.min(), col_profile.max()
     norm = (col_profile - lo) / (hi - lo + 1e-9)
@@ -96,12 +90,53 @@ def detect_channel_edge_x(img: np.ndarray, cy: int, crop_w: int,
 
     dark_indices = np.where(is_dark)[0]
     if len(dark_indices) == 0:
-        return img.shape[1] // 2  # フォールバック
+        return img.shape[1] // 2
 
     if side == "left":
         return int(dark_indices[0])
     else:
         return int(dark_indices[-1])
+
+
+def detect_channel_edge_x_gradient(img: np.ndarray, cy: int, crop_w: int,
+                                    x_min: int = 100, x_max: int = 400,
+                                    smooth_sigma: float = 2.0) -> int:
+    """列平均プロファイルの最急降下点（最小勾配）を cx として返す。
+
+    [x_min, x_max] の範囲で検索。位相画像（float32）に対応。
+    チャネル壁が 0 付近からマイナスへ急変する点を検出する。
+    """
+    h, w = img.shape
+    x_min = max(0, x_min)
+    x_max = min(w, x_max)
+    y1 = max(0, cy - crop_w // 2)
+    y2 = min(h, cy + crop_w // 2)
+    strip = img[y1:y2, x_min:x_max].astype(np.float64)
+    col_profile = np.mean(strip, axis=0)
+    if smooth_sigma > 0:
+        col_profile = gaussian_filter1d(col_profile, sigma=smooth_sigma)
+    grad = np.gradient(col_profile)
+    cx_rel = int(np.argmax(np.abs(grad)))
+    return x_min + cx_rel
+
+
+def _filter_cx_mad(rois: list, mad_thresh: float = 10.0) -> list:
+    """cx の MAD 外れ値チャネルを除外する。"""
+    if len(rois) < 3:
+        return rois
+    cxs = np.array([r["cx"] for r in rois], dtype=np.float64)
+    med = float(np.median(cxs))
+    mad = float(np.median(np.abs(cxs - med)))
+    if mad == 0:
+        return rois
+    valid = []
+    for r, cx in zip(rois, cxs):
+        if abs(cx - med) <= mad_thresh * mad:
+            valid.append(r)
+        else:
+            print(f"  skip cy={r['cy']}: cx={int(cx)} MAD outlier "
+                  f"(median={med:.0f}, MAD={mad:.1f})")
+    return valid
 
 
 # ────────────────────────────────────────────────────────────────
@@ -136,26 +171,48 @@ def extract_rect_roi(img: np.ndarray, cy: int, cx: int,
 def run_detect(img_path: Path, crop_w: int, crop_h: int, out_dir: Path,
                min_dist: int, prominence_sigma: float, side: str = "left",
                dark_threshold: float = 0.4,
-               x_start: int = None, x_end: int = None):
+               x_start: int = None, x_end: int = None,
+               cx_min: int = 100, cx_max: int = 400,
+               cx_mad_thresh: float = 10.0):
     img = load_image(img_path)
     h, w = img.shape
 
     centers, profile = detect_channels(img, min_distance=min_dist,
                                         prominence_sigma=prominence_sigma)
 
-    rois = []
+    rois_raw = []
     for cy in centers:
         if x_start is not None and x_end is not None:
             cx = (x_start + x_end) // 2
             ch = x_end - x_start
         else:
-            cx = detect_channel_edge_x(img, int(cy), crop_w,
-                                       side=side, dark_threshold=dark_threshold)
+            cx = detect_channel_edge_x_gradient(img, int(cy), crop_w,
+                                                 x_min=cx_min, x_max=cx_max)
             ch = crop_h
-        rois.append({"cy": int(cy), "cx": cx, "crop_w": crop_w, "crop_h": ch})
+        rois_raw.append({"cy": int(cy), "cx": cx, "crop_w": crop_w, "crop_h": ch})
 
+    # ── cx MAD 外れ値除外 ──
+    rois_raw = _filter_cx_mad(rois_raw, mad_thresh=cx_mad_thresh)
 
-    print(f"検出チャネル数: {len(rois)}")
+    # ── フィルタ: cx 範囲 + 画像境界クリッピング除外 ──
+    rois = []
+    for roi in rois_raw:
+        cy_, cx_, cw_, ch_ = roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"]
+        # cx 範囲チェック
+        if not (cx_min <= cx_ <= cx_max):
+            print(f"  skip cy={cy_}: cx={cx_} outside [{cx_min}, {cx_max}]")
+            continue
+        # 縦方向クリッピングチェック
+        if cy_ - cw_ // 2 < 0 or cy_ - cw_ // 2 + cw_ > h:
+            print(f"  skip cy={cy_}: vertical clipping (cy±{cw_//2} vs h={h})")
+            continue
+        # 横方向クリッピングチェック
+        if cx_ - ch_ // 2 < 0 or cx_ - ch_ // 2 + ch_ > w:
+            print(f"  skip cy={cy_}: horizontal clipping (cx±{ch_//2} vs w={w})")
+            continue
+        rois.append(roi)
+
+    print(f"検出チャネル数: {len(rois_raw)} → フィルタ後: {len(rois)}")
     for i, r in enumerate(rois):
         print(f"  ch{i:02d}: y={r['cy']}, x={r['cx']}")
 
@@ -286,6 +343,12 @@ def main():
                         help="チャネルのどちらの端を cx にするか (default=left)")
     parser.add_argument("--dark-threshold", type=float, default=0.4,
                         help="暗い領域とみなす正規化輝度の閾値 0-1 (default=0.4)")
+    parser.add_argument("--cx-min", type=int, default=100,
+                        help="cx 検索範囲の下限 [px] (default=100)")
+    parser.add_argument("--cx-max", type=int, default=400,
+                        help="cx 検索範囲の上限 [px] (default=400)")
+    parser.add_argument("--cx-mad-thresh", type=float, default=10.0,
+                        help="cx MAD 外れ値閾値 (default=10.0)")
     args = parser.parse_args()
 
     img_dir = Path(args.dir)
@@ -304,7 +367,10 @@ def main():
     if do_detect:
         rois = run_detect(files[0], args.crop_w, args.crop_h, out_dir,
                           min_dist=args.min_dist,
-                          prominence_sigma=args.prominence)
+                          prominence_sigma=args.prominence,
+                          cx_min=args.cx_min,
+                          cx_max=args.cx_max,
+                          cx_mad_thresh=args.cx_mad_thresh)
 
     if do_apply:
         if rois is None:

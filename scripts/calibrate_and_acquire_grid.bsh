@@ -1,0 +1,316 @@
+/**
+ * calibrate_and_acquire_grid.bsh
+ * --------------------------------
+ * No gui_ needed. Reads timelapse.pos directly from file.
+ * No MDA: uses mmc.snapImage() directly -> no "_1" suffix problem.
+ *
+ * For each PosN:
+ *   1. Move to center (x+0_y+0), snap raw TIF, run Python ECC, read correction
+ *   2. Snake-scan 81 grid points; for each point do z-stack via mmc only
+ *
+ * Pos0 (BG) copies correction from Pos1.
+ *
+ * Requirements before running:
+ *   - timelapse.pos loaded in MicroManager (for reference only; we read the file directly)
+ *   - Camera exposure and settings configured in MM
+ *   - TIPFS engaged
+ *   - CALIB_GRID_DIR parent directory exists
+ */
+
+// ============================================================
+// Settings -- edit here for each experiment
+// ============================================================
+TIMELAPSE_POS   = "D:\\AquisitionData\\Kitagishi\\260331\\timelapse.pos";
+CALIB_GRID_DIR  = "D:\\AquisitionData\\Kitagishi\\260331\\grid_0p00525pergluc_60ms_1";
+ECC_SNAP_DIR    = "C:\\Temp\\grid_ecc_snaps";
+
+PYTHON_EXE      = "C:\\Users\\QPI\\AppData\\Local\\Programs\\Python\\Python311\\python.exe";
+SCRIPT_PATH     = "C:\\Users\\QPI\\Documents\\QPI_Omni\\scripts\\compute_center_correction.py";
+
+XY_STAGE        = "XYStage";
+Z_STAGE         = "TIPFSOffset";
+
+X_STEP          = 0.1;
+Y_STEP          = 0.1;
+X_HALF          = 4;
+Y_HALF          = 4;
+
+N_Z             = 19;       // number of z planes
+Z_START_UM      = -4.0;     // TIPFSOffset offset for z-index 0 [um]
+Z_STEP_UM       = 0.4;      // z step [um]
+
+XY_SETTLE_MS    = 800;
+Z_SETTLE_MS     = 100;
+
+BG_LABELS       = new String[]{"Pos0"};
+BG_SOURCES      = new String[]{"Pos1"};
+// ============================================================
+
+// ---- Read timelapse.pos directly as JSON (Gson) ----
+fr   = new java.io.FileReader(TIMELAPSE_POS);
+root = new com.google.gson.JsonParser().parse(fr);
+fr.close();
+jArr = root.getAsJsonObject().get("POSITIONS").getAsJsonArray();
+print("Read " + jArr.size() + " positions from " + TIMELAPSE_POS);
+
+// Use ArrayList to avoid BeanShell typed-array creation issues
+posLabelsList = new java.util.ArrayList();
+posBaseXList  = new java.util.ArrayList();
+posBaseYList  = new java.util.ArrayList();
+posBaseZList  = new java.util.ArrayList();
+
+for (int i = 0; i < jArr.size(); i++) {
+    jPos = jArr.get(i).getAsJsonObject();
+    posLabelsList.add(jPos.get("LABEL").getAsString());
+    double bx = 0.0;
+    double by = 0.0;
+    double bz = 0.0;
+    jDevs = jPos.get("DEVICES").getAsJsonArray();
+    for (int j = 0; j < jDevs.size(); j++) {
+        jDev    = jDevs.get(j).getAsJsonObject();
+        devName = jDev.get("DEVICE").getAsString();
+        if (XY_STAGE.equals(devName)) {
+            bx = jDev.get("X").getAsDouble();
+            by = jDev.get("Y").getAsDouble();
+        } else if (Z_STAGE.equals(devName)) {
+            bz = jDev.get("X").getAsDouble();
+        }
+    }
+    posBaseXList.add(Double.valueOf(bx));
+    posBaseYList.add(Double.valueOf(by));
+    posBaseZList.add(Double.valueOf(bz));
+    print("  " + posLabelsList.get(i) + "  X=" + bx + "  Y=" + by + "  Z=" + bz);
+}
+int nPos = posLabelsList.size();
+
+// BG label lookup
+bgSet    = new java.util.HashSet();
+bgSrcMap = new java.util.HashMap();
+for (int k = 0; k < BG_LABELS.length; k++) {
+    bgSet.add(BG_LABELS[k]);
+    bgSrcMap.put(BG_LABELS[k], BG_SOURCES[k]);
+}
+corrections = new java.util.HashMap();  // label -> double[]{corrX, corrY}
+
+new java.io.File(ECC_SNAP_DIR).mkdirs();
+new java.io.File(CALIB_GRID_DIR).mkdirs();
+
+// ---- Camera info ----
+imgW = (int)mmc.getImageWidth();
+imgH = (int)mmc.getImageHeight();
+bpp  = (int)mmc.getBytesPerPixel();
+print("Camera: " + imgW + "x" + imgH + "  bpp=" + bpp);
+
+// ============================================================
+// Main loop: sample positions
+// ============================================================
+for (int i = 0; i < nPos; i++) {
+    String lbl  = (String)posLabelsList.get(i);
+    double bx_i = ((Double)posBaseXList.get(i)).doubleValue();
+    double by_i = ((Double)posBaseYList.get(i)).doubleValue();
+    double bz_i = ((Double)posBaseZList.get(i)).doubleValue();
+    if (bgSet.contains(lbl)) continue;
+
+    print("\n--- " + lbl + " ---");
+
+    // ---- Phase 1: ECC snap ----
+    print("[" + lbl + "] Moving to center X=" + bx_i + " Y=" + by_i);
+    mmc.setXYPosition(XY_STAGE, bx_i, by_i);
+    mmc.waitForDevice(XY_STAGE);
+    Thread.sleep(XY_SETTLE_MS);
+
+    String centerLbl = lbl + "_x+0_y+0";
+    String snapPath  = ECC_SNAP_DIR + "\\" + centerLbl + "\\img_000000000_ph_000.tif";
+    new java.io.File(ECC_SNAP_DIR + "\\" + centerLbl).mkdirs();
+
+    mmc.snapImage();
+    snapObj = mmc.getImage();
+    if (bpp == 2) {
+        short[] snapPx = (short[])snapObj;
+        snapImp = new ij.ImagePlus("",
+                      new ij.process.ShortProcessor(imgW, imgH, snapPx, null));
+    } else {
+        byte[] snapPx = (byte[])snapObj;
+        snapImp = new ij.ImagePlus("",
+                      new ij.process.ByteProcessor(imgW, imgH, snapPx, null));
+    }
+    new ij.io.FileSaver(snapImp).saveAsTiff(snapPath);
+    print("[" + lbl + "] Snap saved: " + snapPath);
+
+    // ---- Python ECC ----
+    print("[" + lbl + "] Running ECC...");
+    cmdList = new java.util.ArrayList();
+    cmdList.add(PYTHON_EXE);
+    cmdList.add(SCRIPT_PATH);
+    cmdList.add(lbl);
+    cmdList.add(snapPath);
+    pb = new ProcessBuilder(cmdList);
+    pb.redirectErrorStream(true);
+    pb.environment().put("PYTHONUTF8", "1");
+    proc = pb.start();
+    br   = new java.io.BufferedReader(
+               new java.io.InputStreamReader(proc.getInputStream(), "UTF-8"));
+    sb   = new StringBuffer();
+    while ((pyLine = br.readLine()) != null) sb.append(pyLine + "\n");
+    proc.waitFor();
+    print(sb.toString().trim());
+
+    // ---- Read correction ----
+    double corrX = 0.0;
+    double corrY = 0.0;
+    String txtPath = ECC_SNAP_DIR + "\\center_correction_" + lbl + ".txt";
+    if (new java.io.File(txtPath).exists()) {
+        tr     = new java.io.BufferedReader(new java.io.FileReader(txtPath));
+        status = tr.readLine().trim();
+        if (status.equals("success")) {
+            corrX = Double.parseDouble(tr.readLine().trim());
+            corrY = Double.parseDouble(tr.readLine().trim());
+            print("[" + lbl + "] Correction X=" + corrX + " um  Y=" + corrY + " um");
+        } else {
+            String errMsg = tr.readLine();
+            print("[" + lbl + "] ECC failed: " + errMsg + " -> zero correction");
+        }
+        tr.close();
+    } else {
+        print("[" + lbl + "] WARNING: txt not found -> zero correction");
+    }
+    corrections.put(lbl, new double[]{corrX, corrY});
+
+    // ---- Phase 2: Grid acquisition ----
+    double corrCX = bx_i + corrX;
+    double corrCY = by_i + corrY;
+    int totalPts  = (2*X_HALF+1) * (2*Y_HALF+1);
+    int ptIdx     = 0;
+
+    for (int xi = -X_HALF; xi <= X_HALF; xi++) {
+        int row     = xi + X_HALF;
+        boolean fwd = (row % 2 == 0);
+        for (int k = 0; k <= 2*Y_HALF; k++) {
+            int yi       = fwd ? (k - Y_HALF) : (Y_HALF - k);
+            String xStr  = (xi >= 0) ? ("+"+xi) : (""+xi);
+            String yStr  = (yi >= 0) ? ("+"+yi) : (""+yi);
+            String ptLbl = lbl + "_x" + xStr + "_y" + yStr;
+            double gx = corrCX + xi * X_STEP;
+            double gy = corrCY + yi * Y_STEP;
+
+            mmc.setXYPosition(XY_STAGE, gx, gy);
+            mmc.waitForDevice(XY_STAGE);
+            Thread.sleep(XY_SETTLE_MS);
+
+            String ptDir = CALIB_GRID_DIR + "\\" + ptLbl;
+            new java.io.File(ptDir).mkdirs();
+
+            for (int zi = 0; zi < N_Z; zi++) {
+                double zAbs = bz_i + Z_START_UM + zi * Z_STEP_UM;
+                mmc.setPosition(Z_STAGE, zAbs);
+                mmc.waitForDevice(Z_STAGE);
+                Thread.sleep(Z_SETTLE_MS);
+
+                mmc.snapImage();
+                imgObj = mmc.getImage();
+                if (bpp == 2) {
+                    short[] px = (short[])imgObj;
+                    imp = new ij.ImagePlus("",
+                              new ij.process.ShortProcessor(imgW, imgH, px, null));
+                } else {
+                    byte[] px = (byte[])imgObj;
+                    imp = new ij.ImagePlus("",
+                              new ij.process.ByteProcessor(imgW, imgH, px, null));
+                }
+                String ziStr = (zi < 10) ? ("00"+zi) : ((zi < 100) ? ("0"+zi) : (""+zi));
+                String fname = "img_000000000_ph_" + ziStr + ".tif";
+                new ij.io.FileSaver(imp).saveAsTiff(ptDir + "\\" + fname);
+            }
+
+            // Reset z to base after z-stack
+            mmc.setPosition(Z_STAGE, bz_i);
+            mmc.waitForDevice(Z_STAGE);
+
+            ptIdx++;
+            print("[" + lbl + "] " + ptIdx + "/" + totalPts + " " + ptLbl);
+        }
+    }
+    print("[" + lbl + "] Done.");
+}
+
+// ============================================================
+// BG positions: copy correction from source, then acquire grid
+// ============================================================
+print("\n--- BG positions ---");
+for (int i = 0; i < nPos; i++) {
+    String lbl  = (String)posLabelsList.get(i);
+    double bx_i = ((Double)posBaseXList.get(i)).doubleValue();
+    double by_i = ((Double)posBaseYList.get(i)).doubleValue();
+    double bz_i = ((Double)posBaseZList.get(i)).doubleValue();
+    if (!bgSet.contains(lbl)) continue;
+
+    String srcLbl = (String)bgSrcMap.get(lbl);
+    print("\n--- " + lbl + " (copy from " + srcLbl + ") ---");
+
+    double corrX = 0.0;
+    double corrY = 0.0;
+    if (corrections.containsKey(srcLbl)) {
+        double[] c = (double[])corrections.get(srcLbl);
+        corrX = c[0];
+        corrY = c[1];
+        print("Correction copied: X=" + corrX + " um  Y=" + corrY + " um");
+    } else {
+        print("WARNING: " + srcLbl + " not found -> zero correction");
+    }
+
+    double corrCX = bx_i + corrX;
+    double corrCY = by_i + corrY;
+    int totalPts  = (2*X_HALF+1) * (2*Y_HALF+1);
+    int ptIdx     = 0;
+
+    for (int xi = -X_HALF; xi <= X_HALF; xi++) {
+        int row     = xi + X_HALF;
+        boolean fwd = (row % 2 == 0);
+        for (int k = 0; k <= 2*Y_HALF; k++) {
+            int yi       = fwd ? (k - Y_HALF) : (Y_HALF - k);
+            String xStr  = (xi >= 0) ? ("+"+xi) : (""+xi);
+            String yStr  = (yi >= 0) ? ("+"+yi) : (""+yi);
+            String ptLbl = lbl + "_x" + xStr + "_y" + yStr;
+            double gx = corrCX + xi * X_STEP;
+            double gy = corrCY + yi * Y_STEP;
+
+            mmc.setXYPosition(XY_STAGE, gx, gy);
+            mmc.waitForDevice(XY_STAGE);
+            Thread.sleep(XY_SETTLE_MS);
+
+            String ptDir = CALIB_GRID_DIR + "\\" + ptLbl;
+            new java.io.File(ptDir).mkdirs();
+
+            for (int zi = 0; zi < N_Z; zi++) {
+                double zAbs = bz_i + Z_START_UM + zi * Z_STEP_UM;
+                mmc.setPosition(Z_STAGE, zAbs);
+                mmc.waitForDevice(Z_STAGE);
+                Thread.sleep(Z_SETTLE_MS);
+
+                mmc.snapImage();
+                imgObj = mmc.getImage();
+                if (bpp == 2) {
+                    short[] px = (short[])imgObj;
+                    imp = new ij.ImagePlus("",
+                              new ij.process.ShortProcessor(imgW, imgH, px, null));
+                } else {
+                    byte[] px = (byte[])imgObj;
+                    imp = new ij.ImagePlus("",
+                              new ij.process.ByteProcessor(imgW, imgH, px, null));
+                }
+                String ziStr = (zi < 10) ? ("00"+zi) : ((zi < 100) ? ("0"+zi) : (""+zi));
+                String fname = "img_000000000_ph_" + ziStr + ".tif";
+                new ij.io.FileSaver(imp).saveAsTiff(ptDir + "\\" + fname);
+            }
+
+            mmc.setPosition(Z_STAGE, bz_i);
+            mmc.waitForDevice(Z_STAGE);
+
+            ptIdx++;
+            print("[" + lbl + "] " + ptIdx + "/" + totalPts + " " + ptLbl);
+        }
+    }
+    print("[" + lbl + "] Done.");
+}
+
+print("\n=== All positions complete ===");

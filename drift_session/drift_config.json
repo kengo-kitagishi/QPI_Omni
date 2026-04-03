@@ -46,7 +46,7 @@
   "gradient_sigma": 0,
   "tilt_crop_h": 270,
   "ecc_crop_h": 80,
-  "grid_calibration_json": null,
+  "grid_calibration_json": "E:\\Acuisition\\kitagishi\\260331\\grid_2pergluc_60ms_1\\grid_calibration_Pos1.json",
   "ecc_vmin": -5.0,
   "ecc_vmax": 2.0,
   "sensor_pixel_size": 3.45e-06,
@@ -58,8 +58,12 @@
   "grid_z_index": 10,
   "correction_ema_alpha": 0.3,
   "use_kalman_filter": true,
-  "kf_Q_pos_nm2": 400.0,
+  "kf_Q_pos_nm2": 1650.0,
+  "kf_Q_ty_nm2": 1650,
+  "kf_Q_tx_nm2": 2230,
   "kf_Q_vel_nm2": 400.0,
-  "kf_R_nm2": 12100.0,
+  "kf_R_nm2": 150.0,
+  "kf_R_ty_nm2": 91,
+  "kf_R_tx_nm2": 274,
   "kf_state_file": "C:\\Users\\QPI\\Documents\\QPI_Omni\\drift_session\\drift_kf_state.json"
 }

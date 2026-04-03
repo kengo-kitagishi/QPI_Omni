@@ -202,17 +202,24 @@ def extract_rect_roi(img, cy, cx, crop_w, crop_h):
     return crop
 
 
-def _tilt_correct(img_f64, cy, cx, crop_w, tilt_crop_h, ecc_crop_h):
+def _tilt_correct(img_f64, cy, cx, crop_w, tilt_crop_h, ecc_crop_h, fit_right: bool = False):
     """
     フル位相画像から tilt_crop_h px 幅の crop を取り、
-    左1/3 で slope+intercept fit → 補正 → 中央 ecc_crop_h px を返す。
-    calibrate_grid_positions.py / compute_pos_shifts.py と同じ処理。
+    背景側1/3 で slope+intercept fit → 補正 → 中央 ecc_crop_h px を返す。
+    fit_right=False: 左1/3、True: 右1/3（pos_split で決定）。
+    ゼロパディングが発生する場合は tilt 補正をスキップして simple crop を返す。
     """
+    h, w  = img_f64.shape
+    if (cx - tilt_crop_h // 2) < 0 or (cx + tilt_crop_h // 2) > w:
+        return extract_rect_roi(img_f64, cy, cx, crop_w, ecc_crop_h).astype(np.float64)
     big   = extract_rect_roi(img_f64, cy, cx, crop_w, tilt_crop_h).astype(np.float64)
     x     = np.arange(tilt_crop_h, dtype=np.float64)
     prof  = big.mean(axis=0)
     fit_n = max(1, tilt_crop_h // 3)
-    a, b  = np.polyfit(x[:fit_n], prof[:fit_n], 1)
+    if fit_right:
+        a, b = np.polyfit(x[-fit_n:], prof[-fit_n:], 1)
+    else:
+        a, b = np.polyfit(x[:fit_n], prof[:fit_n], 1)
     corrected = big - (a * x + b)[np.newaxis, :]
     start = (tilt_crop_h - ecc_crop_h) // 2
     return corrected[:, start : start + ecc_crop_h]
@@ -312,7 +319,7 @@ def _get_grid_offset_px(xi, yi, sx_sign, sy_sign, x_step, y_step, pixel_scale_um
 
 
 def _load_grid_ref_full(pos_map, xi, yi, rois, n_channels, z_index, cfg,
-                        tilt_crop_h=0, ecc_crop_h=0):
+                        tilt_crop_h=0, ecc_crop_h=0, fit_right=False):
     """grid(xi,yi) の full-crop 参照を返す（pass 2/3 用）。
     tilt_crop_h > 0 かつ ecc_crop_h > 0 のとき tilt 補正を適用（backsub は不要）。
     それ以外は従来の backsub を適用。
@@ -329,7 +336,7 @@ def _load_grid_ref_full(pos_map, xi, yi, rois, n_channels, z_index, cfg,
         roi = rois[ch] if ch < len(rois) else rois[-1]
         if use_tilt:
             cropped = _tilt_correct(grid_img, roi["cy"], roi["cx"], roi["crop_w"],
-                                    tilt_crop_h, ecc_crop_h)
+                                    tilt_crop_h, ecc_crop_h, fit_right=fit_right)
         else:
             cropped = extract_rect_roi(grid_img, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"])
             offset = compute_backsub_offset(cropped, cfg)
@@ -411,6 +418,9 @@ def main():
     tilt_crop_h    = cfg.get("tilt_crop_h", 0)
     ecc_crop_h     = cfg.get("ecc_crop_h", 0)
     use_tilt       = tilt_crop_h > 0 and ecc_crop_h > 0
+    pos_split      = cfg.get("pos_split", 3)
+    ref_pos_index  = cfg.get("ref_pos_index", 0)
+    tilt_fit_right = ref_pos_index >= pos_split
 
     # ---- grid calibration（実測 px オフセット辞書）----
     # {(xi, yi): (cal_dx_px, cal_dy_px)}  cal = +tx 規約（shift_x に直接加算できる）
@@ -514,7 +524,7 @@ def main():
     for ch_idx, roi in enumerate(rois):
         if use_tilt:
             crop = _tilt_correct(phase, roi["cy"], roi["cx"], roi["crop_w"],
-                                 tilt_crop_h, ecc_crop_h)
+                                 tilt_crop_h, ecc_crop_h, fit_right=tilt_fit_right)
         else:
             crop = extract_rect_roi(phase, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"])
             offset = compute_backsub_offset(crop, cfg)
@@ -566,7 +576,8 @@ def main():
                     halves = _load_grid_ref_full(
                         pos_map, xi2, yi2, rois, n_channels,
                         grid_z_index, cfg,
-                        tilt_crop_h=tilt_crop_h, ecc_crop_h=ecc_crop_h
+                        tilt_crop_h=tilt_crop_h, ecc_crop_h=ecc_crop_h,
+                        fit_right=tilt_fit_right
                     )
                     grid_half_cache[(xi2, yi2)]    = halves
                     grid_half_u8_cache[(xi2, yi2)] = [to_uint8(h, vmin, vmax) for h in halves]
@@ -630,7 +641,8 @@ def main():
                         halves3 = _load_grid_ref_full(
                             pos_map, xi3, yi3, rois, n_channels,
                             grid_z_index, cfg,
-                            tilt_crop_h=tilt_crop_h, ecc_crop_h=ecc_crop_h
+                            tilt_crop_h=tilt_crop_h, ecc_crop_h=ecc_crop_h,
+                            fit_right=tilt_fit_right
                         )
                         grid_half_cache[(xi3, yi3)]    = halves3
                         grid_half_u8_cache[(xi3, yi3)] = [to_uint8(h, vmin, vmax) for h in halves3]
@@ -755,7 +767,12 @@ def main():
         print(f"  EMA(α={ema_alpha}): tx={tx_filt:+.4f}px  ty={ty_filt:+.4f}px")
 
     # ---- Kalman フィルタ（pos-only random walk、use_kalman_filter: true で有効）----
-    # K_ss ≈ 0.65 @ Q=548nm², R=454nm²  (data-tuned: simulation rms=22nm vs RTS truth)
+    # 方向別 Q/R 設定対応: kf_R_ty_nm2 (image X ECC) / kf_R_tx_nm2 (image Y ECC)
+    # analyze_stage_repeatability 実測値より:
+    #   R_ty = (33.1/√12)² ≈  91 nm²  (image X, K_ss ≈ 0.95)
+    #   R_tx = (57.3/√12)² ≈ 274 nm²  (image Y, K_ss ≈ 0.87)
+    #   Q    = σ_stage²    ≈ 1650 nm²  (stage repositioning noise が主因)
+    # Q >> R のため高ゲイン設計が正しい（旧 R=12100 は 130× 過大だった）
     use_kalman          = cfg.get("use_kalman_filter", False)
     kf_K_tx             = kf_K_ty = kf_P_tx = kf_P_ty = None
     kf_innov_tx         = kf_innov_ty = None
@@ -763,10 +780,16 @@ def main():
     if use_kalman:
         kf_Q        = cfg.get("kf_Q_pos_nm2", 548.0)
         kf_R        = cfg.get("kf_R_nm2",     454.0)
+        # 方向別 Q/R（未指定時は kf_Q / kf_R にフォールバック）
+        # ty state は tx_avg (image X 由来), tx state は ty_avg (image Y 由来)
+        kf_Q_ty     = cfg.get("kf_Q_ty_nm2",  kf_Q)
+        kf_Q_tx     = cfg.get("kf_Q_tx_nm2",  kf_Q)
+        kf_R_ty     = cfg.get("kf_R_ty_nm2",  kf_R)
+        kf_R_tx     = cfg.get("kf_R_tx_nm2",  kf_R)
         kf_file     = cfg.get("kf_state_file",
                                str(Path(state_path).parent / "drift_kf_state.json"))
         px_scale_nm = pixel_scale_um * 1000.0
-        kf_state    = load_kf_state(kf_file, kf_R)
+        kf_state    = load_kf_state(kf_file, max(kf_R_ty, kf_R_tx))
 
         # open-loop 再構成位置 [nm]: 累積補正 + 現フレーム ECC 残差
         z_ty_nm      = tx_avg * px_scale_nm * sy_sign
@@ -778,11 +801,11 @@ def main():
         kf_innov_ty = abs(ol_pos_ty_nm - kf_state["kf_pos_ty_nm"])
         kf_innov_tx = abs(ol_pos_tx_nm - kf_state["kf_pos_tx_nm"])
 
-        # pos-only random walk Kalman update
+        # pos-only random walk Kalman update（方向別 Q/R）
         pos_ty_new, P_ty_new, K_ty = kf_step_posonly_nm(
-            ol_pos_ty_nm, kf_state["kf_pos_ty_nm"], kf_state["kf_P_ty"], kf_Q, kf_R)
+            ol_pos_ty_nm, kf_state["kf_pos_ty_nm"], kf_state["kf_P_ty"], kf_Q_ty, kf_R_ty)
         pos_tx_new, P_tx_new, K_tx = kf_step_posonly_nm(
-            ol_pos_tx_nm, kf_state["kf_pos_tx_nm"], kf_state["kf_P_tx"], kf_Q, kf_R)
+            ol_pos_tx_nm, kf_state["kf_pos_tx_nm"], kf_state["kf_P_tx"], kf_Q_tx, kf_R_tx)
 
         save_kf_state(kf_file, pos_tx_new, P_tx_new, pos_ty_new, P_ty_new)
 
@@ -793,8 +816,8 @@ def main():
         kf_K_ty          = K_ty
         kf_K_tx          = K_tx
         print(f"  KF pos-only: "
-              f"ol_ty={ol_pos_ty_nm:.0f}nm pos={pos_ty_new:.0f}nm K={K_ty:.4f}  "
-              f"ol_tx={ol_pos_tx_nm:.0f}nm pos={pos_tx_new:.0f}nm K={K_tx:.4f}")
+              f"ol_ty={ol_pos_ty_nm:.0f}nm pos={pos_ty_new:.0f}nm K={K_ty:.3f}(R={kf_R_ty:.0f})  "
+              f"ol_tx={ol_pos_tx_nm:.0f}nm pos={pos_tx_new:.0f}nm K={K_tx:.3f}(R={kf_R_tx:.0f})")
 
     # channel_details: valid_ch_indices の順序で outlier フラグを付与
     is_out_arr = is_out if n_ch_raw >= 3 else np.zeros(n_ch_raw, dtype=bool)
