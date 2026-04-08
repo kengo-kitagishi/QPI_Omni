@@ -603,8 +603,25 @@ def render_session_block(conn, session: dict) -> list[str]:
     return lines
 
 
+def _load_figure_json(fig: dict) -> dict:
+    """figure inbox JSON を読んで返す。失敗時は空 dict。"""
+    json_path = fig.get("json_path", "")
+    if not json_path:
+        md_path = fig.get("md_path", "")
+        if md_path:
+            json_path = md_path.replace(".md", ".json")
+    if json_path:
+        p = Path(json_path)
+        if p.exists():
+            try:
+                return json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+    return {}
+
+
 def render_figure_block(fig: dict) -> list[str]:
-    """1図分のサマリブロックを生成する。"""
+    """1図分のサマリブロックを生成する（figure inbox JSON の全フィールドを inline 出力）。"""
     script = fig.get("script", "unknown")
     desc = fig.get("description", "")
     commit = fig.get("git_commit", "")
@@ -612,20 +629,84 @@ def render_figure_block(fig: dict) -> list[str]:
     md_path = fig.get("md_path", "")
     image_name = fig.get("image_obsidian_name", "")
 
+    dirty_mark = " *(dirty)*" if dirty else ""
+    commit_str = f"`{commit[:8]}`{dirty_mark}" if commit else "N/A"
+
     lines = [
-        f"#### 📊 図: `{script}` [→ フルメタデータ]",
+        f"#### 📊 `{script}` — {desc}" if desc else f"#### 📊 `{script}`",
         "",
     ]
-    if md_path:
-        lines.append(f"**ファイル:** `{md_path}`")
-    if desc:
-        lines.append(f"**説明:** {desc}")
-    if commit:
-        dirty_mark = " *(dirty)*" if dirty else ""
-        lines.append(f"**git commit:** `{commit[:8]}`{dirty_mark}")
+
     if image_name:
-        lines.append(f"**図ファイル:** `{image_name}`")
         lines.append(f"![[{image_name}]]")
+        lines.append("")
+
+    # JSON からフル情報を読む
+    data = _load_figure_json(fig)
+    if data:
+        params = data.get("params", {}) or {}
+        diff = data.get("diff_from_last", {}) or {}
+        data_file = data.get("data_file", None)
+        data_keys = data.get("data_keys", []) or []
+        git_info = data.get("git", {}) or {}
+        changed_files = git_info.get("changed_files", []) or []
+
+        # params テーブル
+        table_rows: list[tuple[str, str]] = []
+        for k, v in params.items():
+            table_rows.append((k, str(v) if v is not None else "N/A"))
+
+        # diff_from_last
+        if diff:
+            diff_parts = []
+            for k, v in diff.items():
+                if isinstance(v, dict):
+                    old = v.get("from", v.get("old", "?"))
+                    new = v.get("to", v.get("new", "?"))
+                    if old == "(new)":
+                        diff_parts.append(f"{k}: 初回生成 (→ {new})")
+                    elif new == "(deleted)":
+                        diff_parts.append(f"{k}: {old} → (削除)")
+                    else:
+                        diff_parts.append(f"{k}: {old} → {new}")
+                elif v == "(new)":
+                    diff_parts.append(f"{k}: 初回生成")
+                else:
+                    diff_parts.append(f"{k}: {v}")
+            diff_str = ", ".join(diff_parts) if diff_parts else "（変更なし）"
+        else:
+            diff_str = "（変更なし）"
+
+        data_file_str = str(data_file) if data_file else "N/A"
+        data_keys_str = ", ".join(data_keys) if data_keys else "N/A"
+
+        # changed_files（5件まで）
+        if changed_files:
+            MAX_FILES = 5
+            shown = changed_files[:MAX_FILES]
+            remainder = len(changed_files) - MAX_FILES
+            files_str = ", ".join(shown)
+            if remainder > 0:
+                files_str += f" ... (+{remainder}件)"
+        else:
+            files_str = "N/A"
+
+        lines.append("| 項目 | 値 |")
+        lines.append("|------|-----|")
+        for k, v in table_rows:
+            lines.append(f"| {k} | {v} |")
+        lines.append(f"| 前の図からの変更 | {diff_str} |")
+        lines.append(f"| data_file | {data_file_str} |")
+        lines.append(f"| data_keys | {data_keys_str} |")
+        lines.append(f"| git_commit | {commit_str} |")
+        lines.append(f"| 変更ファイル | {files_str} |")
+    else:
+        # JSON が読めなかった場合のフォールバック（従来の動作）
+        if md_path:
+            lines.append(f"**ファイル:** `{md_path}`")
+        if commit:
+            lines.append(f"**git commit:** {commit_str}")
+
     lines.append("")
     lines.append("---")
     lines.append("")
@@ -936,10 +1017,15 @@ def run(args: argparse.Namespace) -> int:
         for lb in lib_entries:
             libs_by_date.setdefault(lb["date"], []).append(lb)
 
-        all_dates = sorted(set(
+        all_dates_set = set(
             list(sessions_by_date) + list(figures_by_date) +
             list(notions_by_date) + list(libs_by_date)
-        ))
+        )
+        # 活動がなくても今日分の daily_index は必ず生成する（日次ログ生成のため）
+        today_str = datetime.now(JST).date().strftime("%Y-%m-%d")
+        if monday.strftime("%Y-%m-%d") <= today_str <= sunday.strftime("%Y-%m-%d"):
+            all_dates_set.add(today_str)
+        all_dates = sorted(all_dates_set)
 
         # 日次索引ファイルを生成
         daily_files: list[tuple[str, str]] = []

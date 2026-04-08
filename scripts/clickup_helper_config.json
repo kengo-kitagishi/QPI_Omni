@@ -7,6 +7,7 @@
     "manuscript": "901813997612",
     "slide": "901813997621",
     "meeting": "901813997648",
+    "admin": "901813997703",
     "competition": "901814044181",
     "other": "901814001256",
     "daily": "901814085779"
@@ -31,6 +32,7 @@
     "会議",
     "seminar",
     "授業",
+    "基礎物理学実験ta",
     "学会",
     "発表",
     "部活",
@@ -147,7 +149,7 @@
     "general": 0
   },
   "category_default_list": {
-    "admin": "other",
+    "admin": "admin",
     "writing": "manuscript",
     "experiment": "experiment",
     "figure": "manuscript",

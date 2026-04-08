@@ -1,0 +1,29 @@
+{
+  "created_at": "2026-03-17T21:38:55.429060",
+  "range": {
+    "start": "2026-04-23",
+    "end": "2026-04-28",
+    "near_days": 2
+  },
+  "counts": {
+    "fetched": 682,
+    "scheduled": 3,
+    "unscheduled": 0,
+    "overdue": 89,
+    "due_soon_unscheduled": 0,
+    "after_due": 0
+  },
+  "findings": [
+    {
+      "severity": "high",
+      "type": "no_schedule_day_violation",
+      "task_id": "86ewv05bv",
+      "task_name": "Q-Microbio｜ポスター草案を教授に共有（レビュー①）",
+      "list_key": "other",
+      "reason": "大会日(2026-04-25)に予定が入っています",
+      "action": "大会日の翌日以降に移動",
+      "suggested_slot_start": "2026-04-27T09:00:00+09:00",
+      "suggested_slot_end": "2026-04-27T10:00:00+09:00"
+    }
+  ]
+}

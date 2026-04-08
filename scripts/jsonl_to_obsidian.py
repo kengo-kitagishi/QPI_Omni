@@ -32,6 +32,8 @@ import argparse
 import json
 import re
 import sys
+import time
+import traceback
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -63,17 +65,31 @@ JST = timezone(timedelta(hours=9))
 # ────────────────────────────────────────────
 
 def load_entries(path: Path) -> list:
-    entries = []
-    with open(path, encoding="utf-8", errors="replace") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
+    """JSONL を読み込む。OSError (errno 11/35: deadlock/EAGAIN) は最大3回 retry。
+    最終的に失敗したら空リストを返してこのセッションだけスキップする。"""
+    last_err = None
+    for attempt in range(3):
+        try:
+            entries = []
+            with open(path, encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entries.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        pass
+            return entries
+        except OSError as e:
+            last_err = e
+            if e.errno in (11, 35):  # EAGAIN / EWOULDBLOCK / Resource deadlock avoided
+                time.sleep(0.5 * (attempt + 1))
                 continue
-            try:
-                entries.append(json.loads(line))
-            except json.JSONDecodeError:
-                pass
-    return entries
+            raise
+    print(f"  WARN: {path.name} を3回 retry しても読めなかった ({last_err}). スキップします.",
+          file=sys.stderr)
+    return []
 
 
 def _strip_tags(text: str) -> str:
@@ -898,7 +914,14 @@ def run(args: argparse.Namespace) -> int:
                     continue
 
             print(f"Processing: {jsonl_path.name}")
-            result = process_session(jsonl_path, args.dry_run)
+            try:
+                result = process_session(jsonl_path, args.dry_run)
+            except Exception as e:
+                print(f"  ERROR: {jsonl_path.name} の処理で例外: {type(e).__name__}: {e}",
+                      file=sys.stderr)
+                traceback.print_exc()
+                skipped += 1
+                continue
 
             if result is not None:
                 processed += 1

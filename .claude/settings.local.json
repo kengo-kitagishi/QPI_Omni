@@ -87,7 +87,22 @@
       "Bash(\"/c/Users/QPI/AppData/Local/Programs/Python/Python311/python.exe\" scripts/analyze_tilt_correct_precision.py)",
       "Bash(\"/c/Users/QPI/AppData/Local/Programs/Python/Python311/python.exe\" scripts/diagnose_tilt_correct_ecc.py)",
       "Bash(\"C:/Temp/calib_all_log.txt\")",
-      "Bash(xargs -I{} basename {})"
+      "Bash(xargs -I{} basename {})",
+      "Bash(sqlite3:*)",
+      "Bash(date:*)",
+      "Bash(pgrep:*)",
+      "Bash(env:*)",
+      "Bash(echo CLAUDECODE=$CLAUDECODE:*)",
+      "Bash(log show:*)",
+      "Bash(CLAUDECODE= python3:*)",
+      "Bash(grep:*)",
+      "Bash(crontab:*)",
+      "Bash(claude:*)",
+      "Bash(chmod +x:*)",
+      "Bash(plutil:*)"
     ]
-  }
+  },
+  "outputStyle": "Explanatory",
+  "spinnerTipsEnabled": true,
+  "prefersReducedMotion": false
 }

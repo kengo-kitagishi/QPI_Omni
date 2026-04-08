@@ -1254,3 +1254,24 @@
 - range: 2026-04-23->2026-04-28
 - pressure: overdue=89 due_soon_unscheduled=0
 - findings: 0 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260317-213954.json
+
+## 2026-04-01 00:00 - hybrid scheduling policy adopted
+- major policy change:
+  - day-to-day schedule viewing and quick planning now defaults to Google Calendar
+  - ClickUp remains the task/deadline/dependency system
+- canonical note:
+  - /Users/kitak/QPI_Omni/scripts/scheduling_hybrid_policy.md
+- practical interpretation:
+  - Google Calendar = visible daily calendar
+  - ClickUp = structured task database
+
+## 2026-04-06 13:36 - review check
+- range: 2026-04-06->2026-05-30
+- pressure: overdue=161 due_soon_unscheduled=0
+- findings: 2 report=/Users/kitak/QPI_Omni/scripts/.clickup_reviews/review-20260406-133612.json
+
+## 2026-04-06 13:37 - 基礎物理学実験TA fixed slots
+- added fixed TA schedule blocks on 2026-04-06, 2026-04-20, 2026-04-27, 2026-05-07, 2026-05-11, 2026-05-18, 2026-05-25 at 12:30-17:00
+- added `admin` list mapping to ClickUp helper config so agenda/review includes TA slots
+- changed future `admin` category routing to write to the `ADMIN` ClickUp list by default
+- marked `基礎物理学実験TA` as fixed via config keyword so auto-reschedule flows avoid moving it

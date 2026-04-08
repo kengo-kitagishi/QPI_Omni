@@ -22,6 +22,7 @@ import argparse
 import json
 import shutil
 import sys
+import traceback
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -364,7 +365,14 @@ def run(args: argparse.Namespace) -> int:
                 continue
 
             print(f"Processing: {json_path.parent.name}/{json_path.name}")
-            result = process_json(json_path, args.dry_run)
+            try:
+                result = process_json(json_path, args.dry_run)
+            except Exception as e:
+                print(f"  ERROR: {json_path.name} の処理で例外: {type(e).__name__}: {e}",
+                      file=sys.stderr)
+                traceback.print_exc()
+                skipped += 1
+                continue
 
             if result is not None:
                 processed += 1

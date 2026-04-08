@@ -1,0 +1,136 @@
+{
+  "created_at": "2026-03-19T21:31:36.914923",
+  "range": {
+    "start": "2026-03-18",
+    "end": "2026-03-29",
+    "near_days": 3
+  },
+  "counts": {
+    "fetched": 682,
+    "scheduled": 51,
+    "unscheduled": 0,
+    "overdue": 100,
+    "due_soon_unscheduled": 0,
+    "after_due": 0
+  },
+  "findings": [
+    {
+      "severity": "high",
+      "type": "overlap",
+      "task_id": "86ewuzmqg",
+      "task_name": "学振DC1｜深掘り執筆セッションA（背景・独自性）",
+      "list_key": "manuscript",
+      "reason": "03-18 15:00 細胞導入 と重なっています",
+      "action": "後ろにずらす",
+      "suggested_slot_start": "2026-03-18T17:10:00+09:00",
+      "suggested_slot_end": "2026-03-18T19:10:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "medium_flow_before",
+      "task_id": "86ewr092c",
+      "task_name": "細胞導入",
+      "list_key": "experiment",
+      "medium_flow_step": "cell_insertion_done",
+      "reason": "細胞導入完了 は 培地交換2%2% の 48h前までに配置する必要があります",
+      "action": "チェーン順に前倒し",
+      "suggested_slot_start": null,
+      "suggested_slot_end": null
+    },
+    {
+      "severity": "high",
+      "type": "medium_flow_gap",
+      "task_id": "86ewr0z00",
+      "task_name": "【実験】2%培地交換（T0+48h）",
+      "list_key": "experiment",
+      "medium_flow_step": "change_2_2",
+      "reason": "培地交換2%2% は 細胞導入完了 / 培地交換0%2% の 48h後以降に配置する必要があります",
+      "action": "チェーン順に後ろ倒し",
+      "suggested_slot_start": "2026-03-20T15:00:00+09:00",
+      "suggested_slot_end": "2026-03-20T16:00:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "no_schedule_day_violation",
+      "task_id": "86ewr280b",
+      "task_name": "この2週間のログを読ませてどういうskill,rulesがいいかを考えてもらう。",
+      "list_key": "plan",
+      "reason": "大会日(2026-03-19)に予定が入っています",
+      "action": "大会日の翌日以降に移動",
+      "suggested_slot_start": "2026-03-20T09:00:00+09:00",
+      "suggested_slot_end": "2026-03-20T12:00:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "no_schedule_day_violation",
+      "task_id": "86ewuzp8t",
+      "task_name": "学振DC1｜深掘り執筆セッションD-2/4（推敲・一貫性チェック）",
+      "list_key": "manuscript",
+      "reason": "大会日(2026-03-19)に予定が入っています",
+      "action": "大会日の翌日以降に移動",
+      "suggested_slot_start": "2026-03-20T09:00:00+09:00",
+      "suggested_slot_end": "2026-03-20T11:00:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "no_schedule_day_violation",
+      "task_id": "86ewuyc26",
+      "task_name": "講習会受ける申し込みする",
+      "list_key": "plan",
+      "reason": "大会日(2026-03-19)に予定が入っています",
+      "action": "大会日の翌日以降に移動",
+      "suggested_slot_start": "2026-03-20T09:00:00+09:00",
+      "suggested_slot_end": "2026-03-20T10:00:00+09:00"
+    },
+    {
+      "severity": "high",
+      "type": "no_schedule_day_violation",
+      "task_id": "86ewqyvwr",
+      "task_name": "学振DC1 書き方の本を買って読む",
+      "list_key": "plan",
+      "reason": "大会日(2026-03-19)に予定が入っています",
+      "action": "大会日の翌日以降に移動",
+      "suggested_slot_start": "2026-03-20T09:00:00+09:00",
+      "suggested_slot_end": "2026-03-20T09:30:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr0z29",
+      "task_name": "【実験】0.0055%培地交換（T0+96h）",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "acquisition",
+      "reason": "workflow順序が逆転: stage=acquisition より前段 (setup) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-28T09:00:00+09:00",
+      "suggested_slot_end": "2026-03-28T10:00:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr0z4d",
+      "task_name": "【実験】0%培地交換（T0+120h）",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "acquisition",
+      "reason": "workflow順序が逆転: stage=acquisition より前段 (setup) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-28T09:00:00+09:00",
+      "suggested_slot_end": "2026-03-28T10:00:00+09:00"
+    },
+    {
+      "severity": "medium",
+      "type": "workflow_order",
+      "task_id": "86ewr08x1",
+      "task_name": "Movingを確認",
+      "list_key": "experiment",
+      "workflow_group": "exp_code",
+      "workflow_stage": "acquisition",
+      "reason": "workflow順序が逆転: stage=acquisition より前段 (setup) が後に配置",
+      "action": "後ろ倒しして工程順を揃える",
+      "suggested_slot_start": "2026-03-28T09:00:00+09:00",
+      "suggested_slot_end": "2026-03-28T11:30:00+09:00"
+    }
+  ]
+}
