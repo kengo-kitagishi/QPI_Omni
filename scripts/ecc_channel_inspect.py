@@ -81,7 +81,7 @@ def main():
     script_dir = Path(cfg.get("script_dir", cfg_path.parent.parent / "scripts"))
     cdo = _import_cdo(script_dir)
 
-    vmin = args.vmin if args.vmin is not None else cfg.get("ecc_vmin", -2.0)
+    vmin = args.vmin if args.vmin is not None else cfg.get("ecc_vmin", -5.0)
     vmax = args.vmax if args.vmax is not None else cfg.get("ecc_vmax",  2.0)
     diff_vmin = args.diff_vmin
     diff_vmax = args.diff_vmax
@@ -107,10 +107,13 @@ def main():
     results = []   # list of dict per channel
     tx_list, ty_list = [], []
 
+    # grid_ref_crops の shape からクロップサイズを取得（JSON の crop_h ではなく実際の参照画像に合わせる）
+    ref_crop_w, ref_crop_h = grid_ref_crops.shape[1], grid_ref_crops.shape[2]
+
     for ch_idx, roi in enumerate(rois):
-        # sample クロップ + per-channel backsub
+        # sample クロップ + per-channel backsub（参照画像と同じサイズで切り出す）
         sample_crop = cdo.extract_rect_roi(phase, roi["cy"], roi["cx"],
-                                           roi["crop_w"], roi["crop_h"])
+                                           ref_crop_w, ref_crop_h)
         offset = cdo.compute_backsub_offset(sample_crop, cfg)
         sample_crop = sample_crop + offset
 

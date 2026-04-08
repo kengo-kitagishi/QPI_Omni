@@ -39,6 +39,7 @@ import tifffile
 import cv2
 from pathlib import Path
 from scipy.ndimage import uniform_filter1d, gaussian_filter
+from concurrent.futures import ThreadPoolExecutor
 from scipy.optimize import curve_fit
 
 
@@ -84,6 +85,9 @@ TIMELAPSE_POS = r"D:\AquisitionData\Kitagishi\260321\timelapse.pos"
 
 # drift_config.json（光学パラメータ・符号・backsub 設定をここから取得）
 DRIFT_CONFIG = r"C:\Users\QPI\Documents\QPI_Omni\drift_session\drift_config.json"
+
+# ---- ECC クロップ ----
+ECC_CROP_H = 80   # ECC 用 X 方向クロップ幅 [px]（compute_pos_shifts.py と統一）
 
 # ---- generate_grid_pos パラメータ（generate_grid_pos.py と合わせる） ----
 X_STEP = 0.1   # μm（ステージ X 方向、画像 Y 方向）
@@ -158,7 +162,7 @@ def compute_backsub_offset(img, cfg) -> float:
 def ecc_align(ref_u8, tl_u8):
     """ECC アライメント。(tx, ty, correlation) を返す。失敗時は None。"""
     warp_matrix = np.eye(2, 3, dtype=np.float32)
-    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-7)
+    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-8)
     try:
         corr, warp_matrix = cv2.findTransformECC(
             ref_u8, tl_u8, warp_matrix, cv2.MOTION_TRANSLATION, criteria
@@ -173,7 +177,7 @@ def _mad(arr):
     return float(np.median(np.abs(arr - m)))
 
 
-def _remove_outliers_mad(values, thresh=2.5):
+def _remove_outliers_mad(values, thresh=5.0):
     arr = np.array(values, dtype=np.float64)
     md = _mad(arr)
     if md == 0:
@@ -324,30 +328,33 @@ def main():
     vmin = cfg.get("ecc_vmin", -5.0)
     vmax = cfg.get("ecc_vmax",  2.0)
 
-    tx_list, ty_list, corr_list = [], [], []
-    for ch_idx, roi in enumerate(rois):
+    def _ecc_one_channel(ch_idx):
+        roi = rois[ch_idx]
         ref_crop = extract_rect_roi(
-            phase_ref, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"]
+            phase_ref, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H
         ).copy().astype(np.float64)
         cal_crop = extract_rect_roi(
-            phase_calib, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"]
+            phase_calib, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H
         ).copy().astype(np.float64)
-
         ref_crop += compute_backsub_offset(ref_crop, cfg)
         cal_crop += compute_backsub_offset(cal_crop, cfg)
-
         result = ecc_align(
             to_uint8(ref_crop, vmin, vmax),
             to_uint8(cal_crop, vmin, vmax),
         )
-        if result is None:
-            print(f"  ch{ch_idx:02d}: ECC failed → skip")
-            continue
-        tx, ty, corr = result
-        tx_list.append(tx)
-        ty_list.append(ty)
-        corr_list.append(corr)
-        print(f"  ch{ch_idx:02d}: tx={tx:+.3f}px  ty={ty:+.3f}px  corr={corr:.4f}")
+        return ch_idx, result
+
+    tx_list, ty_list, corr_list = [], [], []
+    with ThreadPoolExecutor(max_workers=None) as pool:
+        for ch_idx, result in pool.map(_ecc_one_channel, range(n_channels)):
+            if result is None:
+                print(f"  ch{ch_idx:02d}: ECC failed → skip")
+                continue
+            tx, ty, corr = result
+            tx_list.append(tx)
+            ty_list.append(ty)
+            corr_list.append(corr)
+            print(f"  ch{ch_idx:02d}: tx={tx:+.3f}px  ty={ty:+.3f}px  corr={corr:.4f}")
 
     if not tx_list:
         print("ERROR: 全チャネルで ECC が失敗しました")

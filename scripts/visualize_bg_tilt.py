@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from PIL import Image
 from pybaselines import Baseline
+from concurrent.futures import ThreadPoolExecutor
 from scipy.interpolate import UnivariateSpline
 
 _script_dir = Path(__file__).parent
@@ -122,13 +123,15 @@ def main():
     print(f"  Column mean (all {h} rows), frames={indices.tolist()}")
     print(f"  x range: [{x_start}, {x_end}) ({x_end - x_start} px, clipped {clip_px}px each side)")
 
-    # ─── 全フレームのプロファイル・ベースラインを先に計算 ───
-    all_profiles  = []
-    all_baselines = []
-    for frame_idx in indices:
+    # ─── 全フレームのプロファイル・ベースラインを先に計算（並列）───
+    def _compute_profile_bl(frame_idx):
         profile = stack[frame_idx, :, x_start:x_end].mean(axis=0)
-        all_profiles.append(profile)
-        all_baselines.append(compute_baselines(profile))
+        return profile, compute_baselines(profile)
+
+    with ThreadPoolExecutor(max_workers=None) as pool:
+        results_bl = list(pool.map(_compute_profile_bl, indices))
+    all_profiles  = [r[0] for r in results_bl]
+    all_baselines = [r[1] for r in results_bl]
 
     global_left_ylim  = (-0.5, 1.0)
     global_right_ylim = (-0.25, 0.5)
@@ -204,11 +207,13 @@ def main():
 
     # ─── 安定性図: 引いた後の residual を全フレーム重ね書き ───────
     print(f"  Computing subtracted residuals over all {n_frames} frames...")
-    all_residuals = []
-    for fi in range(n_frames):
+    def _compute_residual(fi):
         prof = stack[fi, :, x_start:x_end].mean(axis=0)
         bl = compute_baselines(prof).get("pspline_iarpls", np.full(len(x), np.nan))
-        all_residuals.append(prof - bl)
+        return prof - bl
+
+    with ThreadPoolExecutor(max_workers=None) as pool:
+        all_residuals = list(pool.map(_compute_residual, range(n_frames)))
 
     fig2, ax2 = plt.subplots(1, 1, figsize=(12, 5))
     fig2.suptitle(

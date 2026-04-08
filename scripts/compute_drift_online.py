@@ -854,8 +854,15 @@ def main():
         correction_stage_x_um = kf_pos_tx_nm_new / 1000.0 - prev_state["cumulative_dx_um"]
 
     # ---- 累積ドリフト計算 ----
-    cum_dx = prev_state["cumulative_dx_um"] + correction_stage_x_um
-    cum_dy = prev_state["cumulative_dy_um"] + correction_stage_y_um
+    # 1枚目（state ファイル未存在 = ema_tx_px が None）は grid 撮影→タイムラプス開始間の
+    # オフセット補正なので cumulative には加算しない
+    is_first_frame = prev_state["ema_tx_px"] is None
+    if is_first_frame:
+        cum_dx = 0.0
+        cum_dy = 0.0
+    else:
+        cum_dx = prev_state["cumulative_dx_um"] + correction_stage_x_um
+        cum_dy = prev_state["cumulative_dy_um"] + correction_stage_y_um
 
     print(f"  Correction: stage_x={correction_stage_x_um:+.4f}um  stage_y={correction_stage_y_um:+.4f}um")
     print(f"  Cumulative: stage_x={cum_dx:+.4f}um  stage_y={cum_dy:+.4f}um")

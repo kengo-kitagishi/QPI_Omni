@@ -74,8 +74,8 @@ MIN_PHASE = gauss_config['min_phase']
 align_config = config['alignment']
 WARP_MODE_STR = align_config.get('warp_mode', 'AFFINE')
 WARP_MODE = getattr(cv2.MOTION_, WARP_MODE_STR, cv2.MOTION_AFFINE)
-ECC_ITERATIONS = align_config.get('iterations', 5000)
-ECC_EPS = align_config.get('eps', 1e-5)
+ECC_ITERATIONS = align_config.get('iterations', 100000)
+ECC_EPS = align_config.get('eps', 1e-8)
 
 # 出力設定
 output_config = config['output']

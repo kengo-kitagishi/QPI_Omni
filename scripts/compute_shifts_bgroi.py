@@ -42,7 +42,7 @@ BG_CROP_H = 440   # x 方向サイズ [px]（チャネル全長）
 ECC_VMIN     = -5.0
 ECC_VMAX     =  2.0
 ECC_MAX_ITER = 100000
-ECC_EPSILON  = 1e-7
+ECC_EPSILON  = 1e-8
 
 # ---- 座標変換（グリッド最近傍選択用）----
 # 画像X(shift_x) ↔ ステージY(dy_um), 画像Y(shift_y) ↔ ステージX(dx_um)

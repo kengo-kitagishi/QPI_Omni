@@ -24,6 +24,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from pathlib import Path
 from scipy.ndimage import uniform_filter1d
+from concurrent.futures import ThreadPoolExecutor
 from scipy.optimize import curve_fit
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -174,23 +175,26 @@ def main():
     for j, ttl in enumerate(col_titles):
         axes[0, j].set_title(ttl, fontsize=7, fontweight='bold')
 
-    for row, t in enumerate(frame_indices):
-        frame = stack[t]  # shape (40, 440)
-
-        # frame の half crop（スライス）
-        f_right = frame[:, crop_h_half:]   # cols [220:440] → image cols [cx, cx+220]
-        f_left  = frame[:, :crop_h_half]   # cols [0:220]   → image cols [cx-220, cx]
-
-        # --- RIGHT half ECC ---
+    # Pre-compute ECC results for all frames in parallel
+    def _ecc_for_frame(t):
+        frame = stack[t]
+        f_right = frame[:, crop_h_half:]
+        f_left  = frame[:, :crop_h_half]
         res_r = ecc_align(g_right_u8, to_uint8(f_right, VMIN_ECC, VMAX_ECC))
-
-        # --- LEFT half ECC (固定スケール -1~1) ---
         res_l_fix = ecc_align(g_left_fixed_u8, to_uint8(f_left, -1.0, 1.0))
-
-        # --- LEFT half ECC (自動スケール) ---
         fl_vmin = float(np.percentile(f_left, 1))
         fl_vmax = float(np.percentile(f_left, 99))
         res_l_auto = ecc_align(g_left_auto_u8, to_uint8(f_left, fl_vmin, fl_vmax))
+        return res_r, res_l_fix, res_l_auto, fl_vmin, fl_vmax
+
+    with ThreadPoolExecutor(max_workers=None) as pool:
+        ecc_results = list(pool.map(_ecc_for_frame, frame_indices))
+
+    for row, t in enumerate(frame_indices):
+        frame = stack[t]  # shape (40, 440)
+        f_left  = frame[:, :crop_h_half]
+
+        res_r, res_l_fix, res_l_auto, fl_vmin, fl_vmax = ecc_results[row]
 
         # [0] frame raw
         ax = axes[row, 0]

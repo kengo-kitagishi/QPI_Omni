@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import json
 import cv2
+from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 
 # 日本語フォント設定
@@ -176,7 +177,7 @@ def calculate_alignment_for_pos(pos_name, wo0_phase_dir, wo2_phase_dir,
         
         # ECC
         warp_matrix = np.eye(2, 3, dtype=np.float32)
-        criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-6)
+        criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-8)
         
         try:
             correlation, warp_matrix = cv2.findTransformECC(
@@ -266,14 +267,11 @@ def apply_alignment_to_pos(alignment_info, save_aligned=True):
         aligned_dir = os.path.join(wo2_phase_dir, "aligned")
         os.makedirs(aligned_dir, exist_ok=True)
     
-    # 各画像にアライメント適用
-    for filename in tqdm(wo2_files, desc=f"    {pos_name}"):
+    # 各画像にアライメント適用（並列）
+    def _align_one(filename):
         try:
-            # 画像読み込み
             img_path = os.path.join(wo2_phase_dir, filename)
             img = load_tif_image(img_path)
-            
-            # アライメント適用
             h, w = img.shape
             aligned_img = cv2.warpAffine(
                 img.astype(np.float32),
@@ -281,15 +279,14 @@ def apply_alignment_to_pos(alignment_info, save_aligned=True):
                 (w, h),
                 flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP
             ).astype(np.float64)
-            
-            # 保存
             if save_aligned:
                 aligned_path = os.path.join(aligned_dir, filename)
                 io.imsave(aligned_path, aligned_img.astype(np.float32))
-        
         except Exception as e:
             print(f"\n    ❌ エラー: {filename} - {e}")
-            continue
+
+    with ThreadPoolExecutor(max_workers=None) as pool:
+        list(tqdm(pool.map(_align_one, wo2_files), total=len(wo2_files), desc=f"    {pos_name}"))
     
     print(f"  ✅ アライメント適用完了")
     
@@ -331,29 +328,28 @@ def main():
     for pos_name, _, _ in pos_pairs:
         print(f"  - {pos_name}")
     
-    # 各Posペアを処理
-    alignment_results = []
-    
-    for pos_name, wo0_phase_dir, wo2_phase_dir in pos_pairs:
-        # アライメント計算
+    # 各Posペアを処理（並列）
+    def _process_one_pos(pos_name, wo0_phase_dir, wo2_phase_dir):
         alignment_info = calculate_alignment_for_pos(
             pos_name, wo0_phase_dir, wo2_phase_dir,
             reference_number=0,
             method='ecc'
         )
-        
         if alignment_info is not None:
-            # アライメント適用
             apply_alignment_to_pos(alignment_info, save_aligned=True)
-            
-            # JSON保存
             json_path = os.path.join(wo2_phase_dir, "alignment_transform.json")
             with open(json_path, 'w', encoding='utf-8') as f:
                 json.dump(alignment_info, f, indent=2, ensure_ascii=False)
-            
             print(f"  JSON保存: {json_path}")
-            
-            alignment_results.append(alignment_info)
+        return alignment_info
+
+    alignment_results = []
+    with ThreadPoolExecutor(max_workers=None) as pool:
+        futures = [pool.submit(_process_one_pos, pn, w0, w2) for pn, w0, w2 in pos_pairs]
+        for fut in futures:
+            info = fut.result()
+            if info is not None:
+                alignment_results.append(info)
     
     # サマリー表示
     print("\n" + "="*80)

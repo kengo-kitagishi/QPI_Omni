@@ -14,6 +14,7 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import tifffile
+from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(__file__))
 from figure_logger import save_figure
@@ -84,22 +85,21 @@ def _load_phase(fname: str) -> np.ndarray:
 
 print("\n[41] 隣接差分ノイズ計算中...")
 
-n_pairs        = N_total - 1
-pair_noise_mrad = []
-diff_roi_stack  = []
+n_pairs = N_total - 1
 
-for i in range(n_pairs):
-    if i % 50 == 0:
-        print(f"  pair {i}/{n_pairs - 1} ...")
-    ph0 = _load_phase(_files[i    ])
+def _compute_pair_noise(i):
+    ph0 = _load_phase(_files[i])
     ph1 = _load_phase(_files[i + 1])
     diff_roi = (ph1 - ph0)[rs:re, cs:ce]
     noise_rad = float(np.std(diff_roi) / np.sqrt(2))
-    pair_noise_mrad.append(noise_rad * 1e3)
-    diff_roi_stack.append(diff_roi.copy())
+    return noise_rad * 1e3, diff_roi.copy()
 
-pair_noise_mrad = np.array(pair_noise_mrad)
-diff_roi_stack  = np.stack(diff_roi_stack, axis=0)
+with ThreadPoolExecutor(max_workers=None) as pool:
+    pair_results = list(pool.map(_compute_pair_noise, range(n_pairs)))
+
+pair_noise_mrad = np.array([r[0] for r in pair_results])
+diff_roi_stack  = np.stack([r[1] for r in pair_results], axis=0)
+print(f"  {n_pairs} pairs computed (parallel)")
 
 # 統計
 noise_mean_mrad = float(pair_noise_mrad.mean())
@@ -124,19 +124,17 @@ print("\n[42] 基準フレームからのドリフト計算中...")
 
 phase_ref = _load_phase(_files[0])
 
-roi_mean_mrad = []
-roi_std_mrad  = []
-
-for n, fname in enumerate(_files):
-    if n % 50 == 0:
-        print(f"  frame {n}/{N_total - 1} ...")
+def _compute_drift(fname):
     ph = _load_phase(fname)
     diff_roi = (ph - phase_ref)[rs:re, cs:ce]
-    roi_mean_mrad.append(float(np.mean(diff_roi) * 1e3))
-    roi_std_mrad.append(float(np.std(diff_roi) * 1e3))
+    return float(np.mean(diff_roi) * 1e3), float(np.std(diff_roi) * 1e3)
 
-roi_mean_mrad = np.array(roi_mean_mrad)
-roi_std_mrad  = np.array(roi_std_mrad)
+with ThreadPoolExecutor(max_workers=None) as pool:
+    drift_results = list(pool.map(_compute_drift, _files))
+
+roi_mean_mrad = np.array([r[0] for r in drift_results])
+roi_std_mrad  = np.array([r[1] for r in drift_results])
+print(f"  {N_total} frames computed (parallel)")
 roi_mean_nm   = roi_mean_mrad * 1e-3 * WAVELENGTH / (2 * np.pi) * 1e9
 
 # 2π ジャンプ補正

@@ -29,6 +29,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import numpy as np
 import tifffile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, str(Path(__file__).parent))
 from figure_logger import save_figure
@@ -254,14 +255,21 @@ def main():
     sweep_params = list(product(CROP_W_LIST, CROP_H_LIST))
     print(f"\nSweep: {len(sweep_params)} 組み合わせ × {len(phase_paths)} TP × {n_ch} ch")
 
-    results = []
-    for i, (cw, ch) in enumerate(sweep_params):
-        print(f"  [{i+1}/{len(sweep_params)}] crop_w={cw} crop_h={ch} ...", end=" ", flush=True)
-        res = sweep_one_crop(cw, ch, phase_paths, tp_indices, channels, cfg)
-        results.append(res)
-        print(f"temporal_std_x={res['temporal_std_x']:.4f}  "
-              f"temporal_std_y={res['temporal_std_y']:.4f}  "
-              f"corr2={res['corr_mean']:.4f}")
+    results = [None] * len(sweep_params)
+
+    def _run(idx_cw_ch):
+        idx, (cw, ch) = idx_cw_ch
+        return idx, sweep_one_crop(cw, ch, phase_paths, tp_indices, channels, cfg)
+
+    with ThreadPoolExecutor(max_workers=None) as pool:
+        futures = {pool.submit(_run, (i, p)): i for i, p in enumerate(sweep_params)}
+        for fut in as_completed(futures):
+            idx, res = fut.result()
+            results[idx] = res
+            print(f"  [{idx+1}/{len(sweep_params)}] crop_w={res['crop_w']} crop_h={res['crop_h']}  "
+                  f"temporal_std_x={res['temporal_std_x']:.4f}  "
+                  f"temporal_std_y={res['temporal_std_y']:.4f}  "
+                  f"corr2={res['corr_mean']:.4f}")
 
     # ---- サマリー ----
     print("\n=== Temporal ECC Precision (um) -- lower is better ===")

@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import numpy as np
 import tifffile
+from concurrent.futures import ThreadPoolExecutor
 from scipy.signal import savgol_filter
 from scipy.stats import norm as sp_norm
 
@@ -132,6 +133,19 @@ def main():
             crops.append(to_uint8(crop + offset, vmin, vmax))
         return crops
 
+    def _ecc_one_tp(ref_crops, smp_crops):
+        """Run ECC for all channels between ref and sample crops. Returns (tx_arr, ty_arr)."""
+        tx_arr = np.full(n_ch, np.nan)
+        ty_arr = np.full(n_ch, np.nan)
+        def _run_ch(c_idx):
+            return c_idx, ecc_align(ref_crops[c_idx], smp_crops[c_idx])
+        with ThreadPoolExecutor(max_workers=None) as pool:
+            for c_idx, result in pool.map(lambda c: _run_ch(c), range(n_ch)):
+                if result is not None:
+                    tx_arr[c_idx] = result[0]
+                    ty_arr[c_idx] = result[1]
+        return tx_arr, ty_arr
+
     if args.mode == "fixed":
         # ------ 固定参照（GRID_REF_OVERRIDE があれば grid 画像、なければ frame 0）------
         ref_path = GRID_REF_OVERRIDE if GRID_REF_OVERRIDE else str(phase_paths[0])
@@ -145,11 +159,9 @@ def main():
             except Exception:
                 continue
             smp_crops_u8 = make_crops_u8(phase_tp)
-            for c_idx in range(n_ch):
-                result = ecc_align(ref_crops_u8[c_idx], smp_crops_u8[c_idx])
-                if result is not None:
-                    tx_raw[c_idx, t_idx] = result[0]
-                    ty_raw[c_idx, t_idx] = result[1]
+            tx_arr, ty_arr = _ecc_one_tp(ref_crops_u8, smp_crops_u8)
+            tx_raw[:, t_idx] = tx_arr
+            ty_raw[:, t_idx] = ty_arr
             if (t_idx + 1) % 20 == 0:
                 print(f"  TP {t_idx+1}/{n_tp}", flush=True)
 
@@ -166,11 +178,9 @@ def main():
                 prev_crops_u8 = prev_crops_u8  # keep previous
                 continue
             curr_crops_u8 = make_crops_u8(curr_img)
-            for c_idx in range(n_ch):
-                result = ecc_align(prev_crops_u8[c_idx], curr_crops_u8[c_idx])
-                if result is not None:
-                    tx_raw[c_idx, t_idx] = result[0]
-                    ty_raw[c_idx, t_idx] = result[1]
+            tx_arr, ty_arr = _ecc_one_tp(prev_crops_u8, curr_crops_u8)
+            tx_raw[:, t_idx] = tx_arr
+            ty_raw[:, t_idx] = ty_arr
             prev_crops_u8 = curr_crops_u8
             if (t_idx + 1) % 20 == 0:
                 print(f"  Pair {t_idx+1}/{n_tp}", flush=True)

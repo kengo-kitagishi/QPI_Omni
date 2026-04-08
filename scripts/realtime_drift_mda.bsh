@@ -34,7 +34,7 @@ String RESUME_SAVE_DIR = "";
 
 // Set to true to force start from T=0 even if previous state exists.
 // Normally false: fresh start is triggered by running prepare_drift_session.py
-boolean FORCE_FRESH_START = false;
+boolean FORCE_FRESH_START = true;
 // ============================================================
 
 

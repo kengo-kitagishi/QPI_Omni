@@ -30,12 +30,12 @@ sys.path.insert(0, str(_script_dir))
 # ============================================================
 
 # タイムラプスで使う .pos ファイル（グリッドなし、実際に撮影するポジションリスト）
-POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\260331\_per_pos_ecc_corrected.pos"
+POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\260331\_focus_check6_ecc_corrected.pos"
 
 # グリッド撮影ディレクトリ（小規模グリッドでよい）
 GRID_DIR         = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
 GRID_BASE_LABEL  = "Pos1"   # ドリフト推定に使う Pos のラベル（タイムラプスと同じ）
-GRID_Z_INDEX     = 10       # グリッド画像の z インデックス（合焦スライス）
+GRID_Z_INDEX     = 18       # グリッド画像の z インデックス（合焦スライス）
 
 # channel_rois.json（事前に pipeline_full.py などで生成済みのもの）
 CHANNEL_ROIS_JSON = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
@@ -44,7 +44,7 @@ CHANNEL_ROIS_JSON = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1\Pos1_x
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # タイムラプス画像の保存先（MM1.4 で撮影した画像の保存先）
-SAVE_DIR         = r"D:\AquisitionData\Kitagishi\260403\ph_260403"
+SAVE_DIR         = r"D:\AquisitionData\Kitagishi\260405\ph_260405"
 
 # .pos ファイル内の各 Pos のインデックス（0始まり）
 REF_POS_INDEX    = 1   # ドリフト推定に使う Pos（サンプルがいる Pos）
@@ -72,9 +72,12 @@ SHIFT_SIGN_Y         = 1
 # EMA / Kalman フィルタ設定
 CORRECTION_EMA_ALPHA = 0.3    # EMA の平滑化係数
 USE_KALMAN_FILTER    = True   # Adaptive Kalman フィルタを使う
-KF_Q_POS_NM2         = 400.0  # プロセスノイズ: 位置 [nm^2]
-KF_Q_VEL_NM2         = 400.0  # プロセスノイズ: 速度 [nm^2]
-KF_R_NM2             = 12100.0  # 観測ノイズ [nm^2]（= 110nm 相当）
+# 実測値 (2026-04-03): stage σ_y=49.8nm, σ_x=93.9nm / ECC σ_ty=9.5nm, σ_tx=16.6nm
+# Q は K≈0.80 を目標に β=0.24 オーバーシュート考慮済みの実効値
+KF_Q_TY_NM2          = 291.0   # image X / stage Y プロセスノイズ [nm²]
+KF_Q_TX_NM2          = 877.0   # image Y / stage X プロセスノイズ [nm²]
+KF_R_TY_NM2          = 91.0    # image X ECC 観測ノイズ [nm²] (σ=9.5nm)
+KF_R_TX_NM2          = 274.0   # image Y ECC 観測ノイズ [nm²] (σ=16.6nm)
 
 # 光学パラメータ
 SENSOR_PIXEL_SIZE    = 3.45e-6   # [m]
@@ -110,7 +113,7 @@ ECC_CROP_H  = 80     # ECC に使う中央 crop 幅 [px]
 
 # グリッドキャリブレーション JSON（calibrate_grid_positions.py の出力）
 # None → compute_drift_online.py でステージ名目値にフォールバック
-GRID_CALIBRATION_JSON = None  # 例: r"D:\path\to\grid_calibration_Pos1.json"
+GRID_CALIBRATION_JSON = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1\grid_calibration_Pos1.json"
 
 # ============================================================
 
@@ -365,9 +368,10 @@ def main():
         "grid_z_index":       GRID_Z_INDEX,
         "correction_ema_alpha": CORRECTION_EMA_ALPHA,
         "use_kalman_filter":  USE_KALMAN_FILTER,
-        "kf_Q_pos_nm2":       KF_Q_POS_NM2,
-        "kf_Q_vel_nm2":       KF_Q_VEL_NM2,
-        "kf_R_nm2":           KF_R_NM2,
+        "kf_Q_ty_nm2":        KF_Q_TY_NM2,
+        "kf_Q_tx_nm2":        KF_Q_TX_NM2,
+        "kf_R_ty_nm2":        KF_R_TY_NM2,
+        "kf_R_tx_nm2":        KF_R_TX_NM2,
         "kf_state_file":      str(session_dir / "drift_kf_state.json"),
     }
     config_path = session_dir / "drift_config.json"

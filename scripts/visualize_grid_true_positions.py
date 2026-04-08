@@ -8,7 +8,7 @@ visualize_grid_true_positions.py
 【ECC 手順】compute_pos_shifts.py と完全に揃えた:
   - 前処理: _tilt_correct (TILT_CROP_H=270 → ECC_CROP_H=80)
   - 正規化: to_uint8 固定 VMIN/VMAX (-5/2)
-  - チャネル平均: MAD 外れ値除去 (OUTLIER_MAD_THRESH=2.5) → 残チャネル平均
+  - チャネル平均: MAD 外れ値除去 (OUTLIER_MAD_THRESH=5.0) → 残チャネル平均
   - ECC: MOTION_TRANSLATION, 100000 iter, 1e-8
 
 【方式 1: 直接ECC】
@@ -55,7 +55,7 @@ TILT_CROP_H = 270   # X 方向の big crop 幅 [px]
 ECC_CROP_H  = 80    # ECC に使う中央 crop 幅 [px]
 
 # チャネル外れ値除去 (compute_pos_shifts.py と同値)
-OUTLIER_MAD_THRESH = 2.5
+OUTLIER_MAD_THRESH = 5.0
 
 # 光学パラメータ
 SENSOR_PIXEL_SIZE = 3.45e-6   # [m]

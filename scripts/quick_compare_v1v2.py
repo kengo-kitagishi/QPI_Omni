@@ -102,7 +102,7 @@ def ecc_v2(ref_u8, cur_u8):
         return float(wm[0,2]), float(wm[1,2]), float(corr)
     except: return None
 
-def mad_outliers(vals, thresh=2.5):
+def mad_outliers(vals, thresh=5.0):
     arr = np.array(vals)
     md = float(np.median(np.abs(arr - np.median(arr))))
     if md == 0: return np.zeros(len(arr), dtype=bool)

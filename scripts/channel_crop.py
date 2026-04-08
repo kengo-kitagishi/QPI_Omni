@@ -42,8 +42,8 @@ from figure_logger import save_figure
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
 
-DEFAULT_CROP_W  = 30
-DEFAULT_CROP_H  = 120
+DEFAULT_CROP_W  = 40
+DEFAULT_CROP_H  = 270
 DEFAULT_PATTERN = "img_*_ph_000.tif"
 ROI_FILENAME    = "channel_rois.json"
 

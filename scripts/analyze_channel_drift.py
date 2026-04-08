@@ -96,7 +96,7 @@ def _aggregate(method: str, records_: list) -> tuple[np.ndarray, np.ndarray]:
     return np.array(tx_out), np.array(ty_out)
 
 
-def _mad_outlier(arr: np.ndarray, thresh: float = 2.5) -> np.ndarray:
+def _mad_outlier(arr: np.ndarray, thresh: float = 5.0) -> np.ndarray:
     """MAD ベースの外れ値フラグ（True = 外れ値）"""
     if len(arr) < 3:
         return np.zeros(len(arr), dtype=bool)

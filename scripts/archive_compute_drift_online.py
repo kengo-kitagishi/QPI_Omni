@@ -143,7 +143,7 @@ def to_uint8(img, vmin, vmax):
     return ((clipped - vmin) / (vmax - vmin) * 255).astype(np.uint8)
 
 
-def ecc_align(ref_u8, tl_u8, max_iter=10000, epsilon=1e-6):
+def ecc_align(ref_u8, tl_u8, max_iter=100000, epsilon=1e-8):
     """ECC アライメント。(tx, ty, correlation) を返す。失敗時は None。"""
     warp_matrix = np.eye(2, 3, dtype=np.float32)
     criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, max_iter, epsilon)
@@ -161,7 +161,7 @@ def _mad(arr):
     return float(np.median(np.abs(arr - m)))
 
 
-def _remove_outliers_mad(values, thresh=2.5):
+def _remove_outliers_mad(values, thresh=5.0):
     arr = np.array(values, dtype=np.float64)
     md = _mad(arr)
     if md == 0:

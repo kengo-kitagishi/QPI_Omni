@@ -195,7 +195,7 @@ def process_pos_complete(pos_name, wo0_phase_dir, wo2_phase_dir,
         wo2_uint8 = to_uint8(wo2_reference_img)
         
         warp_matrix = np.eye(2, 3, dtype=np.float32)
-        criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-6)
+        criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-8)
         
         try:
             correlation, warp_matrix = cv2.findTransformECC(

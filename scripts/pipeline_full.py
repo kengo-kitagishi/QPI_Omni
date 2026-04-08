@@ -114,7 +114,7 @@ CROP_APPLY                = True
 # STEP_GAUSSIAN_GRADIENT=True かつ GRADIENT_INPLACE=False のとき自動で *_phase_bgsub.tif に切り替わる
 CROP_IMG_PATTERN          = "*_phase.tif"  # output_phase/ 内の位相画像パターン
 CROP_W                    = 40
-CROP_H                    = 120
+CROP_H                    = 270
 CROP_MIN_DIST             = 35
 CROP_PROMINENCE           = 0.3
 CROP_X_START              = 40
@@ -152,7 +152,7 @@ SHIFTS_GRID_Z_INDEX       = 10       # グリッド基準画像の z 番号
 SHIFTS_METHOD             = 'ecc'
 SHIFTS_VMIN               = -5.0
 SHIFTS_VMAX               =  2.0
-SHIFTS_OUTLIER_MAD_THRESH = 3.0
+SHIFTS_OUTLIER_MAD_THRESH = 5.0
 SHIFTS_TIMESERIES_WINDOW  = 11
 SHIFTS_TIMESERIES_THRESH  = 2.0
 SHIFTS_ECC_MIN_CORR       = 0.9   # ECC スコアがこれ未満のチャネルを除外

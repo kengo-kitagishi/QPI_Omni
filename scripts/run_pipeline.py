@@ -36,8 +36,8 @@ STEP_GRID_SUBTRACT       = True
 # channel_crop パラメータ
 # ============================================================
 CROP_PATTERN   = "img_*_ph_000.tif"
-CROP_W         = 30
-CROP_H         = 120
+CROP_W         = 40
+CROP_H         = 270
 MIN_DIST       = 35
 PROMINENCE     = 0.3
 X_START        = None   # int を入れると自動エッジ検出しない
@@ -77,7 +77,7 @@ SHIFTS_REFERENCE_FRAME      = 150    # USE_GRID_REFERENCE=False の場合のみ�
 SHIFTS_METHOD               = 'ecc'
 SHIFTS_VMIN                 = -5.0
 SHIFTS_VMAX                 = 2.0
-SHIFTS_OUTLIER_MAD_THRESH   = 2.5
+SHIFTS_OUTLIER_MAD_THRESH   = 5.0
 SHIFTS_TIMESERIES_WINDOW    = 11
 SHIFTS_TIMESERIES_THRESH    = 3.0
 

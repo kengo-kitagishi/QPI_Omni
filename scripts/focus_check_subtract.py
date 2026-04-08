@@ -36,14 +36,14 @@ if str(_SCRIPT_DIR) not in sys.path:
 
 DO_RECONSTRUCTION = True
 GRID_DIR    = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"   # Pos{N}_x+0_y+0 を含む親ディレクトリ
-FOCUS_DIR   = r"E:\Acuisition\kitagishi\260331\focus_check_3"  # Pos0..PosN を含む親ディレクトリ
+FOCUS_DIR   = r"E:\Acuisition\kitagishi\260331\focus_check_6"  # Pos0..PosN を含む親ディレクトリ
 GRID_SUFFIX = "x+0_y+0"           # 背景参照グリッド位置のサフィックス
 
 POS_LABELS  = None     # None=自動検出, 例: ["Pos1", "Pos2"]（Pos0=BG は自動除外）
-ALIGN_Z     = 0                    # ECC アライメントに使う z インデックス
+ALIGN_Z     = 10                   # ECC アライメントに使う z インデックス（z=0 = index 10）
 
 CROP_OUTPUT = False                # True=channel ROI でクロップ, False=全体画像
-OUTPUT_DIR  = r"E:\Acuisition\kitagishi\260331\focus_check_subtracted_3"
+OUTPUT_DIR  = r"E:\Acuisition\kitagishi\260331\focus_check_subtracted_6"
 
 N_WORKERS   = 4                    # 再構成時の並列数（DO_RECONSTRUCTION=True 時のみ）
 
@@ -103,7 +103,7 @@ def compute_ecc_warp(ref_img: np.ndarray, src_img: np.ndarray):
     ref_u8 = to_uint8(ref_img)
     src_u8 = to_uint8(src_img)
     warp_matrix = np.eye(2, 3, dtype=np.float32)
-    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-7)
+    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-8)
     try:
         correlation, warp_matrix = cv2.findTransformECC(
             ref_u8, src_u8, warp_matrix, cv2.MOTION_TRANSLATION, criteria
