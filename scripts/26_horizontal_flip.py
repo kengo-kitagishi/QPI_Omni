@@ -4,7 +4,7 @@ import numpy as np
 import tifffile as tiff
 
 # 対象フォルダ
-folder = r"C:\Users\QPI\Desktop\verti_flip_train"
+folder = r"C:\Users\QPI\Desktop\train"
 
 # フォルダ内のファイルを走査
 for filename in os.listdir(folder):

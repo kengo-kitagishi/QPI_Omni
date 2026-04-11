@@ -1,1 +1,1 @@
-/Users/kitak/dotfiles/claude/CLAUDE.md
+C:\Users\QPI\dotfiles\claude\CLAUDE.md

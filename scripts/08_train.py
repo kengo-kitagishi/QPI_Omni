@@ -1,90 +1,3 @@
-# %%
-from cellpose_omni import models, utils, io
-import numpy as np
-import os
-import tifffile
-import glob
-
-lower = 5
-upper = 95
-
-def normalize_custom(img):
-    return util.normalize99(img, lower=lower,upper=upper)
-
-def normalize_none(img):
-    return img.astype(np.float32)
-
-
-# ==== パラメータ設定 ====
-train_dir = r"C:\Users\QPI\Desktop\train"
-
-use_gpu = True
-nchan = 1
-nclasses = 3  # ※nclassesはモデル作成時に使用するかどうか環境による
-diameter = 0
-optimizer = 'RAdam'   # ただし公式 train() 構成には optimizer= 引数が明記されていないので注意
-learning_rate = 0.0001
-batch_size = 1
-save_every = 100
-n_epochs = 3000
-crop_size = (32, 64)  # tyx
-
-# ==== ファイル収集 ====
-# 画像とマスクを手動でペアリング
-image_paths = sorted(glob.glob(os.path.join(train_dir, "*.tif")))
-mask_paths  = [p.replace(".tif", "_masks.tif") for p in image_paths]
-mask_paths  = [p if os.path.exists(p) else None for p in mask_paths]
-
-# 存在するペアだけ残す
-pairs = [(im, m) for im, m in zip(image_paths, mask_paths) if m is not None]
-image_paths = [im for im, _ in pairs]
-mask_paths  = [m for _, m in pairs]
-
-print(f"Found {len(image_paths)} valid image-mask pairs.")
-
-# ==== 読み込み ====
-imgs  = [tifffile.imread(p) for p in image_paths]
-masks = [tifffile.imread(p) for p in mask_paths]
-
-# ==== モデル作成 ====
-model = models.CellposeModel(
-    gpu=use_gpu,
-    pretrained_model=None,
-    omni=True,
-    nchan=nchan,
-    nclasses=nclasses
-)
-
-# ==== 学習 ====
-model.train(
-    train_data=imgs,
-    train_labels=masks,
-    channels=None,
-    normalize=False,          # 公式デフォルト True をオフにして前処理済にする
-    save_path=None,
-    save_every=save_every,
-    learning_rate=learning_rate,
-    n_epochs=n_epochs,
-    batch_size=batch_size,
-    tyx=crop_size,
-    rescale=False
-)
-
-print("Done")
-# %%
-import os
-train_dir = r"C:\Users\QPI\Desktop\train"
-print("Train dir =", train_dir)
-print("Exists =", os.path.exists(train_dir))
-# %%
-from cellpose_omni import io
-
-res = io.get_image_files(train_dir, mask_filter='_masks')
-print("Returned object:", type(res))
-print("Length:", len(res))
-
-for i, item in enumerate(res):
-    print(f"[{i}] Type: {type(item)}  Example: {item[:3] if isinstance(item, list) else item}")
 
 # %%
 import os
@@ -93,25 +6,25 @@ import tifffile
 import numpy as np
 from cellpose_omni import models
 
-lower = 5
-upper = 95
+lower = 0
+upper = 100
 
 def normalize_custom(img):
     return util.normalize99(img, lower=lower,upper=upper)
 
 # === パラメータ（必要なら調整） ===
 os.chdir(r"C:\Users\QPI\Desktop")           # 安全のため作業ディレクトリを固定
-train_dir = r"C:\Users\QPI\Desktop\verti_flip_train" 
+train_dir = r"C:\Users\QPI\Desktop\train" 
 use_gpu = True
 nchan = 1
 nclasses = 3
 learning_rate = 0.0001
-diameter = 20
-batch_size = 2
+diameter = 30
+batch_size = 5
 save_every = 100
 n_epochs = 3000
 crop_size = (32, 96)  # tyx
-save_dir = r"C:\Users\QPI\Desktop\verti_flip_train\omni_model"
+save_dir = r"C:\Users\QPI\Desktop\train\omni_model"
 
 # === ファイル収集（確実） ===
 # 画像 (*.tif) を集めて、対応する *_masks.tif が存在するものだけ採用
@@ -184,7 +97,7 @@ train_files = image_paths[:len(masks)]  # optional: デバッグ/保存用にフ
 # === モデル ===
 model = models.CellposeModel(
     gpu=use_gpu,
-    pretrained_model=r"C:\Users\QPI\Desktop\verti_flip_train\omni_model\models\cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_2025_11_05_18_13_10.220871",
+    pretrained_model=None,
     omni=True,
     nchan=nchan,
     nclasses=nclasses

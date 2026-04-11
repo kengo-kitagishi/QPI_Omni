@@ -144,7 +144,10 @@ mcp.json
 htmlcov/
 .tox/
 .hypothesis/
+
+# Claude Code（ローカル権限・パスがマシン依存。リポジトリでは追跡しない）
 .claude/
+
 docs/EXPERIMENT_LOG.md
 .tmp.driveupload/
 *.bak.*
