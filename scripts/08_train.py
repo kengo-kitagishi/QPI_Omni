@@ -2,9 +2,13 @@
 # %%
 import os
 import glob
+import logging
 import tifffile
 import numpy as np
+import torch
 from cellpose_omni import models
+
+torch.backends.cudnn.benchmark = True
 
 lower = 0
 upper = 100
@@ -18,13 +22,22 @@ train_dir = r"C:\Users\QPI\Desktop\train"
 use_gpu = True
 nchan = 1
 nclasses = 3
-learning_rate = 0.0001
+learning_rate = 0.01
 diameter = 30
 batch_size = 5
 save_every = 100
 n_epochs = 3000
-crop_size = (32, 96)  # tyx
+crop_size = (40, 128)  # tyx: 画像短辺40に合わせ、幅は8の倍数で128
 save_dir = r"C:\Users\QPI\Desktop\train\omni_model"
+pretrained_model = r"C:\Users\QPI\Desktop\train\omni_model\models\cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_2026_04_12_16_20_16.993882"
+loss_log_path = r"C:\Users\QPI\Desktop\train\train_loss.log"
+
+# === cellpose_omni のロガーにファイル出力を追加 ===
+_loss_fh = logging.FileHandler(loss_log_path, mode='w', encoding='utf-8')
+_loss_fh.setLevel(logging.DEBUG)
+_cp_logger = logging.getLogger('cellpose_omni.core')
+_cp_logger.addHandler(_loss_fh)
+_cp_logger.setLevel(logging.DEBUG)
 
 # === ファイル収集（確実） ===
 # 画像 (*.tif) を集めて、対応する *_masks.tif が存在するものだけ採用
@@ -97,7 +110,7 @@ train_files = image_paths[:len(masks)]  # optional: デバッグ/保存用にフ
 # === モデル ===
 model = models.CellposeModel(
     gpu=use_gpu,
-    pretrained_model=None,
+    pretrained_model=pretrained_model,
     omni=True,
     nchan=nchan,
     nclasses=nclasses
@@ -111,14 +124,17 @@ try:
         train_links=train_links,
         train_files=train_files,
         channels=None,
-        normalize=False,          # 正規化OFF
+        normalize=True,           # 内部の1st-99th percentile正規化を使う
         save_path=save_dir,
         save_every=save_every,
         learning_rate=learning_rate,
         min_train_masks=1,
         n_epochs=n_epochs,
         batch_size=batch_size,
-        #tyx=crop_size,
+        dataloader=False,         # WindowsではDataLoaderがハングするため無効
+        num_workers=0,
+        do_autocast=True,         # Mixed Precision（Tensor Core活用）
+        tyx=crop_size,
         rescale=False
     )
     print("Training finished without exception.")

@@ -30,7 +30,7 @@ masks, flows, styles = model.eval(
     images,
     channels=None,
     channel_axis=None,
-    normalize=False,      # 正規化だけオフ（CLIでは指定できない部分）
+    normalize=True,       # 学習時と同じ1st-99th percentile正規化
     diameter=0,
     omni=True,
     net_avg=True,         # CLIデフォルトと合わせる
@@ -77,7 +77,7 @@ for i, f in enumerate(files, 1):
         channels=None,
         channel_axis=None,
         diameter=0,
-        normalize=False,   # 正規化OFF
+        normalize=True,    # 学習時と同じ1st-99th percentile正規化
         tile=False,        # 揺らぎを避けたいなら False
         net_avg=True,
         omni=True,
@@ -188,7 +188,7 @@ masks, flows, styles = model.eval(
     images,
     channels=None,
     channel_axis=None,
-    normalize=False,   # 1–99%正規化OFF
+    normalize=True,    # 学習時と同じ1st-99th percentile正規化
     diameter=0,
     omni=True,
     net_avg=True,
@@ -219,15 +219,13 @@ import os, numpy as np, tifffile, traceback
 
 # ==== 設定（必要に応じて変更） ====
 # 入力ディレクトリ（推論対象画像）
-indir = r"F:\251212\ph_1\Pos10\10_7\crop"
+indir = r"F:\crop_sub_recon_z018\ch09"
 # 出力ディレクトリ（マスク等の保存先）
 outdir = os.path.join(indir, "inference_out")
 os.makedirs(outdir, exist_ok=True)
 
 # 学習済みモデルパス
-model_path = r"C:\Users\QPI\Desktop\verti_flip_train\omni_model\models\cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_2025_11_05_19_14_41.656097"
-model_path = r"C:\Users\QPI\Desktop\verti_flip_train\omni_model\models\cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_2025_11_05_19_14_41.656097"
-model_path = r"C:\Users\QPI\Desktop\archived_train\train_251220\verti_flip_train\omni_model\models\cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_2025_11_05_19_14_41.656097"
+model_path = r"C:\Users\QPI\Desktop\train\omni_model\models\cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_2026_04_12_19_50_19.802592"
 # 推論設定（チューニング可能）
 USE_GPU = True
 NCHAN = 1
@@ -238,7 +236,7 @@ EVAL_PARAMS = dict(
     channels=None,
     channel_axis=None,
     diameter=30,
-    normalize=False,   # 正規化OFF
+    normalize=True,    # 学習時と同じ1st-99th percentile正規化
     tile=False,        # タイル処理はしない（揺らぎ抑制）
     net_avg=True,
     omni=True,
