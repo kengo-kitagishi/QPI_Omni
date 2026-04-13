@@ -45,11 +45,11 @@ POS_END   = 64
 GLUCOSE_0_START = 575
 GLUCOSE_0_END   = 1440   # exclusive
 
-# Reconstruction workers (conservative to avoid crash)
-N_WORKERS_RECON = 4
+# Reconstruction workers (28 logical cores available)
+N_WORKERS_RECON = 8
 
-# compute_pos_shifts workers (conservative)
-N_WORKERS_ECC = 4
+# compute_pos_shifts workers
+N_WORKERS_ECC = 16
 
 # Progress log (for resume)
 PROGRESS_LOG = TIMELAPSE_ROOT / "batch_pipeline_progress.json"
