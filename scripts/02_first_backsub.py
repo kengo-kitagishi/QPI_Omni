@@ -3,7 +3,7 @@ import os, glob
 import numpy as np
 import tifffile as tiff
 
-# ====== 入力 ======
+# ====== Input ======
 #seq_dir  = r"G:\250910_0\Pos4\output_phase\crop_150_300"  #251030_0_Pos4
 #seq_dir = r"G:\250910_0\Pos1\output_phase\aligned_left_center\crop_150_300" #251101_0_Pos1
 #seq_dir = r"G:\250910_0\Pos3\output_phase\aligned_left_center\crop_150_300" #251101_0_Pos3
@@ -31,16 +31,16 @@ out_dir  = os.path.join(seq_dir, "subtracted_by_maskmean_float32")
 
 os.makedirs(out_dir, exist_ok=True)
 
-# ====== ファイル対応 ======
+# ====== File mapping ======
 frames = sorted(glob.glob(os.path.join(seq_dir, "*.tif")))
 masks  = sorted(glob.glob(os.path.join(mask_dir, "*.tif")))
 
 if not frames:
-    raise FileNotFoundError(f"シーケンス画像が見つかりません: {seq_dir}")
+    raise FileNotFoundError(f"Sequence images not found: {seq_dir}")
 if len(frames) != len(masks):
-    print(f"⚠️ 警告: 枚数が一致しません → 画像={len(frames)}枚, マスク={len(masks)}枚")
+    print(f"WARNING: count mismatch -> images={len(frames)}, masks={len(masks)}")
 
-# ====== 各ペアを処理 ======
+# ====== Process each pair ======
 processed = 0
 skipped = 0
 
@@ -52,24 +52,24 @@ for f, m in zip(frames, masks):
         MSK_raw = MSK_raw[..., 0]
     MSK = (MSK_raw > 0)
 
-    # サイズチェック
+    # Size check
     if IMG.shape[:2] != MSK.shape[:2]:
-        print(f"[SKIP] サイズ不一致: {os.path.basename(f)} {IMG.shape} vs {MSK.shape}")
+        print(f"[SKIP] Size mismatch: {os.path.basename(f)} {IMG.shape} vs {MSK.shape}")
         skipped += 1
         continue
 
     if not MSK.any():
-        print(f"[SKIP] マスク領域なし: {os.path.basename(f)}")
+        print(f"[SKIP] No mask region: {os.path.basename(f)}")
         skipped += 1
         continue
 
-    # マスク領域（白）の平均値を計算
+    # Calculate mean of mask region (white)
     mean_in_mask = float(IMG[MSK].mean())
 
-    # 平均値を画像全体から引く
+    # Subtract mean from entire image
     OUT = IMG - mean_in_mask
 
-    # 保存
+    # Save
     base = os.path.splitext(os.path.basename(f))[0]
     out_path = os.path.join(out_dir, f"{base}_subtracted.tif")
     tiff.imwrite(out_path, OUT.astype(np.float32))
@@ -77,6 +77,6 @@ for f, m in zip(frames, masks):
     processed += 1
     print(f"[OK] {os.path.basename(f)} mean_in_mask={mean_in_mask:.6f}")
 
-print(f"✅ 完了: {processed}枚（スキップ: {skipped}枚） → {out_dir}")
+print(f"Done: {processed} images (skipped: {skipped}) -> {out_dir}")
 
 # %%

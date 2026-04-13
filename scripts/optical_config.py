@@ -1,51 +1,51 @@
 """
-optical_config.py — QPI光学系共通パラメータ
+optical_config.py -- Common QPI optical system parameters
 
-使い方:
+Usage:
     from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE, CROP_REGION
 
-実験前に更新するもの:
-    - OFFAXIS_CENTER : CursorVisualizer (get_offaxis_center.py) で取得した値
-    - CROP_REGION    : 使用するクロップ領域（変わった場合のみ）
+Update before experiments:
+    - OFFAXIS_CENTER : Value obtained from CursorVisualizer (get_offaxis_center.py)
+    - CROP_REGION    : Crop region to use (only when changed)
 
-WAVELENGTH / NA / PIXELSIZE はハード変更のない限り触らない。
+Do not modify WAVELENGTH / NA / PIXELSIZE unless hardware changes.
 """
 
 # ============================================================
-# ★ 実験前に更新するパラメータ
+# Parameters to update before experiments
 # ============================================================
 
-OFFAXIS_CENTER = (1632, 445)   # (row, col) — 2026-03-23 更新 (crop 400:2448 右チャンネル)
+OFFAXIS_CENTER = (1632, 445)   # (row, col) -- updated 2026-03-23 (crop 400:2448 right channel)
 
-# クロップ領域 (row_start, row_end, col_start, col_end)
-# カメラ位置を変えた場合は要更新
-# Basler aca2440 (最大 2048 行)  → (0, 2048, 208, 2256)  = 2048×2048
-# MicroManager 1.4 (余白あり)    → (8, 2056, 208, 2256)  = 2048×2048
+# Crop region (row_start, row_end, col_start, col_end)
+# Update when camera position changes
+# Basler aca2440 (max 2048 rows)  -> (0, 2048, 208, 2256)  = 2048x2048
+# MicroManager 1.4 (with margin)  -> (8, 2056, 208, 2256)  = 2048x2048
 CROP_REGION = (0, 2048, 208, 2256)
 
 # ============================================================
-# 変わらない光学パラメータ
+# Fixed optical parameters
 # ============================================================
 
-WAVELENGTH   = 658e-9           # m  (658 nm レーザー)
-NA           = 0.95             # 対物レンズ開口数
-PIXELSIZE    = 3.45e-6 / 40     # m/px  (センサー 3.45 µm, 40x 対物)
+WAVELENGTH   = 658e-9           # m  (658 nm laser)
+NA           = 0.95             # Objective lens numerical aperture
+PIXELSIZE    = 3.45e-6 / 40     # m/px  (sensor 3.45 um, 40x objective)
 
 # ============================================================
-# OFFAXIS_CENTER 履歴
-# 「いつの実験のoffaxisはなんだっけ？」→ ここを見る
+# OFFAXIS_CENTER history
+# "What was the offaxis center for that experiment?" -> look here
 # ============================================================
-# フォーマット: {"date": "YYYY-MM-DD", "center": (row, col), "note": "メモ"}
-# 新しい実験を行うたびに先頭に追加する
+# Format: {"date": "YYYY-MM-DD", "center": (row, col), "note": "memo"}
+# Add new entries at the top for each experiment
 
 OFFAXIS_HISTORY = [
-    {"date": "2026-03-23", "center": (1632,  445), "note": "右チャンネル crop 400:2448 で再測定"},
-    {"date": "2026-03-21", "center": (1634,  532), "note": "回折格子変更後 (crop 208:2256 で測定)"},
+    {"date": "2026-03-23", "center": (1632,  445), "note": "re-measured with right channel crop 400:2448"},
+    {"date": "2026-03-21", "center": (1634,  532), "note": "after diffraction grating change (measured with crop 208:2256)"},
     {"date": "2026-02-28", "center": (1712,  532), "note": ""},
     {"date": "2025-12-12", "center": (1664,  485), "note": "ph_1 / Pos20"},
-    {"date": "unknown",    "center": (1642,  443), "note": "realtime monitor時の値"},
-    {"date": "unknown",    "center": (1623, 1621), "note": "qpi_03 batch時の値"},
-    {"date": "unknown",    "center": (1504, 1708), "note": "focus setup時の値"},
+    {"date": "unknown",    "center": (1642,  443), "note": "value from realtime monitor"},
+    {"date": "unknown",    "center": (1623, 1621), "note": "value from qpi_03 batch"},
+    {"date": "unknown",    "center": (1504, 1708), "note": "value from focus setup"},
     {"date": "unknown",    "center": ( 858,  759), "note": "250522 test timelapse"},
     {"date": "unknown",    "center": ( 857,  759), "note": "250528 visibility test"},
 ]
@@ -53,12 +53,12 @@ OFFAXIS_HISTORY = [
 
 def get_offaxis_for_date(date_str: str):
     """
-    日付文字列（'YYYY-MM-DD'）に対応する offaxis_center を返す。
-    見つからない場合は現在の OFFAXIS_CENTER を返す。
+    Return offaxis_center corresponding to a date string ('YYYY-MM-DD').
+    Returns current OFFAXIS_CENTER if not found.
 
-    例:
+    Example:
         center = get_offaxis_for_date("2025-12-12")
-        # → (1664, 485)
+        # -> (1664, 485)
     """
     for entry in OFFAXIS_HISTORY:
         if entry["date"] == date_str:
@@ -67,7 +67,7 @@ def get_offaxis_for_date(date_str: str):
 
 
 def print_history():
-    """OFFAXIS_HISTORY を一覧表示する。"""
+    """Display OFFAXIS_HISTORY as a list."""
     print(f"{'Date':<14} {'Center':<16} Note")
     print("-" * 50)
     for e in OFFAXIS_HISTORY:

@@ -26,20 +26,20 @@ from compute_pos_shifts import compute_backsub_offset
 # 設定パラメータ
 # ============================================================
 # タイムラプス Pos ディレクトリ（output_phase/*_phase.tif を含む）
-TIMELAPSE_DIR = r"C:\ph_260327\Pos1"
+TIMELAPSE_DIR = r"D:\AquisitionData\Kitagishi\260405\ph_260405\Pos1"
 
 # pos_shifts.json と channel_rois.json の場所
-SHIFTS_JSON       = r"C:\ph_260327\Pos1\output_phase\channels\pos_shifts_cal.json"
-CHANNEL_ROIS_JSON = r"C:\ph_260327\Pos1\output_phase\channels\channel_rois.json"
+SHIFTS_JSON       = r"D:\AquisitionData\Kitagishi\260405\ph_260405\Pos1\output_phase\channels\pos_shifts_cal.json"
+CHANNEL_ROIS_JSON = r"D:\AquisitionData\Kitagishi\260405\ph_260405\Pos1\output_phase\channels\channel_rois.json"
 
 # グリッド画像ディレクトリ（generate_grid_pos.py で取得したデータ）
-GRID_DIR   = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
+GRID_DIR   = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
 BASE_LABEL = "Pos1"               # グリッドPosのベースラベル → Pos1_x{xi:+d}_y{yi:+d}
 
 # タイムラプスの z インデックス（img_*_ph_{TL_Z_INDEX:03d}_phase.tif）
 TL_Z_INDEX   = 0
 # グリッドの z インデックス
-GRID_Z_INDEX = 9
+GRID_Z_INDEX = 18
 
 # グリッドステップ [μm]（generate_grid_pos.py の X_STEP / Y_STEP と合わせる）
 X_STEP = 0.1
@@ -61,16 +61,17 @@ APPLY_SUBPIXEL_CORRECTION = True
 # subtracted を逆シフトして元の位置に戻すか（通常不要）
 APPLY_INVERSE_SHIFT = False
 MAX_FRAMES = None  # テストラン用: None で全フレーム、整数で先頭 N フレームのみ
+PICK_FRAMES = None  # None → all, list → only these indices (e.g. [0, 192, 385])
 
 # グリッドキャリブレーション（calibrate_grid_positions.py の出力 JSON）
 # None → 名目値 (xi*X_STEP/pixel_scale_um) を使用
-GRID_CALIBRATION_JSON = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1\grid_calibration_Pos1.json"
+GRID_CALIBRATION_JSON = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1\grid_calibration_Pos1.json"
 
 # 出力クロップ長（X方向）: None → channel_rois.json の crop_h をそのまま使用
 OUTPUT_CROP_H = None
 
 # 出力ディレクトリ: None → channels_dir/grid_subtracted/ に自動設定
-OUTPUT_DIR = r"C:\ph_260327\Pos1\output_phase\channels\crop_sub_cal"
+OUTPUT_DIR = r"D:\AquisitionData\Kitagishi\260405\ph_260405\Pos1\output_phase\channels\crop_sub_rawraw_z018"
 
 # True → crop前のフルフレーム（subpixel correction適用済み）を full_frame_grid_sub.tif として保存
 OUTPUT_SAVE_FULL_FRAME = False
@@ -81,14 +82,14 @@ OUTPUT_SAVE_FULL_FRAME = False
 # True → ホログラム原版TIFからPos0参照なしでon-the-fly再構成し、raw同士を直接引き算する。
 # その後 2π 補正（global integer offset）と tilt 補正を適用して出力する。
 # ECC 計算（compute_pos_shifts.py）は output_phase/ を使い続けるため変更不要。
-USE_RAW_PHASE    = False
+USE_RAW_PHASE    = True
 
 # 再構成用センサークロップ (r1, r2, c1, c2)  pipeline_full.py の CROP_BEFORE / CROP_AFTER と合わせる
 RAW_CROP         = (0, 2048, 400, 2448)
 
 # 生ホログラムの z インデックス（通常 TL_Z_INDEX / GRID_Z_INDEX と同値）
 RAW_TL_Z_INDEX   = 0
-RAW_GRID_Z_INDEX = 9
+RAW_GRID_Z_INDEX = 18
 
 # 2π補正 + tilt補正に使う大クロップ高さ（axis=1 方向の px 数）
 TILT_CROP_H_RAW  = 270
@@ -299,11 +300,19 @@ def main():
         print("ERROR: pos_shifts.json に frame_results が見つかりません")
         sys.exit(1)
 
-    n_frames   = len(frame_results)
-    if MAX_FRAMES is not None and MAX_FRAMES < n_frames:
+    n_frames_total = len(frame_results)
+    if MAX_FRAMES is not None and MAX_FRAMES < n_frames_total:
         frame_results = frame_results[:MAX_FRAMES]
-        n_frames = MAX_FRAMES
-        print(f"[TEST] フレームを {n_frames} に制限")
+        n_frames_total = MAX_FRAMES
+        print(f"[TEST] MAX_FRAMES={MAX_FRAMES}")
+
+    # PICK_FRAMES: process only selected indices
+    if PICK_FRAMES is not None:
+        pick_set = [i for i in PICK_FRAMES if i < n_frames_total]
+        print(f"[PICK] {len(pick_set)} frames: {pick_set}")
+    else:
+        pick_set = list(range(n_frames_total))
+    n_frames = len(pick_set)
     n_channels = len(rois)
     print(f"フレーム数: {n_frames}")
     print(f"チャネルROI数: {n_channels}")
@@ -325,7 +334,11 @@ def main():
         if not tl_frames:
             print(f"ERROR: タイムラプスフレームが見つかりません: {tl_dir}/output_phase/img_*_ph_{TL_Z_INDEX:03d}_phase.tif")
             sys.exit(1)
-    if len(tl_frames) != n_frames:
+    if PICK_FRAMES is not None:
+        max_needed = max(pick_set) + 1
+        if len(tl_frames) < max_needed:
+            print(f"WARNING: tif files={len(tl_frames)} < max pick index={max_needed}")
+    elif len(tl_frames) != n_frames:
         print(f"WARNING: フレーム数不一致  pos_shifts={n_frames}  tif files={len(tl_frames)}")
 
     # --- グリッドPosスキャン ---
@@ -378,7 +391,7 @@ def main():
     out_stacks = [[] for _ in range(n_channels)]
     full_frame_stack = [] if OUTPUT_SAVE_FULL_FRAME else None
 
-    for t in tqdm(range(n_frames), desc="フレーム処理"):
+    for idx, t in enumerate(tqdm(pick_set, desc="フレーム処理")):
         sx, sy = frame_shifts[t]
         if sx is None or sy is None:
             sx, sy = 0.0, 0.0
@@ -508,12 +521,14 @@ def main():
 
             out_stacks[ch].append(subtracted.astype(np.float32))
 
-    # --- TIF 保存 ---
+    # --- TIF 保存 (per-frame in ch{ch:02d}/ subdirectories) ---
     for ch in range(n_channels):
-        arr = np.array(out_stacks[ch], dtype=np.float32)  # (T, H, W)
-        out_path = out_dir / f"channel_{ch:02d}_grid_sub.tif"
-        tifffile.imwrite(str(out_path), arr, imagej=True)
-        print(f"保存: {out_path}  shape={arr.shape}")
+        ch_dir = out_dir / f"ch{ch:02d}"
+        ch_dir.mkdir(parents=True, exist_ok=True)
+        for idx, t in enumerate(pick_set):
+            frame_path = ch_dir / tl_frames[t].name
+            tifffile.imwrite(str(frame_path), out_stacks[ch][idx].astype(np.float32))
+        print(f"保存: {ch_dir}/  ({n_frames} frames, shape={out_stacks[ch][0].shape})")
 
     if full_frame_stack is not None:
         full_arr = np.array(full_frame_stack, dtype=np.float32)  # (T, H, W)

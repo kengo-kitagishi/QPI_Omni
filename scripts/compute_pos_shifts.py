@@ -85,22 +85,8 @@ SAVE_CORR_DATA         = True
 # --- 並列処理 ---
 N_WORKERS = None               # None = os.cpu_count(). 1 = 直列（デバッグ用）
 
-# ============================================================
-# ★ シフト適用＋引き算＋最終 crop 出力
-# ============================================================
-APPLY_SHIFT_AND_CROP    = True     # False でこのステップをスキップ
-
-# タイムラプスの z インデックス（img_*_ph_{Z}_phase.tif のZZZ部分）
-APPLY_TL_Z_INDEX        = 0        # 通常 0 (ph_000)
-
-# 最終 crop パラメータ（横長: 40行 × 440列）
-FINAL_CROP_CY           = 256      # Y中心（ユーザーが設定）
-FINAL_CROP_CX           = 256      # X中心（crop_h=440 で cx±220 が画像内に収まるよう設定）
-FINAL_CROP_W            = 40       # Y方向行数（高さ）
-FINAL_CROP_H            = 440      # X方向列数（幅）
-
-# 出力先（None なら channels_dir/crop_subtracted/ に自動設定）
-APPLY_OUT_DIR           = None
+# Timelapse z-index (used in slope correction mode)
+TL_Z_INDEX = 0                 # img_*_ph_{Z:03d}_phase.tif
 
 # ============================================================
 # X-tilt補正（gaussian_backsub の代替）
@@ -618,87 +604,6 @@ def _frame_result_from_per_channel(t, per_channel):
     }, sx_avg, sy_avg
 
 
-def apply_shifts_and_crop(channels_dir, frame_results, grid_ref_path_str=None):
-    """
-    pos_shifts.json で求めたシフトを output_phase 全フレームに適用し、
-    参照引き算 → 40×440 crop → channels_dir/crop_subtracted/ に保存。
-    """
-    from channel_crop import extract_rect_roi
-
-    tl_dir = Path(channels_dir).parent          # = output_phase/
-    out_dir = Path(APPLY_OUT_DIR) if APPLY_OUT_DIR else Path(channels_dir) / f"crop_sub_ecc{ECC_CROP_H:03d}_fixed"
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    # タイムラプスフレーム一覧
-    tl_frames = sorted(tl_dir.glob(f"img_*_ph_{APPLY_TL_Z_INDEX:03d}_phase.tif"))
-    if not tl_frames:
-        print(f"[APPLY] output_phase フレームが見つかりません: {tl_dir}")
-        return
-
-    # 参照画像（フル解像度）
-    if grid_ref_path_str and Path(grid_ref_path_str).exists():
-        ref_full = tifffile.imread(str(grid_ref_path_str)).astype(np.float64)
-        print(f"[APPLY] 参照: グリッド {Path(grid_ref_path_str).name}")
-    else:
-        ref_full = tifffile.imread(str(tl_frames[0])).astype(np.float64)
-        print(f"[APPLY] 参照: タイムラプス 1フレーム目 {tl_frames[0].name}")
-
-    # シフト辞書 {frame_index: (sx, sy)}
-    shift_map = {
-        r["frame_index"]: (r["shift_x_avg"] or 0.0, r["shift_y_avg"] or 0.0)
-        for r in frame_results
-    }
-
-    # channel_rois.json を読んでチャネルごとの ROI を取得
-    rois_path = Path(channels_dir) / "channel_rois.json"
-    if not rois_path.exists():
-        print(f"[APPLY] ERROR: channel_rois.json が見つかりません: {rois_path}")
-        return
-    rois = json.load(rois_path.open(encoding="utf-8"))
-    n_ch = len(rois)
-    print(f"[APPLY] channel_rois: {n_ch} channels")
-
-    # 既存の出力をクリア（ch00/ ～ ch{n_ch-1}/ サブフォルダごと削除して再作成）
-    import shutil
-    for ch_dir in out_dir.glob("ch*/"):
-        shutil.rmtree(ch_dir)
-    # 旧フォーマット（フラット配置）のファイルも削除
-    for old in out_dir.glob("img_*.tif"):
-        old.unlink()
-
-    h, w = ref_full.shape
-    for i, fp in enumerate(tqdm(tl_frames, desc="apply+crop")):
-        sx, sy = shift_map.get(i, (0.0, 0.0))
-        frame = tifffile.imread(str(fp)).astype(np.float64)
-
-        # warpAffine でシフト補正
-        warp_matrix = np.eye(2, 3, dtype=np.float32)
-        warp_matrix[0, 2] = float(sx)
-        warp_matrix[1, 2] = float(sy)
-        aligned = cv2.warpAffine(
-            frame.astype(np.float32), warp_matrix, (w, h),
-            flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP
-        ).astype(np.float64)
-
-        # 参照引き算
-        subtracted = aligned - ref_full
-
-        # チャネルごとに ROI でクロップして保存（ch00/ ～ ch11/ フォルダに振り分け）
-        for ch, roi in enumerate(rois):
-            if USE_SLOPE_CORRECTION:
-                # tilt補正後の全幅（TILT_CROP_H=270）をそのまま出力
-                ch_crop = _tilt_correct(subtracted, roi["cy"], roi["cx"], roi["crop_w"], TILT_CROP_H)
-            else:
-                ch_crop = extract_rect_roi(subtracted, roi["cy"], roi["cx"], roi["crop_w"], TILT_CROP_H)
-            ch_dir = out_dir / f"ch{ch:02d}"
-            ch_dir.mkdir(exist_ok=True)
-            tifffile.imwrite(str(ch_dir / fp.name), ch_crop.astype(np.float32))
-
-    crop_h_out = TILT_CROP_H if USE_SLOPE_CORRECTION else TILT_CROP_H
-    print(f"[APPLY] {len(tl_frames)} フレーム × {n_ch} ch 保存完了 → {out_dir}")
-    print(f"[APPLY] crop shape per ch: ({rois[0]['crop_w']}, {crop_h_out})")
-
-
 def main():
     channels_dir = Path(CHANNELS_DIR)
     if not channels_dir.exists():
@@ -708,7 +613,7 @@ def main():
     if USE_SLOPE_CORRECTION:
         # ===== slope補正モード: output_phase/ のフル位相画像から直接構築 =====
         tl_dir = channels_dir.parent
-        phase_paths = sorted(tl_dir.glob(f"img_*_ph_{APPLY_TL_Z_INDEX:03d}_phase.tif"))
+        phase_paths = sorted(tl_dir.glob(f"img_*_ph_{TL_Z_INDEX:03d}_phase.tif"))
         if not phase_paths:
             print(f"ERROR: 位相画像が見つかりません: {tl_dir}")
             sys.exit(1)
@@ -1365,10 +1270,6 @@ def main():
     except Exception as e:
         print(f"[shift_visualize] スキップ: {e}")
 
-    # ---- シフト適用＋最終 crop 出力 ----
-    if APPLY_SHIFT_AND_CROP:
-        _grid_ref_path = reference_info.get("grid_reference_path") if USE_GRID_REFERENCE else None
-        apply_shifts_and_crop(str(channels_dir), frame_results, _grid_ref_path)
 
 
 if __name__ == "__main__":

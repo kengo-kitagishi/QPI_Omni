@@ -1,24 +1,24 @@
 # %%
 import os
 
-# 検索・削除対象のディレクトリを指定
+# Specify directory to search and delete from
 root = r"C:\Users\QPI\Desktop\train"
 
-# 削除対象のキーワードと拡張子
+# Target keyword and extensions for deletion
 target_key = "subtracted_cp_masks"
 extensions = ("cp_masks.tif", "outline.tif")
 
-# 再帰的に探索
+# Recursive search
 for dirpath, dirnames, filenames in os.walk(root):
     for name in filenames:
         if target_key in name and name.endswith(extensions):
             file_path = os.path.join(dirpath, name)
-            print(f"削除: {file_path}")
+            print(f"Delete: {file_path}")
             try:
                 os.remove(file_path)
             except Exception as e:
-                print(f"  ⚠️ 削除失敗: {e}")
+                print(f"  Delete failed: {e}")
 
-print("完了しました。")
+print("Done.")
 
 # %%

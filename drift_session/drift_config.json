@@ -47,6 +47,7 @@
   "tilt_crop_h": 270,
   "ecc_crop_h": 80,
   "grid_calibration_json": "E:\\Acuisition\\kitagishi\\260331\\grid_2pergluc_60ms_1\\grid_calibration_Pos1.json",
+  "ecc_min_corr": 0.96,
   "ecc_vmin": -5.0,
   "ecc_vmax": 2.0,
   "sensor_pixel_size": 3.45e-06,

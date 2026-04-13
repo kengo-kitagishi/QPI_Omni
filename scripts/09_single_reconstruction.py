@@ -21,8 +21,8 @@ path_bg = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1\Pos0_x+0_y+0
 img = Image.open(path)
 
 img_bg = Image.open(path_bg)
-img    = np.array(img)   [0:2048, 400:2448]   # 右チャンネル
-img_bg = np.array(img_bg)[0:2048, 400:2448]   # 右チャンネル
+img    = np.array(img)   [0:2048, 400:2448]   # right channel
+img_bg = np.array(img_bg)[0:2048, 400:2448]   # right channel
 
 plt.imshow(img)
 plt.show()
@@ -60,20 +60,20 @@ params = QPIParameters(
 
 
 # %%
-# ログスケールの FFT を準備
+# Prepare log-scale FFT
 fft_image = np.log(np.abs(img_fft))
 
-# Figure & Axes を生成
+# Create Figure & Axes
 fig, ax = plt.subplots()
 ax.imshow(fft_image)
 
-# 円の半径と中心を指定
-aperture_size = params.aperturesize  # () は不要
+# Specify circle radius and center
+aperture_size = params.aperturesize
 radius = aperture_size // 2
-circle_center = (offaxis_center[1], offaxis_center[0])  # (x, y)に変換
+circle_center = (offaxis_center[1], offaxis_center[0])  # convert to (x, y)
 circle = plt.Circle(circle_center, radius, color='red', fill=False, linewidth=1)
 
-# 円を追加
+# Add circle
 ax.add_patch(circle)
 #ax.set_title("FFT with Aperture Circle")
 plt.show()
