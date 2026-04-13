@@ -38,7 +38,7 @@ GRID_2PER_DIR  = Path(r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1")
 GRID_0PER_DIR  = Path(r"C:\grid_0pergluc_60ms_1")
 
 # Pos range (inclusive). Pos0 is BG, skip it.
-POS_START = 1
+POS_START = 2
 POS_END   = 64
 
 # 0% glucose frame range
@@ -112,8 +112,13 @@ def mark_done(prog, pos_label, step):
 # Step 0: Reconstruction
 # ============================================================
 def _reconstruct_one(args):
-    """Reconstruct a single frame (worker function)."""
-    tgt_path_str, bg_path_str, crop, out_path_str, pos_num, pos_split = args
+    """Reconstruct a single frame (worker function).
+
+    Saves two outputs:
+      - output_phase/     : BG-subtracted + region mean subtracted (for ECC)
+      - output_phase_raw/ : raw phase, no BG subtraction (for grid_subtract)
+    """
+    tgt_path_str, bg_path_str, crop, out_path_str, raw_out_path_str, pos_num, pos_split = args
     from PIL import Image
     from qpi import QPIParameters, get_field
     from skimage.restoration import unwrap_phase
@@ -121,7 +126,8 @@ def _reconstruct_one(args):
     tgt_path = Path(tgt_path_str)
     bg_path  = Path(bg_path_str)
     out_path = Path(out_path_str)
-    if out_path.exists():
+    raw_out_path = Path(raw_out_path_str)
+    if out_path.exists() and raw_out_path.exists():
         return True
 
     rs, re_, cs, ce = crop
@@ -136,16 +142,25 @@ def _reconstruct_one(args):
         return unwrap_phase(np.angle(get_field(img, qp)))
 
     try:
-        phase = _recon(tgt_path) - _recon(bg_path)
-        h, w = phase.shape
-        if pos_num < pos_split:
-            region = phase[1:h-1, 1:w//2]
-        else:
-            region = phase[1:h-1, w//2:w-1]
-        if region.size > 0:
-            phase -= np.mean(region)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        tifffile.imwrite(str(out_path), phase.astype(np.float32))
+        tgt_phase = _recon(tgt_path)
+
+        # Save raw phase (for grid_subtract - no BG subtraction)
+        if not raw_out_path.exists():
+            raw_out_path.parent.mkdir(parents=True, exist_ok=True)
+            tifffile.imwrite(str(raw_out_path), tgt_phase.astype(np.float32))
+
+        # Save BG-subtracted phase (for ECC alignment)
+        if not out_path.exists():
+            phase = tgt_phase - _recon(bg_path)
+            h, w = phase.shape
+            if pos_num < pos_split:
+                region = phase[1:h-1, 1:w//2]
+            else:
+                region = phase[1:h-1, w//2:w-1]
+            if region.size > 0:
+                phase -= np.mean(region)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            tifffile.imwrite(str(out_path), phase.astype(np.float32))
         return True
     except Exception as e:
         print(f"  [RECON ERROR] {tgt_path.name}: {e}")
@@ -153,11 +168,16 @@ def _reconstruct_one(args):
 
 
 def step0_reconstruct(pos_num, pos_dir):
-    """Reconstruct all frames for a Pos with BG subtraction."""
+    """Reconstruct all frames for a Pos.
+
+    Saves both BG-subtracted (output_phase/) and raw (output_phase_raw/) phase.
+    """
     crop = get_crop(pos_num)
     bg_dir = TIMELAPSE_ROOT / "Pos0"
     out_dir = pos_dir / "output_phase"
+    raw_out_dir = pos_dir / "output_phase_raw"
     out_dir.mkdir(exist_ok=True)
+    raw_out_dir.mkdir(exist_ok=True)
 
     # Find raw holos
     raw_files = sorted(pos_dir.glob("img_*_ph_000.tif"))
@@ -165,25 +185,28 @@ def step0_reconstruct(pos_num, pos_dir):
         print(f"  [SKIP] No raw holos found")
         return False
 
-    # Check how many are already done
-    existing = len(list(out_dir.glob("*_phase.tif")))
+    # Check how many are already done (both outputs needed)
+    existing_phase = len(list(out_dir.glob("*_phase.tif")))
+    existing_raw = len(list(raw_out_dir.glob("*_phase.tif")))
+    existing = min(existing_phase, existing_raw)
     if existing >= len(raw_files):
         print(f"  [SKIP] Reconstruction done ({existing}/{len(raw_files)})")
         return True
 
     print(f"  Reconstructing {len(raw_files)} frames "
-          f"({existing} existing, crop={crop})...")
+          f"({existing_phase} phase, {existing_raw} raw existing, crop={crop})...")
 
     tasks = []
     for raw in raw_files:
         out_path = out_dir / (raw.stem + "_phase.tif")
+        raw_out_path = raw_out_dir / (raw.stem + "_phase.tif")
         bg_path = bg_dir / raw.name
         if not bg_path.exists():
             continue
-        if out_path.exists():
+        if out_path.exists() and raw_out_path.exists():
             continue
         tasks.append((str(raw), str(bg_path), crop, str(out_path),
-                      pos_num, POS_SPLIT))
+                      str(raw_out_path), pos_num, POS_SPLIT))
 
     if not tasks:
         return True
@@ -214,8 +237,13 @@ def step1_channel_rois(pos_num, pos_dir):
     dst = channels_dir / "channel_rois.json"
 
     if dst.exists():
-        print(f"  [SKIP] channel_rois.json exists")
-        return True
+        import json as _json
+        _rois = _json.loads(dst.read_text())
+        _bad = any(r.get("crop_w") != 40 for r in _rois)
+        if not _bad:
+            print(f"  [SKIP] channel_rois.json exists (crop_w=40 OK)")
+            return True
+        print(f"  [OVERWRITE] channel_rois.json has wrong crop_w, replacing")
 
     src = (GRID_2PER_DIR / f"Pos{pos_num}_x+0_y+0"
            / "output_phase" / "channels" / "channel_rois.json")
@@ -337,11 +365,16 @@ def step3_grid_subtract(pos_num, pos_dir):
     gs.PICK_FRAMES = None
     gs.APPLY_SUBPIXEL_CORRECTION = True
     gs.APPLY_INVERSE_SHIFT = False
-    gs.OUTPUT_CROP_H = None
+    gs.OUTPUT_CROP_H = TILT_CROP_H_RAW   # 270: save full tilt-corrected strip
     gs.OUTPUT_SAVE_FULL_FRAME = False
 
-    # raw-raw mode
+    # raw-raw mode with pre-reconstructed phase from output_phase_raw/
     gs.USE_RAW_PHASE = True
+    raw_phase_dir = pos_dir / "output_phase_raw"
+    if raw_phase_dir.exists() and len(list(raw_phase_dir.glob("*_phase.tif"))) > 0:
+        gs.TL_PHASE_DIR = str(raw_phase_dir)
+    else:
+        gs.TL_PHASE_DIR = None
     gs.RAW_CROP = crop
     gs.RAW_TL_Z_INDEX = RAW_TL_Z_INDEX
     gs.RAW_GRID_Z_INDEX = RAW_GRID_Z_INDEX

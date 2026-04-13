@@ -76,6 +76,11 @@ OUTPUT_DIR = r"D:\AquisitionData\Kitagishi\260405\ph_260405\Pos1\output_phase\ch
 # True → crop前のフルフレーム（subpixel correction適用済み）を full_frame_grid_sub.tif として保存
 OUTPUT_SAVE_FULL_FRAME = False
 
+# Pre-reconstructed phase directory override (USE_RAW_PHASE=False only).
+# None → default (TIMELAPSE_DIR/output_phase).
+# Set to output_phase_raw/ path to use raw phase without BG subtraction.
+TL_PHASE_DIR = None
+
 # ============================================================
 # raw-raw subtraction モード
 # ============================================================
@@ -322,13 +327,24 @@ def main():
     print(f"Pixel scale: {pixel_scale_um:.4f} μm/px")
 
     # --- タイムラプスフレームリスト ---
+    _use_prerecon = (TL_PHASE_DIR is not None)
+    _qpi_params_raw = None
     if USE_RAW_PHASE:
-        tl_frames = load_timelapse_holos(tl_dir, RAW_TL_Z_INDEX)
-        if not tl_frames:
-            print(f"ERROR: 生ホログラムが見つかりません: {tl_dir}/img_*_ph_{RAW_TL_Z_INDEX:03d}.tif")
-            sys.exit(1)
-        _qpi_params_raw = _make_qpi_params_raw(tl_frames[0], RAW_CROP)
-        print(f"[raw mode] QPIParams 作成完了  ホログラム: {tl_frames[0].name}")
+        if _use_prerecon:
+            # Pre-reconstructed raw phase: read tif instead of reconstructing
+            phase_dir = Path(TL_PHASE_DIR)
+            tl_frames = sorted(phase_dir.glob("img_*_phase.tif"))
+            if not tl_frames:
+                print(f"ERROR: pre-recon phase not found: {phase_dir}/img_*_phase.tif")
+                sys.exit(1)
+            print(f"[pre-recon mode] {len(tl_frames)} frames from {phase_dir}")
+        else:
+            tl_frames = load_timelapse_holos(tl_dir, RAW_TL_Z_INDEX)
+            if not tl_frames:
+                print(f"ERROR: 生ホログラムが見つかりません: {tl_dir}/img_*_ph_{RAW_TL_Z_INDEX:03d}.tif")
+                sys.exit(1)
+            _qpi_params_raw = _make_qpi_params_raw(tl_frames[0], RAW_CROP)
+            print(f"[raw mode] QPIParams 作成完了  ホログラム: {tl_frames[0].name}")
     else:
         tl_frames = load_timelapse_frames(tl_dir, TL_Z_INDEX)
         if not tl_frames:
@@ -447,7 +463,10 @@ def main():
 
         # タイムラプスフレームをフル読み込み
         if USE_RAW_PHASE:
-            tl_img = _reconstruct_raw(tl_frames[t], _qpi_params_raw, RAW_CROP)
+            if _use_prerecon:
+                tl_img = tifffile.imread(str(tl_frames[t])).astype(np.float64)
+            else:
+                tl_img = _reconstruct_raw(tl_frames[t], _qpi_params_raw, RAW_CROP)
         else:
             tl_img = tifffile.imread(str(tl_frames[t])).astype(np.float64)
 

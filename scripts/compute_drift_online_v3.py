@@ -5,7 +5,7 @@ Per-position drift correction with parallel processing.
 
 Changes from v2:
   1. Each position computes drift independently against its own grid ref
-  2. ThreadPoolExecutor processes positions concurrently
+  2. ProcessPoolExecutor processes positions concurrently (GIL-free)
   3. drift_sample_interval groups positions; leader's correction is shared
   4. drift_state.txt has per-pos keys (CUMULATIVE_DX_UM_{pos_idx})
 
@@ -31,7 +31,7 @@ import tifffile
 import cv2
 from pathlib import Path
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 
 # Import shared utilities from v2 (same directory)
 from compute_drift_online import (
@@ -49,6 +49,47 @@ from compute_drift_online import (
     _get_grid_offset_px,
     _load_grid_ref_full,
 )
+
+
+# ================================================================
+# ProcessPoolExecutor worker state + initializer
+# ================================================================
+
+_wk = {}  # worker-process shared data (set by _init_drift_worker)
+
+
+def _init_drift_worker(cfg, rois, leader_data_dict, bg_raw_str, t):
+    """Initialize worker process with shared data."""
+    global _wk
+    script_dir = cfg.get("script_dir", "")
+    if script_dir and script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
+    _wk = {
+        'cfg': cfg, 'rois': rois,
+        'leader_data': leader_data_dict,
+        'bg_raw': bg_raw_str, 't': t,
+    }
+
+
+def _process_leader_task(args):
+    """Top-level worker function for ProcessPoolExecutor.
+
+    Closures are not picklable, so this must be a module-level function.
+    Reads shared data from _wk (set by _init_drift_worker).
+    """
+    idx, label, state_path, kf_path, kf_R = args
+    if idx not in _wk['leader_data']:
+        return None
+    raw_path = get_raw_path(_wk['cfg']['save_dir'], label, _wk['t'])
+    prev = read_per_pos_state(state_path, idx)
+    kf_st = load_per_pos_kf_state(kf_path, label, kf_R)
+    ld = _wk['leader_data'][idx]
+    bg_str = _wk['bg_raw'] if _wk['bg_raw'] != 'none' else None
+    return _process_one_position(
+        idx, label, str(raw_path), bg_str,
+        _wk['cfg'], _wk['rois'],
+        ld['u8_crops'], ld['pos_map'], ld['grid_cal'],
+        prev, kf_st)
 
 
 # ================================================================
@@ -707,29 +748,25 @@ def main():
                        str(Path(cfg["session_dir"]) / "drift_kf_state.json"))
     kf_R = max(cfg.get("kf_R_ty_nm2", 454.0), cfg.get("kf_R_tx_nm2", 454.0))
 
-    # ---- Process leaders in parallel ----
-    def _process_leader(leader):
-        idx = leader["index"]
-        label = leader["label"]
-        if idx not in leader_data:
-            return None
-        raw_path = get_raw_path(cfg["save_dir"], label, t)
-        prev = read_per_pos_state(state_path, idx)
-        kf_st = load_per_pos_kf_state(kf_path, label, kf_R)
-        ld = leader_data[idx]
-        return _process_one_position(
-            idx, label, str(raw_path), str(bg_raw) if bg_raw else None,
-            cfg, rois, ld["u8_crops"], ld["pos_map"], ld["grid_cal"],
-            prev, kf_st)
-
+    # ---- Process leaders in parallel (ProcessPoolExecutor) ----
     max_workers = cfg.get("max_drift_workers", 0)
     if max_workers <= 0:
         max_workers = max(1, os.cpu_count() - 4)
     max_workers = min(max_workers, len(group_leaders))
 
-    print(f"  Processing with {max_workers} workers...")
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        leader_results = list(executor.map(_process_leader, group_leaders))
+    task_args = [
+        (leader["index"], leader["label"], state_path, kf_path, kf_R)
+        for leader in group_leaders
+    ]
+
+    print(f"  Processing with {max_workers} workers (ProcessPool)...")
+    with ProcessPoolExecutor(
+        max_workers=max_workers,
+        initializer=_init_drift_worker,
+        initargs=(cfg, rois, leader_data,
+                  str(bg_raw) if bg_raw else 'none', t),
+    ) as pool:
+        leader_results = list(pool.map(_process_leader_task, task_args))
 
     # Filter out None results (skipped leaders)
     leader_results = [r for r in leader_results if r is not None]
