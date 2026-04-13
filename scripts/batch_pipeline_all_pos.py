@@ -113,7 +113,7 @@ def mark_done(prog, pos_label, step):
 # ============================================================
 def _reconstruct_one(args):
     """Reconstruct a single frame (worker function)."""
-    tgt_path_str, bg_path_str, crop, out_path_str = args
+    tgt_path_str, bg_path_str, crop, out_path_str, pos_num, pos_split = args
     from PIL import Image
     from qpi import QPIParameters, get_field
     from skimage.restoration import unwrap_phase
@@ -137,6 +137,13 @@ def _reconstruct_one(args):
 
     try:
         phase = _recon(tgt_path) - _recon(bg_path)
+        h, w = phase.shape
+        if pos_num < pos_split:
+            region = phase[1:h-1, 1:w//2]
+        else:
+            region = phase[1:h-1, w//2:w-1]
+        if region.size > 0:
+            phase -= np.mean(region)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         tifffile.imwrite(str(out_path), phase.astype(np.float32))
         return True
@@ -175,7 +182,8 @@ def step0_reconstruct(pos_num, pos_dir):
             continue
         if out_path.exists():
             continue
-        tasks.append((str(raw), str(bg_path), crop, str(out_path)))
+        tasks.append((str(raw), str(bg_path), crop, str(out_path),
+                      pos_num, POS_SPLIT))
 
     if not tasks:
         return True
