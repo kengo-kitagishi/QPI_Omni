@@ -61,7 +61,9 @@ DIRECT_RUN_CONFIG = {
     "kymograph_vmax": 2.0,
     "volume_ylim": [0.0, 400.0],
     "mean_ri_ylim": [1.34, 1.37],
-    "mass_ylim": [0.0, 500.0],
+    "mass_ylim": [0.0, 500000.0],
+    "kymograph_sample_hours": 48.0,
+    "kymograph_window_frames": 10,
 }
 
 PRESET_STYLE = {
@@ -289,9 +291,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--mass-ylim",
         nargs=2,
         type=float,
-        default=[0.0, 500.0],
+        default=[0.0, 500000.0],
         metavar=("YMIN", "YMAX"),
-        help="Y-axis limits for total-mass trace in pg. Default: 0 500.",
+        help="Y-axis limits for total-mass trace in pg. Default: 0 500000.",
+    )
+    parser.add_argument(
+        "--kymograph-sample-hours",
+        type=float,
+        default=48.0,
+        help="Sampling interval in hours for sparse kymograph output. Default: 48.",
+    )
+    parser.add_argument(
+        "--kymograph-window-frames",
+        type=int,
+        default=10,
+        help="Number of consecutive frames for the short-window kymograph. Default: 10.",
     )
     return parser
 
@@ -1283,6 +1297,63 @@ def longitudinal_mask_profile(mask_crop: np.ndarray) -> np.ndarray:
     return mask_crop.astype(float).sum(axis=0)
 
 
+def select_kymograph_rows_every_hours(
+    summary_df: pd.DataFrame,
+    time_interval_min: float | None,
+    sample_hours: float,
+) -> pd.DataFrame:
+    tracked = summary_df[summary_df["tracked"]].copy()
+    if tracked.empty or time_interval_min is None or time_interval_min <= 0 or sample_hours <= 0:
+        return tracked.iloc[0:0].copy()
+
+    step = max(1, int(round((sample_hours * 60.0) / time_interval_min)))
+    sampled = tracked.iloc[::step].copy()
+    if not sampled.empty and int(sampled.iloc[-1]["frame_index"]) != int(tracked.iloc[-1]["frame_index"]):
+        sampled = pd.concat([sampled, tracked.iloc[[-1]].copy()], ignore_index=False)
+        sampled = sampled[~sampled.index.duplicated(keep="first")]
+    return sampled
+
+
+def select_kymograph_rows_consecutive(summary_df: pd.DataFrame, window_frames: int) -> pd.DataFrame:
+    tracked = summary_df[summary_df["tracked"]].copy()
+    if tracked.empty or window_frames <= 0:
+        return tracked.iloc[0:0].copy()
+
+    frame_indices = tracked["frame_index"].to_numpy(dtype=int)
+    splits = np.where(np.diff(frame_indices) != 1)[0] + 1
+    segments = np.split(np.arange(len(tracked)), splits)
+    if not segments:
+        return tracked.iloc[0:0].copy()
+
+    best_segment = max(segments, key=len)
+    if len(best_segment) <= window_frames:
+        return tracked.iloc[best_segment].copy()
+
+    start = (len(best_segment) - window_frames) // 2
+    chosen = best_segment[start : start + window_frames]
+    return tracked.iloc[chosen].copy()
+
+
+def build_kymograph_variants(summary_df: pd.DataFrame, args: argparse.Namespace) -> list[tuple[str, str, pd.DataFrame]]:
+    variants: list[tuple[str, str, pd.DataFrame]] = []
+
+    sampled_48h = select_kymograph_rows_every_hours(
+        summary_df,
+        time_interval_min=args.time_interval_min,
+        sample_hours=args.kymograph_sample_hours,
+    )
+    if not sampled_48h.empty:
+        label = f"every {args.kymograph_sample_hours:g} h"
+        variants.append(("48h", label, sampled_48h))
+
+    window_df = select_kymograph_rows_consecutive(summary_df, args.kymograph_window_frames)
+    if not window_df.empty:
+        label = f"contiguous {len(window_df)} frames"
+        variants.append(("10frame", label, window_df))
+
+    return variants
+
+
 def rectangular_longitudinal_profile(raw_crop: np.ndarray, rect_height: int, rect_width: int) -> np.ndarray:
     rect = extract_centered_rectangle(raw_crop, rect_height, rect_width)
     return rect.mean(axis=0).astype(float)
@@ -1307,6 +1378,7 @@ def make_intensity_kymograph(
     summary_df: pd.DataFrame,
     crop_size: int,
     args: argparse.Namespace,
+    variant_label: str | None = None,
 ) -> plt.Figure | None:
     rows_used, raw_crops, mask_crops = build_aligned_stack(summary_df, crop_size, args)
     rect_margin = max(1, min(4, args.crop_margin // 4))
@@ -1323,29 +1395,33 @@ def make_intensity_kymograph(
     arr = np.stack(profiles, axis=0)
     fig, ax = plt.subplots(figsize=(5.2, 3.4), constrained_layout=True)
     im = ax.imshow(
-        arr,
+        arr.T,
         aspect="auto",
-        cmap="magma",
+        cmap="viridis",
         origin="lower",
         interpolation="nearest",
         vmin=args.kymograph_vmin,
         vmax=args.kymograph_vmax,
     )
-    xticks = np.linspace(0, rect_width - 1, 5)
-    ax.set_xticks(xticks)
+    xtick_idx = np.linspace(0, len(labels) - 1, min(5, len(labels))).round().astype(int)
+    ax.set_xticks(xtick_idx)
+    ax.set_xticklabels([frame_time_label(labels[i], args.time_interval_min) for i in xtick_idx])
+    ax.set_xlabel("Time")
+
+    yticks = np.linspace(0, rect_width - 1, 5)
+    ax.set_yticks(yticks)
     if args.pixel_size_um:
-        ax.set_xticklabels([f"{(x - rect_width / 2) * args.pixel_size_um:.1f}" for x in xticks])
-        ax.set_xlabel("Position along major axis [um]")
+        ax.set_yticklabels([f"{(y - rect_width / 2) * args.pixel_size_um:.1f}" for y in yticks])
+        ax.set_ylabel("Position along major axis [um]")
     else:
-        ax.set_xlabel("Position along major axis [px]")
-    ytick_idx = np.linspace(0, len(labels) - 1, min(5, len(labels))).round().astype(int)
-    ax.set_yticks(ytick_idx)
-    ax.set_yticklabels([frame_time_label(labels[i], args.time_interval_min) for i in ytick_idx])
-    ax.set_ylabel("Time")
+        ax.set_ylabel("Position along major axis [px]")
     cbar = fig.colorbar(im, ax=ax, shrink=0.85)
     cbar.set_label("Mean intensity in axis-aligned rectangle")
     if args.preset != "manuscript":
-        fig.suptitle("Center-nearest representative cell: intensity kymograph", y=1.02)
+        title = "Center-nearest representative cell: intensity kymograph"
+        if variant_label:
+            title = f"{title} ({variant_label})"
+        fig.suptitle(title, y=1.02)
     return fig
 
 
@@ -1353,6 +1429,7 @@ def make_mask_kymograph(
     summary_df: pd.DataFrame,
     crop_size: int,
     args: argparse.Namespace,
+    variant_label: str | None = None,
 ) -> plt.Figure | None:
     rows_used, _, mask_crops = build_aligned_stack(summary_df, crop_size, args)
     if not mask_crops:
@@ -1365,29 +1442,33 @@ def make_mask_kymograph(
     )
     fig, ax = plt.subplots(figsize=(5.2, 3.4), constrained_layout=True)
     im = ax.imshow(
-        arr,
+        arr.T,
         aspect="auto",
-        cmap="cividis",
+        cmap="viridis",
         origin="lower",
         interpolation="nearest",
         vmin=0.0,
         vmax=1.0,
     )
-    xticks = np.linspace(0, rect_width - 1, 5)
-    ax.set_xticks(xticks)
+    xtick_idx = np.linspace(0, len(rows_used) - 1, min(5, len(rows_used))).round().astype(int)
+    ax.set_xticks(xtick_idx)
+    ax.set_xticklabels([frame_time_label(rows_used[i], args.time_interval_min) for i in xtick_idx])
+    ax.set_xlabel("Time")
+
+    yticks = np.linspace(0, rect_width - 1, 5)
+    ax.set_yticks(yticks)
     if args.pixel_size_um:
-        ax.set_xticklabels([f"{(x - rect_width / 2) * args.pixel_size_um:.1f}" for x in xticks])
-        ax.set_xlabel("Position along major axis [um]")
+        ax.set_yticklabels([f"{(y - rect_width / 2) * args.pixel_size_um:.1f}" for y in yticks])
+        ax.set_ylabel("Position along major axis [um]")
     else:
-        ax.set_xlabel("Position along major axis [px]")
-    ytick_idx = np.linspace(0, len(rows_used) - 1, min(5, len(rows_used))).round().astype(int)
-    ax.set_yticks(ytick_idx)
-    ax.set_yticklabels([frame_time_label(rows_used[i], args.time_interval_min) for i in ytick_idx])
-    ax.set_ylabel("Time")
+        ax.set_ylabel("Position along major axis [px]")
     cbar = fig.colorbar(im, ax=ax, shrink=0.85)
     cbar.set_label("Mask occupancy in rectangle")
     if args.preset != "manuscript":
-        fig.suptitle("Center-nearest representative cell: mask kymograph", y=1.02)
+        title = "Center-nearest representative cell: mask kymograph"
+        if variant_label:
+            title = f"{title} ({variant_label})"
+        fig.suptitle(title, y=1.02)
     return fig
 
 
@@ -1475,6 +1556,8 @@ def save_fig_with_formats(
         "volume_ylim": args.volume_ylim,
         "mean_ri_ylim": args.mean_ri_ylim,
         "mass_ylim": args.mass_ylim,
+        "kymograph_sample_hours": args.kymograph_sample_hours,
+        "kymograph_window_frames": args.kymograph_window_frames,
     }
     extra_meta = {"local_output_dir": str(outdir.resolve())}
     source_list = list(dict.fromkeys(source_tifs)) if args.attach_source_tifs else None
@@ -1649,9 +1732,47 @@ def main() -> int:
         elif kind == "ghost_contour":
             fig = make_ghost_contour(summary_df, crop_size, args)
         elif kind == "intensity_kymograph":
-            fig = make_intensity_kymograph(summary_df, crop_size, args)
+            variants = build_kymograph_variants(summary_df, args)
+            if not variants:
+                print(f"[central_cell_track] skip {kind}: no valid data")
+                continue
+            for variant_suffix, variant_label, variant_df in variants:
+                fig = make_intensity_kymograph(variant_df, crop_size, args, variant_label=variant_label)
+                if fig is None:
+                    print(f"[central_cell_track] skip {kind}_{variant_suffix}: no valid data")
+                    continue
+                save_kind = f"{kind}_{variant_suffix}"
+                figure_outputs[save_kind] = save_fig_with_formats(
+                    fig,
+                    kind=save_kind,
+                    args=args,
+                    channel_dir=channel_dir,
+                    outdir=outdir,
+                    source_tifs=selected_source_tifs,
+                )
+                plt.close(fig)
+            continue
         elif kind == "mask_kymograph":
-            fig = make_mask_kymograph(summary_df, crop_size, args)
+            variants = build_kymograph_variants(summary_df, args)
+            if not variants:
+                print(f"[central_cell_track] skip {kind}: no valid data")
+                continue
+            for variant_suffix, variant_label, variant_df in variants:
+                fig = make_mask_kymograph(variant_df, crop_size, args, variant_label=variant_label)
+                if fig is None:
+                    print(f"[central_cell_track] skip {kind}_{variant_suffix}: no valid data")
+                    continue
+                save_kind = f"{kind}_{variant_suffix}"
+                figure_outputs[save_kind] = save_fig_with_formats(
+                    fig,
+                    kind=save_kind,
+                    args=args,
+                    channel_dir=channel_dir,
+                    outdir=outdir,
+                    source_tifs=selected_source_tifs,
+                )
+                plt.close(fig)
+            continue
         elif kind == "qc_overview":
             fig = make_qc_overview(summary_df, args)
 
