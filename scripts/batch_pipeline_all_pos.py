@@ -3,7 +3,12 @@ batch_pipeline_all_pos.py
 -------------------------
 Full analysis pipeline for ALL Pos in a timelapse dataset.
 
-Steps per Pos (skipped if already done):
+起動のたびに次を行う（batch_pipeline_progress.json は再開に使わない）:
+  - 先頭: Grid 0%% 再構成（batch_reconstruction_grid.py）
+  - batch_pipeline_progress.json を削除し、POS_START–POS_END 範囲の各 Pos の
+    output_phase / output_phase_raw を削除してから、再構成〜step4 を通しで実行
+
+Steps per Pos:
   0. Reconstruction  (raw holo -> phase, with Pos0 BG subtraction)
   1. Copy channel_rois.json from grid data
   2. compute_pos_shifts.py  (ECC shift calculation)
@@ -15,8 +20,12 @@ Do NOT copy params from pipeline_full.py (stale).
 
 Usage:
     python scripts/batch_pipeline_all_pos.py
+    python scripts/batch_pipeline_all_pos.py --skip-grid-0per   # 0%% グリッド再構成のみ省略
 """
+import argparse
 import json
+import shutil
+import subprocess
 import sys
 import re
 import time
@@ -33,7 +42,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 # ============================================================
 # Configuration
 # ============================================================
-TIMELAPSE_ROOT = Path(r"F:\260405\ph_260405")
+TIMELAPSE_ROOT = Path(r"D:\AquisitionData\Kitagishi\260405\ph_260405")
 GRID_2PER_DIR  = Path(r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1")
 GRID_0PER_DIR  = Path(r"C:\grid_0pergluc_60ms_1")
 
@@ -51,7 +60,7 @@ N_WORKERS_RECON = 8
 # compute_pos_shifts workers
 N_WORKERS_ECC = 16
 
-# Progress log (for resume)
+# 実行中の記録用（次回起動では読まず、起動時に削除する）
 PROGRESS_LOG = TIMELAPSE_ROOT / "batch_pipeline_progress.json"
 
 # ============================================================
@@ -87,25 +96,53 @@ def get_crop(pos_num):
     return CROP_BEFORE if pos_num < POS_SPLIT else CROP_AFTER
 
 
-def load_progress():
-    if PROGRESS_LOG.exists():
-        return json.loads(PROGRESS_LOG.read_text(encoding="utf-8"))
-    return {}
-
-
 def save_progress(prog):
     PROGRESS_LOG.write_text(
         json.dumps(prog, indent=2, ensure_ascii=False), encoding="utf-8",
     )
 
 
-def is_step_done(prog, pos_label, step):
-    return prog.get(pos_label, {}).get(step, False)
-
-
 def mark_done(prog, pos_label, step):
     prog.setdefault(pos_label, {})[step] = True
     save_progress(prog)
+
+
+def step_grid_0per_reconstruction(grid_dir: Path) -> bool:
+    """GRID_0PER_DIR 上で batch_reconstruction_grid を実行（correct_0pergluc の参照元）。"""
+    script = _SCRIPT_DIR / "batch_reconstruction_grid.py"
+    if not script.is_file():
+        print(f"  [ERROR] Not found: {script}")
+        return False
+    if not grid_dir.is_dir():
+        print(f"  [ERROR] Grid 0per directory not found: {grid_dir}")
+        return False
+    print("\n" + "=" * 60)
+    print("Grid 0% reconstruction (batch_reconstruction_grid.py)")
+    print(f"  {grid_dir}")
+    print("=" * 60)
+    r = subprocess.run(
+        [sys.executable, str(script), "--grid-dir", str(grid_dir)],
+        cwd=str(_SCRIPT_DIR),
+    )
+    if r.returncode != 0:
+        print(f"  [ERROR] batch_reconstruction_grid exited with {r.returncode}")
+        return False
+    print("Grid 0% reconstruction finished.\n")
+    return True
+
+
+def _reset_timelapse_for_full_run():
+    """進捗を無視して最初から: ログ削除 + 各 Pos の再構成出力を削除。"""
+    if PROGRESS_LOG.exists():
+        PROGRESS_LOG.unlink()
+    for pos_num in range(POS_START, POS_END + 1):
+        pos_dir = TIMELAPSE_ROOT / f"Pos{pos_num}"
+        if not pos_dir.is_dir():
+            continue
+        for sub in ("output_phase", "output_phase_raw"):
+            p = pos_dir / sub
+            if p.is_dir():
+                shutil.rmtree(p)
 
 
 # ============================================================
@@ -448,7 +485,26 @@ def step4_correct_0pergluc(pos_num, pos_dir):
 # Main
 # ============================================================
 def main():
-    prog = load_progress()
+    ap = argparse.ArgumentParser(description="Full batch pipeline (毎回 grid 0%% + タイムラプス全ステップを最初から)")
+    ap.add_argument(
+        "--skip-grid-0per",
+        action="store_true",
+        help="先頭の Grid 0%% 再構成のみ省略（既に batch_reconstruction_grid 済みのとき）",
+    )
+    args = ap.parse_args()
+
+    if not args.skip_grid_0per:
+        if not step_grid_0per_reconstruction(GRID_0PER_DIR):
+            print("Aborting: Grid 0% reconstruction failed.")
+            sys.exit(1)
+
+    print(
+        "[RESET] Ignoring batch_pipeline_progress.json — removing it and "
+        f"output_phase / output_phase_raw under Pos{POS_START}–Pos{POS_END} …"
+    )
+    _reset_timelapse_for_full_run()
+
+    prog = {}
     total = POS_END - POS_START + 1
     t_start = time.time()
 
@@ -460,7 +516,7 @@ def main():
     print(f"  POS_SPLIT: {POS_SPLIT}")
     print(f"  GLUCOSE_0: [{GLUCOSE_0_START}, {GLUCOSE_0_END})")
     print(f"  Workers: recon={N_WORKERS_RECON}, ecc={N_WORKERS_ECC}")
-    print(f"  Progress log: {PROGRESS_LOG}")
+    print(f"  Progress log (this run only): {PROGRESS_LOG}")
     print("=" * 60)
 
     for pos_num in range(POS_START, POS_END + 1):
@@ -478,38 +534,33 @@ def main():
         print(f"{'=' * 60}")
 
         # Step 0: Reconstruction
-        if not is_step_done(prog, pos_label, "recon"):
-            if step0_reconstruct(pos_num, pos_dir):
-                mark_done(prog, pos_label, "recon")
-            else:
-                print(f"  [FAIL] Reconstruction failed, skipping remaining steps")
-                continue
+        if step0_reconstruct(pos_num, pos_dir):
+            mark_done(prog, pos_label, "recon")
+        else:
+            print(f"  [FAIL] Reconstruction failed, skipping remaining steps")
+            continue
 
         # Step 1: channel_rois.json
-        if not is_step_done(prog, pos_label, "rois"):
-            if step1_channel_rois(pos_num, pos_dir):
-                mark_done(prog, pos_label, "rois")
-            else:
-                continue
+        if step1_channel_rois(pos_num, pos_dir):
+            mark_done(prog, pos_label, "rois")
+        else:
+            continue
 
         # Step 2: compute_pos_shifts
-        if not is_step_done(prog, pos_label, "shifts"):
-            if step2_compute_pos_shifts(pos_num, pos_dir):
-                mark_done(prog, pos_label, "shifts")
-            else:
-                continue
+        if step2_compute_pos_shifts(pos_num, pos_dir):
+            mark_done(prog, pos_label, "shifts")
+        else:
+            continue
 
         # Step 3: grid_subtract
-        if not is_step_done(prog, pos_label, "gridsub"):
-            if step3_grid_subtract(pos_num, pos_dir):
-                mark_done(prog, pos_label, "gridsub")
-            else:
-                continue
+        if step3_grid_subtract(pos_num, pos_dir):
+            mark_done(prog, pos_label, "gridsub")
+        else:
+            continue
 
         # Step 4: correct_0pergluc
-        if not is_step_done(prog, pos_label, "0per"):
-            if step4_correct_0pergluc(pos_num, pos_dir):
-                mark_done(prog, pos_label, "0per")
+        if step4_correct_0pergluc(pos_num, pos_dir):
+            mark_done(prog, pos_label, "0per")
 
     elapsed = time.time() - t_start
     print(f"\n{'=' * 60}")

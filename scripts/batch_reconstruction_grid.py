@@ -45,13 +45,14 @@ if str(_SCRIPT_DIR) not in sys.path:
 # ============================================================
 # 設定パラメータ
 # ============================================================
+# pipeline_full.py の GRID_DIR と揃えること
 GRID_DIR = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
 
-# BG として使うベースラベル（通常 "Pos0"）
+# BG として使うベースラベル（pipeline_full: GRID_BG_BASE_LABEL）
 BG_BASE_LABEL = "Pos0"
 
 # 再構成対象のベースラベル（None で Pos0 以外の全 PosX_x*_y* を処理）
-# 特定のPosだけ回したい場合: TARGET_BASE_LABELS = ["Pos1", "Pos2"]
+# pipeline_full: GRID_TARGET_BASE_LABELS と同じ意味
 TARGET_BASE_LABELS = None
 
 # 再構成対象の (xi, yi) 座標を絞る（None = すべて処理）
@@ -61,30 +62,26 @@ TARGET_COORDS = None
 # QPI 光学パラメータ
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 
-# ---- Pos番号によるクロップ切り替え ----
-# 物理的な対応:
-#   小Pos番号（< POS_SPLIT）= 右チャンネル → col 400:2448
-#   大Pos番号（>= POS_SPLIT）= 左チャンネル → col 0:2048
-# ※ CROP_BEFORE/AFTER の「前後」は取得順であり左右ではない。左右はコメントを必ず確認。
-POS_SPLIT    = 31
-CROP_BEFORE  = (0, 2048, 400, 2448)   # pos < POS_SPLIT  → 右チャンネル（col 400-2448）
-CROP_AFTER   = (0, 2048,   0, 2048)   # pos >= POS_SPLIT → 左チャンネル（col 0-2048）
-# ⚠ データセットによって左右が入れ替わる場合あり。必ず実データで確認すること。
-# -----------------------------------------------
+# ---- Pos番号によるクロップ切り替え（pipeline_full.py と同一）----
+# pos_number < POS_SPLIT → 右側 (400:2448)  センサー幅2448
+# pos_number >= POS_SPLIT → 左側 (0:2048)
+# ※ BG（Pos0）はターゲットの pos_number で決まる crop を使う（常に右ではない）
+POS_SPLIT    = 33
+CROP_BEFORE  = (0, 2048, 400, 2448)
+CROP_AFTER   = (0, 2048,   0, 2048)
 
-# 平均0調整の領域 (row_start, row_end, col_start, col_end)
-# None で無効（mean adjustment しない）
-MEAN_REGION = None   # 例: (1, 50, 1, 50)
+# 平均0調整の領域（pipeline GRID_MEAN_REGION と同じ。None で無効）
+MEAN_REGION = None
 
-# 再構成済み（output_phase/ が既存）の場合スキップするか
-SKIP_IF_EXISTS = True
+# 再構成済み（output_phase に *_phase.tif が既存）の場合スキップするか（pipeline: GRID_SKIP_IF_EXISTS）
+SKIP_IF_EXISTS = False
 
 # PNG カラーマップも保存するか
 SAVE_PNG = False
 PNG_DPI  = 150
 PNG_VMIN = -2.0
 PNG_VMAX =  2.0
-# 並列処理ワーカー数（None = cpu_count(), 1 = 逐次実行でデバッグ向き）
+# 並列処理ワーカー数（pipeline_full: N_WORKERS_GRID と同じ）
 N_WORKERS = None
 # ============================================================
 
