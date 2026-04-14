@@ -5,7 +5,8 @@ correct_0pergluc.py
 Post-processing script for 0% glucose correction.
 
 Runs AFTER grid_subtract.py. Reads the grid-subtracted output,
-computes delta_full = aligned(grid_0per) - grid_2per for the
+computes delta_full = aligned(raw-reconstructed grid_0per)
+minus raw-reconstructed grid_2per for the
 (x+0, y+0) grid point, and subtracts the tilt-corrected delta
 from every frame in the 0% glucose period.
 
@@ -29,6 +30,7 @@ Usage:
 import numpy as np
 import tifffile
 import json
+import re
 import sys
 from pathlib import Path
 from tqdm import tqdm
@@ -38,6 +40,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 from grid_subtract import (
     extract_rect_roi,
     apply_inverse_shift_warp,
+    _reconstruct_raw,
+    _make_qpi_params_raw,
+    load_grid_holo_path,
     load_grid_calibration,
     scan_grid_positions,
 )
@@ -54,6 +59,38 @@ def _cal_dx_dy(xi, yi, grid_cal, pixel_scale_um, x_step_um, y_step_um,
         cal_dy = shift_sign_x * xi * x_step_um / pixel_scale_um
         return (cal_dx, cal_dy)
     return (0.0, 0.0)
+
+
+def _resolve_fit_right(base_label: str) -> bool:
+    """Pos番号と POS_SPLIT から背景fit側を決める。"""
+    if FIT_RIGHT is not None:
+        return bool(FIT_RIGHT)
+    match = re.match(r"Pos(\d+)", str(base_label))
+    pos_num = int(match.group(1)) if match else None
+    return bool(pos_num is not None and pos_num >= POS_SPLIT)
+
+
+def _resolve_raw_crop(log_data: dict):
+    """grid_subtract_log を優先し、無ければ現在設定の RAW_CROP を使う。"""
+    raw_crop = log_data.get("raw_crop")
+    if raw_crop is not None:
+        return tuple(int(v) for v in raw_crop)
+    return tuple(int(v) for v in RAW_CROP)
+
+
+def _load_grid_output_phase(pos_dir, z_index):
+    """Read output_phase image used by compute_pos_shifts for grid ECC."""
+    base_dir = Path(pos_dir) / "output_phase"
+    candidates = [
+        base_dir / f"img_000000000_ph_{z_index:03d}_phase.tif",
+        base_dir / f"img_000000000_ph_{z_index:03d}.tif",
+    ]
+    path = next((p for p in candidates if p.exists()), None)
+    if path is None:
+        raise FileNotFoundError(
+            "output_phase not found:\n" + "\n".join(f"  {p}" for p in candidates)
+        )
+    return tifffile.imread(str(path)).astype(np.float64)
 
 
 # ============================================================
@@ -84,9 +121,10 @@ GRID_Z_INDEX = 18
 GLUCOSE_0_START = 575    # frame index (inclusive)
 GLUCOSE_0_END   = 1151   # frame index (exclusive)
 
-# Tilt correction parameters
+# raw-raw reconstruction and tilt correction parameters
+RAW_CROP        = (0, 2048, 400, 2448)
 TILT_CROP_H_RAW = 270
-ECC_CROP_H      = 40       # must match compute_pos_shifts.py
+ECC_CROP_H      = 80       # must match compute_pos_shifts.py
 POS_SPLIT       = 33       # must match compute_pos_shifts.py
 
 # Output crop height override (None -> use channel_rois.json crop_h)
@@ -97,23 +135,15 @@ PH_SESSION_ROOT = r"D:\AquisitionData\Kitagishi\260405\ph_260405"
 # grid_subtract の出力サブフォルダ名（Pos1 と同じ構成を想定）
 # Pos ごとに grid_subtract の出力フォルダ名が違う場合は実行前に合わせる
 CHANNEL_OUTPUT_SUBDIR = "crop_sub_rawraw"
-POS_NUMBERS_TO_RUN = [6]
+POS_NUMBERS_TO_RUN = []
 
-# ECC の背景フィット側（compute_pos_shifts と揃える）
-FIT_RIGHT = False
+# ECC の背景フィット側（None なら Pos番号と POS_SPLIT から自動決定）
+FIT_RIGHT = None
 
 # grid_subtract_log に base_label が無いときのフォルダ名プレフィックス（例: Pos0_x*_y*）
 GRID_POINTS_BASE_LABEL = "Pos0"
 
 # ============================================================
-
-
-def _load_grid_output_phase(pos_dir, z_index):
-    """Read Pos0-subtracted phase from output_phase/. Error if not found."""
-    path = Path(pos_dir) / "output_phase" / f"img_000000000_ph_{z_index:03d}_phase.tif"
-    if not path.exists():
-        raise FileNotFoundError(f"output_phase not found: {path}")
-    return tifffile.imread(str(path)).astype(np.float64)
 
 
 def _tilt_correct(img_f64, cy, cx, crop_w, crop_h_out, tilt_crop_h, fit_right=False):
@@ -175,8 +205,8 @@ def tilt_correct_and_crop(img_large, out_crop_h, tilt_crop_h, fit_right=False):
 
 def _ecc_per_channel(g0_full, g2_full, rois, fit_right):
     """
-    Per-channel ECC between two Pos0-subtracted full images.
-    Pipeline matches compute_pos_shifts.py exactly:
+    Per-channel ECC between two output_phase full images.
+    Pipeline matches compute_pos_shifts.py:
       _tilt_correct -> compute_backsub_offset -> to_uint8 -> ecc_align
     Returns (median_tx, median_ty, median_corr, per_ch_details) or None.
     """
@@ -202,23 +232,24 @@ def _ecc_per_channel(g0_full, g2_full, rois, fit_right):
 
 
 def compute_delta_full(grid_0per_dir, grid_2per_dir, grid_points_label,
-                       z_index, rois, fit_right):
+                       z_index, qpi_params, raw_crop, rois, fit_right):
     """
     Compute delta_full = aligned(grid_0per_best) - grid_2per (511x511).
-    Uses output_phase (Pos0-subtracted) images — matching compute_pos_shifts.py.
+    Uses output_phase images for ECC/grid selection, then builds delta_full
+    from raw reconstructed grid images to match grid_subtract.py raw-raw mode.
 
-    1. Read grid_2per output_phase {grid_points_label}_x+0_y+0.
+    1. Read grid_2per output_phase {grid_points_label}_x+0_y+0 for ECC.
     2. Coarse ECC grid_0per(0,0) vs grid_2per(0,0) to estimate displacement.
     3. Convert pixel displacement to grid coordinates -> find nearest grid_0per point.
     4. Fine ECC on the nearest grid_0per point (residual should be sub-pixel).
-    5. Warp and subtract.
+    5. Reconstruct raw grid_0per/grid_2per for the selected pair, warp, and subtract.
 
     Returns: (delta_full, ecc_info_dict)
     """
-    # --- Read grid_2per reference (Pos0-subtracted) ---
+    # --- Read grid_2per reference for ECC ---
     g2_pos = Path(grid_2per_dir) / f"{grid_points_label}_x+0_y+0"
-    g2_full = _load_grid_output_phase(g2_pos, z_index)
-    print(f"[2per] output_phase loaded: {g2_pos.name}  shape={g2_full.shape}")
+    g2_phase = _load_grid_output_phase(g2_pos, z_index)
+    print(f"[2per] output_phase loaded: {g2_pos.name}  shape={g2_phase.shape}")
 
     # --- Scan available grid_0per positions ---
     g0_pos_map = scan_grid_positions(grid_0per_dir, grid_points_label)
@@ -233,9 +264,9 @@ def compute_delta_full(grid_0per_dir, grid_2per_dir, grid_points_label,
         raise FileNotFoundError(
             f"grid_0per (0,0) not found in {grid_0per_dir}"
         )
-    g0_00_full = _load_grid_output_phase(g0_pos_map[(0, 0)], z_index)
+    g0_00_phase = _load_grid_output_phase(g0_pos_map[(0, 0)], z_index)
 
-    coarse = _ecc_per_channel(g0_00_full, g2_full, rois, fit_right)
+    coarse = _ecc_per_channel(g0_00_phase, g2_phase, rois, fit_right)
     if coarse is None:
         raise RuntimeError(
             "Coarse ECC failed: all channels returned None for grid_0per(0,0) vs grid_2per(0,0)"
@@ -278,8 +309,8 @@ def compute_delta_full(grid_0per_dir, grid_2per_dir, grid_points_label,
 
     for key in candidates:
         xi, yi = key
-        g0_cand = _load_grid_output_phase(g0_pos_map[key], z_index)
-        result = _ecc_per_channel(g0_cand, g2_full, rois, fit_right)
+        g0_cand_phase = _load_grid_output_phase(g0_pos_map[key], z_index)
+        result = _ecc_per_channel(g0_cand_phase, g2_phase, rois, fit_right)
         if result:
             tx, ty, corr, details = result
             residual = abs(tx) + abs(ty)
@@ -288,7 +319,7 @@ def compute_delta_full(grid_0per_dir, grid_2per_dir, grid_points_label,
             if residual < best_residual:
                 best_residual = residual
                 best_key = key
-                best_ecc_result = (tx, ty, corr, details, g0_cand)
+                best_ecc_result = (tx, ty, corr, details)
 
     # --- Use best grid point (no fallback) ---
     if best_ecc_result is None:
@@ -297,8 +328,12 @@ def compute_delta_full(grid_0per_dir, grid_2per_dir, grid_points_label,
             f"around ({best_xi:+d}, {best_yi:+d})"
         )
 
-    tx, ty, corr, details, g0_best = best_ecc_result
-    aligned_0per = apply_inverse_shift_warp(g0_best, tx, ty)
+    tx, ty, corr, details = best_ecc_result
+    g2_holo = load_grid_holo_path(g2_pos, z_index)
+    g2_raw = _reconstruct_raw(g2_holo, qpi_params, raw_crop)
+    g0_best_holo = load_grid_holo_path(g0_pos_map[best_key], z_index)
+    g0_best_raw = _reconstruct_raw(g0_best_holo, qpi_params, raw_crop)
+    aligned_0per = apply_inverse_shift_warp(g0_best_raw, tx, ty)
 
     ecc_info = {
         "tx": tx, "ty": ty, "corr": corr, "success": True,
@@ -307,11 +342,13 @@ def compute_delta_full(grid_0per_dir, grid_2per_dir, grid_points_label,
         "per_channel_tx": details["tx"],
         "per_channel_ty": details["ty"],
         "per_channel_corr": details["corr"],
+        "ecc_source": "output_phase",
+        "delta_source": "raw_reconstruction",
     }
     print(f"[BEST] grid_0per({best_key[0]:+d},{best_key[1]:+d}): "
           f"tx={tx:.3f} ty={ty:.3f} corr={corr:.4f}")
 
-    delta_full = aligned_0per - g2_full
+    delta_full = aligned_0per - g2_raw
     return delta_full, ecc_info
 
 
@@ -359,6 +396,13 @@ def run_correct_0pergluc(
         f"(grid_subtract_log base_label, else GRID_POINTS_BASE_LABEL={GRID_POINTS_BASE_LABEL})"
     )
     print(f"0%% glucose range: [{GLUCOSE_0_START}, {GLUCOSE_0_END})")
+    fit_right = _resolve_fit_right(base_label)
+    raw_crop = _resolve_raw_crop(log_data)
+    print(
+        f"[tilt] fit_right={fit_right} "
+        f"(base_label={base_label}, POS_SPLIT={POS_SPLIT}, override={FIT_RIGHT})"
+    )
+    print(f"[raw] raw_crop={raw_crop}")
 
     # --- Load grid calibration ---
     grid_cal = {}
@@ -380,14 +424,22 @@ def run_correct_0pergluc(
     # Build filename list (same filenames across all channels)
     filenames = [f.name for f in ch0_files]
 
+    sample_holo = load_grid_holo_path(
+        Path(GRID_2PER_DIR) / f"{grid_points_label}_x+0_y+0", grid_z_index
+    )
+    qpi_params = _make_qpi_params_raw(sample_holo, raw_crop)
+    print(f"[raw] QPIParameters created from: {sample_holo.name}")
+
     # --- Compute delta_full ---
     delta_full, ecc_info = compute_delta_full(
         GRID_0PER_DIR,
         GRID_2PER_DIR,
         grid_points_label,
         grid_z_index,
+        qpi_params,
+        raw_crop,
         rois,
-        FIT_RIGHT,
+        fit_right,
     )
     print(f"delta_full: shape={delta_full.shape}, mean={delta_full.mean():.6f} rad")
 
@@ -492,7 +544,7 @@ def run_correct_0pergluc(
 
             # Apply the same tilt correction pipeline
             delta_corrected = tilt_correct_and_crop(
-                delta_large.copy(), out_crop_h, TILT_CROP_H_RAW,
+                delta_large.copy(), out_crop_h, TILT_CROP_H_RAW, fit_right=fit_right,
             )
 
             if img.shape != delta_corrected.shape:
@@ -512,12 +564,18 @@ def run_correct_0pergluc(
         "session_base_label": base_label,
         "grid_points_base_label": grid_points_label,
         "grid_z_index": grid_z_index,
+        "raw_crop": list(raw_crop),
         "grid_calibration_json": str(cal_path),
         "glucose_0_start": GLUCOSE_0_START,
         "glucose_0_end": GLUCOSE_0_END,
+        "fit_right": fit_right,
+        "pos_split": POS_SPLIT,
+        "ecc_source": ecc_info.get("ecc_source", "output_phase"),
+        "delta_source": ecc_info.get("delta_source", "raw_reconstruction"),
         "delta_warp_mode": "cal_diff_vs_grid00",
         "cal_grid00": {"cal_dx": cal_dx_00, "cal_dy": cal_dy_00},
-        "note": "delta_full warped with apply_inverse_shift_warp(cal(xi,yi)-cal(0,0)); "
+        "note": "ECC/grid selection uses output_phase; delta_full uses raw reconstruction. "
+                "delta_full warped with apply_inverse_shift_warp(cal(xi,yi)-cal(0,0)); "
                 "not timelapse residual_x_px",
         "unique_grid_cells_warped": len(delta_warp_cache),
         "ecc_tx": ecc_info["tx"],
@@ -571,7 +629,9 @@ def run_correct_0pergluc(
         d_large = extract_rect_roi(
             delta_warped_sample, crop_cy, crop_cx, roi["crop_w"], TILT_CROP_H_RAW,
         )
-        d_crop = tilt_correct_and_crop(d_large.copy(), out_h, TILT_CROP_H_RAW)
+        d_crop = tilt_correct_and_crop(
+            d_large.copy(), out_h, TILT_CROP_H_RAW, fit_right=fit_right,
+        )
         tifffile.imwrite(
             str(delta_dir / f"delta_ch{ch:02d}.tif"), d_crop.astype(np.float32),
         )

@@ -33,12 +33,12 @@ if str(_SCRIPT_DIR) not in sys.path:
 # ============================================================
 # Configuration
 # ============================================================
-TIMELAPSE_ROOT = Path(r"D:\AquisitionData\Kitagishi\260405\ph_260405")
+TIMELAPSE_ROOT = Path(r"F:\260405\ph_260405")
 GRID_2PER_DIR  = Path(r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1")
 GRID_0PER_DIR  = Path(r"C:\grid_0pergluc_60ms_1")
 
 # Pos range (inclusive). Pos0 is BG, skip it.
-POS_START = 8
+POS_START = 2
 POS_END   = 64
 
 # 0% glucose frame range
@@ -49,7 +49,7 @@ GLUCOSE_0_END   = 1440   # exclusive
 N_WORKERS_RECON = 8
 
 # compute_pos_shifts workers
-N_WORKERS_ECC = 8
+N_WORKERS_ECC = 16
 
 # Progress log (for resume)
 PROGRESS_LOG = TIMELAPSE_ROOT / "batch_pipeline_progress.json"
@@ -429,7 +429,11 @@ def step4_correct_0pergluc(pos_num, pos_dir):
     c0.GLUCOSE_0_END = GLUCOSE_0_END
     c0.RAW_CROP = crop
     c0.TILT_CROP_H_RAW = TILT_CROP_H_RAW
+    c0.ECC_CROP_H = ECC_CROP_H
     c0.OUTPUT_CROP_H = None
+    c0.POS_NUMBERS_TO_RUN = []
+    c0.POS_SPLIT = POS_SPLIT
+    c0.FIT_RIGHT = None
 
     print(f"  Running correct_0pergluc (frames {GLUCOSE_0_START}-{GLUCOSE_0_END-1})...")
     try:
