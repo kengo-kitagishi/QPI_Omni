@@ -103,7 +103,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--figure",
         nargs="+",
-        choices=["overlay_strip", "contour_montage", "shape_trace"],
+        choices=[
+            "overlay_strip",
+            "contour_montage",
+            "shape_trace",
+            "volume_trace",
+            "ghost_contour",
+            "intensity_kymograph",
+            "mask_kymograph",
+            "qc_overview",
+        ],
         default=["overlay_strip", "contour_montage", "shape_trace"],
         help="Figures to generate.",
     )
@@ -149,6 +158,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Disable rotation alignment.",
     )
     parser.add_argument(
+        "--flip-horizontal",
+        action="store_true",
+        help="Flip aligned crops horizontally after major-axis alignment.",
+    )
+    parser.add_argument(
         "--panel-count",
         type=int,
         default=6,
@@ -182,6 +196,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-save",
         action="store_true",
         help="Build figures but skip figure_logger saves.",
+    )
+    parser.add_argument(
+        "--attach-source-tifs",
+        action="store_true",
+        help="Copy source raw/mask TIFFs into figure_logger inbox. Default: off.",
     )
     return parser
 
@@ -272,17 +291,19 @@ def build_frame_pairs(channel_dir: Path) -> list[FramePair]:
     return pairs
 
 
-def compute_major_axis_angle_deg(mask: np.ndarray) -> float:
-    ys, xs = np.nonzero(mask)
-    if ys.size < 3:
+def compute_alignment_rotation_deg(mask: np.ndarray) -> float:
+    labeled = measure.label(mask > 0, connectivity=1)
+    props = measure.regionprops(labeled)
+    if not props:
         return 0.0
-    coords = np.column_stack([xs - xs.mean(), ys - ys.mean()])
-    try:
-        _, _, vh = np.linalg.svd(coords, full_matrices=False)
-    except np.linalg.LinAlgError:
-        return 0.0
-    vx, vy = vh[0]
-    return float(np.degrees(np.arctan2(vy, vx)))
+    prop = max(props, key=lambda p: p.area)
+    orientation_deg = float(np.degrees(prop.orientation))
+    rotate_deg = 90.0 - orientation_deg
+    while rotate_deg > 90.0:
+        rotate_deg -= 180.0
+    while rotate_deg <= -90.0:
+        rotate_deg += 180.0
+    return rotate_deg
 
 
 def extract_centered_crop(
@@ -320,18 +341,31 @@ def rotate_crop_pair(
     raw_crop: np.ndarray | None,
     mask_crop: np.ndarray,
     align_major_axis: bool,
+    flip_horizontal: bool,
 ) -> tuple[np.ndarray | None, np.ndarray]:
     if not align_major_axis:
-        return raw_crop, mask_crop
-    angle_deg = compute_major_axis_angle_deg(mask_crop > 0)
+        out_raw = raw_crop
+        out_mask = mask_crop
+        if flip_horizontal:
+            if out_raw is not None:
+                out_raw = np.fliplr(out_raw)
+            out_mask = np.fliplr(out_mask)
+        return out_raw, out_mask
+    angle_deg = compute_alignment_rotation_deg(mask_crop > 0)
     if abs(angle_deg) < 1e-6:
-        return raw_crop, mask_crop
+        out_raw = raw_crop
+        out_mask = mask_crop
+        if flip_horizontal:
+            if out_raw is not None:
+                out_raw = np.fliplr(out_raw)
+            out_mask = np.fliplr(out_mask)
+        return out_raw, out_mask
 
     out_raw = None
     if raw_crop is not None:
         out_raw = rotate(
             raw_crop,
-            -angle_deg,
+            angle_deg,
             resize=False,
             order=1,
             preserve_range=True,
@@ -340,14 +374,19 @@ def rotate_crop_pair(
         ).astype(np.float32)
     out_mask = rotate(
         mask_crop.astype(np.float32),
-        -angle_deg,
+        angle_deg,
         resize=False,
         order=0,
         preserve_range=True,
         mode="constant",
         cval=0.0,
     )
-    return out_raw, (out_mask > 0.5).astype(np.uint8)
+    out_mask = (out_mask > 0.5).astype(np.uint8)
+    if flip_horizontal:
+        if out_raw is not None:
+            out_raw = np.fliplr(out_raw)
+        out_mask = np.fliplr(out_mask)
+    return out_raw, out_mask
 
 
 def candidate_rows_for_frame(
@@ -396,6 +435,16 @@ def candidate_rows_for_frame(
         rows.append(row)
 
     return pd.DataFrame(rows)
+
+
+def calc_rod_volume_um3(major_px: float, minor_px: float, pixel_size_um: float) -> float:
+    length_um = float(major_px) * pixel_size_um
+    width_um = float(minor_px) * pixel_size_um
+    r_um = width_um / 2.0
+    h_um = length_um - 2.0 * r_um
+    if h_um < 0:
+        return float((4.0 / 3.0) * np.pi * (r_um ** 3))
+    return float((4.0 / 3.0) * np.pi * (r_um ** 3) + np.pi * (r_um ** 2) * h_um)
 
 
 def select_center_cell_for_frame(
@@ -487,10 +536,27 @@ def build_summary_table(
     frame_pairs: list[FramePair],
     min_area: int,
     exclude_border: bool,
+    pixel_size_um: float | None,
 ) -> pd.DataFrame:
     rows = [select_center_cell_for_frame(pair, min_area=min_area, exclude_border=exclude_border) for pair in frame_pairs]
     df = pd.DataFrame(rows)
     df["frame_label"] = df["frame_name"]
+    if pixel_size_um is not None and pixel_size_um > 0:
+        df["volume_um3_rod"] = np.where(
+            df["tracked"].to_numpy(dtype=bool),
+            [
+                calc_rod_volume_um3(major, minor, pixel_size_um)
+                if np.isfinite(major) and np.isfinite(minor) and minor > 0
+                else np.nan
+                for major, minor in zip(
+                    df["major_axis_px"].to_numpy(dtype=float),
+                    df["minor_axis_px"].to_numpy(dtype=float),
+                )
+            ],
+            np.nan,
+        )
+    else:
+        df["volume_um3_rod"] = np.nan
     return df
 
 
@@ -518,6 +584,7 @@ def build_crops_for_row(
     row: pd.Series,
     crop_size: int,
     align_major_axis: bool,
+    flip_horizontal: bool,
 ) -> tuple[np.ndarray | None, np.ndarray]:
     mask_path = Path(row["mask_path"]) if row["mask_path"] else None
     if not row["tracked"] or mask_path is None or not mask_path.exists():
@@ -543,7 +610,12 @@ def build_crops_for_row(
                 fill_value=float(np.median(raw_img)),
             ).astype(np.float32)
 
-    return rotate_crop_pair(raw_crop, mask_crop, align_major_axis=align_major_axis)
+    return rotate_crop_pair(
+        raw_crop,
+        mask_crop,
+        align_major_axis=align_major_axis,
+        flip_horizontal=flip_horizontal,
+    )
 
 
 def select_panel_rows(summary_df: pd.DataFrame, panel_count: int) -> pd.DataFrame:
@@ -624,7 +696,12 @@ def make_overlay_strip(
     masks: list[np.ndarray] = []
     rows_used: list[pd.Series] = []
     for _, row in panel_rows.iterrows():
-        raw_crop, mask_crop = build_crops_for_row(row, crop_size, args.align_major_axis)
+        raw_crop, mask_crop = build_crops_for_row(
+            row,
+            crop_size,
+            args.align_major_axis,
+            args.flip_horizontal,
+        )
         if raw_crop is None:
             continue
         crops.append(raw_crop)
@@ -685,7 +762,12 @@ def make_contour_montage(
         axes = [axes]
     contour_color = "#111111"
     for ax, (_, row) in zip(axes, panel_rows.iterrows()):
-        _, mask_crop = build_crops_for_row(row, crop_size, args.align_major_axis)
+        _, mask_crop = build_crops_for_row(
+            row,
+            crop_size,
+            args.align_major_axis,
+            args.flip_horizontal,
+        )
         if np.any(mask_crop):
             ax.imshow(mask_crop, cmap="Greys", vmin=0, vmax=1, alpha=0.18)
             for contour in contours_from_mask(mask_crop):
@@ -765,7 +847,7 @@ def make_shape_trace(summary_df: pd.DataFrame, args: argparse.Namespace) -> plt.
     missing_half_width = (args.time_interval_min / 2.0) if args.time_interval_min else 0.45
 
     for ax, letter, (title, y, ylabel) in zip(axes, letters, series):
-        ax.plot(x, y, color=color, lw=1.2, marker="o", markersize=2.5)
+        ax.plot(x, y, color=color, lw=1.2)
         if missing_mask.any():
             for xv, is_missing in zip(x, missing_mask):
                 if is_missing:
@@ -778,6 +860,259 @@ def make_shape_trace(summary_df: pd.DataFrame, args: argparse.Namespace) -> plt.
 
     if args.preset != "manuscript":
         fig.suptitle("Center-nearest representative cell: shape trace", y=1.02)
+    return fig
+
+
+def make_volume_trace(summary_df: pd.DataFrame, args: argparse.Namespace) -> plt.Figure | None:
+    if summary_df["volume_um3_rod"].isna().all():
+        return None
+
+    df = summary_df.copy()
+    x = df["frame_index"].to_numpy(dtype=float)
+    if args.time_interval_min is not None:
+        x = x * args.time_interval_min
+        x_label = "Time [min]"
+    else:
+        x_label = "Frame"
+
+    volume = df["volume_um3_rod"].to_numpy(dtype=float)
+    major = df["major_axis_px"].to_numpy(dtype=float)
+    minor = df["minor_axis_px"].to_numpy(dtype=float)
+    if args.pixel_size_um is not None and args.pixel_size_um > 0:
+        major = major * args.pixel_size_um
+        minor = minor * args.pixel_size_um
+        axis_label = "Axis length [um]"
+    else:
+        axis_label = "Axis length [px]"
+
+    fig, axes = plt.subplots(2, 1, figsize=(6.8, 4.8), constrained_layout=True)
+    missing_mask = ~df["tracked"].to_numpy(dtype=bool)
+    missing_half_width = (args.time_interval_min / 2.0) if args.time_interval_min else 0.45
+
+    axes[0].plot(x, volume, color="#1f77b4", lw=1.4)
+    axes[0].set_title("A  Rod volume estimate", loc="left")
+    axes[0].set_ylabel("Volume [um^3]")
+    axes[0].spines["top"].set_visible(False)
+    axes[0].spines["right"].set_visible(False)
+
+    axes[1].plot(x, major, color="#d55e00", lw=1.2, label="Major")
+    axes[1].plot(x, minor, color="#009e73", lw=1.2, label="Minor")
+    axes[1].set_title("B  Major / minor axes", loc="left")
+    axes[1].set_xlabel(x_label)
+    axes[1].set_ylabel(axis_label)
+    axes[1].legend(frameon=False, loc="best")
+    axes[1].spines["top"].set_visible(False)
+    axes[1].spines["right"].set_visible(False)
+
+    if missing_mask.any():
+        for ax in axes:
+            for xv, is_missing in zip(x, missing_mask):
+                if is_missing:
+                    ax.axvspan(xv - missing_half_width, xv + missing_half_width, color="#eeeeee", zorder=0)
+
+    if args.preset != "manuscript":
+        fig.suptitle("Center-nearest representative cell: volume estimate", y=1.02)
+    return fig
+
+
+def build_aligned_stack(
+    summary_df: pd.DataFrame,
+    crop_size: int,
+    args: argparse.Namespace,
+) -> tuple[list[pd.Series], list[np.ndarray | None], list[np.ndarray]]:
+    rows_used: list[pd.Series] = []
+    raw_crops: list[np.ndarray | None] = []
+    mask_crops: list[np.ndarray] = []
+    for _, row in summary_df.iterrows():
+        if not row["tracked"]:
+            continue
+        raw_crop, mask_crop = build_crops_for_row(
+            row,
+            crop_size,
+            args.align_major_axis,
+            args.flip_horizontal,
+        )
+        rows_used.append(row)
+        raw_crops.append(raw_crop)
+        mask_crops.append(mask_crop)
+    return rows_used, raw_crops, mask_crops
+
+
+def make_ghost_contour(
+    summary_df: pd.DataFrame,
+    crop_size: int,
+    args: argparse.Namespace,
+) -> plt.Figure | None:
+    rows_used, _, mask_crops = build_aligned_stack(summary_df, crop_size, args)
+    if not mask_crops:
+        return None
+    fig, ax = plt.subplots(figsize=(3.3, 3.3), constrained_layout=True)
+    cmap = plt.get_cmap("viridis")
+    n = len(mask_crops)
+    for idx, (row, mask_crop) in enumerate(zip(rows_used, mask_crops)):
+        color = cmap(idx / max(1, n - 1))
+        for contour in contours_from_mask(mask_crop):
+            ax.plot(contour[:, 1], contour[:, 0], color=color, lw=0.9, alpha=0.9)
+    ax.set_aspect("equal")
+    ax.invert_yaxis()
+    ax.set_axis_off()
+    add_scale_bar(
+        ax,
+        (crop_size, crop_size),
+        args.pixel_size_um,
+        args.scalebar_um,
+        color="#111111",
+        linewidth=1.2,
+    )
+    if rows_used:
+        ax.text(0.03, 0.97, frame_time_label(rows_used[0], args.time_interval_min), transform=ax.transAxes, ha="left", va="top")
+        ax.text(0.97, 0.97, frame_time_label(rows_used[-1], args.time_interval_min), transform=ax.transAxes, ha="right", va="top")
+    if args.preset != "manuscript":
+        fig.suptitle("Center-nearest representative cell: ghost contour", y=1.02)
+    return fig
+
+
+def longitudinal_mask_profile(mask_crop: np.ndarray) -> np.ndarray:
+    return mask_crop.astype(float).sum(axis=0)
+
+
+def longitudinal_intensity_profile(raw_crop: np.ndarray, mask_crop: np.ndarray) -> np.ndarray:
+    weighted = np.where(mask_crop > 0, raw_crop, 0.0)
+    counts = mask_crop.sum(axis=0).astype(float)
+    sums = weighted.sum(axis=0).astype(float)
+    prof = np.full(raw_crop.shape[1], np.nan, dtype=float)
+    valid = counts > 0
+    prof[valid] = sums[valid] / counts[valid]
+    return prof
+
+
+def make_intensity_kymograph(
+    summary_df: pd.DataFrame,
+    crop_size: int,
+    args: argparse.Namespace,
+) -> plt.Figure | None:
+    rows_used, raw_crops, mask_crops = build_aligned_stack(summary_df, crop_size, args)
+    profiles = []
+    labels = []
+    for row, raw_crop, mask_crop in zip(rows_used, raw_crops, mask_crops):
+        if raw_crop is None or not np.any(mask_crop):
+            continue
+        profiles.append(longitudinal_intensity_profile(raw_crop, mask_crop))
+        labels.append(row)
+    if not profiles:
+        return None
+    arr = np.stack(profiles, axis=0)
+    fig, ax = plt.subplots(figsize=(5.2, 3.4), constrained_layout=True)
+    im = ax.imshow(
+        arr,
+        aspect="auto",
+        cmap="magma",
+        origin="lower",
+        interpolation="nearest",
+    )
+    xticks = np.linspace(0, crop_size - 1, 5)
+    ax.set_xticks(xticks)
+    if args.pixel_size_um:
+        ax.set_xticklabels([f"{(x - crop_size / 2) * args.pixel_size_um:.1f}" for x in xticks])
+        ax.set_xlabel("Position along major axis [um]")
+    else:
+        ax.set_xlabel("Position along major axis [px]")
+    ytick_idx = np.linspace(0, len(labels) - 1, min(5, len(labels))).round().astype(int)
+    ax.set_yticks(ytick_idx)
+    ax.set_yticklabels([frame_time_label(labels[i], args.time_interval_min) for i in ytick_idx])
+    ax.set_ylabel("Time")
+    cbar = fig.colorbar(im, ax=ax, shrink=0.85)
+    cbar.set_label("Mean intensity inside mask")
+    if args.preset != "manuscript":
+        fig.suptitle("Center-nearest representative cell: intensity kymograph", y=1.02)
+    return fig
+
+
+def make_mask_kymograph(
+    summary_df: pd.DataFrame,
+    crop_size: int,
+    args: argparse.Namespace,
+) -> plt.Figure | None:
+    rows_used, _, mask_crops = build_aligned_stack(summary_df, crop_size, args)
+    if not mask_crops:
+        return None
+    arr = np.stack([longitudinal_mask_profile(mask_crop) for mask_crop in mask_crops], axis=0)
+    fig, ax = plt.subplots(figsize=(5.2, 3.4), constrained_layout=True)
+    im = ax.imshow(
+        arr,
+        aspect="auto",
+        cmap="cividis",
+        origin="lower",
+        interpolation="nearest",
+    )
+    xticks = np.linspace(0, crop_size - 1, 5)
+    ax.set_xticks(xticks)
+    if args.pixel_size_um:
+        ax.set_xticklabels([f"{(x - crop_size / 2) * args.pixel_size_um:.1f}" for x in xticks])
+        ax.set_xlabel("Position along major axis [um]")
+    else:
+        ax.set_xlabel("Position along major axis [px]")
+    ytick_idx = np.linspace(0, len(rows_used) - 1, min(5, len(rows_used))).round().astype(int)
+    ax.set_yticks(ytick_idx)
+    ax.set_yticklabels([frame_time_label(rows_used[i], args.time_interval_min) for i in ytick_idx])
+    ax.set_ylabel("Time")
+    cbar = fig.colorbar(im, ax=ax, shrink=0.85)
+    cbar.set_label("Mask width [px]")
+    if args.preset != "manuscript":
+        fig.suptitle("Center-nearest representative cell: mask kymograph", y=1.02)
+    return fig
+
+
+def make_qc_overview(summary_df: pd.DataFrame, args: argparse.Namespace) -> plt.Figure:
+    fig, axes = plt.subplots(2, 2, figsize=(8.2, 5.6), constrained_layout=True)
+    ax0, ax1, ax2, ax3 = axes.ravel()
+
+    valid = summary_df[summary_df["tracked"]].copy()
+    if not valid.empty:
+        h = int(valid["image_height_px"].dropna().iloc[0])
+        w = int(valid["image_width_px"].dropna().iloc[0])
+        ax0.plot(valid["centroid_x"], valid["centroid_y"], color="#2a6f97", lw=1.2)
+        cx = w / 2.0
+        cy = h / 2.0
+        cross = max(4.0, min(h, w) * 0.03)
+        ax0.plot([cx - cross, cx + cross], [cy, cy], color="red", lw=1.0)
+        ax0.plot([cx, cx], [cy - cross, cy + cross], color="red", lw=1.0)
+        ax0.set_xlim(0, w)
+        ax0.set_ylim(h, 0)
+        ax0.set_title("A  Selected centroids", loc="left")
+        ax0.set_aspect("equal")
+    else:
+        ax0.text(0.5, 0.5, "No tracked frames", transform=ax0.transAxes, ha="center", va="center")
+        ax0.set_title("A  Selected centroids", loc="left")
+
+    x = summary_df["frame_index"].to_numpy(dtype=float)
+    if args.time_interval_min is not None:
+        x = x * args.time_interval_min
+        xlabel = "Time [min]"
+    else:
+        xlabel = "Frame"
+    ax1.plot(x, summary_df["distance_to_center_px"], color="#2a6f97", lw=1.2)
+    ax1.set_title("B  Distance to center", loc="left")
+    ax1.set_xlabel(xlabel)
+    ax1.set_ylabel("Distance [px]")
+    ax1.spines["top"].set_visible(False)
+    ax1.spines["right"].set_visible(False)
+
+    counts = summary_df["selection_flag"].fillna("unknown").value_counts()
+    ax2.bar(counts.index.astype(str), counts.values, color="#7a7a7a")
+    ax2.set_title("C  Selection flags", loc="left")
+    ax2.tick_params(axis="x", rotation=30)
+    ax2.spines["top"].set_visible(False)
+    ax2.spines["right"].set_visible(False)
+
+    ax3.plot(x, summary_df["area_px"], color="#6a4c93", lw=1.2)
+    ax3.set_title("D  Area QC", loc="left")
+    ax3.set_xlabel(xlabel)
+    ax3.set_ylabel("Area [px]")
+    ax3.spines["top"].set_visible(False)
+    ax3.spines["right"].set_visible(False)
+
+    fig.suptitle("Center-nearest representative cell: QC overview", y=1.02)
     return fig
 
 
@@ -800,12 +1135,13 @@ def save_fig_with_formats(
         "exclude_border": bool(args.exclude_border),
         "crop_margin": args.crop_margin,
         "align_major_axis": bool(args.align_major_axis),
+        "flip_horizontal": bool(args.flip_horizontal),
         "panel_count": args.panel_count,
         "pixel_size_um": args.pixel_size_um,
         "time_interval_min": args.time_interval_min,
     }
     extra_meta = {"local_output_dir": str(outdir.resolve())}
-    source_list = list(dict.fromkeys(source_tifs))
+    source_list = list(dict.fromkeys(source_tifs)) if args.attach_source_tifs else None
     for fmt in args.formats:
         path = save_figure(
             fig,
@@ -845,7 +1181,12 @@ def write_intermediate_outputs(
             selected_mask = np.zeros((h, w), dtype=np.uint8)
         mask_stack.append(selected_mask.astype(np.uint8))
 
-        raw_crop, mask_crop = build_crops_for_row(row, crop_size, args.align_major_axis)
+        raw_crop, mask_crop = build_crops_for_row(
+            row,
+            crop_size,
+            args.align_major_axis,
+            args.flip_horizontal,
+        )
         crop_stack.append(mask_crop.astype(np.uint8))
         if raw_crop is not None:
             raw_crop_stack.append(raw_crop.astype(np.float32))
@@ -934,6 +1275,7 @@ def main() -> int:
         frame_pairs,
         min_area=args.min_area,
         exclude_border=args.exclude_border,
+        pixel_size_um=args.pixel_size_um,
     )
     crop_size = determine_crop_size(summary_df, margin=args.crop_margin)
     panel_rows = select_panel_rows(summary_df, panel_count=args.panel_count)
@@ -957,6 +1299,14 @@ def main() -> int:
             fig = make_contour_montage(panel_rows, crop_size, args)
         elif kind == "shape_trace":
             fig = make_shape_trace(summary_df, args)
+        elif kind == "ghost_contour":
+            fig = make_ghost_contour(summary_df, crop_size, args)
+        elif kind == "intensity_kymograph":
+            fig = make_intensity_kymograph(summary_df, crop_size, args)
+        elif kind == "mask_kymograph":
+            fig = make_mask_kymograph(summary_df, crop_size, args)
+        elif kind == "qc_overview":
+            fig = make_qc_overview(summary_df, args)
 
         if fig is None:
             print(f"[central_cell_track] skip {kind}: no valid data")
