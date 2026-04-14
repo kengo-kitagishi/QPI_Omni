@@ -335,59 +335,6 @@ def _call_with_fallback(
     return "", 1, "all models in ladder exhausted"
 
 
-MAX_INPUT_CHARS = 200_000  # claude CLI が安定して受け付けるサイズ上限
-
-
-def compress_daily_index(text: str, max_chars: int) -> str:
-    """巨大な daily_index をタイムラインの中間部分を省略して圧縮する。
-
-    方針:
-    - セッションヘッダ（## / ### で始まる行）は保持
-    - 各セッション内のタイムラインは先頭20行＋末尾20行を残し、中間を省略
-    - 図情報（figure_inbox セクション）は全件保持
-    """
-    lines = text.splitlines()
-    result = []
-    in_timeline = False
-    timeline_buffer = []
-
-    def flush_timeline():
-        nonlocal timeline_buffer
-        if len(timeline_buffer) <= 50:
-            result.extend(timeline_buffer)
-        else:
-            result.extend(timeline_buffer[:20])
-            omitted = len(timeline_buffer) - 40
-            result.append(f"[... {omitted} events omitted ...]")
-            result.extend(timeline_buffer[-20:])
-        timeline_buffer = []
-
-    for line in lines:
-        # セクションヘッダで timeline flush
-        if line.startswith("## ") or line.startswith("### "):
-            if in_timeline:
-                flush_timeline()
-                in_timeline = False
-            result.append(line)
-        elif line.startswith("#### ") and "タイムライン" in line:
-            if in_timeline:
-                flush_timeline()
-            result.append(line)
-            in_timeline = True
-        elif in_timeline:
-            timeline_buffer.append(line)
-        else:
-            result.append(line)
-
-    if in_timeline:
-        flush_timeline()
-
-    compressed = "\n".join(result)
-    if len(compressed) > max_chars:
-        # それでも大きい場合は末尾を切る
-        compressed = compressed[:max_chars] + "\n[... truncated to fit size limit ...]"
-    return compressed
-
 
 # exit code 2 = 空索引（リトライしても無意味）
 EXIT_EMPTY_INDEX = 2
@@ -409,12 +356,6 @@ def _load_inputs(target_date: str) -> tuple[str, str] | None:
         print(f"ERROR: 索引が空または極端に短い ({len(index_text)} chars).")
         print("  前段の jsonl_to_obsidian / weekly_report_hub が失敗している可能性があります.")
         raise SystemExit(EXIT_EMPTY_INDEX)
-
-    # 巨大索引の圧縮
-    if len(index_text) > MAX_INPUT_CHARS:
-        print(f"WARN: 索引が巨大 ({len(index_text):,} chars) — {MAX_INPUT_CHARS:,} chars に圧縮します")
-        index_text = compress_daily_index(index_text, MAX_INPUT_CHARS)
-        print(f"  圧縮後: {len(index_text):,} chars")
 
     # スタイルガイドを読み込み（gm_style.md + daily_log_style.md）
     style_parts = []

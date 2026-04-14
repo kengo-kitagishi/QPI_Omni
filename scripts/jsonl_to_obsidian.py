@@ -136,6 +136,23 @@ def get_last_entry_time(entries: list) -> datetime | None:
     return None
 
 
+def group_timeline_by_date(timeline: list) -> dict[str, list]:
+    """timeline イベントを JST 日付ごとにグループ化する。
+    タイムスタンプがない（ts=None）イベントは直前のイベントと同じ日付に入れる。
+    Returns: {date_str: [events...]} を日付昇順で返す dict。"""
+    groups: dict[str, list] = {}
+    last_date = None
+    for event in timeline:
+        ts = event.get("ts")
+        if ts:
+            dt = _ts_to_jst(ts)
+            if dt:
+                last_date = dt.strftime("%Y-%m-%d")
+        date_key = last_date or "unknown"
+        groups.setdefault(date_key, []).append(event)
+    return dict(sorted(groups.items()))
+
+
 def _tool_result_content(result_block: dict) -> str:
     content = result_block.get("content", "")
     if isinstance(content, str):
@@ -688,8 +705,16 @@ def render_session_md(
     date_str: str,
     jsonl_path: Path,
     timeline: list,
+    continuation_info: dict | None = None,
 ) -> str:
-    """タイムラインを Obsidian Markdown に変換する。"""
+    """タイムラインを Obsidian Markdown に変換する。
+
+    continuation_info: 日付分割セッション用。キー:
+        parent_session_id: 元の session_id
+        date_part: 何日目か (1, 2, ...)
+        prev_date: 前日の日付文字列 (or None)
+        next_date: 翌日の日付文字列 (or None)
+    """
     db_data = extract_db_data(timeline)
     meta = db_data["session_meta"]
 
@@ -711,6 +736,9 @@ def render_session_md(
         f"bash_command_count: {meta['bash_command_count']}",
         f"tool_call_count: {meta['tool_call_count']}",
     ])
+    if continuation_info and continuation_info.get("date_part", 1) > 1:
+        lines.append(f"parent_session: {continuation_info['parent_session_id']}")
+        lines.append(f"date_part: {continuation_info['date_part']}")
     if edited_files:
         files_yaml = "\n".join(f'  - "{f}"' for f in edited_files[:20])
         lines.append(f"edited_files:\n{files_yaml}")
@@ -718,8 +746,16 @@ def render_session_md(
     lines.append("")
 
     # ── タイトル ──
-    lines.append(f"# セッション {date_str} | {session_id[:8]}")
+    sid_short = (continuation_info or {}).get("parent_session_id", session_id)[:8]
+    lines.append(f"# セッション {date_str} | {sid_short}")
     lines.append("")
+
+    # ── 継続リンク（冒頭） ──
+    if continuation_info:
+        prev_d = continuation_info.get("prev_date")
+        if prev_d:
+            lines.append(f"> 前日からの継続: [[{prev_d}_{sid_short}]]")
+            lines.append("")
 
     # ── 変更ファイルサマリ ──
     if edited_files:
@@ -795,6 +831,15 @@ def render_session_md(
                                 lines.append(f"  > {rline}")
                 lines.append("")
 
+    # ── 継続リンク（末尾） ──
+    if continuation_info:
+        next_d = continuation_info.get("next_date")
+        if next_d:
+            sid_short_tail = (continuation_info or {}).get("parent_session_id", session_id)[:8]
+            lines.append("")
+            lines.append(f"> 翌日に継続: [[{next_d}_{sid_short_tail}]]")
+            lines.append("")
+
     return "\n".join(lines)
 
 
@@ -802,11 +847,51 @@ def render_session_md(
 # メイン処理
 # ────────────────────────────────────────────
 
-def process_session(jsonl_path: Path, dry_run: bool) -> dict | None:
+def _process_single_date(
+    session_id: str, date_str: str, jsonl_path: Path,
+    timeline: list, mtime: float, dry_run: bool,
+    continuation_info: dict | None = None,
+) -> dict | None:
+    """1つの日付分の .md を生成する内部ヘルパー。"""
+    sid_for_file = session_id[:8]
+    if continuation_info:
+        parent_sid = continuation_info.get("parent_session_id", session_id)
+        sid_for_file = parent_sid[:8]
+
+    md_content = render_session_md(
+        session_id, date_str, jsonl_path, timeline,
+        continuation_info=continuation_info,
+    )
+    out_path = OBSIDIAN_SESSIONS_DIR / f"{date_str}_{sid_for_file}.md"
+
+    if dry_run:
+        print(f"  [dry-run] would write: {out_path}")
+        db_data = extract_db_data(timeline)
+        meta = db_data["session_meta"]
+        print(f"    events={len(timeline)}, size={len(md_content)} chars,"
+              f" thinking={meta['thinking_blocks']}, errors={meta['error_count']},"
+              f" bash={meta['bash_command_count']}")
+    else:
+        OBSIDIAN_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(md_content, encoding="utf-8")
+        db_data = extract_db_data(timeline)
+        meta = db_data["session_meta"]
+        print(f"  → {out_path.name} ({len(md_content):,} chars, {len(timeline)} events,"
+              f" thinking={meta['thinking_blocks']}, errors={meta['error_count']},"
+              f" bash={meta['bash_command_count']})")
+
+    return {"out_path": out_path, "timeline": timeline,
+            "date_str": date_str, "mtime": mtime,
+            "session_id_for_db": session_id}
+
+
+def process_session(jsonl_path: Path, dry_run: bool) -> list[dict] | None:
     """1つのセッションを処理して .md ファイルを出力する。
 
+    日付をまたぐセッションは日付ごとに分割して複数の .md を生成する。
+
     Returns:
-        dict with out_path, timeline, date_str, mtime  (成功時)
+        list[dict]  各日付分の結果 (成功時、単一日でも要素1のリスト)
         None  (スキップ時)
     """
     entries = load_entries(jsonl_path)
@@ -827,37 +912,47 @@ def process_session(jsonl_path: Path, dry_run: bool) -> dict | None:
         mtime = 0.0
 
     session_id = jsonl_path.stem
-    date_str = get_session_date(entries)
     timeline = parse_timeline(entries)
 
     if not timeline:
         print(f"  SKIP (empty timeline): {jsonl_path.name}")
         return None
 
-    md_content = render_session_md(session_id, date_str, jsonl_path, timeline)
-    out_path = OBSIDIAN_SESSIONS_DIR / f"{date_str}_{session_id[:8]}.md"
+    date_groups = group_timeline_by_date(timeline)
+    sorted_dates = sorted(date_groups.keys())
 
-    if dry_run:
-        print(f"  [dry-run] would write: {out_path}")
-        db_data = extract_db_data(timeline)
-        meta = db_data["session_meta"]
-        print(f"    events={len(timeline)}, size={len(md_content)} chars,"
-              f" thinking={meta['thinking_blocks']}, errors={meta['error_count']},"
-              f" bash={meta['bash_command_count']}")
-        return {"out_path": out_path, "timeline": timeline,
-                "date_str": date_str, "mtime": mtime}
+    # ── 単一日セッション（大多数）: 既存と同じ処理 ──
+    if len(sorted_dates) == 1:
+        date_str = sorted_dates[0]
+        result = _process_single_date(
+            session_id, date_str, jsonl_path, timeline, mtime, dry_run)
+        return [result] if result else None
 
-    OBSIDIAN_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(md_content, encoding="utf-8")
+    # ── 複数日セッション: 日付ごとに分割 ──
+    print(f"  日付分割: {len(sorted_dates)} 日にまたがるセッション ({' → '.join(sorted_dates)})")
+    results = []
+    for i, date_str in enumerate(sorted_dates):
+        part = i + 1
+        day_timeline = date_groups[date_str]
 
-    db_data = extract_db_data(timeline)
-    meta = db_data["session_meta"]
-    print(f"  → {out_path.name} ({len(md_content):,} chars, {len(timeline)} events,"
-          f" thinking={meta['thinking_blocks']}, errors={meta['error_count']},"
-          f" bash={meta['bash_command_count']})")
+        # 合成 session_id: 1日目は元のまま、2日目以降は __dYYYYMMDD を付加
+        sid = session_id if part == 1 else f"{session_id}__d{date_str.replace('-', '')}"
 
-    return {"out_path": out_path, "timeline": timeline,
-            "date_str": date_str, "mtime": mtime}
+        cont_info = {
+            "parent_session_id": session_id,
+            "date_part": part,
+            "prev_date": sorted_dates[i - 1] if i > 0 else None,
+            "next_date": sorted_dates[i + 1] if i < len(sorted_dates) - 1 else None,
+        }
+
+        result = _process_single_date(
+            sid, date_str, jsonl_path, day_timeline, mtime, dry_run,
+            continuation_info=cont_info,
+        )
+        if result:
+            results.append(result)
+
+    return results if results else None
 
 
 def _collect_jsonl_targets(session_dirs: list[Path] | None) -> list[Path]:
@@ -926,15 +1021,20 @@ def run(args: argparse.Namespace) -> int:
             if result is not None:
                 processed += 1
                 if not args.dry_run:
-                    write_session_to_db(
-                        conn,
-                        session_id=session_id,
-                        date_str=result["date_str"],
-                        jsonl_path=jsonl_path,
-                        md_path=result["out_path"],
-                        timeline=result["timeline"],
-                        mtime=result["mtime"],
-                    )
+                    # 再処理時: 古い日付分割部分を先に削除
+                    session_db.delete_session_parts(conn, session_id)
+
+                    for part_result in result:
+                        db_sid = part_result.get("session_id_for_db", session_id)
+                        write_session_to_db(
+                            conn,
+                            session_id=db_sid,
+                            date_str=part_result["date_str"],
+                            jsonl_path=jsonl_path,
+                            md_path=part_result["out_path"],
+                            timeline=part_result["timeline"],
+                            mtime=part_result["mtime"],
+                        )
                     # 共有フォルダ由来の JSONL は処理成功後に削除
                     if (not getattr(args, "no_delete_shared", False)
                         and str(jsonl_path.resolve()).startswith(

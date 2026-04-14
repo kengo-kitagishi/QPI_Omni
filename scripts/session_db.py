@@ -444,6 +444,17 @@ def get_session_mtime(conn: sqlite3.Connection, session_id: str) -> Optional[flo
     return row["jsonl_mtime"] if row else None
 
 
+def delete_session_parts(conn: sqlite3.Connection, session_id: str) -> int:
+    """日付分割で生成された合成 ID の行を削除する。元の session_id 行は残す。
+    session_files, tool_calls, bash_commands は CASCADE で自動削除される。
+    Returns: 削除行数。"""
+    cur = conn.execute(
+        "DELETE FROM sessions WHERE session_id LIKE ? AND session_id != ?",
+        (f"{session_id}__d%", session_id),
+    )
+    return cur.rowcount
+
+
 def is_figure_processed(conn: sqlite3.Connection, unique_key: str) -> bool:
     """unique_key が DB に存在し、かつ移行レコードでない（実処理済み）かを返す。"""
     row = conn.execute(

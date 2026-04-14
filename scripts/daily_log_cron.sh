@@ -3,15 +3,14 @@
 # launchd から呼ばれる日次ログ自動生成スクリプト
 #
 # launchd plist: ~/Library/LaunchAgents/com.kitak.daily_log.plist
-#   StartCalendarInterval: Hour=23, Minute=0  # 毎日 23:00 JST
-#
-# --recover フラグ: 翌朝の recovery ジョブから呼ばれた場合（同じロジック）
+#   StartCalendarInterval: Hour=5, Minute=0  # 毎朝 05:00 JST（前日のログを生成）
 #
 # 改善 (2026-04-08):
 #   - 各ステージが独立実行（1段階の失敗で全体が止まらない）
 #   - 日次ログ生成を最大3回リトライ（rate limit 対策）
 #   - health.json に毎日の成否を記録
 #   - 30日より古いログを自動削除
+#   - 翌朝05:00に前日分を生成（1日分のデータが揃った状態で処理）
 
 export HOME=/Users/kitak
 export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
@@ -25,8 +24,15 @@ fi
 
 SCRIPT_DIR="/Users/kitak/QPI_Omni/scripts"
 LOG_DIR="/Users/kitak/QPI_Omni/logs"
-TODAY=$(date +%Y-%m-%d)
-LOG_FILE="$LOG_DIR/daily_log_${TODAY}.log"
+
+# 対象日: --date 引数があればそれを使う、なければ前日
+if [ -n "$1" ] && [ "$1" != "--recover" ]; then
+    TARGET_DATE="$1"
+else
+    TARGET_DATE=$(python3 -c "from datetime import date, timedelta; print((date.today() - timedelta(days=1)).strftime('%Y-%m-%d'))")
+fi
+
+LOG_FILE="$LOG_DIR/daily_log_${TARGET_DATE}.log"
 HEALTH_FILE="$LOG_DIR/daily_log_health.json"
 mkdir -p "$LOG_DIR"
 
@@ -36,9 +42,7 @@ find "$LOG_DIR" -name "daily_log_recovery_*.log" -mtime +30 -delete 2>/dev/null
 
 {
     echo "=== daily_log_cron.sh 開始: $(date '+%Y-%m-%d %H:%M:%S') ==="
-    if [ "$1" = "--recover" ]; then
-        echo "  (recovery モード)"
-    fi
+    echo "  対象日: $TARGET_DATE"
 
     cd /Users/kitak/QPI_Omni
 
@@ -51,17 +55,17 @@ find "$LOG_DIR" -name "daily_log_recovery_*.log" -mtime +30 -delete 2>/dev/null
 
     # ── Stage 2: weekly index と daily_index を生成 ──
     echo "--- Stage 2: weekly_report_hub ---"
-    WEEK_LABEL=$(python3 -c "from datetime import date; print(date.today().strftime('%Y-W%V'))")
+    WEEK_LABEL=$(python3 -c "from datetime import date; d=date.fromisoformat('$TARGET_DATE'); print(d.strftime('%Y-W%V'))")
     python3 "$SCRIPT_DIR/weekly_report_hub.py" --week "$WEEK_LABEL" --no-preprocess || echo "WARN: weekly_report_hub failed (rc=$?, continuing)"
 
     # ── Stage 3: 日次ログ生成（最大3回リトライ） ──
-    echo "--- Stage 3: generate_daily_log ---"
+    echo "--- Stage 3: generate_daily_log (date=$TARGET_DATE) ---"
     final_rc=1
     final_attempt=0
     for attempt in 1 2 3; do
         final_attempt=$attempt
         echo "  attempt $attempt/3 ..."
-        python3 "$SCRIPT_DIR/generate_daily_log.py" --overwrite --backend cli
+        python3 "$SCRIPT_DIR/generate_daily_log.py" --date "$TARGET_DATE" --overwrite --backend cli
         rc=$?
         if [ $rc -eq 0 ]; then
             echo "  SUCCESS on attempt $attempt"
@@ -85,15 +89,15 @@ find "$LOG_DIR" -name "daily_log_recovery_*.log" -mtime +30 -delete 2>/dev/null
     echo "=== 完了: $(date '+%Y-%m-%d %H:%M:%S') (rc=$final_rc, attempts=$final_attempt) ==="
 
     # ── health.json に結果を記録 ──
-    DAILY_LOG_PATH="/Users/kitak/Documents/Obsidian Vault/01_Daily/${TODAY}.md"
+    DAILY_LOG_PATH="/Users/kitak/Documents/Obsidian Vault/01_Daily/${TARGET_DATE}.md"
     python3 -c "
 import json, os
 from datetime import datetime, timezone, timedelta
 JST = timezone(timedelta(hours=9))
-today = '${TODAY}'
+target = '${TARGET_DATE}'
 log_path = '${DAILY_LOG_PATH}'
 health = {
-    'date': today,
+    'date': target,
     'updated_at': datetime.now(JST).isoformat(),
     'success': os.path.exists(log_path) and os.path.getsize(log_path) > 100,
     'log_exists': os.path.exists(log_path),
