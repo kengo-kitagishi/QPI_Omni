@@ -22,7 +22,7 @@ import re as _re
 # ============================================================
 # 設定パラメータ
 # ============================================================
-CHANNELS_DIR = r"F:\260405\ph_260405\Pos1\output_phase\channels"
+CHANNELS_DIR = r"D:\AquisitionData\Kitagishi\260405\ph_260405\Pos1\output_phase\channels"
 CHANNEL_PATTERN = "channel_*.tif"      # backsub済みなら "channel_*_bg_corr.tif"
 
 # --- 基準画像の選択 ---
@@ -33,7 +33,7 @@ GRID_DIR            = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
 GRID_BASE_LABEL     = "Pos1"           # PosX_x+0_y+0 の PosX 部分
 POS_SPLIT           = 33              # drift_config の pos_split と一致させること
 GRID_Z_INDEX        = 18              # img_000000000_ph_{Z_INDEX:03d}.tif
-CHANNEL_ROIS_JSON   = r"F:\260405\ph_260405\Pos1\output_phase\channels\channel_rois.json"
+CHANNEL_ROIS_JSON   = r"D:\AquisitionData\Kitagishi\260405\ph_260405\Pos1\output_phase\channels\channel_rois.json"
 
 REFERENCE_FRAME = 150                  # USE_GRID_REFERENCE=False の場合のみ使用（1始まり）
 

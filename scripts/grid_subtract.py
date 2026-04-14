@@ -367,6 +367,13 @@ def main():
     yi_vals = [k[1] for k in pos_map]
     print(f"  x範囲: [{min(xi_vals)}, {max(xi_vals)}], y範囲: [{min(yi_vals)}, {max(yi_vals)}]")
 
+    # pre-recon mode: build _qpi_params_raw from grid hologram (for grid reconstruction)
+    if USE_RAW_PHASE and _use_prerecon and _qpi_params_raw is None:
+        grid_origin = pos_map.get((0, 0), next(iter(pos_map.values())))
+        _grid_holo = load_grid_holo_path(grid_origin, RAW_GRID_Z_INDEX)
+        _qpi_params_raw = _make_qpi_params_raw(_grid_holo, RAW_CROP)
+        print(f"[pre-recon] QPIParams from grid hologram: {_grid_holo.name}")
+
     # --- グリッドキャリブレーション読み込み ---
     grid_cal = {}
     if GRID_CALIBRATION_JSON:

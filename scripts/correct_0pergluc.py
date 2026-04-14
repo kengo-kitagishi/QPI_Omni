@@ -22,7 +22,9 @@ medium RI offset, which this script removes.
 Usage:
   1. Run grid_subtract.py as usual (no changes needed).
   2. Set GLUCOSE_0_START / GLUCOSE_0_END below.
-  3. Run:  python scripts/correct_0pergluc.py
+  3. 複数 Pos: PH_SESSION_ROOT + POS_NUMBERS_TO_RUN（空でなければ一括）。
+     単一 Pos: POS_NUMBERS_TO_RUN = [] とし OUTPUT_DIR 等を指定。
+  4. Run:  python scripts/correct_0pergluc.py
 """
 import numpy as np
 import tifffile
@@ -36,9 +38,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 from grid_subtract import (
     extract_rect_roi,
     apply_inverse_shift_warp,
-    _reconstruct_raw,
-    _make_qpi_params_raw,
-    load_grid_holo_path,
     load_grid_calibration,
     scan_grid_positions,
 )
@@ -78,45 +77,70 @@ BASE_LABEL    = "Pos1"
 # Grid calibration JSON (for (xi,yi) -> (cal_dx, cal_dy) mapping)
 GRID_CALIBRATION_JSON = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1\grid_calibration_Pos1.json"
 
-# z-index (must match grid_subtract.py settings)
+# z-index デフォルト（grid_subtract_log に grid_z_index があればそちらを優先）
 GRID_Z_INDEX = 18
 
 # 0% glucose frame range [inclusive, exclusive)
 GLUCOSE_0_START = 575    # frame index (inclusive)
 GLUCOSE_0_END   = 1151   # frame index (exclusive)
 
-# Reconstruction parameters (must match grid_subtract.py)
-RAW_CROP        = (0, 2048, 400, 2448)
+# Tilt correction parameters
 TILT_CROP_H_RAW = 270
+ECC_CROP_H      = 80       # must match compute_pos_shifts.py
+POS_SPLIT       = 33       # must match compute_pos_shifts.py
 
 # Output crop height override (None -> use channel_rois.json crop_h)
 OUTPUT_CROP_H = None
 
+# --- 複数 Pos 一括（空リストなら下の単一路径設定のみ使用）---
+PH_SESSION_ROOT = r"D:\AquisitionData\Kitagishi\260405\ph_260405"
+# grid_subtract の出力サブフォルダ名（Pos1 と同じ構成を想定）
+# Pos ごとに grid_subtract の出力フォルダ名が違う場合は実行前に合わせる
+CHANNEL_OUTPUT_SUBDIR = "crop_sub_rawraw"
+POS_NUMBERS_TO_RUN = [6]
+
+# ECC の背景フィット側（compute_pos_shifts と揃える）
+FIT_RIGHT = False
+
+# grid_subtract_log に base_label が無いときのフォルダ名プレフィックス（例: Pos0_x*_y*）
+GRID_POINTS_BASE_LABEL = "Pos0"
+
 # ============================================================
 
 
-def _tilt_and_center_crop(img_full, cy, cx, crop_w, out_crop_h, tilt_crop_h):
-    """
-    Same pipeline as compute_pos_shifts._tilt_correct:
-    1. Extract 270px-wide crop from full image at (cy, cx)
-    2. Fit slope+intercept on left 1/3
-    3. Subtract linear trend
-    4. Return center out_crop_h pixels
+def _load_grid_output_phase(pos_dir, z_index):
+    """Read Pos0-subtracted phase from output_phase/. Error if not found."""
+    path = Path(pos_dir) / "output_phase" / f"img_000000000_ph_{z_index:03d}_phase.tif"
+    if not path.exists():
+        raise FileNotFoundError(f"output_phase not found: {path}")
+    return tifffile.imread(str(path)).astype(np.float64)
 
-    Used to prepare crops for ECC alignment (matching
-    compute_pos_shifts.py's pre-processing).
+
+def _tilt_correct(img_f64, cy, cx, crop_w, crop_h_out, tilt_crop_h, fit_right=False):
     """
-    big = extract_rect_roi(img_full, cy, cx, crop_w, tilt_crop_h).astype(np.float64)
+    Identical to compute_pos_shifts._tilt_correct.
+    Extract tilt_crop_h-wide crop, fit slope on background 1/3,
+    subtract linear trend, return center crop_h_out pixels.
+    """
+    h, w = img_f64.shape
+    if (cx - tilt_crop_h // 2) < 0 or (cx + tilt_crop_h // 2) > w:
+        raise ValueError(
+            f"tilt crop out of bounds: cx={cx}, tilt_crop_h={tilt_crop_h}, w={w}"
+        )
+    big = extract_rect_roi(img_f64, cy, cx, crop_w, tilt_crop_h).astype(np.float64)
     x = np.arange(tilt_crop_h, dtype=np.float64)
-    fit_n = max(1, tilt_crop_h // 3)
     prof = big.mean(axis=0)
-    a, b = np.polyfit(x[:fit_n], prof[:fit_n], 1)
+    fit_n = max(1, tilt_crop_h // 3)
+    if fit_right:
+        a, b = np.polyfit(x[-fit_n:], prof[-fit_n:], 1)
+    else:
+        a, b = np.polyfit(x[:fit_n], prof[:fit_n], 1)
     corrected = big - (a * x + b)[np.newaxis, :]
-    start = (tilt_crop_h - out_crop_h) // 2
-    return corrected[:, start : start + out_crop_h]
+    start = (tilt_crop_h - crop_h_out) // 2
+    return corrected[:, start : start + crop_h_out]
 
 
-def tilt_correct_and_crop(img_large, out_crop_h, tilt_crop_h):
+def tilt_correct_and_crop(img_large, out_crop_h, tilt_crop_h, fit_right=False):
     """
     Same pipeline as grid_subtract._raw_subtract_correct:
     2pi correction -> tilt correction -> center crop.
@@ -127,15 +151,21 @@ def tilt_correct_and_crop(img_large, out_crop_h, tilt_crop_h):
     fit_n = max(1, tilt_crop_h // 3)
 
     # 1. 2pi correction
-    bg_mean = float(np.mean(img_large[:, :fit_n]))
+    if fit_right:
+        bg_mean = float(np.mean(img_large[:, -fit_n:]))
+    else:
+        bg_mean = float(np.mean(img_large[:, :fit_n]))
     k = int(round(bg_mean / (2.0 * np.pi)))
     if k != 0:
         img_large = img_large - k * 2.0 * np.pi
 
-    # 2. tilt correction (fit left 1/3, subtract linear gradient)
+    # 2. tilt correction
     x = np.arange(tilt_crop_h, dtype=np.float64)
     prof = img_large.mean(axis=0)
-    a, b = np.polyfit(x[:fit_n], prof[:fit_n], 1)
+    if fit_right:
+        a, b = np.polyfit(x[-fit_n:], prof[-fit_n:], 1)
+    else:
+        a, b = np.polyfit(x[:fit_n], prof[:fit_n], 1)
     img_large = img_large - (a * x + b)[np.newaxis, :]
 
     # 3. center crop
@@ -143,19 +173,20 @@ def tilt_correct_and_crop(img_large, out_crop_h, tilt_crop_h):
     return img_large[:, start : start + out_crop_h]
 
 
-def _ecc_per_channel(g0_full, g2_full, rois):
+def _ecc_per_channel(g0_full, g2_full, rois, fit_right):
     """
-    Per-channel ECC between two full images.
+    Per-channel ECC between two Pos0-subtracted full images.
+    Pipeline matches compute_pos_shifts.py exactly:
+      _tilt_correct -> compute_backsub_offset -> to_uint8 -> ecc_align
     Returns (median_tx, median_ty, median_corr, per_ch_details) or None.
     """
-    ecc_crop_h = 80
     tilt_h = TILT_CROP_H_RAW
     all_tx, all_ty, all_corr = [], [], []
     for ch, roi in enumerate(rois):
-        g0_crop = _tilt_and_center_crop(g0_full, roi["cy"], roi["cx"],
-                                        roi["crop_w"], ecc_crop_h, tilt_h)
-        g2_crop = _tilt_and_center_crop(g2_full, roi["cy"], roi["cx"],
-                                        roi["crop_w"], ecc_crop_h, tilt_h)
+        g0_crop = _tilt_correct(g0_full, roi["cy"], roi["cx"],
+                                roi["crop_w"], ECC_CROP_H, tilt_h, fit_right)
+        g2_crop = _tilt_correct(g2_full, roi["cy"], roi["cx"],
+                                roi["crop_w"], ECC_CROP_H, tilt_h, fit_right)
         g0_crop_bc = g0_crop + compute_backsub_offset(g0_crop)
         g2_crop_bc = g2_crop + compute_backsub_offset(g2_crop)
         result = ecc_align(to_uint8(g2_crop_bc), to_uint8(g0_crop_bc))
@@ -170,51 +201,55 @@ def _ecc_per_channel(g0_full, g2_full, rois):
             {"tx": all_tx, "ty": all_ty, "corr": all_corr})
 
 
-def compute_delta_full(grid_0per_dir, grid_2per_dir, base_label,
-                       z_index, qpi_params, crop, rois):
+def compute_delta_full(grid_0per_dir, grid_2per_dir, grid_points_label,
+                       z_index, rois, fit_right):
     """
     Compute delta_full = aligned(grid_0per_best) - grid_2per (511x511).
+    Uses output_phase (Pos0-subtracted) images — matching compute_pos_shifts.py.
 
-    1. Reconstruct grid_2per {base_label}_x+0_y+0.
-    2. Coarse search: ECC grid_0per(0,0) vs grid_2per(0,0) to estimate displacement.
+    1. Read grid_2per output_phase {grid_points_label}_x+0_y+0.
+    2. Coarse ECC grid_0per(0,0) vs grid_2per(0,0) to estimate displacement.
     3. Convert pixel displacement to grid coordinates -> find nearest grid_0per point.
     4. Fine ECC on the nearest grid_0per point (residual should be sub-pixel).
     5. Warp and subtract.
 
     Returns: (delta_full, ecc_info_dict)
     """
-    # --- Reconstruct grid_2per reference ---
-    g2_pos = Path(grid_2per_dir) / f"{base_label}_x+0_y+0"
-    g2_holo = load_grid_holo_path(g2_pos, z_index)
-    g2_full = _reconstruct_raw(g2_holo, qpi_params, crop)
+    # --- Read grid_2per reference (Pos0-subtracted) ---
+    g2_pos = Path(grid_2per_dir) / f"{grid_points_label}_x+0_y+0"
+    g2_full = _load_grid_output_phase(g2_pos, z_index)
+    print(f"[2per] output_phase loaded: {g2_pos.name}  shape={g2_full.shape}")
 
     # --- Scan available grid_0per positions ---
-    g0_pos_map = scan_grid_positions(grid_0per_dir, base_label)
+    g0_pos_map = scan_grid_positions(grid_0per_dir, grid_points_label)
+    if not g0_pos_map:
+        raise FileNotFoundError(
+            f"No grid_0per positions found: {grid_0per_dir}/{grid_points_label}_x*_y*"
+        )
     print(f"[0per] grid positions available: {len(g0_pos_map)}")
 
     # --- Coarse ECC: grid_0per(0,0) vs grid_2per(0,0) ---
-    g0_00_holo = load_grid_holo_path(g0_pos_map[(0, 0)], z_index)
-    g0_00_full = _reconstruct_raw(g0_00_holo, qpi_params, crop)
+    if (0, 0) not in g0_pos_map:
+        raise FileNotFoundError(
+            f"grid_0per (0,0) not found in {grid_0per_dir}"
+        )
+    g0_00_full = _load_grid_output_phase(g0_pos_map[(0, 0)], z_index)
 
-    coarse = _ecc_per_channel(g0_00_full, g2_full, rois)
-    if coarse:
-        coarse_tx, coarse_ty, coarse_corr, _ = coarse
-        print(f"[coarse ECC] (0,0): tx={coarse_tx:.3f} ty={coarse_ty:.3f} "
-              f"corr={coarse_corr:.4f}")
-    else:
-        coarse_tx, coarse_ty = 0.0, 0.0
-        print("[coarse ECC] failed, using (0,0)")
+    coarse = _ecc_per_channel(g0_00_full, g2_full, rois, fit_right)
+    if coarse is None:
+        raise RuntimeError(
+            "Coarse ECC failed: all channels returned None for grid_0per(0,0) vs grid_2per(0,0)"
+        )
+    coarse_tx, coarse_ty, coarse_corr, _ = coarse
+    print(f"[coarse ECC] (0,0): tx={coarse_tx:.3f} ty={coarse_ty:.3f} "
+          f"corr={coarse_corr:.4f}")
 
     # --- Convert pixel shift to grid indices ---
-    # Grid step in pixels
     from grid_subtract import SHIFT_SIGN_X, SHIFT_SIGN_Y, X_STEP, Y_STEP
     pixel_scale_um = (3.45e-6 / 40 * 2048 / 511) * 1e6  # sensor/mag/dim
     step_x_px = Y_STEP / pixel_scale_um  # grid yi -> image x
     step_y_px = X_STEP / pixel_scale_um  # grid xi -> image y
 
-    # ECC tx is image-X shift of g0 relative to g2.
-    # Grid yi controls image-X position (with SHIFT_SIGN_Y).
-    # Grid xi controls image-Y position (with SHIFT_SIGN_X).
     best_yi = int(round(SHIFT_SIGN_Y * coarse_tx / step_x_px))
     best_xi = int(round(SHIFT_SIGN_X * coarse_ty / step_y_px))
     print(f"[grid search] coarse displacement -> best candidate: "
@@ -233,14 +268,18 @@ def compute_delta_full(grid_0per_dir, grid_2per_dir, base_label,
             if key in g0_pos_map:
                 candidates.append(key)
 
+    if not candidates:
+        raise RuntimeError(
+            f"No grid_0per candidates found around ({best_xi:+d}, {best_yi:+d})"
+        )
+
     print(f"[grid search] testing {len(candidates)} candidates "
           f"around ({best_xi:+d}, {best_yi:+d})...")
 
     for key in candidates:
         xi, yi = key
-        g0_holo = load_grid_holo_path(g0_pos_map[key], z_index)
-        g0_cand = _reconstruct_raw(g0_holo, qpi_params, crop)
-        result = _ecc_per_channel(g0_cand, g2_full, rois)
+        g0_cand = _load_grid_output_phase(g0_pos_map[key], z_index)
+        result = _ecc_per_channel(g0_cand, g2_full, rois, fit_right)
         if result:
             tx, ty, corr, details = result
             residual = abs(tx) + abs(ty)
@@ -251,34 +290,38 @@ def compute_delta_full(grid_0per_dir, grid_2per_dir, base_label,
                 best_key = key
                 best_ecc_result = (tx, ty, corr, details, g0_cand)
 
-    # --- Use best grid point ---
-    ecc_info = {"tx": 0.0, "ty": 0.0, "corr": 0.0, "success": False,
-                "grid_0per_point": list(best_key),
-                "coarse_tx": coarse_tx, "coarse_ty": coarse_ty}
+    # --- Use best grid point (no fallback) ---
+    if best_ecc_result is None:
+        raise RuntimeError(
+            f"ECC failed for all {len(candidates)} grid_0per candidates "
+            f"around ({best_xi:+d}, {best_yi:+d})"
+        )
 
-    if best_ecc_result:
-        tx, ty, corr, details, g0_best = best_ecc_result
-        aligned_0per = apply_inverse_shift_warp(g0_best, tx, ty)
-        ecc_info.update({
-            "tx": tx, "ty": ty, "corr": corr, "success": True,
-            "per_channel_tx": details["tx"],
-            "per_channel_ty": details["ty"],
-            "per_channel_corr": details["corr"],
-        })
-        print(f"[BEST] grid_0per({best_key[0]:+d},{best_key[1]:+d}): "
-              f"tx={tx:.3f} ty={ty:.3f} corr={corr:.4f}")
-    else:
-        # Fallback: use (0,0) with coarse alignment
-        aligned_0per = apply_inverse_shift_warp(g0_00_full, coarse_tx, coarse_ty)
-        ecc_info.update({"tx": coarse_tx, "ty": coarse_ty,
-                         "success": coarse is not None})
-        print(f"[FALLBACK] using grid_0per(0,0) with coarse alignment")
+    tx, ty, corr, details, g0_best = best_ecc_result
+    aligned_0per = apply_inverse_shift_warp(g0_best, tx, ty)
+
+    ecc_info = {
+        "tx": tx, "ty": ty, "corr": corr, "success": True,
+        "grid_0per_point": list(best_key),
+        "coarse_tx": coarse_tx, "coarse_ty": coarse_ty,
+        "per_channel_tx": details["tx"],
+        "per_channel_ty": details["ty"],
+        "per_channel_corr": details["corr"],
+    }
+    print(f"[BEST] grid_0per({best_key[0]:+d},{best_key[1]:+d}): "
+          f"tx={tx:.3f} ty={ty:.3f} corr={corr:.4f}")
 
     delta_full = aligned_0per - g2_full
     return delta_full, ecc_info
 
 
-def main():
+def run_correct_0pergluc(
+    out_dir: Path,
+    grid_sub_log: Path,
+    channel_rois_json: Path,
+    base_label: str,
+    grid_calibration_json: Path,
+):
     # --- Validate inputs ---
     if GLUCOSE_0_START is None or GLUCOSE_0_END is None:
         print("ERROR: GLUCOSE_0_START and GLUCOSE_0_END must be set.")
@@ -287,19 +330,18 @@ def main():
         print("ERROR: GLUCOSE_0_START must be < GLUCOSE_0_END.")
         sys.exit(1)
 
-    out_dir = Path(OUTPUT_DIR)
     if not out_dir.exists():
-        print(f"ERROR: OUTPUT_DIR not found: {out_dir}")
+        print(f"ERROR: output dir not found: {out_dir}")
         sys.exit(1)
 
-    log_path = Path(GRID_SUB_LOG)
+    log_path = Path(grid_sub_log)
     if not log_path.exists():
-        print(f"ERROR: GRID_SUB_LOG not found: {log_path}")
+        print(f"ERROR: grid_subtract_log not found: {log_path}")
         sys.exit(1)
 
-    rois_path = Path(CHANNEL_ROIS_JSON)
+    rois_path = Path(channel_rois_json)
     if not rois_path.exists():
-        print(f"ERROR: CHANNEL_ROIS_JSON not found: {rois_path}")
+        print(f"ERROR: channel_rois.json not found: {rois_path}")
         sys.exit(1)
 
     # --- Load grid_subtract log and channel ROIs ---
@@ -309,11 +351,18 @@ def main():
     n_channels = len(rois)
 
     print(f"Loaded grid_subtract_log: {len(frame_log)} frames, {n_channels} channels")
+    grid_z_index = int(log_data.get("grid_z_index", GRID_Z_INDEX))
+    print(f"[z] grid_z_index={grid_z_index} (from log, else GRID_Z_INDEX={GRID_Z_INDEX})")
+    grid_points_label = log_data.get("base_label") or GRID_POINTS_BASE_LABEL
+    print(
+        f"[grid] folder prefix={grid_points_label} "
+        f"(grid_subtract_log base_label, else GRID_POINTS_BASE_LABEL={GRID_POINTS_BASE_LABEL})"
+    )
     print(f"0%% glucose range: [{GLUCOSE_0_START}, {GLUCOSE_0_END})")
 
     # --- Load grid calibration ---
     grid_cal = {}
-    cal_path = Path(GRID_CALIBRATION_JSON)
+    cal_path = Path(grid_calibration_json)
     if cal_path.exists():
         grid_cal = load_grid_calibration(str(cal_path))
         print(f"[calibration] Loaded {len(grid_cal)} grid positions")
@@ -331,17 +380,14 @@ def main():
     # Build filename list (same filenames across all channels)
     filenames = [f.name for f in ch0_files]
 
-    # --- Create QPIParameters from a grid hologram ---
-    sample_holo = load_grid_holo_path(
-        Path(GRID_2PER_DIR) / f"{BASE_LABEL}_x+0_y+0", GRID_Z_INDEX
-    )
-    qpi_params = _make_qpi_params_raw(sample_holo, RAW_CROP)
-    print(f"[raw] QPIParameters created from: {sample_holo.name}")
-
     # --- Compute delta_full ---
     delta_full, ecc_info = compute_delta_full(
-        GRID_0PER_DIR, GRID_2PER_DIR, BASE_LABEL,
-        GRID_Z_INDEX, qpi_params, RAW_CROP, rois,
+        GRID_0PER_DIR,
+        GRID_2PER_DIR,
+        grid_points_label,
+        grid_z_index,
+        rois,
+        FIT_RIGHT,
     )
     print(f"delta_full: shape={delta_full.shape}, mean={delta_full.mean():.6f} rad")
 
@@ -450,9 +496,10 @@ def main():
     correction_log = {
         "grid_0per_dir": str(GRID_0PER_DIR),
         "grid_2per_dir": str(GRID_2PER_DIR),
-        "base_label": BASE_LABEL,
-        "grid_z_index": GRID_Z_INDEX,
-        "grid_calibration_json": str(GRID_CALIBRATION_JSON),
+        "session_base_label": base_label,
+        "grid_points_base_label": grid_points_label,
+        "grid_z_index": grid_z_index,
+        "grid_calibration_json": str(cal_path),
         "glucose_0_start": GLUCOSE_0_START,
         "glucose_0_end": GLUCOSE_0_END,
         "delta_warp_mode": "cal_diff_vs_grid00",
@@ -504,7 +551,7 @@ def main():
         roi = rois[ch]
         crop_cx = int(round(roi["cx"] + cal_dx0))
         crop_cy = int(round(roi["cy"] + cal_dy0))
-        out_h = OUTPUT_CROP_H if OUTPUT_CROP_H else roi["crop_h"]
+        out_h = OUTPUT_CROP_H if OUTPUT_CROP_H is not None else roi["crop_h"]
         d_large = extract_rect_roi(
             delta_warped_sample, crop_cy, crop_cx, roi["crop_w"], TILT_CROP_H_RAW,
         )
@@ -583,6 +630,31 @@ def main():
     )
     plt.close(fig)
     print("[profile] figure saved via figure_logger")
+
+
+def main():
+    session = Path(PH_SESSION_ROOT)
+    grid2 = Path(GRID_2PER_DIR)
+
+    if POS_NUMBERS_TO_RUN:
+        for n in POS_NUMBERS_TO_RUN:
+            label = f"Pos{n}"
+            out = session / label / "output_phase" / "channels" / CHANNEL_OUTPUT_SUBDIR
+            glog = session / label / "output_phase" / "channels" / "grid_subtract_log.json"
+            crois = session / label / "output_phase" / "channels" / "channel_rois.json"
+            gcal = grid2 / f"grid_calibration_{label}.json"
+            print("\n" + "=" * 60)
+            print(f"  correct_0pergluc - {label}")
+            print("=" * 60)
+            run_correct_0pergluc(out, glog, crois, label, gcal)
+    else:
+        run_correct_0pergluc(
+            Path(OUTPUT_DIR),
+            Path(GRID_SUB_LOG),
+            Path(CHANNEL_ROIS_JSON),
+            BASE_LABEL,
+            Path(GRID_CALIBRATION_JSON),
+        )
 
 
 if __name__ == "__main__":

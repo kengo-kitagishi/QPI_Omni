@@ -33,7 +33,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 # ============================================================
 # Configuration
 # ============================================================
-TIMELAPSE_ROOT = Path(r"F:\260405\ph_260405")
+TIMELAPSE_ROOT = Path(r"D:\AquisitionData\Kitagishi\260405\ph_260405")
 GRID_2PER_DIR  = Path(r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1")
 GRID_0PER_DIR  = Path(r"C:\grid_0pergluc_60ms_1")
 
