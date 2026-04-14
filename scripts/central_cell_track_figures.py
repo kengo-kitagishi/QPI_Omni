@@ -59,6 +59,9 @@ DIRECT_RUN_CONFIG = {
     "write_track_tifs": False,
     "kymograph_vmin": -0.5,
     "kymograph_vmax": 2.0,
+    "volume_ylim": [0.0, 400.0],
+    "mean_ri_ylim": [1.34, 1.37],
+    "mass_ylim": [0.0, 500.0],
 }
 
 PRESET_STYLE = {
@@ -265,6 +268,30 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=2.0,
         help="Upper intensity limit for rectangular kymograph display.",
+    )
+    parser.add_argument(
+        "--volume-ylim",
+        nargs=2,
+        type=float,
+        default=[0.0, 400.0],
+        metavar=("YMIN", "YMAX"),
+        help="Y-axis limits for volume trace. Default: 0 400.",
+    )
+    parser.add_argument(
+        "--mean-ri-ylim",
+        nargs=2,
+        type=float,
+        default=[1.34, 1.37],
+        metavar=("YMIN", "YMAX"),
+        help="Y-axis limits for mean-RI trace. Default: 1.34 1.37.",
+    )
+    parser.add_argument(
+        "--mass-ylim",
+        nargs=2,
+        type=float,
+        default=[0.0, 500.0],
+        metavar=("YMIN", "YMAX"),
+        help="Y-axis limits for total-mass trace in pg. Default: 0 500.",
     )
     return parser
 
@@ -1156,6 +1183,7 @@ def make_volume_trace(summary_df: pd.DataFrame, args: argparse.Namespace) -> plt
     axes[0].plot(x, volume, color="#1f77b4", lw=1.5)
     axes[0].set_title("A  Rod volume estimate", loc="left")
     axes[0].set_ylabel("Volume [um^3]")
+    axes[0].set_ylim(*args.volume_ylim)
     axes[0].grid(True, alpha=0.3, linestyle="--")
     axes[0].spines["top"].set_visible(False)
     axes[0].spines["right"].set_visible(False)
@@ -1166,6 +1194,7 @@ def make_volume_trace(summary_df: pd.DataFrame, args: argparse.Namespace) -> plt
         axes[1].text(0.5, 0.5, "Mean RI unavailable", transform=axes[1].transAxes, ha="center", va="center")
     axes[1].set_title("B  Mean RI", loc="left")
     axes[1].set_ylabel("Mean RI")
+    axes[1].set_ylim(*args.mean_ri_ylim)
     axes[1].grid(True, alpha=0.3, linestyle="--")
     axes[1].spines["top"].set_visible(False)
     axes[1].spines["right"].set_visible(False)
@@ -1177,6 +1206,7 @@ def make_volume_trace(summary_df: pd.DataFrame, args: argparse.Namespace) -> plt
     axes[2].set_title("C  Total mass", loc="left")
     axes[2].set_xlabel(x_label)
     axes[2].set_ylabel("Total mass [pg]")
+    axes[2].set_ylim(*args.mass_ylim)
     axes[2].grid(True, alpha=0.3, linestyle="--")
     axes[2].spines["top"].set_visible(False)
     axes[2].spines["right"].set_visible(False)
@@ -1442,6 +1472,9 @@ def save_fig_with_formats(
         "alpha_ri": args.alpha_ri,
         "kymograph_vmin": args.kymograph_vmin,
         "kymograph_vmax": args.kymograph_vmax,
+        "volume_ylim": args.volume_ylim,
+        "mean_ri_ylim": args.mean_ri_ylim,
+        "mass_ylim": args.mass_ylim,
     }
     extra_meta = {"local_output_dir": str(outdir.resolve())}
     source_list = list(dict.fromkeys(source_tifs)) if args.attach_source_tifs else None
