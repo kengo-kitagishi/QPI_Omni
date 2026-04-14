@@ -9,6 +9,11 @@ computes delta_full = aligned(grid_0per) - grid_2per for the
 (x+0, y+0) grid point, and subtracts the tilt-corrected delta
 from every frame in the 0% glucose period.
 
+Per frame, delta_full (2per grid(0,0) coordinates) is warped by
+apply_inverse_shift_warp with (cal(xi,yi) - cal(0,0)) from the same
+grid calibration as grid_subtract — not timelapse residual_x_px.
+Then the same cal(xi,yi) crop as grid_subtract raw-raw, tilt, subtract.
+
 The delta represents the medium RI difference between 0% and 2%
 glucose conditions. Since grid_subtract.py uses grid_2pergluc
 as reference, frames acquired under 0% glucose retain this
@@ -22,7 +27,6 @@ Usage:
 import numpy as np
 import tifffile
 import json
-import cv2
 import sys
 from pathlib import Path
 from tqdm import tqdm
@@ -39,6 +43,19 @@ from grid_subtract import (
     scan_grid_positions,
 )
 from compute_pos_shifts import compute_backsub_offset, to_uint8, ecc_align
+
+
+def _cal_dx_dy(xi, yi, grid_cal, pixel_scale_um, x_step_um, y_step_um,
+               shift_sign_x, shift_sign_y):
+    """grid_subtract.py と同じ規則で (cal_dx, cal_dy) を返す。"""
+    if grid_cal and (xi, yi) in grid_cal:
+        return grid_cal[(xi, yi)]
+    if pixel_scale_um:
+        cal_dx = shift_sign_y * yi * y_step_um / pixel_scale_um
+        cal_dy = shift_sign_x * xi * x_step_um / pixel_scale_um
+        return (cal_dx, cal_dy)
+    return (0.0, 0.0)
+
 
 # ============================================================
 # Parameters
@@ -347,6 +364,13 @@ def main():
     shift_sign_x = log_data.get("shift_sign_x", -1)
     shift_sign_y = log_data.get("shift_sign_y", -1)
 
+    cal_dx_00, cal_dy_00 = _cal_dx_dy(
+        0, 0, grid_cal, pixel_scale_um, x_step_um, y_step_um,
+        shift_sign_x, shift_sign_y,
+    )
+    print(f"[cal] grid(0,0): cal_dx={cal_dx_00:.4f} cal_dy={cal_dy_00:.4f} "
+          f"(delta warp uses cal(xi,yi) - this)")
+
     # --- Save "before" snapshot for profile comparison ---
     sample_idx = target_indices[0]
     sample_fi = frame_log[sample_idx]["frame_index"]
@@ -360,6 +384,7 @@ def main():
 
     # --- Main correction loop ---
     corrected_frames = []
+    delta_warp_cache = {}
 
     for idx in tqdm(target_indices, desc="0per correction"):
         entry = frame_log[idx]
@@ -367,14 +392,19 @@ def main():
         xi = entry["grid_xi"]
         yi = entry["grid_yi"]
 
-        # Restore cal_dx, cal_dy (same logic as grid_subtract.py L421-430)
-        if grid_cal and (xi, yi) in grid_cal:
-            cal_dx, cal_dy = grid_cal[(xi, yi)]
-        elif pixel_scale_um:
-            cal_dx = shift_sign_y * yi * y_step_um / pixel_scale_um
-            cal_dy = shift_sign_x * xi * x_step_um / pixel_scale_um
-        else:
-            cal_dx, cal_dy = 0.0, 0.0
+        cal_dx, cal_dy = _cal_dx_dy(
+            xi, yi, grid_cal, pixel_scale_um, x_step_um, y_step_um,
+            shift_sign_x, shift_sign_y,
+        )
+
+        gw_key = (xi, yi)
+        if gw_key not in delta_warp_cache:
+            d_warp_x = cal_dx - cal_dx_00
+            d_warp_y = cal_dy - cal_dy_00
+            delta_warp_cache[gw_key] = apply_inverse_shift_warp(
+                delta_full, d_warp_x, d_warp_y,
+            )
+        delta_warped = delta_warp_cache[gw_key]
 
         for ch in range(n_channels):
             roi = rois[ch] if ch < len(rois) else rois[-1]
@@ -387,9 +417,9 @@ def main():
             crop_cx = int(round(cx + cal_dx))
             crop_cy = int(round(cy + cal_dy))
 
-            # Crop delta_full at the same position with TILT_CROP_H_RAW
+            # Crop warped delta at the same position with TILT_CROP_H_RAW
             delta_large = extract_rect_roi(
-                delta_full, crop_cy, crop_cx, crop_w, TILT_CROP_H_RAW,
+                delta_warped, crop_cy, crop_cx, crop_w, TILT_CROP_H_RAW,
             )
 
             # Apply the same tilt correction pipeline
@@ -425,6 +455,11 @@ def main():
         "grid_calibration_json": str(GRID_CALIBRATION_JSON),
         "glucose_0_start": GLUCOSE_0_START,
         "glucose_0_end": GLUCOSE_0_END,
+        "delta_warp_mode": "cal_diff_vs_grid00",
+        "cal_grid00": {"cal_dx": cal_dx_00, "cal_dy": cal_dy_00},
+        "note": "delta_full warped with apply_inverse_shift_warp(cal(xi,yi)-cal(0,0)); "
+                "not timelapse residual_x_px",
+        "unique_grid_cells_warped": len(delta_warp_cache),
         "ecc_tx": ecc_info["tx"],
         "ecc_ty": ecc_info["ty"],
         "ecc_corr": ecc_info["corr"],
@@ -455,13 +490,11 @@ def main():
     # --- Per-channel delta crops (at first 0% frame's grid position) ---
     entry0 = frame_log[sample_idx]
     xi0, yi0 = entry0["grid_xi"], entry0["grid_yi"]
-    if grid_cal and (xi0, yi0) in grid_cal:
-        cal_dx0, cal_dy0 = grid_cal[(xi0, yi0)]
-    elif pixel_scale_um:
-        cal_dx0 = shift_sign_y * yi0 * y_step_um / pixel_scale_um
-        cal_dy0 = shift_sign_x * xi0 * x_step_um / pixel_scale_um
-    else:
-        cal_dx0, cal_dy0 = 0.0, 0.0
+    cal_dx0, cal_dy0 = _cal_dx_dy(
+        xi0, yi0, grid_cal, pixel_scale_um, x_step_um, y_step_um,
+        shift_sign_x, shift_sign_y,
+    )
+    delta_warped_sample = delta_warp_cache[(xi0, yi0)]
 
     delta_dir = out_dir / "delta_per_ch"
     delta_dir.mkdir(exist_ok=True)
@@ -473,7 +506,7 @@ def main():
         crop_cy = int(round(roi["cy"] + cal_dy0))
         out_h = OUTPUT_CROP_H if OUTPUT_CROP_H else roi["crop_h"]
         d_large = extract_rect_roi(
-            delta_full, crop_cy, crop_cx, roi["crop_w"], TILT_CROP_H_RAW,
+            delta_warped_sample, crop_cy, crop_cx, roi["crop_w"], TILT_CROP_H_RAW,
         )
         d_crop = tilt_correct_and_crop(d_large.copy(), out_h, TILT_CROP_H_RAW)
         tifffile.imwrite(
