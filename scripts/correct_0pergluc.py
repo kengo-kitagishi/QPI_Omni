@@ -86,7 +86,7 @@ GLUCOSE_0_END   = 1151   # frame index (exclusive)
 
 # Tilt correction parameters
 TILT_CROP_H_RAW = 270
-ECC_CROP_H      = 80       # must match compute_pos_shifts.py
+ECC_CROP_H      = 40       # must match compute_pos_shifts.py
 POS_SPLIT       = 33       # must match compute_pos_shifts.py
 
 # Output crop height override (None -> use channel_rois.json crop_h)
@@ -456,12 +456,34 @@ def run_correct_0pergluc(
             roi = rois[ch] if ch < len(rois) else rois[-1]
             cx, cy = roi["cx"], roi["cy"]
             crop_w = roi["crop_w"]
-            crop_h = roi["crop_h"]
-            out_crop_h = OUTPUT_CROP_H if OUTPUT_CROP_H is not None else crop_h
 
             # Same crop position as grid_subtract.py (L481-482)
             crop_cx = int(round(cx + cal_dx))
             crop_cy = int(round(cy + cal_dy))
+
+            ch_dir = out_dir / f"ch{ch:02d}"
+            tif_path = ch_dir / filenames[idx]
+            if not tif_path.exists():
+                print(f"  [WARNING] File not found: {tif_path}")
+                continue
+
+            img = tifffile.imread(str(tif_path)).astype(np.float64)
+            # grid_subtract 保存 shape (crop_w, out_crop_h) に合わせる。
+            # channel_rois の crop_h と乖離しうる（例: ROI 120 に対し実ファイル 270）。
+            if img.ndim != 2:
+                print(f"  [WARNING] Expected 2D at frame {fi} ch{ch:02d}: shape={img.shape}")
+                continue
+            if img.shape[0] != crop_w:
+                print(
+                    f"  [WARNING] crop_w mismatch frame {fi} ch{ch:02d}: "
+                    f"img[0]={img.shape[0]} roi crop_w={crop_w}",
+                )
+            out_crop_h = img.shape[1]
+            if OUTPUT_CROP_H is not None and OUTPUT_CROP_H != out_crop_h:
+                print(
+                    f"  [WARNING] OUTPUT_CROP_H={OUTPUT_CROP_H} != TIF width {out_crop_h}; "
+                    f"using TIF (frame {fi} ch{ch:02d})",
+                )
 
             # Crop warped delta at the same position with TILT_CROP_H_RAW
             delta_large = extract_rect_roi(
@@ -472,15 +494,6 @@ def run_correct_0pergluc(
             delta_corrected = tilt_correct_and_crop(
                 delta_large.copy(), out_crop_h, TILT_CROP_H_RAW,
             )
-
-            # Read existing output, subtract delta, overwrite
-            ch_dir = out_dir / f"ch{ch:02d}"
-            tif_path = ch_dir / filenames[idx]
-            if not tif_path.exists():
-                print(f"  [WARNING] File not found: {tif_path}")
-                continue
-
-            img = tifffile.imread(str(tif_path)).astype(np.float64)
 
             if img.shape != delta_corrected.shape:
                 print(f"  [WARNING] Shape mismatch at frame {fi} ch{ch:02d}: "
@@ -551,7 +564,10 @@ def run_correct_0pergluc(
         roi = rois[ch]
         crop_cx = int(round(roi["cx"] + cal_dx0))
         crop_cy = int(round(roi["cy"] + cal_dy0))
-        out_h = OUTPUT_CROP_H if OUTPUT_CROP_H is not None else roi["crop_h"]
+        if ch in before_imgs:
+            out_h = before_imgs[ch].shape[1]
+        else:
+            out_h = OUTPUT_CROP_H if OUTPUT_CROP_H is not None else roi["crop_h"]
         d_large = extract_rect_roi(
             delta_warped_sample, crop_cy, crop_cx, roi["crop_w"], TILT_CROP_H_RAW,
         )

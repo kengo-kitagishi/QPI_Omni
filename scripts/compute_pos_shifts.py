@@ -96,7 +96,7 @@ TL_Z_INDEX = 0                 # img_*_ph_{Z:03d}_phase.tif
 # ============================================================
 USE_SLOPE_CORRECTION = True    # True: bg_corr不要・フル位相画像を直接使用
 TILT_CROP_H          = 270     # 補正用横幅（左1/3 or 右1/3 が背景フィット領域）
-ECC_CROP_H           = 80      # ECC に使う crop の X 幅（TILT_CROP_H の中央から切り出す）
+ECC_CROP_H           = 40      # ECC に使う crop の X 幅（TILT_CROP_H の中央から切り出す）
 # ============================================================
 _m           = _re.match(r"Pos(\d+)", GRID_BASE_LABEL)
 _POS_NUM     = int(_m.group(1)) if _m else 1
