@@ -268,7 +268,6 @@ def main():
     print(f"対象ベースラベル: {target_labels}  (計 {sum(len(folders[l]) for l in target_labels if l in folders)} フォルダ)")
 
     total_ok = 0
-    total_skip = 0
     total_err = 0
 
     for base_label in target_labels:
@@ -291,10 +290,7 @@ def main():
             if TARGET_COORDS is not None and (xi, yi) not in TARGET_COORDS:
                 continue
             tgt_dir = target_map[(xi, yi)]
-            out_dir = tgt_dir / "output_phase"
-            if SKIP_IF_EXISTS and out_dir.exists() and any(out_dir.glob("*.tif")):
-                total_skip += 1
-                continue
+            # スキップは _reconstruct_grid_point 内で z ごとに行う（途中まで終わったフォルダを再開できる）
             if (xi, yi) not in bg_map:
                 print(f"  [WARN] BG が見つかりません: {bg_label}_x{xi:+d}_y{yi:+d}  → スキップ")
                 total_err += 1
@@ -328,8 +324,8 @@ def main():
     print(f"\n{'='*60}")
     print(f"完了")
     print(f"  成功:   {total_ok} フォルダ")
-    print(f"  スキップ: {total_skip} フォルダ（SKIP_IF_EXISTS=True）")
     print(f"  エラー:  {total_err} フォルダ")
+    print(f"  （既存の *_phase.tif は z ごとにスキップ: SKIP_IF_EXISTS={SKIP_IF_EXISTS}）")
 
 
 if __name__ == "__main__":

@@ -38,7 +38,7 @@ GRID_2PER_DIR  = Path(r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1")
 GRID_0PER_DIR  = Path(r"C:\grid_0pergluc_60ms_1")
 
 # Pos range (inclusive). Pos0 is BG, skip it.
-POS_START = 2
+POS_START = 8
 POS_END   = 64
 
 # 0% glucose frame range
@@ -49,7 +49,7 @@ GLUCOSE_0_END   = 1440   # exclusive
 N_WORKERS_RECON = 8
 
 # compute_pos_shifts workers
-N_WORKERS_ECC = 16
+N_WORKERS_ECC = 8
 
 # Progress log (for resume)
 PROGRESS_LOG = TIMELAPSE_ROOT / "batch_pipeline_progress.json"
