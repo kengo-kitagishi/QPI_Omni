@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 import re
+import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -22,7 +23,6 @@ from skimage.transform import rotate
 
 from figure_logger import save_figure
 
-
 ALL_FIGURES = [
     "overlay_strip",
     "contour_montage",
@@ -33,6 +33,33 @@ ALL_FIGURES = [
     "mask_kymograph",
     "qc_overview",
 ]
+
+DIRECT_RUN_CONFIG = {
+    "indir": None,
+    "pos_root": None,
+    "channel": None,
+    "outdir": None,
+    "figure": ALL_FIGURES,
+    "formats": ["png", "pdf", "svg"],
+    "min_area": 20,
+    "exclude_border": True,
+    "crop_margin": 12,
+    "align_major_axis": True,
+    "flip_horizontal": False,
+    "panel_count": 6,
+    "pixel_size_um": 0.348,
+    "time_interval_min": None,
+    "scalebar_um": 2.0,
+    "wavelength_nm": 663.0,
+    "n_medium": 1.333,
+    "alpha_ri": 0.00018,
+    "preset": "manuscript",
+    "no_save": False,
+    "attach_source_tifs": False,
+    "write_track_tifs": False,
+    "kymograph_vmin": -0.5,
+    "kymograph_vmax": 2.0,
+}
 
 PRESET_STYLE = {
     "manuscript": {
@@ -173,8 +200,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--pixel-size-um",
         type=float,
-        default=None,
-        help="Pixel size in micrometers for scale bars and metric conversion.",
+        default=0.348,
+        help="Pixel size in micrometers for scale bars and metric conversion. Default: 0.348.",
     )
     parser.add_argument(
         "--time-interval-min",
@@ -227,7 +254,58 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write track_masks.tif and aligned crop TIFF stacks into the local output directory. Default: off.",
     )
+    parser.add_argument(
+        "--kymograph-vmin",
+        type=float,
+        default=-0.5,
+        help="Lower intensity limit for rectangular kymograph display.",
+    )
+    parser.add_argument(
+        "--kymograph-vmax",
+        type=float,
+        default=2.0,
+        help="Upper intensity limit for rectangular kymograph display.",
+    )
     return parser
+
+
+def build_args_from_direct_run_config() -> argparse.Namespace:
+    cfg = dict(DIRECT_RUN_CONFIG)
+    indir = cfg.get("indir")
+    pos_root = cfg.get("pos_root")
+    channel = cfg.get("channel")
+
+    if indir is None and pos_root is None:
+        raise SystemExit(
+            "No CLI arguments were provided. Set DIRECT_RUN_CONFIG['indir'] or DIRECT_RUN_CONFIG['pos_root'] before running directly."
+        )
+    if indir is None and channel is None:
+        raise SystemExit(
+            "DIRECT_RUN_CONFIG['channel'] is required when using DIRECT_RUN_CONFIG['pos_root']."
+        )
+
+    path_keys = {"indir", "pos_root", "outdir"}
+    for key in path_keys:
+        if cfg.get(key) is not None:
+            cfg[key] = Path(cfg[key])
+
+    if cfg["figure"] is None:
+        cfg["figure"] = list(ALL_FIGURES)
+    else:
+        cfg["figure"] = list(cfg["figure"])
+
+    if cfg["formats"] is None:
+        cfg["formats"] = ["png", "pdf", "svg"]
+    else:
+        cfg["formats"] = list(cfg["formats"])
+
+    return argparse.Namespace(**cfg)
+
+
+def parse_runtime_args() -> argparse.Namespace:
+    if len(sys.argv) > 1:
+        return build_parser().parse_args()
+    return build_args_from_direct_run_config()
 
 
 def resolve_channel_dir(args: argparse.Namespace) -> Path:
@@ -759,6 +837,47 @@ def tight_crop_single(mask: np.ndarray, margin: int) -> tuple[slice, slice]:
     return slice(r0, r1), slice(c0, c1)
 
 
+def centered_rectangle_slices(
+    image_shape: tuple[int, int],
+    height: int,
+    width: int,
+) -> tuple[slice, slice]:
+    img_h, img_w = image_shape
+    height = max(1, min(int(height), img_h))
+    width = max(1, min(int(width), img_w))
+    center_y = img_h // 2
+    center_x = img_w // 2
+    y0 = max(0, center_y - (height // 2))
+    x0 = max(0, center_x - (width // 2))
+    y1 = min(img_h, y0 + height)
+    x1 = min(img_w, x0 + width)
+    y0 = max(0, y1 - height)
+    x0 = max(0, x1 - width)
+    return slice(y0, y1), slice(x0, x1)
+
+
+def determine_kymograph_box(summary_df: pd.DataFrame, crop_size: int, margin: int) -> tuple[int, int]:
+    valid = summary_df[summary_df["tracked"]].copy()
+    if valid.empty:
+        side = max(8, crop_size // 2)
+        return side, side
+
+    major = valid["major_axis_px"].to_numpy(dtype=float)
+    minor = valid["minor_axis_px"].to_numpy(dtype=float)
+    major = major[np.isfinite(major)]
+    minor = minor[np.isfinite(minor)]
+    rect_width = int(np.ceil(np.max(major))) if major.size else crop_size
+    rect_height = int(np.ceil(np.max(minor))) if minor.size else crop_size
+    rect_width = min(crop_size, max(8, rect_width + 2 * margin))
+    rect_height = min(crop_size, max(8, rect_height + 2 * margin))
+    return rect_height, rect_width
+
+
+def extract_centered_rectangle(image: np.ndarray, rect_height: int, rect_width: int) -> np.ndarray:
+    row_slice, col_slice = centered_rectangle_slices(image.shape, rect_height, rect_width)
+    return image[row_slice, col_slice]
+
+
 def panel_letters(n: int) -> list[str]:
     letters = []
     for idx in range(n):
@@ -1134,6 +1253,16 @@ def longitudinal_mask_profile(mask_crop: np.ndarray) -> np.ndarray:
     return mask_crop.astype(float).sum(axis=0)
 
 
+def rectangular_longitudinal_profile(raw_crop: np.ndarray, rect_height: int, rect_width: int) -> np.ndarray:
+    rect = extract_centered_rectangle(raw_crop, rect_height, rect_width)
+    return rect.mean(axis=0).astype(float)
+
+
+def rectangular_mask_occupancy_profile(mask_crop: np.ndarray, rect_height: int, rect_width: int) -> np.ndarray:
+    rect = extract_centered_rectangle(mask_crop.astype(float), rect_height, rect_width)
+    return rect.mean(axis=0).astype(float)
+
+
 def longitudinal_intensity_profile(raw_crop: np.ndarray, mask_crop: np.ndarray) -> np.ndarray:
     weighted = np.where(mask_crop > 0, raw_crop, 0.0)
     counts = mask_crop.sum(axis=0).astype(float)
@@ -1150,12 +1279,14 @@ def make_intensity_kymograph(
     args: argparse.Namespace,
 ) -> plt.Figure | None:
     rows_used, raw_crops, mask_crops = build_aligned_stack(summary_df, crop_size, args)
+    rect_margin = max(1, min(4, args.crop_margin // 4))
+    rect_height, rect_width = determine_kymograph_box(summary_df, crop_size, rect_margin)
     profiles = []
     labels = []
-    for row, raw_crop, mask_crop in zip(rows_used, raw_crops, mask_crops):
-        if raw_crop is None or not np.any(mask_crop):
+    for row, raw_crop, _mask_crop in zip(rows_used, raw_crops, mask_crops):
+        if raw_crop is None:
             continue
-        profiles.append(longitudinal_intensity_profile(raw_crop, mask_crop))
+        profiles.append(rectangular_longitudinal_profile(raw_crop, rect_height, rect_width))
         labels.append(row)
     if not profiles:
         return None
@@ -1167,11 +1298,13 @@ def make_intensity_kymograph(
         cmap="magma",
         origin="lower",
         interpolation="nearest",
+        vmin=args.kymograph_vmin,
+        vmax=args.kymograph_vmax,
     )
-    xticks = np.linspace(0, crop_size - 1, 5)
+    xticks = np.linspace(0, rect_width - 1, 5)
     ax.set_xticks(xticks)
     if args.pixel_size_um:
-        ax.set_xticklabels([f"{(x - crop_size / 2) * args.pixel_size_um:.1f}" for x in xticks])
+        ax.set_xticklabels([f"{(x - rect_width / 2) * args.pixel_size_um:.1f}" for x in xticks])
         ax.set_xlabel("Position along major axis [um]")
     else:
         ax.set_xlabel("Position along major axis [px]")
@@ -1180,7 +1313,7 @@ def make_intensity_kymograph(
     ax.set_yticklabels([frame_time_label(labels[i], args.time_interval_min) for i in ytick_idx])
     ax.set_ylabel("Time")
     cbar = fig.colorbar(im, ax=ax, shrink=0.85)
-    cbar.set_label("Mean intensity inside mask")
+    cbar.set_label("Mean intensity in axis-aligned rectangle")
     if args.preset != "manuscript":
         fig.suptitle("Center-nearest representative cell: intensity kymograph", y=1.02)
     return fig
@@ -1194,7 +1327,12 @@ def make_mask_kymograph(
     rows_used, _, mask_crops = build_aligned_stack(summary_df, crop_size, args)
     if not mask_crops:
         return None
-    arr = np.stack([longitudinal_mask_profile(mask_crop) for mask_crop in mask_crops], axis=0)
+    rect_margin = max(1, min(4, args.crop_margin // 4))
+    rect_height, rect_width = determine_kymograph_box(summary_df, crop_size, rect_margin)
+    arr = np.stack(
+        [rectangular_mask_occupancy_profile(mask_crop, rect_height, rect_width) for mask_crop in mask_crops],
+        axis=0,
+    )
     fig, ax = plt.subplots(figsize=(5.2, 3.4), constrained_layout=True)
     im = ax.imshow(
         arr,
@@ -1202,11 +1340,13 @@ def make_mask_kymograph(
         cmap="cividis",
         origin="lower",
         interpolation="nearest",
+        vmin=0.0,
+        vmax=1.0,
     )
-    xticks = np.linspace(0, crop_size - 1, 5)
+    xticks = np.linspace(0, rect_width - 1, 5)
     ax.set_xticks(xticks)
     if args.pixel_size_um:
-        ax.set_xticklabels([f"{(x - crop_size / 2) * args.pixel_size_um:.1f}" for x in xticks])
+        ax.set_xticklabels([f"{(x - rect_width / 2) * args.pixel_size_um:.1f}" for x in xticks])
         ax.set_xlabel("Position along major axis [um]")
     else:
         ax.set_xlabel("Position along major axis [px]")
@@ -1215,7 +1355,7 @@ def make_mask_kymograph(
     ax.set_yticklabels([frame_time_label(rows_used[i], args.time_interval_min) for i in ytick_idx])
     ax.set_ylabel("Time")
     cbar = fig.colorbar(im, ax=ax, shrink=0.85)
-    cbar.set_label("Mask width [px]")
+    cbar.set_label("Mask occupancy in rectangle")
     if args.preset != "manuscript":
         fig.suptitle("Center-nearest representative cell: mask kymograph", y=1.02)
     return fig
@@ -1300,6 +1440,8 @@ def save_fig_with_formats(
         "wavelength_nm": args.wavelength_nm,
         "n_medium": args.n_medium,
         "alpha_ri": args.alpha_ri,
+        "kymograph_vmin": args.kymograph_vmin,
+        "kymograph_vmax": args.kymograph_vmax,
     }
     extra_meta = {"local_output_dir": str(outdir.resolve())}
     source_list = list(dict.fromkeys(source_tifs)) if args.attach_source_tifs else None
@@ -1424,7 +1566,7 @@ def write_metadata(
 
 
 def main() -> int:
-    args = build_parser().parse_args()
+    args = parse_runtime_args()
     channel_dir = resolve_channel_dir(args)
     outdir = (args.outdir or default_outdir(channel_dir)).expanduser().resolve()
     outdir.mkdir(parents=True, exist_ok=True)
