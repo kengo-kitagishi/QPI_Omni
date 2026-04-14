@@ -23,6 +23,17 @@ from skimage.transform import rotate
 from figure_logger import save_figure
 
 
+ALL_FIGURES = [
+    "overlay_strip",
+    "contour_montage",
+    "shape_trace",
+    "volume_trace",
+    "ghost_contour",
+    "intensity_kymograph",
+    "mask_kymograph",
+    "qc_overview",
+]
+
 PRESET_STYLE = {
     "manuscript": {
         "font.size": 8,
@@ -103,17 +114,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--figure",
         nargs="+",
-        choices=[
-            "overlay_strip",
-            "contour_montage",
-            "shape_trace",
-            "volume_trace",
-            "ghost_contour",
-            "intensity_kymograph",
-            "mask_kymograph",
-            "qc_overview",
-        ],
-        default=["overlay_strip", "contour_montage", "shape_trace"],
+        choices=ALL_FIGURES,
+        default=ALL_FIGURES,
         help="Figures to generate.",
     )
     parser.add_argument(
@@ -187,6 +189,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Scale bar length in micrometers.",
     )
     parser.add_argument(
+        "--wavelength-nm",
+        type=float,
+        default=663.0,
+        help="Illumination wavelength in nanometers for mean-RI estimation.",
+    )
+    parser.add_argument(
+        "--n-medium",
+        type=float,
+        default=1.333,
+        help="Medium refractive index for mean-RI estimation.",
+    )
+    parser.add_argument(
+        "--alpha-ri",
+        type=float,
+        default=0.00018,
+        help="Specific refractive increment used for concentration and mass estimation.",
+    )
+    parser.add_argument(
         "--preset",
         choices=["manuscript", "presentation", "qc"],
         default="manuscript",
@@ -201,6 +221,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--attach-source-tifs",
         action="store_true",
         help="Copy source raw/mask TIFFs into figure_logger inbox. Default: off.",
+    )
+    parser.add_argument(
+        "--write-track-tifs",
+        action="store_true",
+        help="Write track_masks.tif and aligned crop TIFF stacks into the local output directory. Default: off.",
     )
     return parser
 
@@ -447,6 +472,28 @@ def calc_rod_volume_um3(major_px: float, minor_px: float, pixel_size_um: float) 
     return float((4.0 / 3.0) * np.pi * (r_um ** 3) + np.pi * (r_um ** 2) * h_um)
 
 
+def calc_optical_metrics(
+    total_phase: float,
+    volume_um3: float,
+    pixel_size_um: float,
+    wavelength_nm: float,
+    n_medium: float,
+    alpha_ri: float,
+) -> tuple[float, float, float]:
+    if not np.isfinite(total_phase) or not np.isfinite(volume_um3) or volume_um3 <= 0 or pixel_size_um <= 0:
+        return np.nan, np.nan, np.nan
+
+    wavelength_um = wavelength_nm * 1e-3
+    pixel_area_um2 = pixel_size_um ** 2
+    mean_ri = n_medium + (float(total_phase) * wavelength_um * pixel_area_um2) / (2.0 * np.pi * float(volume_um3))
+
+    if not np.isfinite(mean_ri):
+        return np.nan, np.nan, np.nan
+    mean_conc = (mean_ri - n_medium) / alpha_ri if alpha_ri > 0 else np.nan
+    mass_pg = mean_conc * volume_um3 if np.isfinite(mean_conc) else np.nan
+    return float(mean_ri), float(mean_conc), float(mass_pg)
+
+
 def select_center_cell_for_frame(
     pair: FramePair,
     min_area: int,
@@ -537,10 +584,18 @@ def build_summary_table(
     min_area: int,
     exclude_border: bool,
     pixel_size_um: float | None,
+    wavelength_nm: float,
+    n_medium: float,
+    alpha_ri: float,
 ) -> pd.DataFrame:
     rows = [select_center_cell_for_frame(pair, min_area=min_area, exclude_border=exclude_border) for pair in frame_pairs]
     df = pd.DataFrame(rows)
     df["frame_label"] = df["frame_name"]
+    df["total_phase"] = np.where(
+        df["tracked"].to_numpy(dtype=bool),
+        df["integrated_intensity"].to_numpy(dtype=float),
+        np.nan,
+    )
     if pixel_size_um is not None and pixel_size_um > 0:
         df["volume_um3_rod"] = np.where(
             df["tracked"].to_numpy(dtype=bool),
@@ -557,6 +612,22 @@ def build_summary_table(
         )
     else:
         df["volume_um3_rod"] = np.nan
+
+    if pixel_size_um is not None and pixel_size_um > 0:
+        optical_metrics = [
+            calc_optical_metrics(total_phase, volume_um3, pixel_size_um, wavelength_nm, n_medium, alpha_ri)
+            for total_phase, volume_um3 in zip(
+                df["total_phase"].to_numpy(dtype=float),
+                df["volume_um3_rod"].to_numpy(dtype=float),
+            )
+        ]
+        df["mean_ri"] = [vals[0] for vals in optical_metrics]
+        df["mean_concentration"] = [vals[1] for vals in optical_metrics]
+        df["mass_pg"] = [vals[2] for vals in optical_metrics]
+    else:
+        df["mean_ri"] = np.nan
+        df["mean_concentration"] = np.nan
+        df["mass_pg"] = np.nan
     return df
 
 
@@ -672,6 +743,22 @@ def contours_from_mask(mask: np.ndarray) -> list[np.ndarray]:
     return measure.find_contours(mask.astype(float), level=0.5)
 
 
+def rotate_clockwise_90(image: np.ndarray) -> np.ndarray:
+    return np.rot90(image, k=-1)
+
+
+def tight_crop_single(mask: np.ndarray, margin: int) -> tuple[slice, slice]:
+    if not np.any(mask):
+        return slice(0, mask.shape[0]), slice(0, mask.shape[1])
+    rows = np.flatnonzero(np.any(mask > 0, axis=1))
+    cols = np.flatnonzero(np.any(mask > 0, axis=0))
+    r0 = max(0, int(rows[0]) - margin)
+    r1 = min(mask.shape[0], int(rows[-1]) + margin + 1)
+    c0 = max(0, int(cols[0]) - margin)
+    c1 = min(mask.shape[1], int(cols[-1]) + margin + 1)
+    return slice(r0, r1), slice(c0, c1)
+
+
 def panel_letters(n: int) -> list[str]:
     letters = []
     for idx in range(n):
@@ -686,66 +773,130 @@ def apply_style(preset: str) -> dict[str, object]:
 
 
 def make_overlay_strip(
-    panel_rows: pd.DataFrame,
+    summary_df: pd.DataFrame,
     crop_size: int,
     args: argparse.Namespace,
 ) -> plt.Figure | None:
-    if panel_rows.empty or panel_rows["raw_path"].eq("").all():
+    if summary_df.empty or summary_df["raw_path"].eq("").all():
         return None
-    crops: list[np.ndarray] = []
-    masks: list[np.ndarray] = []
+
+    raw_crops_rot: list[np.ndarray] = []
+    mask_crops_rot: list[np.ndarray] = []
     rows_used: list[pd.Series] = []
-    for _, row in panel_rows.iterrows():
+    valid_raw_pixels: list[np.ndarray] = []
+
+    for _, row in summary_df.iterrows():
         raw_crop, mask_crop = build_crops_for_row(
             row,
             crop_size,
             args.align_major_axis,
             args.flip_horizontal,
         )
-        if raw_crop is None:
-            continue
-        crops.append(raw_crop)
-        masks.append(mask_crop)
+        if raw_crop is not None:
+            raw_rot = rotate_clockwise_90(raw_crop)
+            if np.any(mask_crop):
+                valid_raw_pixels.append(raw_rot[np.isfinite(raw_rot)])
+        else:
+            raw_rot = np.full((crop_size, crop_size), np.nan, dtype=np.float32)
+        mask_rot = rotate_clockwise_90(mask_crop)
+        raw_crops_rot.append(raw_rot)
+        mask_crops_rot.append(mask_rot)
         rows_used.append(row)
-    if not crops:
+
+    if not rows_used or not valid_raw_pixels:
         return None
 
-    stack = np.stack(crops)
+    fill_value = float(np.nanmedian(np.concatenate(valid_raw_pixels)))
+    raw_crops_rot = [
+        np.where(np.isfinite(raw_crop), raw_crop, fill_value).astype(np.float32)
+        for raw_crop in raw_crops_rot
+    ]
+
+    tight_margin = max(1, min(3, args.crop_margin // 4))
+    raw_crops_tight: list[np.ndarray] = []
+    mask_crops_tight: list[np.ndarray] = []
+    heights: list[int] = []
+    widths: list[int] = []
+    for raw_crop, mask_crop in zip(raw_crops_rot, mask_crops_rot):
+        row_slice, col_slice = tight_crop_single(mask_crop, margin=tight_margin)
+        raw_tight = raw_crop[row_slice, col_slice]
+        mask_tight = mask_crop[row_slice, col_slice]
+        raw_crops_tight.append(raw_tight)
+        mask_crops_tight.append(mask_tight)
+        heights.append(raw_tight.shape[0])
+        widths.append(raw_tight.shape[1])
+
+    target_height = max(heights)
+    raw_crops_rot = []
+    mask_crops_rot = []
+    for raw_crop, mask_crop in zip(raw_crops_tight, mask_crops_tight):
+        pad_total = target_height - raw_crop.shape[0]
+        pad_top = pad_total // 2
+        pad_bottom = pad_total - pad_top
+        raw_crops_rot.append(
+            np.pad(raw_crop, ((pad_top, pad_bottom), (0, 0)), mode="constant", constant_values=fill_value)
+        )
+        mask_crops_rot.append(
+            np.pad(mask_crop, ((pad_top, pad_bottom), (0, 0)), mode="constant", constant_values=0)
+        )
+
+    stack = np.concatenate(raw_crops_rot, axis=1)
     vmin = float(np.nanpercentile(stack, 2))
     vmax = float(np.nanpercentile(stack, 98))
-    n = len(crops)
-    fig, axes = plt.subplots(1, n, figsize=(2.2 * n, 2.6), constrained_layout=True)
-    if n == 1:
-        axes = [axes]
+    strip = stack
+    strip_height = raw_crops_rot[0].shape[0]
+    fig_width = min(14.0, max(6.0, strip.shape[1] / 260.0))
+    fig_height = min(4.6, max(2.6, strip_height / 26.0))
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height), constrained_layout=True)
     contour_color = "#ffcc33" if args.preset == "presentation" else "#d55e00"
 
-    for ax, raw_crop, mask_crop, row in zip(axes, crops, masks, rows_used):
-        ax.imshow(raw_crop, cmap="gray", vmin=vmin, vmax=vmax)
+    ax.imshow(strip, cmap="gray", vmin=vmin, vmax=vmax, aspect="auto", interpolation="nearest")
+    x_offset = 0
+    for mask_crop in mask_crops_rot:
         for contour in contours_from_mask(mask_crop):
-            ax.plot(contour[:, 1], contour[:, 0], color=contour_color, lw=1.0)
-        ax.text(
-            0.04,
-            0.96,
-            frame_time_label(row, args.time_interval_min),
-            transform=ax.transAxes,
-            ha="left",
-            va="top",
-            color="#111111",
-            bbox=dict(boxstyle="round,pad=0.18", fc=(1, 1, 1, 0.78), ec="none"),
-        )
-        ax.set_axis_off()
+            ax.plot(contour[:, 1] + x_offset, contour[:, 0], color=contour_color, lw=0.7)
+        x_offset += mask_crop.shape[1]
 
-    add_scale_bar(
-        axes[-1],
-        crops[-1].shape,
-        args.pixel_size_um,
-        args.scalebar_um,
-        color="white",
-        linewidth=2.0 if args.preset == "presentation" else 1.2,
-        outline_color="#111111",
+    x_edges = np.cumsum([0, *[raw_crop.shape[1] for raw_crop in raw_crops_rot]])
+    xtick_idx = np.linspace(0, len(rows_used) - 1, min(6, len(rows_used))).round().astype(int)
+    xtick_pos = [(x_edges[i] + x_edges[i + 1]) / 2.0 for i in xtick_idx]
+    ax.set_xticks(xtick_pos)
+    ax.set_xticklabels([frame_time_label(rows_used[i], args.time_interval_min) for i in xtick_idx])
+    ax.set_xlabel("Time")
+
+    yticks = np.linspace(0, strip_height - 1, 5)
+    ax.set_yticks(yticks)
+    if args.pixel_size_um is not None and args.pixel_size_um > 0:
+        ax.set_yticklabels([f"{(y - (strip_height / 2.0)) * args.pixel_size_um:.1f}" for y in yticks])
+        ax.set_ylabel("Position along major axis [um]")
+    else:
+        ax.set_ylabel("Position along major axis [px]")
+
+    ax.text(
+        0.01,
+        0.98,
+        frame_time_label(rows_used[0], args.time_interval_min),
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        color="#111111",
+        bbox=dict(boxstyle="round,pad=0.18", fc=(1, 1, 1, 0.78), ec="none"),
     )
+    ax.text(
+        0.99,
+        0.98,
+        frame_time_label(rows_used[-1], args.time_interval_min),
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        color="#111111",
+        bbox=dict(boxstyle="round,pad=0.18", fc=(1, 1, 1, 0.78), ec="none"),
+    )
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
     if args.preset != "manuscript":
-        fig.suptitle("Center-nearest representative cell: overlay strip", y=1.02)
+        fig.suptitle("Center-nearest representative cell: overlay kymograph", y=1.02)
     return fig
 
 
@@ -876,33 +1027,40 @@ def make_volume_trace(summary_df: pd.DataFrame, args: argparse.Namespace) -> plt
         x_label = "Frame"
 
     volume = df["volume_um3_rod"].to_numpy(dtype=float)
-    major = df["major_axis_px"].to_numpy(dtype=float)
-    minor = df["minor_axis_px"].to_numpy(dtype=float)
-    if args.pixel_size_um is not None and args.pixel_size_um > 0:
-        major = major * args.pixel_size_um
-        minor = minor * args.pixel_size_um
-        axis_label = "Axis length [um]"
-    else:
-        axis_label = "Axis length [px]"
+    mean_ri = df["mean_ri"].to_numpy(dtype=float)
+    mass_pg = df["mass_pg"].to_numpy(dtype=float)
 
-    fig, axes = plt.subplots(2, 1, figsize=(6.8, 4.8), constrained_layout=True)
+    fig, axes = plt.subplots(3, 1, figsize=(7.0, 5.9), constrained_layout=True, sharex=True)
     missing_mask = ~df["tracked"].to_numpy(dtype=bool)
     missing_half_width = (args.time_interval_min / 2.0) if args.time_interval_min else 0.45
 
-    axes[0].plot(x, volume, color="#1f77b4", lw=1.4)
+    axes[0].plot(x, volume, color="#1f77b4", lw=1.5)
     axes[0].set_title("A  Rod volume estimate", loc="left")
     axes[0].set_ylabel("Volume [um^3]")
+    axes[0].grid(True, alpha=0.3, linestyle="--")
     axes[0].spines["top"].set_visible(False)
     axes[0].spines["right"].set_visible(False)
 
-    axes[1].plot(x, major, color="#d55e00", lw=1.2, label="Major")
-    axes[1].plot(x, minor, color="#009e73", lw=1.2, label="Minor")
-    axes[1].set_title("B  Major / minor axes", loc="left")
-    axes[1].set_xlabel(x_label)
-    axes[1].set_ylabel(axis_label)
-    axes[1].legend(frameon=False, loc="best")
+    if np.isfinite(mean_ri).any():
+        axes[1].plot(x, mean_ri, color="#ff7f0e", lw=1.5)
+    else:
+        axes[1].text(0.5, 0.5, "Mean RI unavailable", transform=axes[1].transAxes, ha="center", va="center")
+    axes[1].set_title("B  Mean RI", loc="left")
+    axes[1].set_ylabel("Mean RI")
+    axes[1].grid(True, alpha=0.3, linestyle="--")
     axes[1].spines["top"].set_visible(False)
     axes[1].spines["right"].set_visible(False)
+
+    if np.isfinite(mass_pg).any():
+        axes[2].plot(x, mass_pg, color="#2ca02c", lw=1.5)
+    else:
+        axes[2].text(0.5, 0.5, "Mass unavailable", transform=axes[2].transAxes, ha="center", va="center")
+    axes[2].set_title("C  Total mass", loc="left")
+    axes[2].set_xlabel(x_label)
+    axes[2].set_ylabel("Total mass [pg]")
+    axes[2].grid(True, alpha=0.3, linestyle="--")
+    axes[2].spines["top"].set_visible(False)
+    axes[2].spines["right"].set_visible(False)
 
     if missing_mask.any():
         for ax in axes:
@@ -1139,6 +1297,9 @@ def save_fig_with_formats(
         "panel_count": args.panel_count,
         "pixel_size_um": args.pixel_size_um,
         "time_interval_min": args.time_interval_min,
+        "wavelength_nm": args.wavelength_nm,
+        "n_medium": args.n_medium,
+        "alpha_ri": args.alpha_ri,
     }
     extra_meta = {"local_output_dir": str(outdir.resolve())}
     source_list = list(dict.fromkeys(source_tifs)) if args.attach_source_tifs else None
@@ -1166,6 +1327,13 @@ def write_intermediate_outputs(
     summary_csv = outdir / "track_summary.csv"
     summary_df.to_csv(summary_csv, index=False)
 
+    outputs = {
+        "track_summary_csv": str(summary_csv.resolve()),
+    }
+
+    if not args.write_track_tifs:
+        return outputs
+
     mask_stack = []
     crop_stack = []
     raw_crop_stack = []
@@ -1174,7 +1342,10 @@ def write_intermediate_outputs(
     for _, row in summary_df.iterrows():
         if row["mask_path"]:
             label_img = load_label_image(Path(row["mask_path"]))
-            selected_mask = build_selected_mask(label_img, int(row["label"])) if row["tracked"] else np.zeros_like(label_img, dtype=np.uint8)
+            if row["tracked"]:
+                selected_mask = build_selected_mask(label_img, int(row["label"]))
+            else:
+                selected_mask = np.zeros_like(label_img, dtype=np.uint8)
         else:
             h = int(row["image_height_px"]) if pd.notna(row["image_height_px"]) else crop_size
             w = int(row["image_width_px"]) if pd.notna(row["image_width_px"]) else crop_size
@@ -1196,15 +1367,11 @@ def write_intermediate_outputs(
 
     track_masks_path = outdir / "track_masks.tif"
     tifffile.imwrite(track_masks_path, np.stack(mask_stack, axis=0))
+    outputs["track_masks_tif"] = str(track_masks_path.resolve())
 
     track_crops_path = outdir / "track_crops.tif"
     tifffile.imwrite(track_crops_path, np.stack(crop_stack, axis=0))
-
-    outputs = {
-        "track_summary_csv": str(summary_csv.resolve()),
-        "track_masks_tif": str(track_masks_path.resolve()),
-        "track_crops_tif": str(track_crops_path.resolve()),
-    }
+    outputs["track_crops_tif"] = str(track_crops_path.resolve())
 
     if has_raw_crop:
         track_raw_crops_path = outdir / "track_raw_crops.tif"
@@ -1276,6 +1443,9 @@ def main() -> int:
         min_area=args.min_area,
         exclude_border=args.exclude_border,
         pixel_size_um=args.pixel_size_um,
+        wavelength_nm=args.wavelength_nm,
+        n_medium=args.n_medium,
+        alpha_ri=args.alpha_ri,
     )
     crop_size = determine_crop_size(summary_df, margin=args.crop_margin)
     panel_rows = select_panel_rows(summary_df, panel_count=args.panel_count)
@@ -1294,11 +1464,13 @@ def main() -> int:
     for kind in args.figure:
         fig = None
         if kind == "overlay_strip":
-            fig = make_overlay_strip(panel_rows, crop_size, args)
+            fig = make_overlay_strip(summary_df, crop_size, args)
         elif kind == "contour_montage":
             fig = make_contour_montage(panel_rows, crop_size, args)
         elif kind == "shape_trace":
             fig = make_shape_trace(summary_df, args)
+        elif kind == "volume_trace":
+            fig = make_volume_trace(summary_df, args)
         elif kind == "ghost_contour":
             fig = make_ghost_contour(summary_df, crop_size, args)
         elif kind == "intensity_kymograph":
