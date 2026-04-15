@@ -62,6 +62,7 @@ DIRECT_RUN_CONFIG = {
     "volume_ylim": [0.0, 400.0],
     "mean_ri_ylim": [1.34, 1.37],
     "mass_ylim": [0.0, 500000.0],
+    "media_switch_frames": [575.0, 875.0, 1439.0],
     "kymograph_sample_hours": 48.0,
     "kymograph_window_frames": 10,
 }
@@ -294,6 +295,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=[0.0, 500000.0],
         metavar=("YMIN", "YMAX"),
         help="Y-axis limits for total-mass trace in pg. Default: 0 500000.",
+    )
+    parser.add_argument(
+        "--media-switch-frames",
+        nargs="+",
+        type=float,
+        default=[575.0, 875.0, 1439.0],
+        help="Vertical dotted guide lines for media switches, specified in frame index units.",
     )
     parser.add_argument(
         "--kymograph-sample-hours",
@@ -1193,6 +1201,7 @@ def make_volume_trace(summary_df: pd.DataFrame, args: argparse.Namespace) -> plt
     fig, axes = plt.subplots(3, 1, figsize=(7.0, 5.9), constrained_layout=True, sharex=True)
     missing_mask = ~df["tracked"].to_numpy(dtype=bool)
     missing_half_width = (args.time_interval_min / 2.0) if args.time_interval_min else 0.45
+    media_switches = [float(frame) for frame in args.media_switch_frames]
 
     axes[0].plot(x, volume, color="#1f77b4", lw=1.5)
     axes[0].set_title("A  Rod volume estimate", loc="left")
@@ -1230,6 +1239,10 @@ def make_volume_trace(summary_df: pd.DataFrame, args: argparse.Namespace) -> plt
             for xv, is_missing in zip(x, missing_mask):
                 if is_missing:
                     ax.axvspan(xv - missing_half_width, xv + missing_half_width, color="#eeeeee", zorder=0)
+
+    for ax in axes:
+        for switch_time in media_switches:
+            ax.axvline(switch_time, color="#666666", lw=0.9, ls=":", alpha=0.9, zorder=1)
 
     if args.preset != "manuscript":
         fig.suptitle("Center-nearest representative cell: volume estimate", y=1.02)
@@ -1556,6 +1569,7 @@ def save_fig_with_formats(
         "volume_ylim": args.volume_ylim,
         "mean_ri_ylim": args.mean_ri_ylim,
         "mass_ylim": args.mass_ylim,
+        "media_switch_frames": args.media_switch_frames,
         "kymograph_sample_hours": args.kymograph_sample_hours,
         "kymograph_window_frames": args.kymograph_window_frames,
     }
