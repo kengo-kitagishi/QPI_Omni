@@ -1,225 +1,145 @@
 """
 prepare_drift_session.py
 ------------------------
-リアルタイムドリフト補正セッションの事前準備スクリプト。
-realtime_drift_mda.bsh を実行する前に1回だけ実行する。
+Pre-flight setup for a real-time drift-corrected QPI time-lapse session.
+Run once before launching ``realtime_drift_mda.bsh`` from Micro-Manager.
 
-何をするか:
-  1. .pos ファイル → positions.csv（Beanshell 用の簡易フォーマット）
-  2. grid(0,0) の再構成済み位相画像 → チャネルROIでcrop + backsub → grid_ref_crops.tif
-  3. drift_config.json（全パラメータを集約）
-  4. drift_state.txt 初期化
+What this script does:
+  1. Read the .pos file used by MM and emit ``positions.csv`` (the simple
+     format BeanShell consumes).
+  2. Verify that ``grid_calibration_{pos_label}.json`` exists for every
+     sample position (BG excluded). Missing files abort the setup -- the
+     online drift correction has no nominal-step fallback any more.
+  3. Write ``drift_config.json`` with all parameters needed by
+     ``compute_drift_online.py`` and ``realtime_drift_mda.bsh``.
+  4. Initialise ``drift_state.txt`` and ``drift_log.json``.
 
-使い方:
+Usage:
   python prepare_drift_session.py
 """
 
 import sys
 import json
-import numpy as np
-import tifffile
+import shutil
+from datetime import datetime
 from pathlib import Path
-from scipy.ndimage import uniform_filter1d
-from scipy.optimize import curve_fit
 
 _script_dir = Path(__file__).parent
 sys.path.insert(0, str(_script_dir))
 
 # ============================================================
-# ★★★ 実験ごとにここを変更 ★★★
+# Edit per experiment
 # ============================================================
 
-# タイムラプスで使う .pos ファイル（グリッドなし、実際に撮影するポジションリスト）
+# .pos file consumed by Micro-Manager (the actual time-lapse position list)
 POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\260331\_focus_check6_ecc_corrected.pos"
 
-# グリッド撮影ディレクトリ（小規模グリッドでよい）
+# Grid acquisition directory (small grid is fine)
 GRID_DIR         = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
-GRID_BASE_LABEL  = "Pos1"   # ドリフト推定に使う Pos のラベル（タイムラプスと同じ）
-GRID_Z_INDEX     = 18       # グリッド画像の z インデックス（合焦スライス）
+GRID_Z_INDEX     = 18       # z-slice of the grid TIFFs to use as reference
 
-# channel_rois.json（事前に pipeline_full.py などで生成済みのもの）
+# channel_rois.json (built beforehand by pipeline_full.py / channel_crop.py)
 CHANNEL_ROIS_JSON = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
 
-# セッション作業ディレクトリ（ここに設定ファイルと状態ファイルが保存される）
+# Session working directory (config + state files land here)
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
-# タイムラプス画像の保存先（MM1.4 で撮影した画像の保存先）
+# Time-lapse image save directory (Micro-Manager output)
 SAVE_DIR         = r"D:\AquisitionData\Kitagishi\260405\ph_260405"
 
-# .pos ファイル内の各 Pos のインデックス（0始まり）
-REF_POS_INDEX    = 1   # ドリフト推定に使う Pos（サンプルがいる Pos）
-BG_POS_INDEX     = 0   # BG Pos（Pos0: 細胞なし、位相補正用）
+# Index of the BG position inside the .pos file (0-based; cell-free Pos)
+BG_POS_INDEX     = 0
 
-# MM1.4 撮影パラメータ
-N_TIMEPOINTS     = 2592     # 260403実験
-INTERVAL_SEC     = 300       # タイムポイント間隔 [秒]（5分）
-EXPOSURE_MS      = 60.0      # カメラ露光時間 [ms]
-SETTLE_MS        = 150      # ステージ移動後の待機時間 [ms]
-PFS_SETTLE_MS    = 200      # PFS ロック待機時間 [ms]（不要なら 0）
+# Micro-Manager acquisition parameters
+N_TIMEPOINTS     = 2592
+INTERVAL_SEC     = 300        # Time-lapse interval [s]
+EXPOSURE_MS      = 60.0
+SETTLE_MS        = 150        # Stage settle time after move [ms]
+PFS_SETTLE_MS    = 200        # Nikon PFS lock time [ms] (0 to disable)
 
-# MM1.4 デバイス名
+# Micro-Manager device names
 XY_STAGE_DEVICE  = "XYStage"
-Z_OFFSET_DEVICE  = "TIPFSOffset"   # Nikon PFS オフセット
-CHANNEL_NAME     = "ph"            # MM チャンネルグループ名
+Z_OFFSET_DEVICE  = "TIPFSOffset"
+CHANNEL_NAME     = "ph"
 PYTHON_EXE       = r"C:\Users\QPI\AppData\Local\Programs\Python\Python311\python.exe"
 
-# ドリフト補正パラメータ
-JUMP_THRESH_UM       = None   # 1ステップの閾値 [μm]。None ならステップ閾値チェックを無効化
-MAX_TOTAL_CORR_UM    = 15.0   # 累積補正量の上限 [μm]（安全弁）
-SHIFT_SIGN_X         = 1      # 符号（実データで確認して変更）
+# Drift-correction parameters
+JUMP_THRESH_UM       = None    # Per-step jump cutoff [um]; None disables
+MAX_TOTAL_CORR_UM    = 15.0    # Cumulative correction safety cap [um]
+SHIFT_SIGN_X         = 1
 SHIFT_SIGN_Y         = 1
 
-# EMA / Kalman フィルタ設定
-CORRECTION_EMA_ALPHA = 0.3    # EMA の平滑化係数
-USE_KALMAN_FILTER    = True   # Adaptive Kalman フィルタを使う
-# 実測値 (2026-04-03): stage σ_y=49.8nm, σ_x=93.9nm / ECC σ_ty=9.5nm, σ_tx=16.6nm
-# Q は K≈0.80 を目標に β=0.24 オーバーシュート考慮済みの実効値
-KF_Q_TY_NM2          = 291.0   # image X / stage Y プロセスノイズ [nm²]
-KF_Q_TX_NM2          = 877.0   # image Y / stage X プロセスノイズ [nm²]
-KF_R_TY_NM2          = 91.0    # image X ECC 観測ノイズ [nm²] (σ=9.5nm)
-KF_R_TX_NM2          = 274.0   # image Y ECC 観測ノイズ [nm²] (σ=16.6nm)
+# EMA / Kalman filter
+CORRECTION_EMA_ALPHA = 0.3
+USE_KALMAN_FILTER    = True
+# Measured (2026-04-03): stage sigma_y=49.8nm, sigma_x=93.9nm
+#                        ECC sigma_ty=9.5nm, sigma_tx=16.6nm
+# Q tuned for K~0.80 with beta=0.24 overshoot already absorbed.
+KF_Q_TY_NM2          = 291.0
+KF_Q_TX_NM2          = 877.0
+KF_R_TY_NM2          = 91.0
+KF_R_TX_NM2          = 274.0
 
-# 光学パラメータ
-SENSOR_PIXEL_SIZE    = 3.45e-6   # [m]
+# Per-position scheduling and ECC controls (consumed by compute_drift_online.py)
+DRIFT_SAMPLE_INTERVAL = 1      # 1 = every position; N = every Nth (group leader)
+MAX_DRIFT_WORKERS     = 0      # 0 = auto (cpu_count - 4)
+ENABLE_THIRD_PASS     = True   # Run pass 3 (re-select grid after pass 2)
+ECC_MIN_CORR          = 0.0    # ECC correlation threshold (0 disables filter)
+
+# Optical parameters
+SENSOR_PIXEL_SIZE    = 3.45e-6
 MAGNIFICATION        = 40
 ORIGINAL_DIM         = 2048
 RECONSTRUCTED_DIM    = 511
 
-# 位置クロップ設定（pipeline_full.py と同値）
+# Position-dependent crop (matches pipeline_full.py)
 POS_SPLIT    = 33
-CROP_BEFORE  = (0, 2048, 400, 2448)   # pos_number < POS_SPLIT → 右側
-CROP_AFTER   = (0, 2048,   0, 2048)   # Pos3 以降
+CROP_BEFORE  = (0, 2048, 400, 2448)
+CROP_AFTER   = (0, 2048,   0, 2048)
 
-# バックグラウンド減算パラメータ
-BACKSUB_MIN_PHASE    = -1.1
-BACKSUB_HIST_MIN     = -1.1
-BACKSUB_HIST_MAX     =  1.5
-BACKSUB_N_BINS       = 512
+# Histogram-based background subtraction
+BACKSUB_MIN_PHASE     = -1.1
+BACKSUB_HIST_MIN      = -1.1
+BACKSUB_HIST_MAX      =  1.5
+BACKSUB_N_BINS        = 512
 BACKSUB_SMOOTH_WINDOW = 20
 
-# Gaussian 空間グラジェント除去（channel crop の前に適用）
-# alignment 用: sigma >= 150 推奨（channel crop サイズ 40×120 px より十分大きく）
-# 0 で無効
+# Spatial gradient removal applied before channel cropping (0 = disabled)
 GRADIENT_SIGMA = 0
 
-# ECC パラメータ
+# ECC normalisation range
 VMIN = -5.0
 VMAX =  2.0
 
-# tilt 補正パラメータ（calibrate_grid_positions.py / compute_pos_shifts.py と同値）
-# 0 に設定するとフォールバック（backsub のみ）になる
-TILT_CROP_H = 270    # X 方向の big crop 幅 [px]
-ECC_CROP_H  = 80     # ECC に使う中央 crop 幅 [px]
+# Tilt-correction crop sizes (must match calibrate_grid_pos_per_pos.py /
+# compute_pos_shifts.py); set both to 0 to fall back to plain backsub.
+TILT_CROP_H = 270
+ECC_CROP_H  = 80
 
-# グリッドキャリブレーション JSON（calibrate_grid_positions.py の出力）
-# None → compute_drift_online.py でステージ名目値にフォールバック
-GRID_CALIBRATION_JSON = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1\grid_calibration_Pos1.json"
+# Crop-subtract / raw-phase Phase B (online crop_sub_rawraw save)
+# Step values are nominal fallback only; grid_calibration_*.json (measured)
+# wins when present.
+RAW_TL_Z_INDEX        = 0
+CROP_SUB_X_STEP_UM    = 0.1
+CROP_SUB_Y_STEP_UM    = 0.1
+ENABLE_CROP_SUB_SAVE  = False
+CROP_SUB_ROOT         = r"E:\Acuisition\kitagishi\260405\online_crop_sub"
+CROP_SUB_MAX_SECONDS  = 200.0
+CROP_SUB_MAX_WORKERS  = 0
+CROP_SUB_MIN_FREE_GB  = 2.0
 
 # ============================================================
-
-
-def compute_backsub_offset(img: np.ndarray, min_phase=BACKSUB_MIN_PHASE,
-                            hist_min=BACKSUB_HIST_MIN, hist_max=BACKSUB_HIST_MAX,
-                            n_bins=BACKSUB_N_BINS, smooth_window=BACKSUB_SMOOTH_WINDOW) -> float:
-    """ガウスフィットによる背景ピーク検出。オフセット = -peak_mean を返す。"""
-    bin_edges = np.linspace(hist_min, hist_max, n_bins + 1)
-    hist_counts, _ = np.histogram(img.flatten(), bins=bin_edges)
-    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-    bin_width = bin_centers[1] - bin_centers[0]
-    smoothed = uniform_filter1d(hist_counts.astype(float), size=smooth_window, mode='nearest')
-    smoothed = uniform_filter1d(smoothed, size=smooth_window, mode='nearest')
-    valid_idx = np.where(bin_centers >= min_phase)[0]
-    max_search_idx = int(len(bin_centers) * 0.95)
-    search_idx = valid_idx[valid_idx < max_search_idx]
-    if len(search_idx) == 0:
-        return 0.0
-    peak_idx = search_idx[np.argmax(smoothed[search_idx])]
-    peak_value = bin_centers[peak_idx]
-    fit_width = 300
-    s = max(0, peak_idx - fit_width)
-    e = min(len(bin_centers), peak_idx + fit_width)
-    x_data, y_data = bin_centers[s:e], smoothed[s:e]
-    try:
-        popt, _ = curve_fit(
-            lambda x, amp, mean, std: amp * np.exp(-((x - mean)**2) / (2 * std**2)),
-            x_data, y_data, p0=[float(np.max(y_data)), peak_value, bin_width * 20], maxfev=5000
-        )
-        return float(-popt[1])
-    except Exception:
-        return float(-peak_value)
-
-
-def extract_rect_roi(img, cy, cx, crop_w, crop_h):
-    h, w = img.shape
-    y1 = cy - crop_w // 2; y2 = y1 + crop_w
-    x1 = cx - crop_h // 2; x2 = x1 + crop_h
-    pad_y0 = max(0, -y1); y1 = max(0, y1)
-    pad_y1 = max(0, y2 - h); y2 = min(h, y2)
-    pad_x0 = max(0, -x1); x1 = max(0, x1)
-    pad_x1 = max(0, x2 - w); x2 = min(w, x2)
-    crop = img[y1:y2, x1:x2]
-    if any([pad_y0, pad_y1, pad_x0, pad_x1]):
-        crop = np.pad(crop, ((pad_y0, pad_y1), (pad_x0, pad_x1)), mode="constant")
-    return crop
-
-
-def _tilt_correct(img_f64, cy, cx, crop_w, tilt_crop_h, ecc_crop_h):
-    """
-    フル位相画像から tilt_crop_h px 幅の crop を取り、
-    左1/3 で slope+intercept fit → 補正 → 中央 ecc_crop_h px を返す。
-    calibrate_grid_positions.py / compute_pos_shifts.py と同じ処理。
-    """
-    big   = extract_rect_roi(img_f64, cy, cx, crop_w, tilt_crop_h).astype(np.float64)
-    x     = np.arange(tilt_crop_h, dtype=np.float64)
-    prof  = big.mean(axis=0)
-    fit_n = max(1, tilt_crop_h // 3)
-    a, b  = np.polyfit(x[:fit_n], prof[:fit_n], 1)
-    corrected = big - (a * x + b)[np.newaxis, :]
-    start = (tilt_crop_h - ecc_crop_h) // 2
-    return corrected[:, start : start + ecc_crop_h]
-
-
-def get_crop_for_pos_index(pos_index):
-    return CROP_BEFORE if pos_index < POS_SPLIT else CROP_AFTER
-
-
-def reconstruct_phase(raw_path: Path, crop_region, bg_path: Path = None) -> np.ndarray:
-    """QPI 位相再構成。bg_path があれば差分、なければ生画像の位相を返す。"""
-    from PIL import Image
-    from qpi import QPIParameters, get_field
-    from skimage.restoration import unwrap_phase
-    from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
-
-    def _load_and_reconstruct(path, params, crop):
-        img = np.array(Image.open(str(path)))
-        rs, re_, cs, ce = crop
-        img = img[rs:re_, cs:ce]
-        field = get_field(img, params)
-        return unwrap_phase(np.angle(field))
-
-    img = np.array(Image.open(str(raw_path)))
-    rs, re_, cs, ce = crop_region
-    cropped = img[rs:re_, cs:ce]
-    qpi_params = QPIParameters(
-        wavelength=WAVELENGTH, NA=NA,
-        img_shape=cropped.shape, pixelsize=PIXELSIZE,
-        offaxis_center=OFFAXIS_CENTER,
-    )
-    phase = _load_and_reconstruct(raw_path, qpi_params, crop_region)
-    if bg_path is not None and bg_path.exists():
-        phase -= _load_and_reconstruct(bg_path, qpi_params, crop_region)
-    return phase
 
 
 def main():
     session_dir = Path(SESSION_DIR)
     session_dir.mkdir(parents=True, exist_ok=True)
-    print(f"セッションディレクトリ: {session_dir}")
+    print(f"Session directory: {session_dir}")
 
-    # ---- 1. .pos ファイルを読んで positions.csv を出力 ----
+    # ---- 1. Read .pos -> positions.csv ----
     pos_file = Path(POSITIONS_FILE)
     if not pos_file.exists():
-        print(f"ERROR: .pos ファイルが見つかりません: {pos_file}")
+        print(f"ERROR: .pos file not found: {pos_file}")
         sys.exit(1)
 
     with open(pos_file, encoding="utf-8") as f:
@@ -239,84 +159,51 @@ def main():
         print(f"  Pos[{i}] {label}: x={x:.3f}, y={y:.3f}, z_offset={z_offset:.4f}")
 
     n_positions = len(positions)
-    print(f"ポジション数: {n_positions}")
+    print(f"Positions: {n_positions}")
 
-    if REF_POS_INDEX >= n_positions:
-        print(f"ERROR: REF_POS_INDEX={REF_POS_INDEX} が範囲外 (0~{n_positions-1})")
+    if BG_POS_INDEX >= n_positions:
+        print(f"ERROR: BG_POS_INDEX={BG_POS_INDEX} out of range (0..{n_positions-1})")
         sys.exit(1)
 
-    # positions.csv を書き出し
     csv_path = session_dir / "positions.csv"
     with open(csv_path, "w", encoding="utf-8") as f:
         f.write("index,label,x,y,z_offset\n")
         for p in positions:
             f.write(f"{p['index']},{p['label']},{p['x']:.6f},{p['y']:.6f},{p['z_offset']:.6f}\n")
-    print(f"positions.csv 保存: {csv_path}")
+    print(f"positions.csv written: {csv_path}")
 
-    # ---- 2. channel_rois.json 読み込み ----
+    # ---- 2. channel_rois.json ----
     rois_path = Path(CHANNEL_ROIS_JSON)
     if not rois_path.exists():
-        print(f"ERROR: channel_rois.json が見つかりません: {rois_path}")
+        print(f"ERROR: channel_rois.json not found: {rois_path}")
         sys.exit(1)
     with open(rois_path, encoding="utf-8") as f:
         rois = json.load(f)
     n_channels = len(rois)
-    print(f"チャネル数: {n_channels}")
+    print(f"Channels: {n_channels}")
     if n_channels == 0:
-        print(f"ERROR: channel_rois.json にチャネルが登録されていません: {rois_path}")
-        print("  calibrate_grid_positions.py --detect で検出し直すか、ROI を手動で設定して --apply を実行してください。")
+        print(f"ERROR: channel_rois.json has zero channels: {rois_path}")
+        print("  Run channel_crop.py --detect to populate it.")
         sys.exit(1)
 
-    # ---- 3. grid(0,0) の位相画像を読んでリファレンスcropを生成 ----
-    grid_ref_path = (
-        Path(GRID_DIR)
-        / f"{GRID_BASE_LABEL}_x+0_y+0"
-        / "output_phase"
-        / f"img_000000000_ph_{GRID_Z_INDEX:03d}_phase.tif"
-    )
-    if not grid_ref_path.exists():
-        # フォールバック: _ph_{z:03d} なし（旧命名）
-        alt = grid_ref_path.parent / f"img_000000000_ph_{GRID_Z_INDEX:03d}.tif"
-        if alt.exists():
-            grid_ref_path = alt
-        else:
-            print(f"ERROR: grid(0,0) 位相画像が見つかりません: {grid_ref_path}")
-            print("  先に pipeline_full.py Step0 (grid reconstruction) を実行してください。")
-            sys.exit(1)
+    # ---- 3. grid_calibration_{label}.json must exist for every sample Pos ----
+    grid_dir = Path(GRID_DIR)
+    missing = []
+    for p in positions:
+        if p["index"] == BG_POS_INDEX:
+            continue
+        cal_path = grid_dir / f"grid_calibration_{p['label']}.json"
+        if not cal_path.exists():
+            missing.append(cal_path)
+    if missing:
+        print("ERROR: grid_calibration JSON missing for the following positions:")
+        for m in missing:
+            print(f"  - {m}")
+        print("Run calibrate_grid_pos_per_pos.py first.")
+        sys.exit(1)
+    print(f"grid calibration: verified for {n_positions - 1} sample positions")
 
-    print(f"grid(0,0) 参照画像: {grid_ref_path}")
-    grid_img = tifffile.imread(str(grid_ref_path)).astype(np.float64)
-
-    # Gaussian 空間グラジェント除去（タイムラプス側と同じ処理を必ず適用）
-    if GRADIENT_SIGMA > 0:
-        from scipy.ndimage import gaussian_filter
-        bg = gaussian_filter(grid_img.astype(np.float32), sigma=GRADIENT_SIGMA, mode='nearest')
-        grid_img = grid_img - bg.astype(np.float64)
-        print(f"  Gaussian gradient removal: sigma={GRADIENT_SIGMA}px applied to grid ref")
-
-    # チャネルごとに crop（tilt 補正 or backsub）
-    use_tilt = TILT_CROP_H > 0 and ECC_CROP_H > 0
-    ref_crops = []
-    for ch_idx, roi in enumerate(rois):
-        if use_tilt:
-            crop = _tilt_correct(grid_img, roi["cy"], roi["cx"], roi["crop_w"],
-                                 TILT_CROP_H, ECC_CROP_H)
-            ref_crops.append(crop.astype(np.float32))
-            print(f"  ch{ch_idx:02d}: tilt-corrected crop shape={crop.shape}")
-        else:
-            crop = extract_rect_roi(grid_img, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"])
-            offset = compute_backsub_offset(crop)
-            crop = crop + offset
-            ref_crops.append(crop.astype(np.float32))
-            print(f"  ch{ch_idx:02d}: crop shape={crop.shape}, backsub offset={offset:+.4f}")
-
-    # grid_ref_crops.tif として保存（shape: n_channels, H, W）
-    ref_crops_arr = np.stack(ref_crops, axis=0)  # (C, H, W)
-    grid_ref_tif = session_dir / "grid_ref_crops.tif"
-    tifffile.imwrite(str(grid_ref_tif), ref_crops_arr)
-    print(f"grid_ref_crops.tif 保存: {grid_ref_tif}  shape={ref_crops_arr.shape}")
-
-    # ---- 4. drift_config.json 生成 ----
+    # ---- 4. drift_config.json ----
     pixel_scale_um = SENSOR_PIXEL_SIZE / MAGNIFICATION * ORIGINAL_DIM / RECONSTRUCTED_DIM * 1e6
     config = {
         "python_exe":         PYTHON_EXE,
@@ -324,30 +211,44 @@ def main():
         "session_dir":        str(session_dir),
         "save_dir":           SAVE_DIR,
         "positions_csv":      str(csv_path),
-        "grid_ref_crops_tif": str(grid_ref_tif),
         "state_file":         str(session_dir / "drift_state.txt"),
         "log_file":           str(session_dir / "drift_log.json"),
-        "prev_frame_crops_tif": str(session_dir / "prev_frame_crops.tif"),
         "channel_rois_json":  str(rois_path),
+        "kf_state_file":      str(session_dir / "drift_kf_state.json"),
+
+        # Acquisition
         "n_timepoints":       N_TIMEPOINTS,
         "interval_sec":       INTERVAL_SEC,
         "exposure_ms":        EXPOSURE_MS,
         "settle_ms":          SETTLE_MS,
         "pfs_settle_ms":      PFS_SETTLE_MS,
-        "ref_pos_index":      REF_POS_INDEX,
         "bg_pos_index":       BG_POS_INDEX,
         "n_channels":         n_channels,
         "xy_stage_device":    XY_STAGE_DEVICE,
         "z_offset_device":    Z_OFFSET_DEVICE,
         "channel_name":       CHANNEL_NAME,
+
+        # Drift correction
         "jump_thresh_um":     JUMP_THRESH_UM,
         "max_total_corr_um":  MAX_TOTAL_CORR_UM,
         "shift_sign_x":       SHIFT_SIGN_X,
         "shift_sign_y":       SHIFT_SIGN_Y,
         "pixel_scale_um":     pixel_scale_um,
+        "drift_sample_interval": DRIFT_SAMPLE_INTERVAL,
+        "max_drift_workers":  MAX_DRIFT_WORKERS,
+        "enable_third_pass":  ENABLE_THIRD_PASS,
+        "ecc_min_corr":       ECC_MIN_CORR,
+
+        # Reconstruction
         "pos_split":          POS_SPLIT,
         "crop_before":        list(CROP_BEFORE),
         "crop_after":         list(CROP_AFTER),
+        "sensor_pixel_size":  SENSOR_PIXEL_SIZE,
+        "magnification":      MAGNIFICATION,
+        "original_dim":       ORIGINAL_DIM,
+        "reconstructed_dim":  RECONSTRUCTED_DIM,
+
+        # Backsub / gradient / ECC normalisation
         "backsub_min_phase":  BACKSUB_MIN_PHASE,
         "backsub_hist_min":   BACKSUB_HIST_MIN,
         "backsub_hist_max":   BACKSUB_HIST_MAX,
@@ -356,83 +257,83 @@ def main():
         "gradient_sigma":     GRADIENT_SIGMA,
         "tilt_crop_h":        TILT_CROP_H,
         "ecc_crop_h":         ECC_CROP_H,
-        "grid_calibration_json": GRID_CALIBRATION_JSON,
         "ecc_vmin":           VMIN,
         "ecc_vmax":           VMAX,
-        "sensor_pixel_size":  SENSOR_PIXEL_SIZE,
-        "magnification":      MAGNIFICATION,
-        "original_dim":       ORIGINAL_DIM,
-        "reconstructed_dim":  RECONSTRUCTED_DIM,
+
+        # Grid references
         "grid_dir":           GRID_DIR,
-        "grid_base_label":    GRID_BASE_LABEL,
         "grid_z_index":       GRID_Z_INDEX,
+
+        # Crop-subtract / raw-phase Phase B (consumed by compute_drift_online.py
+        # and recorded in pos_shifts_cal_online.json metadata)
+        "raw_grid_z_index":   GRID_Z_INDEX,
+        "raw_tl_z_index":     RAW_TL_Z_INDEX,
+        "crop_sub_x_step_um": CROP_SUB_X_STEP_UM,
+        "crop_sub_y_step_um": CROP_SUB_Y_STEP_UM,
+        "tilt_crop_h_raw":    TILT_CROP_H,
+        "enable_crop_sub_save": ENABLE_CROP_SUB_SAVE,
+        "crop_sub_root":      CROP_SUB_ROOT,
+        "crop_sub_max_seconds": CROP_SUB_MAX_SECONDS,
+        "crop_sub_max_workers": CROP_SUB_MAX_WORKERS,
+        "crop_sub_min_free_gb": CROP_SUB_MIN_FREE_GB,
+
+        # EMA / Kalman
         "correction_ema_alpha": CORRECTION_EMA_ALPHA,
         "use_kalman_filter":  USE_KALMAN_FILTER,
         "kf_Q_ty_nm2":        KF_Q_TY_NM2,
         "kf_Q_tx_nm2":        KF_Q_TX_NM2,
         "kf_R_ty_nm2":        KF_R_TY_NM2,
         "kf_R_tx_nm2":        KF_R_TX_NM2,
-        "kf_state_file":      str(session_dir / "drift_kf_state.json"),
     }
     config_path = session_dir / "drift_config.json"
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
-    print(f"drift_config.json 保存: {config_path}")
+    print(f"drift_config.json written: {config_path}")
 
-    # ---- 5. drift_state.txt 初期化 ----
+    # ---- 5. drift_state.txt (per-pos format; populated by compute_drift_online.py) ----
     state_path = session_dir / "drift_state.txt"
     with open(state_path, "w", encoding="utf-8") as f:
-        f.write("# drift_state.txt - realtime_drift_mda.bsh / compute_drift_online.py\n")
+        f.write("# drift_state.txt - written by compute_drift_online.py\n")
         f.write("STATUS=idle\n")
         f.write("TIMEPOINT=-1\n")
-        f.write("DX_UM=0.0\n")
-        f.write("DY_UM=0.0\n")
-        f.write("CUMULATIVE_DX_UM=0.0\n")
-        f.write("CUMULATIVE_DY_UM=0.0\n")
-        f.write("CORRECTION_VALID=false\n")
-        f.write("ECC_CORRELATION=0.0\n")
-        f.write("JUMP_DETECTED=false\n")
-    print(f"drift_state.txt 初期化: {state_path}")
+    print(f"drift_state.txt initialised: {state_path}")
 
-    # ---- 6. drift_log.json 初期化（旧ログはアーカイブ保存） ----
-    import shutil
-    from datetime import datetime
+    # ---- 6. drift_log.json (archive previous run) ----
     log_path = session_dir / "drift_log.json"
     if log_path.exists():
         timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
         archive_path = session_dir / f"drift_log_{timestamp}.json"
         shutil.copy2(log_path, archive_path)
-        print(f"旧 drift_log.json をアーカイブ: {archive_path}")
+        print(f"Previous drift_log.json archived: {archive_path}")
     with open(log_path, "w", encoding="utf-8") as f:
         json.dump([], f)
-    print(f"drift_log.json 初期化: {log_path}")
+    print(f"drift_log.json initialised: {log_path}")
 
-    # ---- 6b. drift_kf_state.json をリセット ----
+    # ---- 6b. Reset Kalman state ----
     kf_state_path = session_dir / "drift_kf_state.json"
     if kf_state_path.exists():
         kf_state_path.unlink()
-        print(f"drift_kf_state.json 削除（Kalman 状態リセット）: {kf_state_path}")
+        print(f"drift_kf_state.json removed (Kalman state reset): {kf_state_path}")
 
-    # ---- 7. 保存ディレクトリ作成 ----
+    # ---- 7. Create per-position save directories ----
     save_dir = Path(SAVE_DIR)
     save_dir.mkdir(parents=True, exist_ok=True)
     for p in positions:
         (save_dir / p["label"]).mkdir(exist_ok=True)
-    print(f"保存ディレクトリ作成: {save_dir}")
+    print(f"Save directories created under: {save_dir}")
 
-    # ---- サマリ ----
-    print("\n" + "="*60)
-    print("セットアップ完了。以下の順で実行してください:")
-    print(f"  1. MM1.4 の Script Panel を開く")
-    print(f"  2. realtime_drift_mda.bsh を読み込む")
-    print(f"  3. スクリプト先頭の CONFIG_FILE を以下に設定:")
+    # ---- Summary ----
+    print("\n" + "=" * 60)
+    print("Setup complete. Next steps:")
+    print(f"  1. Open MM1.4 Script Panel.")
+    print(f"  2. Load realtime_drift_mda.bsh.")
+    print(f"  3. Set CONFIG_FILE in the script to:")
     print(f"     {config_path}")
-    print(f"  4. Run ボタンを押す")
-    print(f"\n保存先: {SAVE_DIR}")
-    print(f"タイムポイント数: {N_TIMEPOINTS}  間隔: {INTERVAL_SEC}s")
-    print(f"ドリフト参照Pos: [{REF_POS_INDEX}] {positions[REF_POS_INDEX]['label']}")
-    print(f"BG Pos:         [{BG_POS_INDEX}] {positions[BG_POS_INDEX]['label']}")
-    print(f"pixel scale: {pixel_scale_um:.4f} μm/px")
+    print(f"  4. Press Run.")
+    print(f"\nSave dir:   {SAVE_DIR}")
+    print(f"Timepoints: {N_TIMEPOINTS}  Interval: {INTERVAL_SEC}s")
+    print(f"BG Pos:     [{BG_POS_INDEX}] {positions[BG_POS_INDEX]['label']}")
+    print(f"Pixel scale: {pixel_scale_um:.4f} um/px")
 
 
 if __name__ == "__main__":

@@ -34,6 +34,10 @@ import re
 import sys
 from pathlib import Path
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Number of threads for the per-frame correction loop.
+N_PARALLEL_FRAMES = 8
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -47,6 +51,29 @@ from grid_subtract import (
     scan_grid_positions,
 )
 from compute_pos_shifts import compute_backsub_offset, to_uint8, ecc_align
+from optical_config import RAW_CROP as _OPTICAL_RAW_CROP
+from tilt_utils import tilt_fit_crop, apply_2pi_tilt_crop
+
+
+def _grid_prerecon_raw_path(pos_dir, z_index):
+    """output_phase_raw 配下の保存済み raw phase TIF パス。"""
+    return Path(pos_dir) / "output_phase_raw" / f"img_000000000_ph_{z_index:03d}_phase.tif"
+
+
+def _load_or_reconstruct_raw(pos_dir, z_index, qpi_params_holder, raw_crop):
+    """保存済み raw を優先、無ければ on-the-fly 再構成。
+
+    qpi_params_holder: dict with "params" key (lazy init)。
+    Returns (image, source) where source ∈ {"prerecon", "onthefly"}.
+    """
+    prerecon = _grid_prerecon_raw_path(pos_dir, z_index)
+    if prerecon.exists():
+        return tifffile.imread(str(prerecon)).astype(np.float64), "prerecon"
+    if qpi_params_holder.get("params") is None:
+        holo_for_params = load_grid_holo_path(pos_dir, z_index)
+        qpi_params_holder["params"] = _make_qpi_params_raw(holo_for_params, raw_crop)
+    holo = load_grid_holo_path(pos_dir, z_index)
+    return _reconstruct_raw(holo, qpi_params_holder["params"], raw_crop), "onthefly"
 
 
 def _cal_dx_dy(xi, yi, grid_cal, pixel_scale_um, x_step_um, y_step_um,
@@ -122,7 +149,7 @@ GLUCOSE_0_START = 575    # frame index (inclusive)
 GLUCOSE_0_END   = 1151   # frame index (exclusive)
 
 # raw-raw reconstruction and tilt correction parameters
-RAW_CROP        = (0, 2048, 400, 2448)
+RAW_CROP        = _OPTICAL_RAW_CROP
 TILT_CROP_H_RAW = 270
 ECC_CROP_H      = 80       # must match compute_pos_shifts.py
 POS_SPLIT       = 33       # must match compute_pos_shifts.py
@@ -146,61 +173,11 @@ GRID_POINTS_BASE_LABEL = "Pos0"
 # ============================================================
 
 
-def _tilt_correct(img_f64, cy, cx, crop_w, crop_h_out, tilt_crop_h, fit_right=False):
-    """
-    Identical to compute_pos_shifts._tilt_correct.
-    Extract tilt_crop_h-wide crop, fit slope on background 1/3,
-    subtract linear trend, return center crop_h_out pixels.
-    """
-    h, w = img_f64.shape
-    if (cx - tilt_crop_h // 2) < 0 or (cx + tilt_crop_h // 2) > w:
-        raise ValueError(
-            f"tilt crop out of bounds: cx={cx}, tilt_crop_h={tilt_crop_h}, w={w}"
-        )
-    big = extract_rect_roi(img_f64, cy, cx, crop_w, tilt_crop_h).astype(np.float64)
-    x = np.arange(tilt_crop_h, dtype=np.float64)
-    prof = big.mean(axis=0)
-    fit_n = max(1, tilt_crop_h // 3)
-    if fit_right:
-        a, b = np.polyfit(x[-fit_n:], prof[-fit_n:], 1)
-    else:
-        a, b = np.polyfit(x[:fit_n], prof[:fit_n], 1)
-    corrected = big - (a * x + b)[np.newaxis, :]
-    start = (tilt_crop_h - crop_h_out) // 2
-    return corrected[:, start : start + crop_h_out]
-
-
-def tilt_correct_and_crop(img_large, out_crop_h, tilt_crop_h, fit_right=False):
-    """
-    Same pipeline as grid_subtract._raw_subtract_correct:
-    2pi correction -> tilt correction -> center crop.
-
-    Applied to delta_large so the correction matches
-    what was done to the grid-subtracted output.
-    """
-    fit_n = max(1, tilt_crop_h // 3)
-
-    # 1. 2pi correction
-    if fit_right:
-        bg_mean = float(np.mean(img_large[:, -fit_n:]))
-    else:
-        bg_mean = float(np.mean(img_large[:, :fit_n]))
-    k = int(round(bg_mean / (2.0 * np.pi)))
-    if k != 0:
-        img_large = img_large - k * 2.0 * np.pi
-
-    # 2. tilt correction
-    x = np.arange(tilt_crop_h, dtype=np.float64)
-    prof = img_large.mean(axis=0)
-    if fit_right:
-        a, b = np.polyfit(x[-fit_n:], prof[-fit_n:], 1)
-    else:
-        a, b = np.polyfit(x[:fit_n], prof[:fit_n], 1)
-    img_large = img_large - (a * x + b)[np.newaxis, :]
-
-    # 3. center crop
-    start = (tilt_crop_h - out_crop_h) // 2
-    return img_large[:, start : start + out_crop_h]
+# _tilt_correct / tilt_correct_and_crop are provided by tilt_utils
+# (tilt_fit_crop and apply_2pi_tilt_crop). A local alias keeps the old
+# name for backward compatibility within this file.
+_tilt_correct = tilt_fit_crop
+tilt_correct_and_crop = apply_2pi_tilt_crop
 
 
 def _ecc_per_channel(g0_full, g2_full, rois, fit_right):
@@ -214,9 +191,14 @@ def _ecc_per_channel(g0_full, g2_full, rois, fit_right):
     all_tx, all_ty, all_corr = [], [], []
     for ch, roi in enumerate(rois):
         g0_crop = _tilt_correct(g0_full, roi["cy"], roi["cx"],
-                                roi["crop_w"], ECC_CROP_H, tilt_h, fit_right)
+                                roi["crop_w"], ECC_CROP_H, tilt_h,
+                                fit_right=fit_right)
         g2_crop = _tilt_correct(g2_full, roi["cy"], roi["cx"],
-                                roi["crop_w"], ECC_CROP_H, tilt_h, fit_right)
+                                roi["crop_w"], ECC_CROP_H, tilt_h,
+                                fit_right=fit_right)
+        if g0_crop is None or g2_crop is None:
+            print(f"  [tilt bounds NG] ch{ch:02d} cx={roi['cx']} → skip from ECC median")
+            continue
         g0_crop_bc = g0_crop + compute_backsub_offset(g0_crop)
         g2_crop_bc = g2_crop + compute_backsub_offset(g2_crop)
         result = ecc_align(to_uint8(g2_crop_bc), to_uint8(g0_crop_bc))
@@ -329,10 +311,12 @@ def compute_delta_full(grid_0per_dir, grid_2per_dir, grid_points_label,
         )
 
     tx, ty, corr, details = best_ecc_result
-    g2_holo = load_grid_holo_path(g2_pos, z_index)
-    g2_raw = _reconstruct_raw(g2_holo, qpi_params, raw_crop)
-    g0_best_holo = load_grid_holo_path(g0_pos_map[best_key], z_index)
-    g0_best_raw = _reconstruct_raw(g0_best_holo, qpi_params, raw_crop)
+    qpi_holder = {"params": qpi_params}
+    g2_raw, g2_src = _load_or_reconstruct_raw(g2_pos, z_index, qpi_holder, raw_crop)
+    g0_best_raw, g0_src = _load_or_reconstruct_raw(
+        g0_pos_map[best_key], z_index, qpi_holder, raw_crop
+    )
+    print(f"[raw source] grid_2per={g2_src}  grid_0per={g0_src}")
     aligned_0per = apply_inverse_shift_warp(g0_best_raw, tx, ty)
 
     ecc_info = {
@@ -343,13 +327,40 @@ def compute_delta_full(grid_0per_dir, grid_2per_dir, grid_points_label,
         "per_channel_ty": details["ty"],
         "per_channel_corr": details["corr"],
         "ecc_source": "output_phase",
-        "delta_source": "raw_reconstruction",
+        "delta_source": f"g2={g2_src},g0={g0_src}",
     }
     print(f"[BEST] grid_0per({best_key[0]:+d},{best_key[1]:+d}): "
           f"tx={tx:.3f} ty={ty:.3f} corr={corr:.4f}")
 
     delta_full = aligned_0per - g2_raw
     return delta_full, ecc_info
+
+
+def _load_frame_log(log_path: Path) -> dict:
+    """Load grid_subtract_log.json or pos_shifts_cal_online.json.
+
+    Online JSON has frame_results (sparse list, may contain None) and uses
+    ``shift_x_avg``/``shift_y_avg`` keys. Normalize to grid_subtract_log
+    schema (frame_log with ``*_px`` keys) so the rest of main() is uniform.
+    """
+    js = json.loads(log_path.read_text(encoding="utf-8"))
+    if "frame_log" in js:
+        return js
+    fr = [e for e in js.get("frame_results", []) if e is not None]
+    base_label = js.get("base_label", "")
+    js["frame_log"] = [{
+        "frame_index": int(e["frame_index"]),
+        "shift_x_avg_px": float(e.get("shift_x_avg", 0.0)),
+        "shift_y_avg_px": float(e.get("shift_y_avg", 0.0)),
+        "grid_xi": int(e["grid_xi"]),
+        "grid_yi": int(e["grid_yi"]),
+        "grid_pos_label": f"{base_label}_x{int(e['grid_xi']):+d}_y{int(e['grid_yi']):+d}",
+        "grid_nearest_dist_um": e.get("grid_nearest_dist_um"),
+        "residual_x_px": float(e.get("residual_x_px", 0.0)),
+        "residual_y_px": float(e.get("residual_y_px", 0.0)),
+        "is_outlier_timeseries": False,
+    } for e in sorted(fr, key=lambda x: x["frame_index"])]
+    return js
 
 
 def run_correct_0pergluc(
@@ -373,8 +384,14 @@ def run_correct_0pergluc(
 
     log_path = Path(grid_sub_log)
     if not log_path.exists():
-        print(f"ERROR: grid_subtract_log not found: {log_path}")
-        sys.exit(1)
+        alt = log_path.parent / "pos_shifts_cal_online.json"
+        if alt.exists():
+            log_path = alt
+            print(f"[log] grid_subtract_log not found; using online JSON: {log_path}")
+        else:
+            print(f"ERROR: neither grid_subtract_log nor pos_shifts_cal_online.json "
+                  f"found under {log_path.parent}")
+            sys.exit(1)
 
     rois_path = Path(channel_rois_json)
     if not rois_path.exists():
@@ -382,7 +399,7 @@ def run_correct_0pergluc(
         sys.exit(1)
 
     # --- Load grid_subtract log and channel ROIs ---
-    log_data = json.loads(log_path.read_text(encoding="utf-8"))
+    log_data = _load_frame_log(log_path)
     frame_log = log_data["frame_log"]
     rois = json.loads(rois_path.read_text(encoding="utf-8"))
     n_channels = len(rois)
@@ -424,11 +441,10 @@ def run_correct_0pergluc(
     # Build filename list (same filenames across all channels)
     filenames = [f.name for f in ch0_files]
 
-    sample_holo = load_grid_holo_path(
-        Path(GRID_2PER_DIR) / f"{grid_points_label}_x+0_y+0", grid_z_index
-    )
-    qpi_params = _make_qpi_params_raw(sample_holo, raw_crop)
-    print(f"[raw] QPIParameters created from: {sample_holo.name}")
+    # qpi_params は on-the-fly fallback が走るときだけ必要。
+    # 全 raw が保存済みなら生ホログラム不要なので、ここでは作らず None を渡す。
+    qpi_params = None
+    print(f"[raw] QPIParameters lazy-init (built only if on-the-fly fallback fires)")
 
     # --- Compute delta_full ---
     delta_full, ecc_info = compute_delta_full(
@@ -481,35 +497,49 @@ def run_correct_0pergluc(
     print(f"[profile] 'before' snapshot: frame {sample_fi}, {len(before_imgs)} channels")
 
     # --- Main correction loop ---
-    corrected_frames = []
     delta_warp_cache = {}
 
-    for idx in tqdm(target_indices, desc="0per correction"):
+    # ---- Pre-populate delta_warp_cache serially (thread-safe read afterwards) ----
+    _unique_gw_keys = set()
+    _cal_dxdy_by_key = {}
+    for idx in target_indices:
+        entry = frame_log[idx]
+        xi = entry["grid_xi"]
+        yi = entry["grid_yi"]
+        key = (xi, yi)
+        if key not in _cal_dxdy_by_key:
+            _cal_dxdy_by_key[key] = _cal_dx_dy(
+                xi, yi, grid_cal, pixel_scale_um, x_step_um, y_step_um,
+                shift_sign_x, shift_sign_y,
+            )
+        _unique_gw_keys.add(key)
+    for key in _unique_gw_keys:
+        if key in delta_warp_cache:
+            continue
+        cal_dx, cal_dy = _cal_dxdy_by_key[key]
+        d_warp_x = cal_dx - cal_dx_00
+        d_warp_y = cal_dy - cal_dy_00
+        delta_warp_cache[key] = apply_inverse_shift_warp(
+            delta_full, d_warp_x, d_warp_y,
+        )
+
+    corrected_frames = [None] * len(target_indices)
+
+    def _process_one(pos_in_targets):
+        idx = target_indices[pos_in_targets]
         entry = frame_log[idx]
         fi = entry["frame_index"]
         xi = entry["grid_xi"]
         yi = entry["grid_yi"]
 
-        cal_dx, cal_dy = _cal_dx_dy(
-            xi, yi, grid_cal, pixel_scale_um, x_step_um, y_step_um,
-            shift_sign_x, shift_sign_y,
-        )
-
-        gw_key = (xi, yi)
-        if gw_key not in delta_warp_cache:
-            d_warp_x = cal_dx - cal_dx_00
-            d_warp_y = cal_dy - cal_dy_00
-            delta_warp_cache[gw_key] = apply_inverse_shift_warp(
-                delta_full, d_warp_x, d_warp_y,
-            )
-        delta_warped = delta_warp_cache[gw_key]
+        cal_dx, cal_dy = _cal_dxdy_by_key[(xi, yi)]
+        delta_warped = delta_warp_cache[(xi, yi)]
 
         for ch in range(n_channels):
             roi = rois[ch] if ch < len(rois) else rois[-1]
             cx, cy = roi["cx"], roi["cy"]
             crop_w = roi["crop_w"]
 
-            # Same crop position as grid_subtract.py (L481-482)
             crop_cx = int(round(cx + cal_dx))
             crop_cy = int(round(cy + cal_dy))
 
@@ -520,8 +550,6 @@ def run_correct_0pergluc(
                 continue
 
             img = tifffile.imread(str(tif_path)).astype(np.float64)
-            # grid_subtract 保存 shape (crop_w, out_crop_h) に合わせる。
-            # channel_rois の crop_h と乖離しうる（例: ROI 120 に対し実ファイル 270）。
             if img.ndim != 2:
                 print(f"  [WARNING] Expected 2D at frame {fi} ch{ch:02d}: shape={img.shape}")
                 continue
@@ -537,16 +565,12 @@ def run_correct_0pergluc(
                     f"using TIF (frame {fi} ch{ch:02d})",
                 )
 
-            # Crop warped delta at the same position with TILT_CROP_H_RAW
             delta_large = extract_rect_roi(
                 delta_warped, crop_cy, crop_cx, crop_w, TILT_CROP_H_RAW,
             )
-
-            # Apply the same tilt correction pipeline
             delta_corrected = tilt_correct_and_crop(
                 delta_large.copy(), out_crop_h, TILT_CROP_H_RAW, fit_right=fit_right,
             )
-
             if img.shape != delta_corrected.shape:
                 print(f"  [WARNING] Shape mismatch at frame {fi} ch{ch:02d}: "
                       f"img={img.shape} delta={delta_corrected.shape}")
@@ -555,7 +579,15 @@ def run_correct_0pergluc(
             img -= delta_corrected
             tifffile.imwrite(str(tif_path), img.astype(np.float32))
 
-        corrected_frames.append(fi)
+        corrected_frames[pos_in_targets] = fi
+
+    with ThreadPoolExecutor(max_workers=N_PARALLEL_FRAMES) as ex:
+        futures = [ex.submit(_process_one, p) for p in range(len(target_indices))]
+        for f in tqdm(as_completed(futures), total=len(target_indices), desc="0per correction"):
+            f.result()
+
+    # Drop any None (in case of early continue; preserves old append semantics)
+    corrected_frames = [fi for fi in corrected_frames if fi is not None]
 
     # --- Save log ---
     correction_log = {

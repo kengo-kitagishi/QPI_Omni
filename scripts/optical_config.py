@@ -15,13 +15,18 @@ Do not modify WAVELENGTH / NA / PIXELSIZE unless hardware changes.
 # Parameters to update before experiments
 # ============================================================
 
-OFFAXIS_CENTER = (1632, 445)   # (row, col) -- updated 2026-03-23 (crop 400:2448 right channel)
+OFFAXIS_CENTER = (1633, 439)   # (row, col) -- updated 2026-04-15 (crop 400:2448 right channel)
 
 # Crop region (row_start, row_end, col_start, col_end)
 # Update when camera position changes
 # Basler aca2440 (max 2048 rows)  -> (0, 2048, 208, 2256)  = 2048x2048
 # MicroManager 1.4 (with margin)  -> (8, 2056, 208, 2256)  = 2048x2048
 CROP_REGION = (0, 2048, 208, 2256)
+
+# Reconstruction crop used by the raw-raw subtraction pipeline
+# (grid_subtract.py, correct_0pergluc.py, batch_pipeline_all_pos.py).
+# Must match the crop used when output_phase_raw/ TIFs were produced.
+RAW_CROP = (0, 2048, 400, 2448)
 
 # ============================================================
 # Fixed optical parameters
@@ -39,6 +44,7 @@ PIXELSIZE    = 3.45e-6 / 40     # m/px  (sensor 3.45 um, 40x objective)
 # Add new entries at the top for each experiment
 
 OFFAXIS_HISTORY = [
+    {"date": "2026-04-15", "center": (1633,  439), "note": "re-measured for new timelapse (crop 400:2448)"},
     {"date": "2026-03-23", "center": (1632,  445), "note": "re-measured with right channel crop 400:2448"},
     {"date": "2026-03-21", "center": (1634,  532), "note": "after diffraction grating change (measured with crop 208:2256)"},
     {"date": "2026-02-28", "center": (1712,  532), "note": ""},

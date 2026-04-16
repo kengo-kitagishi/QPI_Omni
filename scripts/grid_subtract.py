@@ -18,9 +18,15 @@ import re
 import sys
 from pathlib import Path
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Number of threads for the per-frame main loop (cv2/tifffile release the GIL).
+N_PARALLEL_FRAMES = 8
 
 sys.path.insert(0, str(Path(__file__).parent))
 from compute_pos_shifts import compute_backsub_offset
+from optical_config import RAW_CROP as _OPTICAL_RAW_CROP
+from tilt_utils import apply_2pi_tilt_crop
 
 # ============================================================
 # 設定パラメータ
@@ -76,9 +82,11 @@ OUTPUT_DIR = r"D:\AquisitionData\Kitagishi\260405\ph_260405\Pos1\output_phase\ch
 # True → crop前のフルフレーム（subpixel correction適用済み）を full_frame_grid_sub.tif として保存
 OUTPUT_SAVE_FULL_FRAME = False
 
-# Pre-reconstructed phase directory override (USE_RAW_PHASE=False only).
-# None → default (TIMELAPSE_DIR/output_phase).
-# Set to output_phase_raw/ path to use raw phase without BG subtraction.
+# Pre-reconstructed phase directory override.
+# None → auto-detect:
+#   USE_RAW_PHASE=True  : TIMELAPSE_DIR/output_phase_raw/ if it exists, else on-the-fly
+#   USE_RAW_PHASE=False : TIMELAPSE_DIR/output_phase/
+# Set explicitly to override.
 TL_PHASE_DIR = None
 
 # ============================================================
@@ -89,8 +97,9 @@ TL_PHASE_DIR = None
 # ECC 計算（compute_pos_shifts.py）は output_phase/ を使い続けるため変更不要。
 USE_RAW_PHASE    = True
 
-# 再構成用センサークロップ (r1, r2, c1, c2)  pipeline_full.py の CROP_BEFORE / CROP_AFTER と合わせる
-RAW_CROP         = (0, 2048, 400, 2448)
+# 再構成用センサークロップ (r1, r2, c1, c2)  optical_config.py から import
+# 一時的に上書きしたい場合のみここで明示的に値を入れる
+RAW_CROP         = _OPTICAL_RAW_CROP
 
 # 生ホログラムの z インデックス（通常 TL_Z_INDEX / GRID_Z_INDEX と同値）
 RAW_TL_Z_INDEX   = 0
@@ -98,6 +107,10 @@ RAW_GRID_Z_INDEX = 18
 
 # 2π補正 + tilt補正に使う大クロップ高さ（axis=1 方向の px 数）
 TILT_CROP_H_RAW  = 270
+
+# 背景 1/3 を左右どちら側にとるかの Pos 分割閾値（compute_pos_shifts.py と同値）。
+# Pos番号 < POS_SPLIT → left 1/3 で fit。Pos番号 >= POS_SPLIT → right 1/3 で fit。
+POS_SPLIT        = 33
 # ============================================================
 
 
@@ -248,36 +261,166 @@ def load_grid_holo_path(pos_dir, z_index):
     return path
 
 
-def _raw_subtract_correct(sub_large, out_crop_h):
+def _raw_subtract_correct(sub_large, out_crop_h, fit_right=False, tilt_crop_h_raw=None):
+    """Thin wrapper around tilt_utils.apply_2pi_tilt_crop for raw-raw delta.
+
+    Shared implementation matches correct_0pergluc.py, so the delta used by
+    downstream correction scripts sees the same 2pi + tilt + center crop as
+    the one baked into grid_subtract output.
     """
-    raw-raw 引き算後の大クロップ shape: (crop_w, TILT_CROP_H_RAW) に対して
-    2π補正 → tilt補正 → center crop を適用して (crop_w, out_crop_h) を返す。
+    th = tilt_crop_h_raw if tilt_crop_h_raw is not None else TILT_CROP_H_RAW
+    return apply_2pi_tilt_crop(sub_large, out_crop_h, th, fit_right=fit_right)
 
-    axis=1 が horizontal 方向（~270 px）。
-    left 1/3（axis=1 の 0..TILT_CROP_H_RAW//3）= 背景領域として利用。
 
-    1. 2π correction : left 1/3 の平均から k = round(mean/2π) を求め k×2π を引く
-    2. tilt correction: left 1/3 で 1次フィット → 線形勾配を全体から引く
-    3. center crop   : 中央 out_crop_h px を切り出す
+def select_grid(sx, sy, pos_map, grid_cal,
+                pixel_scale_um, x_step=X_STEP, y_step=Y_STEP,
+                shift_sign_x=SHIFT_SIGN_X, shift_sign_y=SHIFT_SIGN_Y):
+    """Given a frame's ECC shift (px), pick the nearest grid (xi, yi) and return
+    calibration + residual values used by process_single_frame.
+
+    Returns: (xi, yi, dist_um, dx_um, dy_um, cal_dx, cal_dy, residual_x, residual_y)
     """
-    tch = TILT_CROP_H_RAW
-    fit_n = max(1, tch // 3)
+    dx_um = None
+    dy_um = None
+    if grid_cal:
+        best_key, best_dist = None, float('inf')
+        for key, (adx, ady) in grid_cal.items():
+            if key not in pos_map:
+                continue
+            dist = ((adx - sx) ** 2 + (ady - sy) ** 2) ** 0.5
+            if dist < best_dist:
+                best_dist = dist
+                best_key = key
+        (xi, yi), dist_um = best_key, best_dist
+    else:
+        dx_um = shift_sign_x * sy * pixel_scale_um
+        dy_um = shift_sign_y * sx * pixel_scale_um
+        (xi, yi), dist_um = find_nearest_grid(pos_map, dx_um, dy_um, x_step, y_step)
 
-    # 1. 2π correction
-    bg_mean = float(np.mean(sub_large[:, :fit_n]))
-    k = int(round(bg_mean / (2.0 * np.pi)))
-    if k != 0:
-        sub_large = sub_large - k * 2.0 * np.pi
+    if grid_cal and (xi, yi) in grid_cal:
+        cal_dx, cal_dy = grid_cal[(xi, yi)]
+        residual_x = sx - cal_dx
+        residual_y = sy - cal_dy
+    else:
+        cal_dx = shift_sign_y * yi * y_step / pixel_scale_um
+        cal_dy = shift_sign_x * xi * x_step / pixel_scale_um
+        residual_x = shift_sign_y * sx - yi * y_step / pixel_scale_um
+        residual_y = shift_sign_x * sy - xi * x_step / pixel_scale_um
+    return xi, yi, dist_um, dx_um, dy_um, cal_dx, cal_dy, residual_x, residual_y
 
-    # 2. tilt correction
-    x = np.arange(tch, dtype=np.float64)
-    prof = sub_large.mean(axis=0)           # (tch,) profile along axis=1
-    a, b = np.polyfit(x[:fit_n], prof[:fit_n], 1)
-    sub_large = sub_large - (a * x + b)[np.newaxis, :]
 
-    # 3. center crop
-    start = (tch - out_crop_h) // 2
-    return sub_large[:, start : start + out_crop_h]
+def process_single_frame(tl_img, sx, sy, rois,
+                         cal_dx, cal_dy, residual_x, residual_y,
+                         grid_img,
+                         output_crop_h_override=None,
+                         tilt_crop_h_raw=None,
+                         use_raw_phase=True,
+                         apply_subpixel_correction=True,
+                         fit_right=False,
+                         apply_inverse_shift=False):
+    """Process one frame end-to-end: residual subpixel warp -> per-channel crop + grid-subtract.
+
+    This is the shared kernel used by both grid_subtract.main() (offline) and
+    compute_drift_online.py Phase B (online). Keep the math here byte-identical
+    between the two so downstream analysis is source-agnostic.
+
+    Parameters
+    ----------
+    tl_img : np.ndarray (float64)
+        Full reconstructed timelapse frame (raw-raw or phase).
+    sx, sy : float
+        ECC shift_x_avg / shift_y_avg [px]. Used only when apply_inverse_shift=True
+        and kept in the per-frame log by the caller.
+    rois : list of dict
+        channel_rois.json entries (cy, cx, crop_w, crop_h).
+    cal_dx, cal_dy, residual_x, residual_y : float
+        Grid calibration offsets and residuals (from ``select_grid``).
+    grid_img : np.ndarray or None
+        Pre-loaded grid reference image. None -> write tl_crop or zeros.
+    output_crop_h_override : int or None
+        Override the per-channel output crop_h. None -> use roi["crop_h"].
+    tilt_crop_h_raw : int or None
+        Height of the wide crop used for tilt fitting. None -> module TILT_CROP_H_RAW.
+    use_raw_phase : bool
+        True -> raw-raw subtraction + tilt-correction path; False -> phase+backsub path.
+    apply_subpixel_correction : bool
+        If True and residual_{x,y} != 0, apply inverse-shift warp to tl_img first.
+    fit_right : bool
+        tilt-correction side (per Pos number vs POS_SPLIT).
+    apply_inverse_shift : bool
+        Legacy: apply -(sx, sy) to final subtracted crop (normally False).
+
+    Returns
+    -------
+    per_channel_out : list[np.ndarray (float32)]
+        Per-channel cropped, grid-subtracted, corrected images.
+    full_frame : np.ndarray (float32) or None
+        Full-frame (tl_warped - grid_img) if grid_img present else tl_warped,
+        caller may discard.
+    """
+    n_channels = len(rois)
+    _tilt_h = tilt_crop_h_raw if tilt_crop_h_raw is not None else TILT_CROP_H_RAW
+
+    if apply_subpixel_correction and (residual_x != 0.0 or residual_y != 0.0):
+        tl_warped = apply_inverse_shift_warp(tl_img, residual_x, residual_y)
+    else:
+        tl_warped = tl_img
+
+    if grid_img is not None:
+        full_frame = (tl_warped - grid_img).astype(np.float32)
+    else:
+        full_frame = tl_warped.astype(np.float32)
+
+    per_channel_out = []
+    for ch in range(n_channels):
+        roi = rois[ch] if ch < len(rois) else rois[-1]
+        cx, cy = roi["cx"], roi["cy"]
+        crop_w, crop_h = roi["crop_w"], roi["crop_h"]
+        out_crop_h = output_crop_h_override if output_crop_h_override is not None else crop_h
+
+        crop_cx = int(round(cx + cal_dx))
+        crop_cy = int(round(cy + cal_dy))
+
+        if use_raw_phase:
+            tl_large = extract_rect_roi(tl_warped, crop_cy, crop_cx, crop_w, _tilt_h)
+            if grid_img is not None:
+                grid_large = extract_rect_roi(grid_img, crop_cy, crop_cx, crop_w, _tilt_h)
+                if grid_large.shape != tl_large.shape:
+                    import cv2
+                    grid_large = cv2.resize(
+                        grid_large.astype(np.float32),
+                        (tl_large.shape[1], tl_large.shape[0]),
+                        interpolation=cv2.INTER_LINEAR
+                    ).astype(np.float64)
+                sub_large = tl_large - grid_large
+                subtracted = _raw_subtract_correct(sub_large, out_crop_h,
+                                                    fit_right=fit_right,
+                                                    tilt_crop_h_raw=_tilt_h)
+            else:
+                subtracted = np.zeros((crop_w, out_crop_h), dtype=np.float64)
+        else:
+            tl_crop = extract_rect_roi(tl_warped, crop_cy, crop_cx, crop_w, out_crop_h)
+            if grid_img is not None:
+                grid_crop = extract_rect_roi(grid_img, crop_cy, crop_cx, crop_w, out_crop_h)
+                if grid_crop.shape != tl_crop.shape:
+                    import cv2
+                    grid_crop = cv2.resize(
+                        grid_crop.astype(np.float32),
+                        (tl_crop.shape[1], tl_crop.shape[0]),
+                        interpolation=cv2.INTER_LINEAR
+                    ).astype(np.float64)
+                tl_bc = tl_crop + compute_backsub_offset(tl_crop)
+                grid_bc = grid_crop + compute_backsub_offset(grid_crop)
+                subtracted = tl_bc - grid_bc
+            else:
+                subtracted = tl_crop.copy()
+
+        if apply_inverse_shift and (sx != 0.0 or sy != 0.0):
+            subtracted = apply_inverse_shift_warp(subtracted, sx, sy)
+
+        per_channel_out.append(subtracted.astype(np.float32))
+
+    return per_channel_out, full_frame
 
 
 def main():
@@ -290,6 +433,16 @@ def main():
         if not Path(p).exists():
             print(f"ERROR: {name} が見つかりません: {p}")
             sys.exit(1)
+
+    # Determine tilt fit side from the timelapse Pos number (same rule as compute_pos_shifts.py).
+    _pos_match = re.match(r"Pos(\d+)", tl_dir.name)
+    if _pos_match is None:
+        print(f"WARNING: TIMELAPSE_DIR name {tl_dir.name!r} does not start with PosN; defaulting fit_right=False")
+        _pos_num = 0
+    else:
+        _pos_num = int(_pos_match.group(1))
+    fit_right = _pos_num >= POS_SPLIT
+    print(f"[tilt] Pos{_pos_num}  POS_SPLIT={POS_SPLIT}  fit_right={fit_right}")
 
     # channels_dir は rois_json の親ディレクトリ
     channels_dir = rois_json.parent
@@ -327,16 +480,25 @@ def main():
     print(f"Pixel scale: {pixel_scale_um:.4f} μm/px")
 
     # --- タイムラプスフレームリスト ---
-    _use_prerecon = (TL_PHASE_DIR is not None)
+    # TL_PHASE_DIR=None のとき output_phase_raw/ を auto-detect
+    _tl_phase_dir = TL_PHASE_DIR
+    if _tl_phase_dir is None and USE_RAW_PHASE:
+        _candidate = tl_dir / "output_phase_raw"
+        if _candidate.exists() and any(_candidate.glob("img_*_phase.tif")):
+            _tl_phase_dir = _candidate
+            print(f"[auto-detect] using pre-reconstructed raw at {_candidate}")
+    _use_prerecon = (_tl_phase_dir is not None)
     _qpi_params_raw = None
+    _tl_raw_source = None  # "prerecon" | "onthefly"
     if USE_RAW_PHASE:
         if _use_prerecon:
             # Pre-reconstructed raw phase: read tif instead of reconstructing
-            phase_dir = Path(TL_PHASE_DIR)
+            phase_dir = Path(_tl_phase_dir)
             tl_frames = sorted(phase_dir.glob("img_*_phase.tif"))
             if not tl_frames:
                 print(f"ERROR: pre-recon phase not found: {phase_dir}/img_*_phase.tif")
                 sys.exit(1)
+            _tl_raw_source = "prerecon"
             print(f"[pre-recon mode] {len(tl_frames)} frames from {phase_dir}")
         else:
             tl_frames = load_timelapse_holos(tl_dir, RAW_TL_Z_INDEX)
@@ -344,6 +506,7 @@ def main():
                 print(f"ERROR: 生ホログラムが見つかりません: {tl_dir}/img_*_ph_{RAW_TL_Z_INDEX:03d}.tif")
                 sys.exit(1)
             _qpi_params_raw = _make_qpi_params_raw(tl_frames[0], RAW_CROP)
+            _tl_raw_source = "onthefly"
             print(f"[raw mode] QPIParams 作成完了  ホログラム: {tl_frames[0].name}")
     else:
         tl_frames = load_timelapse_frames(tl_dir, TL_Z_INDEX)
@@ -367,12 +530,17 @@ def main():
     yi_vals = [k[1] for k in pos_map]
     print(f"  x範囲: [{min(xi_vals)}, {max(xi_vals)}], y範囲: [{min(yi_vals)}, {max(yi_vals)}]")
 
-    # pre-recon mode: build _qpi_params_raw from grid hologram (for grid reconstruction)
-    if USE_RAW_PHASE and _use_prerecon and _qpi_params_raw is None:
+    # _qpi_params_raw is needed for any on-the-fly grid reconstruction.
+    # If tlapse used pre-recon, build it from a grid hologram only if at least
+    # one grid point lacks pre-saved raw (lazy: try first, fall back if needed).
+    def _ensure_qpi_params_raw():
+        nonlocal _qpi_params_raw
+        if _qpi_params_raw is not None:
+            return
         grid_origin = pos_map.get((0, 0), next(iter(pos_map.values())))
         _grid_holo = load_grid_holo_path(grid_origin, RAW_GRID_Z_INDEX)
         _qpi_params_raw = _make_qpi_params_raw(_grid_holo, RAW_CROP)
-        print(f"[pre-recon] QPIParams from grid hologram: {_grid_holo.name}")
+        print(f"[on-the-fly grid] QPIParams from grid hologram: {_grid_holo.name}")
 
     # --- グリッドキャリブレーション読み込み ---
     grid_cal = {}
@@ -390,16 +558,28 @@ def main():
 
     # --- グリッド画像キャッシュ ---
     grid_img_cache = {}
+    _grid_raw_sources = {}  # key -> "prerecon" | "onthefly"
+
+    def _grid_prerecon_path(pos_dir, z_index):
+        return pos_dir / "output_phase_raw" / f"img_000000000_ph_{z_index:03d}_phase.tif"
 
     def get_grid_image(xi, yi):
         key = (xi, yi)
         if key not in grid_img_cache:
             pos_dir = pos_map[key]
             if USE_RAW_PHASE:
-                holo_path = load_grid_holo_path(pos_dir, RAW_GRID_Z_INDEX)
-                grid_img_cache[key] = _reconstruct_raw(holo_path, _qpi_params_raw, RAW_CROP)
+                prerecon = _grid_prerecon_path(pos_dir, RAW_GRID_Z_INDEX)
+                if prerecon.exists():
+                    grid_img_cache[key] = tifffile.imread(str(prerecon)).astype(np.float64)
+                    _grid_raw_sources[key] = "prerecon"
+                else:
+                    _ensure_qpi_params_raw()
+                    holo_path = load_grid_holo_path(pos_dir, RAW_GRID_Z_INDEX)
+                    grid_img_cache[key] = _reconstruct_raw(holo_path, _qpi_params_raw, RAW_CROP)
+                    _grid_raw_sources[key] = "onthefly"
             else:
                 grid_img_cache[key] = load_grid_image(pos_dir, GRID_Z_INDEX)
+                _grid_raw_sources[key] = "phase"
         return grid_img_cache[key]
 
     # --- フレームごとにシフト取得 ---
@@ -409,50 +589,46 @@ def main():
         sy = r.get("shift_y_avg") or r.get("shift_y")
         frame_shifts.append((sx, sy))
 
-    # --- メインループ ---
-    subtract_log = []
-    out_stacks = [[] for _ in range(n_channels)]
-    full_frame_stack = [] if OUTPUT_SAVE_FULL_FRAME else None
+    # --- Pre-allocate output buffers (parallel-safe: each idx writes once) ---
+    subtract_log = [None] * n_frames
+    out_stacks = [[None] * n_frames for _ in range(n_channels)]
+    full_frame_stack = [None] * n_frames if OUTPUT_SAVE_FULL_FRAME else None
 
-    for idx, t in enumerate(tqdm(pick_set, desc="フレーム処理")):
+    def _select_grid(sx, sy):
+        """Thin wrapper around module-level select_grid(), bound to this call's
+        pos_map / grid_cal / pixel_scale."""
+        return select_grid(sx, sy, pos_map, grid_cal, pixel_scale_um,
+                           x_step=X_STEP, y_step=Y_STEP,
+                           shift_sign_x=SHIFT_SIGN_X, shift_sign_y=SHIFT_SIGN_Y)
+
+    # ---- Pre-populate grid image cache serially (thread-unsafe loader) ----
+    _unique_keys = set()
+    for idx in range(n_frames):
+        t = pick_set[idx]
+        sx, sy = frame_shifts[t]
+        if sx is None or sy is None:
+            sx, sy = 0.0, 0.0
+        xi, yi, *_ = _select_grid(sx, sy)
+        _unique_keys.add((xi, yi))
+    for key in sorted(_unique_keys):
+        if key in grid_img_cache:
+            continue
+        try:
+            get_grid_image(*key)
+        except FileNotFoundError as e:
+            print(f"\n  [prefill] grid{key}: {e}  -> mark missing")
+            grid_img_cache[key] = None  # sentinel: worker treats None as "no grid"
+
+    def _process_one(idx):
+        t = pick_set[idx]
         sx, sy = frame_shifts[t]
         if sx is None or sy is None:
             sx, sy = 0.0, 0.0
 
-        # ---- 最近傍グリッド点を選択 ----
-        dx_um = None
-        dy_um = None
-        if grid_cal:
-            # キャリブレーション済み: 実ピクセル変位と (sx, sy) の距離で比較
-            best_key, best_dist = None, float('inf')
-            for key, (adx, ady) in grid_cal.items():
-                if key not in pos_map:
-                    continue
-                dist = ((adx - sx) ** 2 + (ady - sy) ** 2) ** 0.5
-                if dist < best_dist:
-                    best_dist = dist
-                    best_key = key
-            (xi, yi), dist_um = best_key, best_dist
-        else:
-            # 名目値: ステージ空間で比較
-            # shift_y（画像Y） → xi（ステージX）、shift_x（画像X） → yi（ステージY）
-            dx_um = SHIFT_SIGN_X * sy * pixel_scale_um  # shift_y → xi
-            dy_um = SHIFT_SIGN_Y * sx * pixel_scale_um  # shift_x → yi
-            (xi, yi), dist_um = find_nearest_grid(pos_map, dx_um, dy_um, X_STEP, Y_STEP)
+        xi, yi, dist_um, dx_um, dy_um, cal_dx, cal_dy, residual_x, residual_y = _select_grid(sx, sy)
         pos_label = f"{BASE_LABEL}_x{xi:+d}_y{yi:+d}"
 
-        # ---- grid(xi,yi) の content offset と残差 ----
-        if grid_cal and (xi, yi) in grid_cal:
-            cal_dx, cal_dy = grid_cal[(xi, yi)]
-            residual_x = sx - cal_dx   # 画像X方向残差
-            residual_y = sy - cal_dy   # 画像Y方向残差
-        else:
-            cal_dx = SHIFT_SIGN_Y * yi * Y_STEP / pixel_scale_um
-            cal_dy = SHIFT_SIGN_X * xi * X_STEP / pixel_scale_um
-            residual_x = SHIFT_SIGN_Y * sx - yi * Y_STEP / pixel_scale_um
-            residual_y = SHIFT_SIGN_X * sy - xi * X_STEP / pixel_scale_um
-
-        log_entry = {
+        subtract_log[idx] = {
             "frame_index": t,
             "shift_x_avg_px": sx,
             "shift_y_avg_px": sy,
@@ -466,9 +642,7 @@ def main():
             "residual_y_px": residual_y,
             "is_outlier_timeseries": frame_results[t].get("is_outlier_timeseries", False)
         }
-        subtract_log.append(log_entry)
 
-        # タイムラプスフレームをフル読み込み
         if USE_RAW_PHASE:
             if _use_prerecon:
                 tl_img = tifffile.imread(str(tl_frames[t])).astype(np.float64)
@@ -477,75 +651,31 @@ def main():
         else:
             tl_img = tifffile.imread(str(tl_frames[t])).astype(np.float64)
 
-        # -residual warp でフル画像を grid(m,n) に合わせる
-        if APPLY_SUBPIXEL_CORRECTION and (residual_x != 0.0 or residual_y != 0.0):
-            tl_warped = apply_inverse_shift_warp(tl_img, residual_x, residual_y)
-        else:
-            tl_warped = tl_img
+        grid_img = grid_img_cache.get((xi, yi))  # pre-populated; None if missing
 
-        # grid(m,n) フル画像
-        try:
-            grid_img = get_grid_image(xi, yi)
-        except FileNotFoundError as e:
-            print(f"\n  [t={t}] {e}  → ゼロ画像を使用")
-            grid_img = None
+        per_channel_out, full_frame = process_single_frame(
+            tl_img, sx, sy, rois,
+            cal_dx, cal_dy, residual_x, residual_y,
+            grid_img,
+            output_crop_h_override=OUTPUT_CROP_H,
+            tilt_crop_h_raw=TILT_CROP_H_RAW,
+            use_raw_phase=USE_RAW_PHASE,
+            apply_subpixel_correction=APPLY_SUBPIXEL_CORRECTION,
+            fit_right=fit_right,
+            apply_inverse_shift=APPLY_INVERSE_SHIFT,
+        )
 
         if full_frame_stack is not None:
-            if grid_img is not None:
-                full_frame_stack.append((tl_warped - grid_img).astype(np.float32))
-            else:
-                full_frame_stack.append(tl_warped.astype(np.float32))
+            full_frame_stack[idx] = full_frame
 
-        # --- 各チャネル: (m,n)-シフト済み位置で crop → (bgcorr or raw-raw) → 引き算 ---
         for ch in range(n_channels):
-            roi = rois[ch] if ch < len(rois) else rois[-1]
-            cx, cy   = roi["cx"], roi["cy"]
-            crop_w, crop_h = roi["crop_w"], roi["crop_h"]
-            out_crop_h = OUTPUT_CROP_H if OUTPUT_CROP_H is not None else crop_h
+            out_stacks[ch][idx] = per_channel_out[ch]
 
-            # grid(xi,yi) 内での content 位置（cal_dx/cal_dy はキャリブレーション or 名目値）
-            crop_cx = int(round(cx + cal_dx))
-            crop_cy = int(round(cy + cal_dy))
-
-            if USE_RAW_PHASE:
-                # ── raw-raw モード: 大クロップで引き算 → 2π補正 → tilt補正 → center crop ──
-                tl_large = extract_rect_roi(tl_warped, crop_cy, crop_cx, crop_w, TILT_CROP_H_RAW)
-                if grid_img is not None:
-                    grid_large = extract_rect_roi(grid_img, crop_cy, crop_cx, crop_w, TILT_CROP_H_RAW)
-                    if grid_large.shape != tl_large.shape:
-                        import cv2
-                        grid_large = cv2.resize(
-                            grid_large.astype(np.float32),
-                            (tl_large.shape[1], tl_large.shape[0]),
-                            interpolation=cv2.INTER_LINEAR
-                        ).astype(np.float64)
-                    sub_large  = tl_large - grid_large
-                    subtracted = _raw_subtract_correct(sub_large, out_crop_h)
-                else:
-                    subtracted = np.zeros((crop_w, out_crop_h), dtype=np.float64)
-
-            else:
-                # ── 既存の backsub モード ──
-                tl_crop = extract_rect_roi(tl_warped, crop_cy, crop_cx, crop_w, out_crop_h)
-                if grid_img is not None:
-                    grid_crop = extract_rect_roi(grid_img, crop_cy, crop_cx, crop_w, out_crop_h)
-                    if grid_crop.shape != tl_crop.shape:
-                        import cv2
-                        grid_crop = cv2.resize(
-                            grid_crop.astype(np.float32),
-                            (tl_crop.shape[1], tl_crop.shape[0]),
-                            interpolation=cv2.INTER_LINEAR
-                        ).astype(np.float64)
-                    tl_bc   = tl_crop   + compute_backsub_offset(tl_crop)
-                    grid_bc = grid_crop + compute_backsub_offset(grid_crop)
-                    subtracted = tl_bc - grid_bc
-                else:
-                    subtracted = tl_crop.copy()
-
-            if APPLY_INVERSE_SHIFT and (sx != 0.0 or sy != 0.0):
-                subtracted = apply_inverse_shift_warp(subtracted, sx, sy)
-
-            out_stacks[ch].append(subtracted.astype(np.float32))
+    # --- Parallel frame processing ---
+    with ThreadPoolExecutor(max_workers=N_PARALLEL_FRAMES) as ex:
+        futures = [ex.submit(_process_one, i) for i in range(n_frames)]
+        for f in tqdm(as_completed(futures), total=n_frames, desc="フレーム処理"):
+            f.result()
 
     # --- TIF 保存 (per-frame in ch{ch:02d}/ subdirectories) ---
     for ch in range(n_channels):
@@ -582,6 +712,10 @@ def main():
             "use_raw_phase": USE_RAW_PHASE,
             "raw_crop": list(RAW_CROP) if USE_RAW_PHASE else None,
             "tilt_crop_h_raw": TILT_CROP_H_RAW if USE_RAW_PHASE else None,
+            "tl_raw_source": _tl_raw_source,
+            "tl_phase_dir": str(_tl_phase_dir) if _tl_phase_dir else None,
+            "grid_raw_sources": {f"{k[0]:+d},{k[1]:+d}": v
+                                  for k, v in _grid_raw_sources.items()},
             "frame_log": subtract_log
         }, f, indent=2, ensure_ascii=False)
     print(f"ログ保存: {log_path}")

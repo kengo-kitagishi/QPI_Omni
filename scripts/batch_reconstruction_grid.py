@@ -46,7 +46,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 # 設定パラメータ
 # ============================================================
 # pipeline_full.py の GRID_DIR と揃えること
-GRID_DIR = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
+GRID_DIR = r"C:\grid_0pergluc_60ms_1"
 
 # BG として使うベースラベル（pipeline_full: GRID_BG_BASE_LABEL）
 BG_BASE_LABEL = "Pos0"
@@ -82,7 +82,7 @@ PNG_DPI  = 150
 PNG_VMIN = -2.0
 PNG_VMAX =  2.0
 # 並列処理ワーカー数（pipeline_full: N_WORKERS_GRID と同じ）
-N_WORKERS = None
+N_WORKERS = 16
 # ============================================================
 
 # QPIインポート
@@ -154,11 +154,17 @@ def make_qpi_params(sample_img_path: Path, crop):
 
 
 def _reconstruct_grid_point(args):
-    """ProcessPoolExecutor ワーカー: 1グリッドポイントの全 z スライスを再構成して保存。"""
+    """ProcessPoolExecutor ワーカー: 1グリッドポイントの全 z スライスを再構成して保存。
+
+    Saves two outputs per z slice:
+      - output_phase/     : BG-subtracted + region mean subtracted (for ECC)
+      - output_phase_raw/ : raw phase, no BG subtraction (for grid_subtract / correct_0pergluc)
+    """
     xi, yi, target_dir_str, bg_dir_str, crop, pos_number = args
-    target_dir = Path(target_dir_str)
-    bg_dir     = Path(bg_dir_str)
-    out_dir    = target_dir / "output_phase"
+    target_dir  = Path(target_dir_str)
+    bg_dir      = Path(bg_dir_str)
+    out_dir     = target_dir / "output_phase"
+    raw_out_dir = target_dir / "output_phase_raw"
 
     z_files_target = {get_z_index(p): p for p in get_z_files(target_dir)}
     z_files_bg     = {get_z_index(p): p for p in get_z_files(bg_dir)}
@@ -167,6 +173,7 @@ def _reconstruct_grid_point(args):
         return xi, yi, False, "z画像なし"
 
     out_dir.mkdir(exist_ok=True)
+    raw_out_dir.mkdir(exist_ok=True)
     sample_path = next(iter(z_files_target.values()))
     try:
         qpi_params = make_qpi_params(sample_path, crop)
@@ -175,14 +182,20 @@ def _reconstruct_grid_point(args):
 
     folder_ok = True
     for z_idx, tgt_path in sorted(z_files_target.items()):
-        out_path = out_dir / (tgt_path.stem + "_phase.tif")
-        if SKIP_IF_EXISTS and out_path.exists():
+        out_path     = out_dir     / (tgt_path.stem + "_phase.tif")
+        raw_out_path = raw_out_dir / (tgt_path.stem + "_phase.tif")
+        if SKIP_IF_EXISTS and out_path.exists() and raw_out_path.exists():
             continue
         if z_idx not in z_files_bg:
             folder_ok = False
             continue
         try:
             phase_target = reconstruct_image(tgt_path, qpi_params, crop)
+
+            # Save raw phase (no BG subtraction) for grid_subtract / correct_0pergluc
+            if not raw_out_path.exists():
+                tifffile.imwrite(str(raw_out_path), phase_target.astype(np.float32))
+
             phase_bg     = reconstruct_image(z_files_bg[z_idx], qpi_params, crop)
             phase_diff   = phase_target - phase_bg
             h, w = phase_diff.shape

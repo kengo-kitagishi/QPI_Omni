@@ -13,8 +13,8 @@ import json
 import copy
 
 # ---- パラメータ ----
-INPUT_POS  = r"D:\AquisitionData\Kitagishi\260331\timelapse.pos"
-OUTPUT_POS = r"D:\AquisitionData\Kitagishi\260331\timelapse_grid_260331.pos"
+INPUT_POS  = r"D:\AquisitionData\Kitagishi\260416\timelapse.pos"
+OUTPUT_POS = r"D:\AquisitionData\Kitagishi\260416\timelapse_grid_260416.pos"
 X_STEP = 0.1   # μm
 Y_STEP = 0.1   # μm
 X_HALF = 4    # 片側 → 合計 9個（ステージX → 画像Y、±0.4 μm カバー）

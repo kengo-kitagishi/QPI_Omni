@@ -63,5 +63,15 @@
   "kf_Q_tx_nm2": 877.0,
   "kf_R_ty_nm2": 91.0,
   "kf_R_tx_nm2": 274.0,
-  "kf_state_file": "C:\\Users\\QPI\\Documents\\QPI_Omni\\drift_session\\drift_kf_state.json"
+  "kf_state_file": "C:\\Users\\QPI\\Documents\\QPI_Omni\\drift_session\\drift_kf_state.json",
+  "enable_crop_sub_save": false,
+  "crop_sub_root": "E:\\Acuisition\\kitagishi\\260405\\online_crop_sub",
+  "crop_sub_max_seconds": 200.0,
+  "crop_sub_max_workers": 0,
+  "tilt_crop_h_raw": 270,
+  "raw_tl_z_index": 0,
+  "raw_grid_z_index": 18,
+  "crop_sub_x_step_um": 0.1,
+  "crop_sub_y_step_um": 0.1,
+  "crop_sub_min_free_gb": 2.0
 }

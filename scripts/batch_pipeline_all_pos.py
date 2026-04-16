@@ -47,7 +47,7 @@ GRID_2PER_DIR  = Path(r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1")
 GRID_0PER_DIR  = Path(r"C:\grid_0pergluc_60ms_1")
 
 # Pos range (inclusive). Pos0 is BG, skip it.
-POS_START = 2
+POS_START = 10
 POS_END   = 64
 
 # 0% glucose frame range
@@ -55,13 +55,17 @@ GLUCOSE_0_START = 575
 GLUCOSE_0_END   = 1440   # exclusive
 
 # Reconstruction workers (28 logical cores available)
-N_WORKERS_RECON = 8
+N_WORKERS_RECON = 24
 
 # compute_pos_shifts workers
-N_WORKERS_ECC = 16
+N_WORKERS_ECC = 24
 
 # 実行中の記録用（次回起動では読まず、起動時に削除する）
 PROGRESS_LOG = TIMELAPSE_ROOT / "batch_pipeline_progress.json"
+
+# BG (Pos0) phase cache dirs — precomputed once per crop, reused across all Pos
+BG_CACHE_BEFORE = TIMELAPSE_ROOT / "Pos0" / "bg_phase_before"
+BG_CACHE_AFTER  = TIMELAPSE_ROOT / "Pos0" / "bg_phase_after"
 
 # ============================================================
 # Confirmed parameters (from drift_config.json + memory)
@@ -148,38 +152,146 @@ def _reset_timelapse_for_full_run():
 # ============================================================
 # Step 0: Reconstruction
 # ============================================================
+# ============================================================
+# BG phase shared_memory cache (worker-side globals)
+# ============================================================
+_BG_SHM = None      # SharedMemory instance attached in the worker (kept alive)
+_BG_CACHE = {}      # stem -> ndarray view into shared_memory
+
+
+def _init_recon_worker(shm_name, shape, dtype_str, stems):
+    """ProcessPool initializer: attach to BG shared_memory and build stem -> view dict.
+
+    Main process creates a single shm segment with all BG phase frames stacked
+    along axis 0. Each worker attaches once and exposes a read-only dict keyed
+    by the cache TIF stem (e.g. 'img_000000000_ph_000_phase').
+    """
+    global _BG_SHM, _BG_CACHE
+    from multiprocessing import shared_memory
+    _BG_SHM = shared_memory.SharedMemory(name=shm_name)
+    arr = np.ndarray(shape, dtype=np.dtype(dtype_str), buffer=_BG_SHM.buf)
+    _BG_CACHE = {stem: arr[i] for i, stem in enumerate(stems)}
+
+
+def _build_bg_shm(cache_dir, label):
+    """Load all BG cache TIFs from `cache_dir` into one shared_memory segment.
+
+    Returns (shm, (shm_name, shape, dtype_str, stems)) — the second tuple is
+    what gets passed to _init_recon_worker via `initargs`.
+    Caller is responsible for shm.close() + shm.unlink() when done.
+    """
+    from multiprocessing import shared_memory
+    cache_files = sorted(cache_dir.glob("*_phase.tif"))
+    if not cache_files:
+        raise FileNotFoundError(f"No BG cache TIFs in {cache_dir}")
+    first = tifffile.imread(str(cache_files[0]))
+    dtype = first.dtype
+    shape = (len(cache_files), first.shape[0], first.shape[1])
+    nbytes = int(np.prod(shape)) * dtype.itemsize
+    print(f"  [{label}] BG shared_memory: {len(cache_files)} frames x {first.shape} "
+          f"{dtype} = {nbytes/1e9:.2f} GB")
+    shm = shared_memory.SharedMemory(create=True, size=nbytes)
+    arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
+    arr[0] = first
+    stems = [cache_files[0].stem]
+    for i, f in enumerate(cache_files[1:], start=1):
+        arr[i] = tifffile.imread(str(f))
+        stems.append(f.stem)
+    return shm, (shm.name, shape, str(dtype), stems)
+
+
+def _release_bg_shm(shm):
+    if shm is None:
+        return
+    try:
+        shm.close()
+    except Exception:
+        pass
+    try:
+        shm.unlink()
+    except Exception:
+        pass
+
+
+def _recon_phase_from_holo(holo_path, crop):
+    """Reconstruct unwrapped phase from a hologram at `crop`."""
+    from PIL import Image
+    from qpi import QPIParameters, get_field
+    from skimage.restoration import unwrap_phase
+    rs, re_, cs, ce = crop
+    img = np.array(Image.open(str(holo_path)))[rs:re_, cs:ce]
+    qp = QPIParameters(
+        wavelength=WAVELENGTH, NA=NA,
+        img_shape=img.shape, pixelsize=PIXELSIZE,
+        offaxis_center=OFFAXIS_CENTER,
+    )
+    return unwrap_phase(np.angle(get_field(img, qp)))
+
+
+def _bg_recon_one(args):
+    """Worker: reconstruct one Pos0 BG frame for a given crop and save as float32 tif."""
+    bg_path_str, crop, out_path_str = args
+    out_path = Path(out_path_str)
+    if out_path.exists():
+        return True
+    try:
+        phase = _recon_phase_from_holo(bg_path_str, crop)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        tifffile.imwrite(str(out_path), phase.astype(np.float32))
+        return True
+    except Exception as e:
+        print(f"  [BG RECON ERROR] {Path(bg_path_str).name}: {e}")
+        return False
+
+
+def _precompute_bg_cache(crop, cache_dir, label):
+    """Precompute BG phase cache for all Pos0 holos at `crop`."""
+    bg_dir = TIMELAPSE_ROOT / "Pos0"
+    bg_files = sorted(bg_dir.glob("img_*_ph_000.tif"))
+    if not bg_files:
+        print(f"  [ERROR] No BG holos in {bg_dir}")
+        return False
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    tasks = []
+    for bg in bg_files:
+        out_path = cache_dir / (bg.stem + "_phase.tif")
+        if out_path.exists():
+            continue
+        tasks.append((str(bg), crop, str(out_path)))
+    if not tasks:
+        print(f"  [{label}] BG cache complete ({len(bg_files)} frames) at {cache_dir}")
+        return True
+    print(f"  [{label}] Precomputing BG cache ({len(tasks)} frames, crop={crop}) -> {cache_dir}")
+    done = 0
+    with ProcessPoolExecutor(max_workers=N_WORKERS_RECON) as ex:
+        futures = {ex.submit(_bg_recon_one, t): t for t in tasks}
+        for f in tqdm(as_completed(futures), total=len(futures), desc=f"  bg_recon[{label}]"):
+            if f.result():
+                done += 1
+    print(f"  [{label}] BG cache done: {done}/{len(tasks)}")
+    return done == len(tasks)
+
+
 def _reconstruct_one(args):
     """Reconstruct a single frame (worker function).
 
     Saves two outputs:
       - output_phase/     : BG-subtracted + region mean subtracted (for ECC)
       - output_phase_raw/ : raw phase, no BG subtraction (for grid_subtract)
+
+    BG phase is loaded from precomputed cache (bg_cache_path) instead of
+    re-reconstructed per target — saves 1 unwrap_phase per frame.
     """
-    tgt_path_str, bg_path_str, crop, out_path_str, raw_out_path_str, pos_num, pos_split = args
-    from PIL import Image
-    from qpi import QPIParameters, get_field
-    from skimage.restoration import unwrap_phase
+    tgt_path_str, bg_cache_path_str, crop, out_path_str, raw_out_path_str, pos_num, pos_split = args
 
     tgt_path = Path(tgt_path_str)
-    bg_path  = Path(bg_path_str)
     out_path = Path(out_path_str)
     raw_out_path = Path(raw_out_path_str)
     if out_path.exists() and raw_out_path.exists():
         return True
 
-    rs, re_, cs, ce = crop
-
-    def _recon(p):
-        img = np.array(Image.open(str(p)))[rs:re_, cs:ce]
-        qp = QPIParameters(
-            wavelength=WAVELENGTH, NA=NA,
-            img_shape=img.shape, pixelsize=PIXELSIZE,
-            offaxis_center=OFFAXIS_CENTER,
-        )
-        return unwrap_phase(np.angle(get_field(img, qp)))
-
     try:
-        tgt_phase = _recon(tgt_path)
+        tgt_phase = _recon_phase_from_holo(tgt_path, crop)
 
         # Save raw phase (for grid_subtract - no BG subtraction)
         if not raw_out_path.exists():
@@ -188,7 +300,12 @@ def _reconstruct_one(args):
 
         # Save BG-subtracted phase (for ECC alignment)
         if not out_path.exists():
-            phase = tgt_phase - _recon(bg_path)
+            bg_stem = Path(bg_cache_path_str).stem
+            if _BG_CACHE:
+                bg_phase = _BG_CACHE[bg_stem].astype(np.float64)
+            else:
+                bg_phase = tifffile.imread(bg_cache_path_str).astype(np.float64)
+            phase = tgt_phase - bg_phase
             h, w = phase.shape
             if pos_num < pos_split:
                 region = phase[1:h-1, 1:w//2]
@@ -204,13 +321,17 @@ def _reconstruct_one(args):
         return False
 
 
-def step0_reconstruct(pos_num, pos_dir):
+def step0_reconstruct(pos_num, pos_dir, bg_shm_initargs=None):
     """Reconstruct all frames for a Pos.
 
     Saves both BG-subtracted (output_phase/) and raw (output_phase_raw/) phase.
+
+    bg_shm_initargs: tuple (shm_name, shape, dtype_str, stems) passed to the
+    worker pool initializer so workers read BG phase from shared_memory instead
+    of disk. If None, workers fall back to tifffile.imread (per-frame disk I/O).
     """
     crop = get_crop(pos_num)
-    bg_dir = TIMELAPSE_ROOT / "Pos0"
+    bg_cache_dir = BG_CACHE_BEFORE if pos_num < POS_SPLIT else BG_CACHE_AFTER
     out_dir = pos_dir / "output_phase"
     raw_out_dir = pos_dir / "output_phase_raw"
     out_dir.mkdir(exist_ok=True)
@@ -237,12 +358,13 @@ def step0_reconstruct(pos_num, pos_dir):
     for raw in raw_files:
         out_path = out_dir / (raw.stem + "_phase.tif")
         raw_out_path = raw_out_dir / (raw.stem + "_phase.tif")
-        bg_path = bg_dir / raw.name
-        if not bg_path.exists():
-            continue
+        bg_cache_path = bg_cache_dir / (raw.stem + "_phase.tif")
+        if not bg_cache_path.exists():
+            print(f"  [ERROR] BG cache missing: {bg_cache_path}")
+            return False
         if out_path.exists() and raw_out_path.exists():
             continue
-        tasks.append((str(raw), str(bg_path), crop, str(out_path),
+        tasks.append((str(raw), str(bg_cache_path), crop, str(out_path),
                       str(raw_out_path), pos_num, POS_SPLIT))
 
     if not tasks:
@@ -250,11 +372,18 @@ def step0_reconstruct(pos_num, pos_dir):
 
     done = 0
     if N_WORKERS_RECON == 1:
+        # Single-process: initialize BG cache locally so the lookup matches workers
+        if bg_shm_initargs is not None:
+            _init_recon_worker(*bg_shm_initargs)
         for t in tqdm(tasks, desc="  recon"):
             if _reconstruct_one(t):
                 done += 1
     else:
-        with ProcessPoolExecutor(max_workers=N_WORKERS_RECON) as ex:
+        pool_kwargs = {"max_workers": N_WORKERS_RECON}
+        if bg_shm_initargs is not None:
+            pool_kwargs["initializer"] = _init_recon_worker
+            pool_kwargs["initargs"] = bg_shm_initargs
+        with ProcessPoolExecutor(**pool_kwargs) as ex:
             futures = {ex.submit(_reconstruct_one, t): t for t in tasks}
             for f in tqdm(as_completed(futures), total=len(futures), desc="  recon"):
                 if f.result():
@@ -432,6 +561,130 @@ def step3_grid_subtract(pos_num, pos_dir):
 
 
 # ============================================================
+# Online consume: reuse crop-subtracted TIFs saved by compute_drift_online.py
+# ============================================================
+def _check_online_complete(online_pos_dir: Path, n_holos: int, n_channels: int) -> bool:
+    """Return True if online Phase B wrote a complete set of TIFs + JSON for this Pos."""
+    if not online_pos_dir.is_dir():
+        return False
+    cs_root = online_pos_dir / "output_phase" / "channels" / "crop_sub_rawraw"
+    js_path = online_pos_dir / "output_phase" / "channels" / "pos_shifts_cal_online.json"
+    if not cs_root.is_dir() or not js_path.is_file():
+        return False
+    try:
+        js = json.loads(js_path.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    fr = js.get("frame_results", [])
+    n_seen = sum(1 for x in fr if x is not None)
+    if n_seen < n_holos:
+        return False
+    for ch in range(n_channels):
+        ch_dir = cs_root / f"ch{ch:02d}"
+        if not ch_dir.is_dir():
+            return False
+        if len(list(ch_dir.glob("*.tif"))) < n_holos:
+            return False
+    return True
+
+
+def _synthesize_grid_subtract_log(online_json_path: Path, pos_num: int,
+                                   raw_crop) -> dict:
+    """Build a grid_subtract_log.json dict from pos_shifts_cal_online.json.
+
+    correct_0pergluc reads `frame_log[*].grid_xi/grid_yi/frame_index` and
+    top-level `base_label / grid_z_index / raw_crop / ...`. We materialize
+    those fields so Step 4 works bit-for-bit.
+    """
+    js = json.loads(online_json_path.read_text(encoding="utf-8"))
+    fr = js.get("frame_results", [])
+    base_label = f"Pos{pos_num}"
+    frame_log = []
+    for entry in fr:
+        if entry is None:
+            continue
+        xi = int(entry["grid_xi"])
+        yi = int(entry["grid_yi"])
+        frame_log.append({
+            "frame_index": int(entry["frame_index"]),
+            "shift_x_avg_px": float(entry.get("shift_x_avg", 0.0)),
+            "shift_y_avg_px": float(entry.get("shift_y_avg", 0.0)),
+            "grid_xi": xi,
+            "grid_yi": yi,
+            "grid_pos_label": f"{base_label}_x{xi:+d}_y{yi:+d}",
+            "grid_nearest_dist_um": entry.get("grid_nearest_dist_um"),
+            "residual_x_px": float(entry.get("residual_x_px", 0.0)),
+            "residual_y_px": float(entry.get("residual_y_px", 0.0)),
+            "is_outlier_timeseries": False,
+        })
+    frame_log.sort(key=lambda e: e["frame_index"])
+    return {
+        "source": "online_crop_sub",
+        "base_label": base_label,
+        "grid_dir": str(GRID_2PER_DIR),
+        "grid_z_index": RAW_GRID_Z_INDEX,
+        "tl_z_index": RAW_TL_Z_INDEX,
+        "x_step_um": 0.1,
+        "y_step_um": 0.1,
+        "shift_sign_x": SHIFT_SIGN_X,
+        "shift_sign_y": SHIFT_SIGN_Y,
+        "apply_subpixel_correction": True,
+        "apply_inverse_shift": False,
+        "use_raw_phase": True,
+        "raw_crop": list(raw_crop),
+        "tilt_crop_h_raw": TILT_CROP_H_RAW,
+        "frame_log": frame_log,
+    }
+
+
+def _consume_online_pos(online_root: Path, pos_num: int, pos_dir: Path,
+                        n_channels: int, move: bool = False) -> bool:
+    """Copy/move online crop-sub TIFs into pos_dir and synthesize grid_subtract_log.json.
+
+    Returns True on success. Assumes _check_online_complete already passed.
+    """
+    pos_label = f"Pos{pos_num}"
+    online_pos = online_root / pos_label
+    online_cs = online_pos / "output_phase" / "channels" / "crop_sub_rawraw"
+    online_js = online_pos / "output_phase" / "channels" / "pos_shifts_cal_online.json"
+
+    channels_dir = pos_dir / "output_phase" / "channels"
+    channels_dir.mkdir(parents=True, exist_ok=True)
+    out_cs = channels_dir / "crop_sub_rawraw"
+    out_cs.mkdir(parents=True, exist_ok=True)
+
+    raw_crop = get_crop(pos_num)
+
+    # Copy/move per-channel TIFs
+    total_copied = 0
+    for ch in range(n_channels):
+        src_dir = online_cs / f"ch{ch:02d}"
+        dst_dir = out_cs / f"ch{ch:02d}"
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        for src in src_dir.glob("*.tif"):
+            dst = dst_dir / src.name
+            if dst.exists():
+                continue
+            if move:
+                shutil.move(str(src), str(dst))
+            else:
+                shutil.copy2(str(src), str(dst))
+            total_copied += 1
+
+    # Synthesize grid_subtract_log.json
+    log = _synthesize_grid_subtract_log(online_js, pos_num, raw_crop)
+    log_path = channels_dir / "grid_subtract_log.json"
+    tmp = log_path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(log, indent=2, ensure_ascii=False), encoding="utf-8")
+    import os as _os
+    _os.replace(str(tmp), str(log_path))
+
+    print(f"  [ONLINE] {'moved' if move else 'copied'} {total_copied} TIFs; "
+          f"synthesized grid_subtract_log.json ({len(log['frame_log'])} entries)")
+    return True
+
+
+# ============================================================
 # Step 4: correct_0pergluc
 # ============================================================
 def step4_correct_0pergluc(pos_num, pos_dir):
@@ -491,18 +744,70 @@ def main():
         action="store_true",
         help="先頭の Grid 0%% 再構成のみ省略（既に batch_reconstruction_grid 済みのとき）",
     )
+    ap.add_argument(
+        "--no-reset",
+        action="store_true",
+        help="output_phase / output_phase_raw を削除せず、既存成果物から再開する",
+    )
+    ap.add_argument(
+        "--consume-online-crop-sub",
+        type=str,
+        default=None,
+        metavar="CROP_SUB_ROOT",
+        help="compute_drift_online.py が書いた crop_sub_rawraw を再利用。"
+             "Pos 単位で完全なら step0/2/3 を skip し、step4 のみ実行。"
+             "不完全な Pos は従来パイプラインに fallback。",
+    )
+    ap.add_argument(
+        "--move-online-tifs",
+        action="store_true",
+        help="--consume-online-crop-sub と併用。online TIF を copy ではなく move する "
+             "(E: のディスクを解放)。",
+    )
     args = ap.parse_args()
+
+    consume_online_root = Path(args.consume_online_crop_sub) if args.consume_online_crop_sub else None
+    if consume_online_root is not None and not consume_online_root.is_dir():
+        print(f"[ERROR] --consume-online-crop-sub root not found: {consume_online_root}")
+        sys.exit(1)
+    if consume_online_root is not None:
+        print(f"[ONLINE CONSUME] reusing crop-sub TIFs from: {consume_online_root}")
 
     if not args.skip_grid_0per:
         if not step_grid_0per_reconstruction(GRID_0PER_DIR):
             print("Aborting: Grid 0% reconstruction failed.")
             sys.exit(1)
 
-    print(
-        "[RESET] Ignoring batch_pipeline_progress.json — removing it and "
-        f"output_phase / output_phase_raw under Pos{POS_START}–Pos{POS_END} …"
-    )
-    _reset_timelapse_for_full_run()
+    if consume_online_root is not None:
+        print("[ONLINE CONSUME] skipping full reset; per-Pos consume path will "
+              "reuse online TIFs. Incomplete Pos fall back to full pipeline.")
+    elif args.no_reset:
+        print("[NO-RESET] keeping existing output_phase / output_phase_raw / progress log")
+    else:
+        print(
+            "[RESET] Ignoring batch_pipeline_progress.json - removing it and "
+            f"output_phase / output_phase_raw under Pos{POS_START}-Pos{POS_END} ..."
+        )
+        _reset_timelapse_for_full_run()
+
+    # Precompute Pos0 BG phase cache once per crop (reused across all target Pos)
+    # Skipped in online-consume mode because BG-subtracted output_phase is not
+    # needed when consuming pre-saved crop-sub TIFs. If a Pos falls back, we
+    # lazily build BG cache inside step0 via _activate_bg.
+    if consume_online_root is None:
+        print("\n" + "=" * 60)
+        print("Precomputing Pos0 BG phase cache (both crops)")
+        print("=" * 60)
+        need_before = any(p < POS_SPLIT for p in range(POS_START, POS_END + 1))
+        need_after  = any(p >= POS_SPLIT for p in range(POS_START, POS_END + 1))
+        if need_before:
+            if not _precompute_bg_cache(CROP_BEFORE, BG_CACHE_BEFORE, "BEFORE"):
+                print("Aborting: BG cache (BEFORE) failed.")
+                sys.exit(1)
+        if need_after:
+            if not _precompute_bg_cache(CROP_AFTER, BG_CACHE_AFTER, "AFTER"):
+                print("Aborting: BG cache (AFTER) failed.")
+                sys.exit(1)
 
     prog = {}
     total = POS_END - POS_START + 1
@@ -519,48 +824,125 @@ def main():
     print(f"  Progress log (this run only): {PROGRESS_LOG}")
     print("=" * 60)
 
-    for pos_num in range(POS_START, POS_END + 1):
-        pos_label = f"Pos{pos_num}"
-        pos_dir = TIMELAPSE_ROOT / pos_label
+    # Active BG shared_memory: load on demand per crop group, release on switch.
+    # On a 64 GB workstation we cannot afford both groups (~46 GB) simultaneously,
+    # so swap when crossing POS_SPLIT.
+    bg_shm_obj = None
+    bg_shm_args = None
+    bg_group_loaded = None
 
-        if not pos_dir.exists():
-            print(f"\n[{pos_label}] Directory not found, skipping")
-            continue
+    def _activate_bg(group):
+        nonlocal bg_shm_obj, bg_shm_args, bg_group_loaded
+        if bg_group_loaded == group:
+            return bg_shm_args
+        if bg_shm_obj is not None:
+            print(f"  [BG shm] releasing {bg_group_loaded}")
+            _release_bg_shm(bg_shm_obj)
+            bg_shm_obj = None
+            bg_shm_args = None
+            bg_group_loaded = None
+        cache_dir = BG_CACHE_BEFORE if group == "BEFORE" else BG_CACHE_AFTER
+        try:
+            bg_shm_obj, bg_shm_args = _build_bg_shm(cache_dir, group)
+            bg_group_loaded = group
+            return bg_shm_args
+        except Exception as e:
+            print(f"  [BG shm] {group} build failed: {e}  -> fallback to disk reads")
+            bg_shm_obj = None
+            bg_shm_args = None
+            bg_group_loaded = None
+            return None
 
-        elapsed = time.time() - t_start
-        print(f"\n{'=' * 60}")
-        print(f"[{pos_label}] ({pos_num - POS_START + 1}/{total}) "
-              f"elapsed={elapsed/60:.0f}min")
-        print(f"{'=' * 60}")
+    try:
+        for pos_num in range(POS_START, POS_END + 1):
+            pos_label = f"Pos{pos_num}"
+            pos_dir = TIMELAPSE_ROOT / pos_label
 
-        # Step 0: Reconstruction
-        if step0_reconstruct(pos_num, pos_dir):
-            mark_done(prog, pos_label, "recon")
-        else:
-            print(f"  [FAIL] Reconstruction failed, skipping remaining steps")
-            continue
+            if not pos_dir.exists():
+                print(f"\n[{pos_label}] Directory not found, skipping")
+                continue
 
-        # Step 1: channel_rois.json
-        if step1_channel_rois(pos_num, pos_dir):
-            mark_done(prog, pos_label, "rois")
-        else:
-            continue
+            elapsed = time.time() - t_start
+            print(f"\n{'=' * 60}")
+            print(f"[{pos_label}] ({pos_num - POS_START + 1}/{total}) "
+                  f"elapsed={elapsed/60:.0f}min")
+            print(f"{'=' * 60}")
 
-        # Step 2: compute_pos_shifts
-        if step2_compute_pos_shifts(pos_num, pos_dir):
-            mark_done(prog, pos_label, "shifts")
-        else:
-            continue
+            # ONLINE CONSUME path: if flag set and online TIFs are complete,
+            # skip step0 (recon), step2 (pos_shifts), step3 (grid_subtract)
+            # and run only step1 (channel_rois) + step4 (correct_0pergluc).
+            use_online = False
+            if consume_online_root is not None:
+                n_holos = len(list(pos_dir.glob("img_*_ph_000.tif")))
+                # channel_rois lives in grid_2per; fetch once to know n_channels
+                src_rois = (GRID_2PER_DIR / f"Pos{pos_num}_x+0_y+0"
+                            / "output_phase" / "channels" / "channel_rois.json")
+                n_channels = 0
+                if src_rois.exists():
+                    try:
+                        n_channels = len(json.loads(src_rois.read_text(encoding="utf-8")))
+                    except Exception:
+                        n_channels = 0
+                if n_channels > 0 and _check_online_complete(
+                        consume_online_root / pos_label, n_holos, n_channels):
+                    use_online = True
+                    print(f"  [ONLINE] complete ({n_holos} frames, {n_channels} ch) — "
+                          f"skipping step0/2/3")
+                else:
+                    print(f"  [ONLINE] incomplete or missing — falling back to full pipeline")
 
-        # Step 3: grid_subtract
-        if step3_grid_subtract(pos_num, pos_dir):
-            mark_done(prog, pos_label, "gridsub")
-        else:
-            continue
+            if use_online:
+                # Step 1: channel_rois (needed for step4)
+                if not step1_channel_rois(pos_num, pos_dir):
+                    continue
+                mark_done(prog, pos_label, "rois")
 
-        # Step 4: correct_0pergluc
-        if step4_correct_0pergluc(pos_num, pos_dir):
-            mark_done(prog, pos_label, "0per")
+                # Consume: copy/move TIFs, synthesize grid_subtract_log.json
+                if not _consume_online_pos(consume_online_root, pos_num, pos_dir,
+                                            n_channels, move=args.move_online_tifs):
+                    print(f"  [FAIL] consume online failed, skipping")
+                    continue
+                mark_done(prog, pos_label, "gridsub")
+
+                # Step 4: correct_0pergluc
+                if step4_correct_0pergluc(pos_num, pos_dir):
+                    mark_done(prog, pos_label, "0per")
+                continue
+
+            # --- Full offline path ---
+            group = "BEFORE" if pos_num < POS_SPLIT else "AFTER"
+            current_bg_args = _activate_bg(group)
+
+            # Step 0: Reconstruction
+            if step0_reconstruct(pos_num, pos_dir, bg_shm_initargs=current_bg_args):
+                mark_done(prog, pos_label, "recon")
+            else:
+                print(f"  [FAIL] Reconstruction failed, skipping remaining steps")
+                continue
+
+            # Step 1: channel_rois.json
+            if step1_channel_rois(pos_num, pos_dir):
+                mark_done(prog, pos_label, "rois")
+            else:
+                continue
+
+            # Step 2: compute_pos_shifts
+            if step2_compute_pos_shifts(pos_num, pos_dir):
+                mark_done(prog, pos_label, "shifts")
+            else:
+                continue
+
+            # Step 3: grid_subtract
+            if step3_grid_subtract(pos_num, pos_dir):
+                mark_done(prog, pos_label, "gridsub")
+            else:
+                continue
+
+            # Step 4: correct_0pergluc
+            if step4_correct_0pergluc(pos_num, pos_dir):
+                mark_done(prog, pos_label, "0per")
+    finally:
+        _release_bg_shm(bg_shm_obj)
 
     elapsed = time.time() - t_start
     print(f"\n{'=' * 60}")

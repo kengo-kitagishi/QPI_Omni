@@ -19,6 +19,8 @@ import concurrent.futures
 import threading
 import re as _re
 
+from tilt_utils import tilt_fit_crop
+
 # ============================================================
 # 設定パラメータ
 # ============================================================
@@ -104,28 +106,14 @@ TILT_FIT_RIGHT = _POS_NUM >= POS_SPLIT  # Pos<POS_SPLIT: 左1/3 fit, Pos>=POS_SP
 
 
 def _tilt_correct(img_f64, cy, cx, crop_w, crop_h_out, fit_right: bool = False):
+    """Thin wrapper around tilt_utils.tilt_fit_crop using module-level TILT_CROP_H.
+
+    Returns None when the wide crop would go out of bounds. Callers must
+    treat None as "this channel has no valid tilt-corrected crop" and skip
+    it from any ECC median (no silent fallback).
     """
-    フル位相画像から TILT_CROP_H px 幅の crop を取り、
-    背景側1/3 で slope+intercept fit → 補正 → 中央 crop_h_out px を返す。
-    fit_right=False: 左1/3（Pos_num < POS_SPLIT）、True: 右1/3（Pos_num >= POS_SPLIT）。
-    ゼロパディングが発生する場合は tilt 補正をスキップして simple crop を返す。
-    USE_SLOPE_CORRECTION=True 時に grid ref / timelapse stack 両方で使用。
-    """
-    from channel_crop import extract_rect_roi
-    h, w  = img_f64.shape
-    if (cx - TILT_CROP_H // 2) < 0 or (cx + TILT_CROP_H // 2) > w:
-        return extract_rect_roi(img_f64, cy, cx, crop_w, crop_h_out).astype(np.float64)
-    big   = extract_rect_roi(img_f64, cy, cx, crop_w, TILT_CROP_H).astype(np.float64)
-    x     = np.arange(TILT_CROP_H, dtype=np.float64)
-    prof  = big.mean(axis=0)
-    fit_n = max(1, TILT_CROP_H // 3)
-    if fit_right:
-        a, b = np.polyfit(x[-fit_n:], prof[-fit_n:], 1)
-    else:
-        a, b = np.polyfit(x[:fit_n], prof[:fit_n], 1)
-    corrected = big - (a * x + b)[np.newaxis, :]
-    start = (TILT_CROP_H - crop_h_out) // 2
-    return corrected[:, start : start + crop_h_out]
+    return tilt_fit_crop(img_f64, cy, cx, crop_w, crop_h_out, TILT_CROP_H,
+                         fit_right=fit_right)
 
 
 def to_uint8(img, vmin=VMIN, vmax=VMAX):
@@ -284,6 +272,10 @@ def load_grid_refs(channels_dir, n_channels):
         if USE_SLOPE_CORRECTION:
             cropped = _tilt_correct(grid_img, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H,
                                     fit_right=TILT_FIT_RIGHT)
+            if cropped is None:
+                print(f"  ch{ch:02d} tilt bounds NG (cx={roi['cx']}): skip from ECC")
+                refs.append(None)
+                continue
             print(f"  ch{ch:02d} tilt-corrected crop: {cropped.shape}")
         else:
             cropped = extract_rect_roi(grid_img, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H)
@@ -361,6 +353,7 @@ def load_grid_ref_mn(pos_map, xi, yi, rois, n_channels):
         if USE_SLOPE_CORRECTION:
             cropped = _tilt_correct(grid_img, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H,
                                     fit_right=TILT_FIT_RIGHT)
+            # cropped is None => tilt bounds NG; keep placeholder so callers can skip.
         else:
             cropped = extract_rect_roi(grid_img, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H)
             if APPLY_BACKSUB_TO_GRID_REF:
@@ -384,6 +377,7 @@ def load_grid_ref_mn_half(pos_map, xi, yi, rois, n_channels):
         if USE_SLOPE_CORRECTION:
             cropped = _tilt_correct(grid_img, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H,
                                     fit_right=TILT_FIT_RIGHT)
+            # cropped is None => tilt bounds NG; keep placeholder so callers can skip.
         else:
             cropped = extract_rect_roi(grid_img, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H)
             if APPLY_BACKSUB_TO_GRID_REF:
@@ -611,7 +605,8 @@ _wp = {}  # worker-process shared data (set by _init_incr_worker)
 
 
 def _init_incr_worker(stacks, p1_refs_u8, grid_refs_u8, grid_cal,
-                      n_channels, ecc_min_corr, use_third_pass):
+                      n_channels, ecc_min_corr, use_third_pass,
+                      invalid_chs=None):
     """Initialize worker process with shared data."""
     global _wp
     _wp = {
@@ -619,6 +614,7 @@ def _init_incr_worker(stacks, p1_refs_u8, grid_refs_u8, grid_cal,
         'gcal': grid_cal, 'avail': set(grid_refs_u8.keys()),
         'nch': n_channels, 'ecc_min_corr': ecc_min_corr,
         'use_third': use_third_pass,
+        'invalid_chs': set(invalid_chs) if invalid_chs else set(),
     }
 
 
@@ -643,6 +639,16 @@ def _incr_compute_frame(t):
     corr_records = []
 
     for ch in range(S['nch']):
+        if ch in S['invalid_chs']:
+            per_channel.append({
+                "channel": ch, "shift_x": None, "shift_y": None,
+                "correlation": None, "excluded": True,
+                "exclude_reason": "tilt_bounds_ng",
+                "grid_xi": 0, "grid_yi": 0})
+            corr_records.append({
+                "t": t, "ch": ch, "shift_x": None, "shift_y": None,
+                "corr": None, "grid_xi": 0, "grid_yi": 0, "failed": True})
+            continue
         frame_u8 = to_uint8(S['stacks'][ch][t])
 
         # ---- Pass 1: grid(0,0) fixed ----
@@ -793,6 +799,7 @@ def main():
         print(f"ERROR: CHANNELS_DIR が見つかりません: {channels_dir}")
         sys.exit(1)
 
+    tilt_invalid_chs = set()  # channels whose tilt wide-crop goes OOB; skip from ECC.
     if USE_SLOPE_CORRECTION:
         # ===== slope補正モード: output_phase/ のフル位相画像から直接構築 =====
         tl_dir = channels_dir.parent
@@ -815,8 +822,15 @@ def main():
         for t, pp in enumerate(tqdm(phase_paths, desc="slope-correct")):
             full_img = tifffile.imread(str(pp)).astype(np.float64)
             for ch, roi in enumerate(rois_sc):
-                stacks[ch][t] = _tilt_correct(full_img, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H,
-                                              fit_right=TILT_FIT_RIGHT)
+                if ch in tilt_invalid_chs:
+                    continue
+                crop = _tilt_correct(full_img, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H,
+                                     fit_right=TILT_FIT_RIGHT)
+                if crop is None:
+                    tilt_invalid_chs.add(ch)
+                    print(f"  [tilt bounds NG] ch{ch:02d} cx={roi['cx']} tilt_crop_h={TILT_CROP_H} → skip from ECC")
+                    continue
+                stacks[ch][t] = crop
     else:
         # ===== 既存モード: channel stacks（bg_corr済み等）から読む =====
         stacks_paths = sorted(channels_dir.glob(CHANNEL_PATTERN))
@@ -875,12 +889,17 @@ def main():
             "reference_frame": REFERENCE_FRAME,
         }
 
-    if ALIGNMENT_METHOD == 'ecc':
-        refs_u8 = [to_uint8(r) for r in refs]
+    # Channels whose tilt wide-crop went out of bounds: exclude from all ECC averaging.
+    invalid_chs = tilt_invalid_chs | {ch for ch, r in enumerate(refs) if r is None}
+    if invalid_chs:
+        print(f"[tilt bounds NG] ECC から除外するチャネル: {sorted(invalid_chs)}")
 
-    # channel_rois.json 読み込み（逐次追跡 or 非incremental 3-pass で使用）
+    if ALIGNMENT_METHOD == 'ecc':
+        refs_u8 = [None if r is None else to_uint8(r) for r in refs]
+
+    # channel_rois.json: required for incremental grid-ref loading
     rois_for_incremental = None
-    if USE_INCREMENTAL_TRACKING or USE_SECOND_PASS_ECC:
+    if USE_INCREMENTAL_TRACKING:
         rois_path = Path(CHANNEL_ROIS_JSON)
         if not rois_path.exists():
             print(f"ERROR: CHANNEL_ROIS_JSON が見つかりません: {rois_path}")
@@ -917,7 +936,8 @@ def main():
             if FIRST_PASS_HALF:
                 print(f"[pass1] grid(0,0) HALF crop ({SECOND_PASS_HALF}側) を使用")
                 p1_refs    = load_grid_ref_mn_half(pos_map, 0, 0, rois_for_incremental, n_channels)
-                p1_refs_u8 = [to_uint8(r) for r in p1_refs] if ALIGNMENT_METHOD == 'ecc' else None
+                p1_refs_u8 = ([None if r is None else to_uint8(r) for r in p1_refs]
+                              if ALIGNMENT_METHOD == 'ecc' else None)
             else:
                 print(f"[pass1] grid(0,0) FULL crop を使用（上記の backsub offset が適用済み）")
                 p1_refs    = refs
@@ -930,7 +950,7 @@ def main():
             try:
                 refs_mn = load_grid_ref_mn_half(
                     pos_map, key[0], key[1], rois_for_incremental, n_channels)
-                all_grid_refs_u8[key] = [to_uint8(r) for r in refs_mn]
+                all_grid_refs_u8[key] = [None if r is None else to_uint8(r) for r in refs_mn]
             except FileNotFoundError:
                 pass
         print(f"[preload] {len(all_grid_refs_u8)} / {len(pos_map)} loaded")
@@ -943,7 +963,8 @@ def main():
             max_workers=_n_workers,
             initializer=_init_incr_worker,
             initargs=(stacks, p1_refs_u8, all_grid_refs_u8, grid_cal,
-                      n_channels, ECC_MIN_CORR, USE_THIRD_PASS_ECC),
+                      n_channels, ECC_MIN_CORR, USE_THIRD_PASS_ECC,
+                      invalid_chs),
         ) as pool:
             results_iter = pool.map(_incr_compute_frame, range(n_frames),
                                     chunksize=4)
@@ -975,198 +996,40 @@ def main():
             _save_corr_npz_csv(corr_records, channels_dir)
 
     else:
-        # ---- 非インクリメンタル: フレームをスレッドプールで並列処理 ----
+        # ---- Non-incremental: 1-pass ECC against grid(0,0), frame-parallel ----
         _n_workers = N_WORKERS or os.cpu_count()
-        print(f"並列ワーカー数: {_n_workers} (non-incremental / フレーム並列)")
-
-        if USE_SECOND_PASS_ECC:
-            pos_map = scan_grid_positions(GRID_DIR, GRID_BASE_LABEL)
-            if not pos_map:
-                print("ERROR: グリッド Pos が見つかりません")
-                sys.exit(1)
-            print(f"[non-incremental] grid Pos数: {len(pos_map)}")
-            grid_cal = {}
-            if GRID_CALIBRATION_JSON:
-                cal_path = Path(GRID_CALIBRATION_JSON)
-                if cal_path.exists():
-                    grid_cal = load_grid_calibration(str(cal_path))
-                    print(f"[calibration] {len(grid_cal)} 点の実計測オフセットを読み込み: {cal_path}")
-                else:
-                    print(f"[calibration] JSON が見つかりません: {cal_path}  → 名目値を使用")
-            grid_half_cache    = {}
-            grid_half_u8_cache = {}
-            _cache_lock = threading.Lock()
-            p1_refs_u8 = refs_u8 if ALIGNMENT_METHOD == 'ecc' else None
-            p1_refs    = refs
-            print(f"[pass1] grid(0,0) FULL crop を使用（backsub offset 適用済み）")
+        print(f"並列ワーカー数: {_n_workers} (non-incremental / フレーム並列, 1-pass)")
 
         def _run_frame(t):
             pc, cr = [], []
             for ch in range(n_channels):
+                if ch in invalid_chs:
+                    pc.append({"channel": ch, "shift_x": None, "shift_y": None,
+                               "correlation": None, "excluded": True,
+                               "exclude_reason": "tilt_bounds_ng"})
+                    cr.append({"t": t, "ch": ch, "shift_x": None, "shift_y": None,
+                               "corr": None, "failed": True})
+                    continue
                 frame = stacks[ch][t]
 
-                if not USE_SECOND_PASS_ECC:
-                    # ---- 1-pass（従来通り） ----
-                    if ALIGNMENT_METHOD == 'ecc':
-                        res = ecc_align(refs_u8[ch], to_uint8(frame))
-                    else:
-                        res = phase_align(refs[ch], frame)
-                    if res is None:
-                        pc.append({"channel": ch, "shift_x": None, "shift_y": None,
-                                   "correlation": None, "excluded": True,
-                                   "exclude_reason": "alignment_failed"})
-                        cr.append({"t": t, "ch": ch, "shift_x": None, "shift_y": None,
-                                   "corr": None, "failed": True})
-                    else:
-                        sx, sy, corr = res
-                        low_ecc = ECC_MIN_CORR > 0 and corr < ECC_MIN_CORR
-                        pc.append({"channel": ch, "shift_x": sx, "shift_y": sy,
-                                   "correlation": corr, "excluded": low_ecc,
-                                   "exclude_reason": "low_ecc_score" if low_ecc else None})
-                        cr.append({"t": t, "ch": ch, "shift_x": sx, "shift_y": sy,
-                                   "corr": corr, "failed": False})
-
+                if ALIGNMENT_METHOD == 'ecc':
+                    res = ecc_align(refs_u8[ch], to_uint8(frame))
                 else:
-                    # ---- 3-pass ECC（incremental と同じロジック、フレーム独立） ----
-                    xi, yi = 0, 0
-                    grid_offset_x, grid_offset_y = 0.0, 0.0
-
-                    # pass1: grid(0,0) 固定
-                    if ALIGNMENT_METHOD == 'ecc':
-                        result1 = ecc_align(p1_refs_u8[ch], to_uint8(frame))
-                    else:
-                        result1 = phase_align(p1_refs[ch], frame)
-
-                    if result1 is None:
-                        pc.append({"channel": ch, "shift_x": None, "shift_y": None,
-                                   "correlation": None, "excluded": True,
-                                   "exclude_reason": "alignment_failed",
-                                   "grid_xi": xi, "grid_yi": yi})
-                        cr.append({"t": t, "ch": ch, "shift_x": None, "shift_y": None,
-                                   "corr": None, "grid_xi": xi, "grid_yi": yi, "failed": True})
-                        continue
-
-                    fine1_x, fine1_y, corr1 = result1
-                    shift1_x = fine1_x + grid_offset_x
-                    shift1_y = fine1_y + grid_offset_y
-
-                    # pass2: pass1 結果から最近傍 grid 選択
-                    xi2, yi2 = _select_nearest_grid(shift1_x, shift1_y, grid_cal, pos_map, pixel_scale_um)
-                    grid_offset_x2, grid_offset_y2 = _get_grid_offset(xi2, yi2, grid_cal, pixel_scale_um)
-
-                    with _cache_lock:
-                        if (xi2, yi2) not in grid_half_cache:
-                            try:
-                                grid_half_cache[(xi2, yi2)] = load_grid_ref_mn_half(
-                                    pos_map, xi2, yi2, rois_for_incremental, n_channels)
-                                if ALIGNMENT_METHOD == 'ecc':
-                                    grid_half_u8_cache[(xi2, yi2)] = [
-                                        to_uint8(r) for r in grid_half_cache[(xi2, yi2)]]
-                            except FileNotFoundError as e:
-                                print(f"\n[t={t},ch={ch}] pass2 load失敗: {e} → pass1使用")
-                                low_ecc = ECC_MIN_CORR > 0 and corr1 < ECC_MIN_CORR
-                                pc.append({"channel": ch,
-                                           "shift_x": shift1_x, "shift_y": shift1_y, "correlation": corr1,
-                                           "excluded": low_ecc,
-                                           "exclude_reason": "low_ecc_score" if low_ecc else None,
-                                           "grid_xi": xi, "grid_yi": yi,
-                                           "pass1_corr": corr1, "pass1_grid_xi": xi, "pass1_grid_yi": yi,
-                                           "pass2_corr": None, "pass2_grid_xi": xi2, "pass2_grid_yi": yi2})
-                                cr.append({"t": t, "ch": ch,
-                                           "shift_x": shift1_x, "shift_y": shift1_y,
-                                           "corr": corr1, "grid_xi": xi, "grid_yi": yi, "failed": False,
-                                           "pass1_corr": corr1, "pass1_grid_xi": xi, "pass1_grid_yi": yi,
-                                           "pass2_corr": None, "pass2_grid_xi": xi2, "pass2_grid_yi": yi2})
-                                continue
-
-                    if ALIGNMENT_METHOD == 'ecc':
-                        result2 = ecc_align(grid_half_u8_cache[(xi2, yi2)][ch], to_uint8(frame))
-                    else:
-                        result2 = phase_align(grid_half_cache[(xi2, yi2)][ch], frame)
-
-                    if result2 is None:
-                        low_ecc = ECC_MIN_CORR > 0 and corr1 < ECC_MIN_CORR
-                        pc.append({"channel": ch,
-                                   "shift_x": shift1_x, "shift_y": shift1_y, "correlation": corr1,
-                                   "excluded": low_ecc,
-                                   "exclude_reason": "low_ecc_score" if low_ecc else None,
-                                   "grid_xi": xi, "grid_yi": yi,
-                                   "pass1_corr": corr1, "pass1_grid_xi": xi, "pass1_grid_yi": yi,
-                                   "pass2_corr": None, "pass2_grid_xi": xi2, "pass2_grid_yi": yi2})
-                        cr.append({"t": t, "ch": ch,
-                                   "shift_x": shift1_x, "shift_y": shift1_y,
-                                   "corr": corr1, "grid_xi": xi, "grid_yi": yi, "failed": False,
-                                   "pass1_corr": corr1, "pass1_grid_xi": xi, "pass1_grid_yi": yi,
-                                   "pass2_corr": None, "pass2_grid_xi": xi2, "pass2_grid_yi": yi2})
-                        continue
-
-                    fine2_x, fine2_y, corr2 = result2
-                    shift2_x = fine2_x + grid_offset_x2
-                    shift2_y = fine2_y + grid_offset_y2
-                    final_shift_x, final_shift_y = shift2_x, shift2_y
-                    final_corr = corr2
-                    final_xi, final_yi = xi2, yi2
-
-                    # pass3（USE_THIRD_PASS_ECC=True の場合）
-                    fine3_x = fine3_y = corr3 = None
-                    xi3, yi3 = xi2, yi2
-                    grid_offset_x3, grid_offset_y3 = grid_offset_x2, grid_offset_y2
-                    if USE_THIRD_PASS_ECC:
-                        xi3, yi3 = _select_nearest_grid(shift2_x, shift2_y, grid_cal, pos_map, pixel_scale_um)
-                        grid_offset_x3, grid_offset_y3 = _get_grid_offset(xi3, yi3, grid_cal, pixel_scale_um)
-                        with _cache_lock:
-                            if (xi3, yi3) not in grid_half_cache:
-                                try:
-                                    grid_half_cache[(xi3, yi3)] = load_grid_ref_mn_half(
-                                        pos_map, xi3, yi3, rois_for_incremental, n_channels)
-                                    if ALIGNMENT_METHOD == 'ecc':
-                                        grid_half_u8_cache[(xi3, yi3)] = [
-                                            to_uint8(r) for r in grid_half_cache[(xi3, yi3)]]
-                                except FileNotFoundError as e:
-                                    print(f"\n[t={t},ch={ch}] pass3 load失敗: {e} → pass2使用")
-                                    xi3, yi3 = xi2, yi2
-                        if (xi3, yi3) in grid_half_cache:
-                            if ALIGNMENT_METHOD == 'ecc':
-                                result3 = ecc_align(grid_half_u8_cache[(xi3, yi3)][ch], to_uint8(frame))
-                            else:
-                                result3 = phase_align(grid_half_cache[(xi3, yi3)][ch], frame)
-                            if result3 is not None:
-                                fine3_x, fine3_y, corr3 = result3
-                                final_shift_x = fine3_x + grid_offset_x3
-                                final_shift_y = fine3_y + grid_offset_y3
-                                final_corr = corr3
-                                final_xi, final_yi = xi3, yi3
-
-                    low_ecc_corrs = [corr1, corr2]
-                    if USE_THIRD_PASS_ECC and corr3 is not None:
-                        low_ecc_corrs.append(corr3)
-                    low_ecc = ECC_MIN_CORR > 0 and any(c < ECC_MIN_CORR for c in low_ecc_corrs)
-
-                    pc_entry = {
-                        "channel": ch,
-                        "shift_x": final_shift_x, "shift_y": final_shift_y, "correlation": final_corr,
-                        "excluded": low_ecc,
-                        "exclude_reason": "low_ecc_score" if low_ecc else None,
-                        "grid_xi": final_xi, "grid_yi": final_yi,
-                        "pass1_corr": corr1, "pass1_grid_xi": xi, "pass1_grid_yi": yi,
-                        "pass2_corr": corr2, "pass2_grid_xi": xi2, "pass2_grid_yi": yi2,
-                    }
-                    cr_entry = {
-                        "t": t, "ch": ch,
-                        "shift_x": final_shift_x, "shift_y": final_shift_y, "corr": final_corr,
-                        "grid_xi": final_xi, "grid_yi": final_yi, "failed": False,
-                        "pass1_corr": corr1, "pass1_grid_xi": xi, "pass1_grid_yi": yi,
-                        "pass2_corr": corr2, "pass2_grid_xi": xi2, "pass2_grid_yi": yi2,
-                    }
-                    if USE_THIRD_PASS_ECC:
-                        pc_entry.update({
-                            "pass3_corr": corr3, "pass3_grid_xi": xi3, "pass3_grid_yi": yi3,
-                        })
-                        cr_entry.update({
-                            "pass3_corr": corr3, "pass3_grid_xi": xi3, "pass3_grid_yi": yi3,
-                        })
-                    pc.append(pc_entry)
-                    cr.append(cr_entry)
+                    res = phase_align(refs[ch], frame)
+                if res is None:
+                    pc.append({"channel": ch, "shift_x": None, "shift_y": None,
+                               "correlation": None, "excluded": True,
+                               "exclude_reason": "alignment_failed"})
+                    cr.append({"t": t, "ch": ch, "shift_x": None, "shift_y": None,
+                               "corr": None, "failed": True})
+                else:
+                    sx, sy, corr = res
+                    low_ecc = ECC_MIN_CORR > 0 and corr < ECC_MIN_CORR
+                    pc.append({"channel": ch, "shift_x": sx, "shift_y": sy,
+                               "correlation": corr, "excluded": low_ecc,
+                               "exclude_reason": "low_ecc_score" if low_ecc else None})
+                    cr.append({"t": t, "ch": ch, "shift_x": sx, "shift_y": sy,
+                               "corr": corr, "failed": False})
 
             return pc, cr
 
@@ -1259,7 +1122,7 @@ def main():
         sys.path.insert(0, str(Path(__file__).parent))
         from shift_visualize import visualize_shifts, visualize_2pass_shifts, visualize_exclusion_summary
         visualize_shifts(str(out_path))
-        if USE_SECOND_PASS_ECC:
+        if USE_INCREMENTAL_TRACKING and USE_SECOND_PASS_ECC:
             visualize_2pass_shifts(str(out_path))
         excl_csv = channels_dir / "pos_shifts_exclusion_summary.csv"
         if excl_csv.exists():

@@ -1,166 +1,86 @@
 """
-compute_drift_online_v2.py
---------------------------
-compute_drift_online.py の精度向上版。
+compute_drift_online.py
+-----------------------
+Per-position online drift correction for QPI time-lapse microscopy.
 
-変更点 (v1 → v2):
-  1. ECC 収束基準: max_iter 10,000→100,000, epsilon 1e-6→1e-7→1e-8
-  2. 2-pass ECC:
-       Pass 1: grid(0,0) full-crop で粗いシフト量を取得
-       Pass 2: shift1 から最近傍グリッド (xi,yi) を選択 → full-crop ECC で精密化
-       最終出力は常に grid(0,0) 基準の絶対シフト量
-  3. per-channel backsub は v1 と同じ（既にヒストグラムベース per-ROI）
+Each position computes its stage-drift correction independently against its own
+grid(0,0) reference. Positions are processed in parallel with
+ProcessPoolExecutor. When ``drift_sample_interval > 1``, positions are grouped
+and only the leader's correction is computed; members share the leader's value.
 
-引数・出力フォーマットは v1 と完全互換（BeanShell 側変更不要）。
+Config keys (drift_config.json):
+  drift_sample_interval: 1     -- 1 = every pos, N = every Nth pos (grouping)
+  max_drift_workers: 0         -- 0 = auto (cpu_count - 4)
 
-使い方 (Beanshell が呼び出す):
-    python compute_drift_online_v2.py \\
-        --timepoint 5 \\
-        --sample-raw "D:/path/Pos1/img_000000005_ph_000.tif" \\
-        --bg-raw     "D:/path/Pos0/img_000000005_ph_000.tif" \\
-        --config     "C:/Users/QPI/Documents/QPI_Omni/drift_session/drift_config.json"
+Usage:
+    python compute_drift_online.py --timepoint 5 --config drift_config.json
 """
 
 import sys
+import os
 import re
 import json
+import csv
+import time
+import shutil as _shutil
 import argparse
-import threading
 import numpy as np
 import tifffile
 import cv2
-import concurrent.futures
 from pathlib import Path
 from datetime import datetime
+from concurrent.futures import ProcessPoolExecutor, wait, ALL_COMPLETED
 from scipy.ndimage import uniform_filter1d
 from scipy.optimize import curve_fit
 
 
-def parse_args():
-    p = argparse.ArgumentParser()
-    p.add_argument("--timepoint",   type=int,  required=True)
-    p.add_argument("--sample-raw",  required=True, help="参照Posの生画像パス")
-    p.add_argument("--bg-raw",      default="none", help="BG Posの生画像パス（noneでスキップ）")
-    p.add_argument("--config",      required=True, help="drift_config.json のパス")
-    return p.parse_args()
-
+# ================================================================
+# Configuration
+# ================================================================
 
 def load_config(config_path):
     with open(config_path, encoding="utf-8") as f:
         return json.load(f)
 
 
-def write_state(state_path: str, t: int, dx_um: float, dy_um: float,
-                cum_dx: float, cum_dy: float, valid: bool, corr: float,
-                jump: bool, ema_tx: float = 0.0, ema_ty: float = 0.0):
-    """drift_state.txt を書き込む（Beanshell が key=value 形式で読む）"""
-    lines = [
-        "# drift_state.txt - written by compute_drift_online_v2.py",
-        f"STATUS={'correction_ready' if valid else 'correction_skipped'}",
-        f"TIMEPOINT={t}",
-        f"DX_UM={dx_um:.6f}",
-        f"DY_UM={dy_um:.6f}",
-        f"CUMULATIVE_DX_UM={cum_dx:.6f}",
-        f"CUMULATIVE_DY_UM={cum_dy:.6f}",
-        f"CORRECTION_VALID={'true' if valid else 'false'}",
-        f"ECC_CORRELATION={corr:.6f}",
-        f"JUMP_DETECTED={'true' if jump else 'false'}",
-        f"EMA_TX_PX={ema_tx:.6f}",
-        f"EMA_TY_PX={ema_ty:.6f}",
-        f"TIMESTAMP={datetime.now().isoformat()}",
-    ]
-    with open(state_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
-
-
-def read_state(state_path: str) -> dict:
-    """前回の状態（累積ドリフト値など）を読む"""
-    result = {
-        "cumulative_dx_um": 0.0,
-        "cumulative_dy_um": 0.0,
-        "ema_tx_px": None,  # None = 初回フレーム（EMAをスキップ）
-        "ema_ty_px": None,
-    }
-    try:
-        with open(state_path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith("#") or "=" not in line:
-                    continue
-                k, v = line.split("=", 1)
-                if k == "CUMULATIVE_DX_UM":
-                    result["cumulative_dx_um"] = float(v)
-                elif k == "CUMULATIVE_DY_UM":
-                    result["cumulative_dy_um"] = float(v)
-                elif k == "EMA_TX_PX":
-                    result["ema_tx_px"] = float(v)
-                elif k == "EMA_TY_PX":
-                    result["ema_ty_px"] = float(v)
-    except Exception:
-        pass
-    return result
-
-
-def kf_step_1d(z_px: float, pos_est_px: float, P_nm2: float,
-               Q_nm2: float, R_nm2: float, px_scale_nm: float):
-    """1次元 Kalman filter (random-walk モデル) の predict+update。
-    入出力はピクセル単位。内部計算は nm 単位。
-    Returns: (pos_new_px, P_new_nm2, K)
-    """
-    z_nm   = z_px       * px_scale_nm
-    pos_nm = pos_est_px * px_scale_nm
-    P_pred = P_nm2 + Q_nm2
-    K      = P_pred / (P_pred + R_nm2)
-    pos_nm_new = pos_nm + K * (z_nm - pos_nm)
-    P_new      = (1.0 - K) * P_pred
-    return pos_nm_new / px_scale_nm, P_new, float(K)
-
+# ================================================================
+# Kalman filter (position-only random walk, scalar, nm units)
+# ================================================================
 
 def kf_step_posonly_nm(z_nm: float, pos_nm: float, P: float,
                        Q: float, R: float):
-    """1D pos-only random walk Kalman step (scalar, nm units).
-    Model: x_k = x_{k-1} + w_k  (w ~ N(0,Q)),  z_k = x_k + v_k  (v ~ N(0,R))
-    Ref: Kalman (1960), also Labbe "Kalman and Bayesian Filters in Python" ch.4
-    Returns: (pos_new_nm, P_new, K)
+    """One Kalman step for a 1D position-only random-walk model.
+
+    Model:  x_k = x_{k-1} + w_k,  w ~ N(0, Q)
+            z_k = x_k + v_k,      v ~ N(0, R)
+    Ref:    Kalman (1960); Labbe, "Kalman and Bayesian Filters in Python", ch.4.
+    Returns (pos_new_nm, P_new, K).
     """
     P_pred = P + Q
-    K      = P_pred / (P_pred + R)
+    K = P_pred / (P_pred + R)
     pos_new = pos_nm + K * (z_nm - pos_nm)
-    P_new   = (1.0 - K) * P_pred
+    P_new = (1.0 - K) * P_pred
     return float(pos_new), float(P_new), float(K)
 
 
-def load_kf_state(path: str, R_nm2: float) -> dict:
-    """drift_kf_state.json を読む。なければ pos-only 初期値を返す。"""
-    default = {"kf_pos_tx_nm": 0.0, "kf_P_tx": R_nm2,
-               "kf_pos_ty_nm": 0.0, "kf_P_ty": R_nm2}
-    try:
-        with open(path, encoding="utf-8") as f:
-            d = json.load(f)
-        # 旧 pos+vel フォーマット互換: P が 2x2 リストの場合は [0][0] だけ使う
-        for key in ("kf_P_tx", "kf_P_ty"):
-            if key in d and isinstance(d[key], list):
-                d[key] = float(np.array(d[key])[0, 0])
-        return {k: d.get(k, default[k]) for k in default}
-    except Exception:
-        return default
-
-
-def save_kf_state(path: str, pos_tx: float, P_tx: float,
-                  pos_ty: float, P_ty: float) -> None:
-    """drift_kf_state.json を書き込む（pos-only）。"""
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump({"kf_pos_tx_nm": pos_tx, "kf_P_tx": float(P_tx),
-                   "kf_pos_ty_nm": pos_ty, "kf_P_ty": float(P_ty)},
-                  f, indent=2)
-
+# ================================================================
+# Background subtraction and ROI cropping
+# ================================================================
 
 def compute_backsub_offset(img, cfg) -> float:
-    min_phase    = cfg.get("backsub_min_phase", -1.1)
-    hist_min     = cfg.get("backsub_hist_min", -1.1)
-    hist_max     = cfg.get("backsub_hist_max",  1.5)
-    n_bins       = cfg.get("backsub_n_bins", 512)
-    smooth_w     = cfg.get("backsub_smooth_window", 20)
+    """Estimate the background phase offset from the histogram peak.
+
+    A smoothed histogram of ``img`` is built, and the tallest peak above
+    ``backsub_min_phase`` is located. A Gaussian is then fit around the peak to
+    refine its centre; the negated centre is returned as the offset that brings
+    the background to zero. If the Gaussian fit fails, the raw bin centre is
+    used instead.
+    """
+    min_phase = cfg.get("backsub_min_phase", -1.1)
+    hist_min = cfg.get("backsub_hist_min", -1.1)
+    hist_max = cfg.get("backsub_hist_max", 1.5)
+    n_bins = cfg.get("backsub_n_bins", 512)
+    smooth_w = cfg.get("backsub_smooth_window", 20)
 
     bin_edges = np.linspace(hist_min, hist_max, n_bins + 1)
     hist_counts, _ = np.histogram(img.flatten(), bins=bin_edges)
@@ -181,14 +101,15 @@ def compute_backsub_offset(img, cfg) -> float:
             lambda x, a, m, s_: a * np.exp(-((x - m)**2) / (2 * s_**2)),
             bin_centers[s:e], smoothed[s:e],
             p0=[float(np.max(smoothed[s:e])), peak_value, bin_width * 20],
-            maxfev=5000
+            maxfev=5000,
         )
         return float(-popt[1])
-    except Exception:
+    except RuntimeError:
         return float(-peak_value)
 
 
 def extract_rect_roi(img, cy, cx, crop_w, crop_h):
+    """Extract a (crop_w x crop_h) ROI centred at (cy, cx), zero-padding edges."""
     h, w = img.shape
     y1 = cy - crop_w // 2; y2 = y1 + crop_w
     x1 = cx - crop_h // 2; x2 = x1 + crop_h
@@ -202,46 +123,46 @@ def extract_rect_roi(img, cy, cx, crop_w, crop_h):
     return crop
 
 
-def _tilt_correct(img_f64, cy, cx, crop_w, tilt_crop_h, ecc_crop_h, fit_right: bool = False):
+from tilt_utils import tilt_fit_crop
+
+
+def _tilt_correct(img_f64, cy, cx, crop_w, tilt_crop_h, ecc_crop_h,
+                  fit_right: bool = False):
+    """Shared tilt-correction wrapper (see tilt_utils.tilt_fit_crop).
+
+    Returns ``None`` when the wider ROI would require zero-padding; callers
+    must treat that as "skip this channel from ECC" rather than fall back to
+    a different crop shape.
     """
-    フル位相画像から tilt_crop_h px 幅の crop を取り、
-    背景側1/3 で slope+intercept fit → 補正 → 中央 ecc_crop_h px を返す。
-    fit_right=False: 左1/3、True: 右1/3（pos_split で決定）。
-    ゼロパディングが発生する場合は tilt 補正をスキップして simple crop を返す。
-    """
-    h, w  = img_f64.shape
-    if (cx - tilt_crop_h // 2) < 0 or (cx + tilt_crop_h // 2) > w:
-        return extract_rect_roi(img_f64, cy, cx, crop_w, ecc_crop_h).astype(np.float64)
-    big   = extract_rect_roi(img_f64, cy, cx, crop_w, tilt_crop_h).astype(np.float64)
-    x     = np.arange(tilt_crop_h, dtype=np.float64)
-    prof  = big.mean(axis=0)
-    fit_n = max(1, tilt_crop_h // 3)
-    if fit_right:
-        a, b = np.polyfit(x[-fit_n:], prof[-fit_n:], 1)
-    else:
-        a, b = np.polyfit(x[:fit_n], prof[:fit_n], 1)
-    corrected = big - (a * x + b)[np.newaxis, :]
-    start = (tilt_crop_h - ecc_crop_h) // 2
-    return corrected[:, start : start + ecc_crop_h]
+    return tilt_fit_crop(img_f64, cy, cx, crop_w, ecc_crop_h, tilt_crop_h,
+                         fit_right=fit_right)
 
 
 def to_uint8(img, vmin, vmax):
+    """Linearly map ``img`` in [vmin, vmax] to uint8 [0, 255] (for ECC input)."""
     clipped = np.clip(img, vmin, vmax)
     return ((clipped - vmin) / (vmax - vmin) * 255).astype(np.uint8)
 
 
+# ================================================================
+# ECC alignment and outlier rejection
+# ================================================================
+
 def ecc_align(ref_u8, tl_u8):
-    """ECC アライメント。(tx, ty, correlation) を返す。失敗時は None。
-    v2: max_iter=100000, epsilon=1e-8（v1 より高精度）
+    """ECC translation alignment between two uint8 images.
+
+    Returns (tx, ty, correlation) on success, or ``None`` if ECC fails to
+    converge. Criteria match ``cv2.findTransformECC`` defaults in style, with
+    max_iter=100000 and epsilon=1e-8 for high-precision sub-pixel shifts.
     """
     warp_matrix = np.eye(2, 3, dtype=np.float32)
     criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-8)
     try:
         corr, warp_matrix = cv2.findTransformECC(
-            ref_u8, tl_u8, warp_matrix, cv2.MOTION_TRANSLATION, criteria
+            ref_u8, tl_u8, warp_matrix, cv2.MOTION_TRANSLATION, criteria,
         )
         return float(warp_matrix[0, 2]), float(warp_matrix[1, 2]), float(corr)
-    except Exception:
+    except cv2.error:
         return None
 
 
@@ -251,6 +172,7 @@ def _mad(arr):
 
 
 def _remove_outliers_mad(values, thresh=5.0):
+    """Return a boolean mask marking MAD-based outliers (|x - med| > thresh * MAD)."""
     arr = np.array(values, dtype=np.float64)
     md = _mad(arr)
     if md == 0:
@@ -258,10 +180,13 @@ def _remove_outliers_mad(values, thresh=5.0):
     return np.abs(arr - np.median(arr)) > thresh * md
 
 
-# ---- 2-pass ECC 用グリッドユーティリティ ----
+# ================================================================
+# Grid reference management (2-pass / 3-pass ECC)
+# ================================================================
 
 def scan_grid_positions(grid_dir, base_label):
-    """(xi, yi) → folder_path のマップを返す。"""
+    """Scan grid_dir for ``{base_label}_x<i>_y<j>`` folders and return
+    a {(xi, yi): folder_path} map."""
     grid_dir = Path(grid_dir)
     pattern = re.compile(rf"^{re.escape(base_label)}_x([+-]?\d+)_y([+-]?\d+)$")
     pos_map = {}
@@ -274,61 +199,46 @@ def scan_grid_positions(grid_dir, base_label):
     return pos_map
 
 
-def _find_nearest_grid(pos_map, dx_um, dy_um, x_step, y_step):
-    """(dx_um, dy_um) に最近傍の (xi, yi) を返す。"""
+def _select_nearest_grid(shift_x, shift_y, pos_map, grid_cal):
+    """Pick the grid (xi, yi) nearest to an image-space shift [px].
+
+    Uses measured per-grid pixel offsets from ``grid_cal``. Only entries that
+    are also present in ``pos_map`` (i.e. an actual grid TIFF exists) are
+    considered.
+    """
     best_key, best_dist = None, float('inf')
-    for (xi, yi) in pos_map:
-        dist = ((xi * x_step - dx_um) ** 2 + (yi * y_step - dy_um) ** 2) ** 0.5
+    for key, (adx, ady) in grid_cal.items():
+        if key not in pos_map:
+            continue
+        dist = ((adx - shift_x) ** 2 + (ady - shift_y) ** 2) ** 0.5
         if dist < best_dist:
             best_dist = dist
-            best_key = (xi, yi)
+            best_key = key
     return best_key
 
 
-def _select_nearest_grid(shift_x, shift_y, pos_map, sx_sign, sy_sign, x_step, y_step, pixel_scale_um,
-                         grid_cal=None):
-    """shift_x/y [画像px] から最近傍 (xi, yi) を返す。
-    grid_cal が指定された場合は実測オフセット（px）で最近傍を選ぶ。
-    なければ名目値（ステージ μm → px 換算）にフォールバック。
-    """
-    if grid_cal:
-        best_key, best_dist = None, float('inf')
-        for key, (adx, ady) in grid_cal.items():
-            if key not in pos_map:
-                continue
-            dist = ((adx - shift_x) ** 2 + (ady - shift_y) ** 2) ** 0.5
-            if dist < best_dist:
-                best_dist = dist
-                best_key = key
-        return best_key
-    dx_um = sx_sign * shift_y * pixel_scale_um  # 画像Y → ステージX
-    dy_um = sy_sign * shift_x * pixel_scale_um  # 画像X → ステージY
-    return _find_nearest_grid(pos_map, dx_um, dy_um, x_step, y_step)
+def _get_grid_offset_px(xi, yi, grid_cal):
+    """Return the grid(xi, yi) reference offset [image px] relative to grid(0, 0).
 
-
-def _get_grid_offset_px(xi, yi, sx_sign, sy_sign, x_step, y_step, pixel_scale_um,
-                        grid_cal=None):
-    """grid(xi,yi) の grid(0,0) 基準オフセット [画像px] を返す (offset_x, offset_y)。
-    grid_cal が指定された場合は実測値を返す。なければ名目値にフォールバック。
+    ``(xi, yi)`` must be present in ``grid_cal`` (guaranteed by
+    ``_select_nearest_grid``, which only picks calibrated keys).
     """
-    if grid_cal and (xi, yi) in grid_cal:
-        return grid_cal[(xi, yi)]   # (cal_dx, cal_dy) = (offset_x, offset_y)
-    offset_x = sy_sign * yi * y_step / pixel_scale_um  # ステージY → 画像X
-    offset_y = sx_sign * xi * x_step / pixel_scale_um  # ステージX → 画像Y
-    return offset_x, offset_y
+    return grid_cal[(xi, yi)]
 
 
 def _load_grid_ref_full(pos_map, xi, yi, rois, n_channels, z_index, cfg,
                         tilt_crop_h=0, ecc_crop_h=0, fit_right=False):
-    """grid(xi,yi) の full-crop 参照を返す（pass 2/3 用）。
-    tilt_crop_h > 0 かつ ecc_crop_h > 0 のとき tilt 補正を適用（backsub は不要）。
-    それ以外は従来の backsub を適用。
+    """Load per-channel grid(xi, yi) reference crops for pass 2 / pass 3.
+
+    When ``tilt_crop_h > 0 and ecc_crop_h > 0``, a tilt-correction crop is
+    used (and ``compute_backsub_offset`` is skipped). Otherwise a plain ROI is
+    extracted and the background offset is added back.
     """
     pos_dir = pos_map[(xi, yi)]
     fname = f"img_000000000_ph_{z_index:03d}_phase.tif"
     path = pos_dir / "output_phase" / fname
     if not path.exists():
-        raise FileNotFoundError(f"グリッド画像が見つかりません: {path}")
+        raise FileNotFoundError(f"Grid reference image not found: {path}")
     grid_img = tifffile.imread(str(path)).astype(np.float64)
     use_tilt = tilt_crop_h > 0 and ecc_crop_h > 0
     refs_out = []
@@ -338,537 +248,651 @@ def _load_grid_ref_full(pos_map, xi, yi, rois, n_channels, z_index, cfg,
             cropped = _tilt_correct(grid_img, roi["cy"], roi["cx"], roi["crop_w"],
                                     tilt_crop_h, ecc_crop_h, fit_right=fit_right)
         else:
-            cropped = extract_rect_roi(grid_img, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"])
+            cropped = extract_rect_roi(grid_img, roi["cy"], roi["cx"],
+                                       roi["crop_w"], roi["crop_h"])
             offset = compute_backsub_offset(cropped, cfg)
             cropped = cropped + offset
+        # cropped is None => tilt bounds NG; refs_out carries the sentinel so
+        # ECC callers can skip that channel.
         refs_out.append(cropped)
     return refs_out
 
 
-# ---- 位相再構成 ----
+# ================================================================
+# ProcessPoolExecutor worker state + initializer
+# ================================================================
 
-def reconstruct_phase(raw_path: Path, cfg: dict, bg_path: Path = None) -> np.ndarray:
-    """QPI 位相再構成。bg_path があれば差分を返す。"""
+_wk = {}  # worker-process shared data (set by _init_drift_worker)
+
+
+def _init_drift_worker(cfg, rois, leader_data_dict, bg_phases, t):
+    """Initialize worker process with shared data.
+
+    ``bg_phases`` is a dict ``{"before": ndarray|None, "after": ndarray|None}``
+    of pre-reconstructed BG phases (one per crop variant). Workers pick the
+    matching one by ``pos_index`` and subtract directly — no redundant BG
+    reconstruction per position.
+    """
+    global _wk
+    script_dir = cfg.get("script_dir", "")
+    if script_dir and script_dir not in sys.path:
+        sys.path.insert(0, script_dir)
+    _wk = {
+        'cfg': cfg, 'rois': rois,
+        'leader_data': leader_data_dict,
+        'bg_phases': bg_phases, 't': t,
+    }
+
+
+def _process_leader_task(args):
+    """Top-level worker function for ProcessPoolExecutor.
+
+    Closures are not picklable, so this must be a module-level function.
+    Reads shared data from _wk (set by _init_drift_worker).
+    """
+    idx, label, state_path, kf_path, kf_R = args
+    if idx not in _wk['leader_data']:
+        return None
+    raw_path = get_raw_path(_wk['cfg']['save_dir'], label, _wk['t'])
+    prev = read_per_pos_state(state_path, idx)
+    kf_st = load_per_pos_kf_state(kf_path, label, kf_R)
+    ld = _wk['leader_data'][idx]
+    pos_split = _wk['cfg'].get("pos_split", 3)
+    bg_phase = _wk['bg_phases']["after" if idx >= pos_split else "before"]
+    return _process_one_position(
+        idx, label, str(raw_path), bg_phase,
+        _wk['cfg'], _wk['rois'],
+        ld['u8_crops'], ld['pos_map'], ld['grid_cal'],
+        prev, kf_st)
+
+
+# ================================================================
+# Argument parsing
+# ================================================================
+
+def parse_args():
+    p = argparse.ArgumentParser(description="Per-position online drift correction")
+    p.add_argument("--timepoint", type=int, required=True)
+    p.add_argument("--config", required=True)
+    return p.parse_args()
+
+
+# ================================================================
+# Position / path helpers
+# ================================================================
+
+def load_positions_csv(csv_path):
+    """Load positions.csv -> list of dicts with index, label, x, y."""
+    positions = []
+    with open(csv_path, encoding="utf-8") as f:
+        reader = csv.reader(f)
+        next(reader)
+        for row in reader:
+            positions.append({
+                "index": int(row[0]),
+                "label": row[1].strip(),
+                "x": float(row[2]),
+                "y": float(row[3]),
+            })
+    return positions
+
+
+def get_raw_path(save_dir, label, timepoint):
+    return Path(save_dir) / label / f"img_{timepoint:09d}_ph_000.tif"
+
+
+def _pos_index_from_label(label):
+    """Extract numeric index from label, e.g. 'Pos5' -> 5."""
+    m = re.search(r"\d+", label)
+    if not m:
+        raise ValueError(f"Cannot extract index from position label: {label!r}")
+    return int(m.group())
+
+
+# ================================================================
+# Phase reconstruction (per-pos crop selection)
+# ================================================================
+
+def _reconstruct_phase_raw(raw_path, cfg, pos_index=0):
+    """Reconstruct phase from a raw TIF, no BG subtraction.
+
+    Crop is selected by ``pos_index`` vs ``cfg['pos_split']``. Used for both
+    sample and BG reconstruction; callers subtract pre-computed BG themselves.
+    """
     script_dir = Path(cfg["script_dir"])
-    sys.path.insert(0, str(script_dir))
+    if str(script_dir) not in sys.path:
+        sys.path.insert(0, str(script_dir))
 
     from PIL import Image
     from qpi import QPIParameters, get_field
     from skimage.restoration import unwrap_phase
     from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 
-    ref_idx = cfg["ref_pos_index"]
     pos_split = cfg.get("pos_split", 3)
-    if ref_idx < pos_split:
-        crop = tuple(cfg["crop_before"])
-    else:
-        crop = tuple(cfg["crop_after"])
+    crop = tuple(cfg["crop_before"]) if pos_index < pos_split else tuple(cfg["crop_after"])
     rs, re_, cs, ce = crop
 
-    def _recon(path):
-        img = np.array(Image.open(str(path)))
-        img_crop = img[rs:re_, cs:ce]
-        qpi_params = QPIParameters(
-            wavelength=WAVELENGTH, NA=NA,
-            img_shape=img_crop.shape, pixelsize=PIXELSIZE,
-            offaxis_center=OFFAXIS_CENTER,
-        )
-        field = get_field(img_crop, qpi_params)
-        return unwrap_phase(np.angle(field))
+    img = np.array(Image.open(str(raw_path)))
+    img_crop = img[rs:re_, cs:ce]
+    qpi_params = QPIParameters(
+        wavelength=WAVELENGTH, NA=NA,
+        img_shape=img_crop.shape, pixelsize=PIXELSIZE,
+        offaxis_center=OFFAXIS_CENTER,
+    )
+    return unwrap_phase(np.angle(get_field(img_crop, qpi_params)))
 
-    phase = _recon(raw_path)
-    if bg_path is not None and bg_path.exists():
-        phase = phase - _recon(bg_path)
-        print(f"  BG subtraction: {bg_path.name}")
-    else:
-        print("  No BG (backsub only)")
 
+def reconstruct_bg_phase_variants(bg_path, cfg, pos_indices):
+    """Reconstruct BG phase once per crop variant needed by the given positions.
+
+    Returns ``{"before": ndarray|None, "after": ndarray|None}``. Entries are
+    only populated for crop variants actually used by ``pos_indices``, so the
+    other entry stays ``None`` and is not sent to workers.
+    """
+    out = {"before": None, "after": None}
+    if bg_path is None or not Path(bg_path).exists():
+        return out
+    pos_split = cfg.get("pos_split", 3)
+    needs_before = any(i < pos_split for i in pos_indices)
+    needs_after  = any(i >= pos_split for i in pos_indices)
+    if needs_before:
+        # pos_index=0 forces crop_before
+        out["before"] = _reconstruct_phase_raw(bg_path, cfg, pos_index=0).astype(np.float32)
+    if needs_after:
+        # pos_index=pos_split forces crop_after
+        out["after"]  = _reconstruct_phase_raw(bg_path, cfg, pos_index=pos_split).astype(np.float32)
+    return out
+
+
+def reconstruct_phase_for_pos(raw_path, cfg, bg_phase=None, pos_index=0):
+    """QPI phase reconstruction for one sample image.
+
+    ``bg_phase`` is the pre-reconstructed BG phase (ndarray) for the same crop
+    variant as this pos; callers are responsible for picking the matching one.
+    Subtraction is skipped when ``bg_phase`` is None.
+    """
+    phase = _reconstruct_phase_raw(raw_path, cfg, pos_index=pos_index)
+    if bg_phase is not None:
+        phase = phase - bg_phase
     return phase
 
 
-# ---- メイン ----
+# ================================================================
+# Grid reference management
+# ================================================================
 
-def main():
-    args = parse_args()
-    cfg = load_config(args.config)
+def load_grid_ref_crops_for_pos(pos_label, cfg, rois):
+    """Load grid(0,0) reference crops for a position.
+    Returns (float64_crops, uint8_crops) lists.
+    """
+    grid_dir = Path(cfg["grid_dir"])
+    z_index = cfg.get("grid_z_index", 0)
+    tilt_crop_h = cfg.get("tilt_crop_h", 0)
+    ecc_crop_h = cfg.get("ecc_crop_h", 0)
+    use_tilt = tilt_crop_h > 0 and ecc_crop_h > 0
+    vmin = cfg.get("ecc_vmin", -5.0)
+    vmax = cfg.get("ecc_vmax", 2.0)
+    pos_split = cfg.get("pos_split", 3)
+    pos_index = _pos_index_from_label(pos_label)
+    fit_right = pos_index >= pos_split
 
-    t          = args.timepoint
-    sample_raw = Path(args.sample_raw)
-    bg_raw     = Path(args.bg_raw) if args.bg_raw.lower() != "none" else None
-    state_path = cfg["state_file"]
-    log_path   = cfg["log_file"]
-    prev_crops_path = Path(cfg["prev_frame_crops_tif"])
-    ref_crops_path  = Path(cfg["grid_ref_crops_tif"])
-    rois_path       = Path(cfg["channel_rois_json"])
+    grid_ref_path = (grid_dir / f"{pos_label}_x+0_y+0" / "output_phase"
+                     / f"img_000000000_ph_{z_index:03d}_phase.tif")
+    if not grid_ref_path.exists():
+        raise FileNotFoundError(f"Grid ref not found: {grid_ref_path}")
 
-    vmin           = cfg.get("ecc_vmin", -5.0)
-    vmax           = cfg.get("ecc_vmax",  2.0)
-    jump_thresh    = cfg.get("jump_thresh_um", 1.0)
-    max_total      = cfg.get("max_total_corr_um", 15.0)
-    pixel_scale_um = cfg.get("pixel_scale_um", 0.3462)
-    sx_sign        = cfg.get("shift_sign_x", 1)
-    sy_sign        = cfg.get("shift_sign_y", 1)
-    x_step         = cfg.get("x_step_um", 0.1)
-    y_step         = cfg.get("y_step_um", 0.1)
-    second_pass_half = cfg.get("second_pass_half", "right")
-    grid_dir       = cfg.get("grid_dir", None)
-    grid_base_label = cfg.get("grid_base_label", None)
-    grid_z_index   = cfg.get("grid_z_index", 0)
-    enable_third_pass = cfg.get("enable_third_pass", True)
-    tilt_crop_h    = cfg.get("tilt_crop_h", 0)
-    ecc_crop_h     = cfg.get("ecc_crop_h", 0)
-    use_tilt       = tilt_crop_h > 0 and ecc_crop_h > 0
-    pos_split      = cfg.get("pos_split", 3)
-    ref_pos_index  = cfg.get("ref_pos_index", 0)
-    tilt_fit_right = ref_pos_index >= pos_split
+    grid_img = tifffile.imread(str(grid_ref_path)).astype(np.float64)
 
-    # ---- grid calibration（実測 px オフセット辞書）----
-    # {(xi, yi): (cal_dx_px, cal_dy_px)}  cal = +tx 規約（shift_x に直接加算できる）
-    grid_cal = {}
-    grid_cal_path = cfg.get("grid_calibration_json", None)
-    if grid_cal_path and Path(grid_cal_path).exists():
-        try:
-            with open(grid_cal_path, encoding="utf-8") as f:
-                _cal_data = json.load(f)
-            for entry in _cal_data.get("positions", []):
-                grid_cal[(entry["xi"], entry["yi"])] = (
-                    -entry["actual_dx_px"],   # actual_dx = -tx → cal = +tx
-                    -entry["actual_dy_px"],
-                )
-            print(f"  grid_calibration: {len(grid_cal)} positions loaded from {Path(grid_cal_path).name}")
-        except Exception as _ex:
-            print(f"  [WARNING] grid_calibration_json 読み込み失敗: {_ex} → 名目値にフォールバック")
-            grid_cal = {}
-    elif grid_cal_path:
-        print(f"  [WARNING] grid_calibration_json が見つかりません: {grid_cal_path} → 名目値にフォールバック")
-    else:
-        print("  [INFO] grid_calibration_json 未設定 → 名目値で grid 選択")
-
-    print(f"[T={t}] compute_drift_online_v2.py start  ({'3' if enable_third_pass else '2'}-pass ECC)")
-    print(f"  sample: {sample_raw.name}")
-    print(f"  bg:     {bg_raw.name if bg_raw else 'none'}")
-
-    # ---- 入力ファイルの確認 ----
-    if not sample_raw.exists():
-        print(f"ERROR: sample-raw が見つかりません: {sample_raw}")
-        write_state(state_path, t, 0.0, 0.0, 0.0, 0.0, False, 0.0, False)
-        sys.exit(1)
-
-    if not ref_crops_path.exists():
-        print(f"ERROR: grid_ref_crops.tif が見つかりません: {ref_crops_path}")
-        write_state(state_path, t, 0.0, 0.0, 0.0, 0.0, False, 0.0, False)
-        sys.exit(1)
-
-    # ---- channel_rois.json ----
-    with open(rois_path, encoding="utf-8") as f:
-        rois = json.load(f)
-    n_channels = len(rois)
-
-    # ---- grid(0,0) 参照 crops（pass 1 用）----
-    grid_ref_crops = tifffile.imread(str(ref_crops_path)).astype(np.float64)
-    if grid_ref_crops.ndim == 2:
-        grid_ref_crops = grid_ref_crops[np.newaxis, ...]
-    grid_ref_crops_u8 = [to_uint8(grid_ref_crops[ch], vmin, vmax)
-                         for ch in range(min(n_channels, len(grid_ref_crops)))]
-    print(f"  Pass 1: grid(0,0) full-crop reference ({n_channels} channels)")
-
-    # ---- グリッドポジションマップ（pass 2 用）----
-    use_second_pass = False
-    pos_map = {}
-    if grid_dir and grid_base_label:
-        try:
-            pos_map = scan_grid_positions(grid_dir, grid_base_label)
-            if pos_map:
-                use_second_pass = True
-                print(f"  Pass 2: {len(pos_map)} grid positions loaded, full-crop")
-            else:
-                print("  [WARNING] グリッドPosが見つかりません → 1-pass にフォールバック")
-        except Exception as ex:
-            print(f"  [WARNING] グリッドスキャン失敗: {ex} → 1-pass にフォールバック")
-    else:
-        print("  [INFO] grid_dir/grid_base_label 未設定 → 1-pass ECC")
-
-    # ---- QPI 位相再構成 ----
-    print("  Phase reconstruction...")
-    try:
-        phase = reconstruct_phase(sample_raw, cfg, bg_raw)
-    except Exception as ex:
-        print(f"ERROR: Phase reconstruction failed: {ex}")
-        import traceback; traceback.print_exc()
-        write_state(state_path, t, 0.0, 0.0, 0.0, 0.0, False, 0.0, False)
-        sys.exit(1)
-
-    # 平均除去
-    h_p, w_p = phase.shape
-    region = phase[1:h_p-1, 1:w_p//2]
-    if region.size > 0:
-        phase -= np.mean(region)
-
-    # Gaussian 空間グラジェント除去
     gradient_sigma = cfg.get("gradient_sigma", 0)
     if gradient_sigma > 0:
         from scipy.ndimage import gaussian_filter
-        bg = gaussian_filter(phase, sigma=gradient_sigma, mode='nearest')
-        phase = phase - bg
-        print(f"  Gaussian gradient removal: sigma={gradient_sigma}px")
+        grid_img = grid_img - gaussian_filter(grid_img, sigma=gradient_sigma, mode="nearest")
 
-    # 再構成済み位相を保存
-    out_phase_dir = sample_raw.parent / "output_phase"
-    out_phase_dir.mkdir(exist_ok=True)
-    out_phase_path = out_phase_dir / (sample_raw.stem + "_phase.tif")
-    tifffile.imwrite(str(out_phase_path), phase.astype(np.float32))
-    print(f"  Phase saved: {out_phase_path.name}")
+    f64_crops, u8_crops = [], []
+    for roi in rois:
+        if use_tilt:
+            crop = _tilt_correct(grid_img, roi["cy"], roi["cx"], roi["crop_w"],
+                                 tilt_crop_h, ecc_crop_h, fit_right=fit_right)
+        else:
+            crop = extract_rect_roi(grid_img, roi["cy"], roi["cx"],
+                                    roi["crop_w"], roi["crop_h"])
+            offset = compute_backsub_offset(crop, cfg)
+            crop = crop + offset
+        if crop is None:
+            f64_crops.append(None)
+            u8_crops.append(None)
+        else:
+            f64_crops.append(crop.astype(np.float64))
+            u8_crops.append(to_uint8(crop, vmin, vmax))
+    return f64_crops, u8_crops
 
-    # ---- 各チャネルの full-crop（tilt 補正 or backsub）----
+
+def load_grid_cal_for_pos(pos_label, cfg):
+    """Load measured grid calibration for a position.
+
+    Returns a dict ``{(xi, yi): (dx_px, dy_px)}`` of measured pixel offsets
+    relative to grid(0, 0). The calibration JSON
+    (``grid_dir/grid_calibration_{pos_label}.json``) is mandatory; a missing
+    file is a configuration error and raises ``FileNotFoundError`` so the
+    nominal-step fallback path can no longer be silently entered.
+    """
+    grid_dir = Path(cfg["grid_dir"])
+    cal_path = grid_dir / f"grid_calibration_{pos_label}.json"
+    if not cal_path.exists():
+        raise FileNotFoundError(
+            f"Grid calibration file not found for {pos_label}: {cal_path}. "
+            f"Run calibrate_grid_pos_per_pos.py first."
+        )
+    with open(cal_path, encoding="utf-8") as f:
+        data = json.load(f)
+    return {
+        (e["xi"], e["yi"]): (-e["actual_dx_px"], -e["actual_dy_px"])
+        for e in data.get("positions", [])
+    }
+
+
+# ================================================================
+# Per-pos state management
+# ================================================================
+
+def read_per_pos_state(state_path, pos_idx):
+    """Read previous per-pos state from drift_state.txt.
+
+    Returns zeros / ``None`` defaults when the file does not exist yet
+    (first timepoint). Malformed lines propagate as exceptions.
+    """
+    result = {"cumulative_dx_um": 0.0, "cumulative_dy_um": 0.0,
+              "ema_tx_px": None, "ema_ty_px": None}
+    keys = {
+        f"CUMULATIVE_DX_UM_{pos_idx}": "cumulative_dx_um",
+        f"CUMULATIVE_DY_UM_{pos_idx}": "cumulative_dy_um",
+        f"EMA_TX_PX_{pos_idx}": "ema_tx_px",
+        f"EMA_TY_PX_{pos_idx}": "ema_ty_px",
+    }
+    try:
+        f = open(state_path, encoding="utf-8")
+    except FileNotFoundError:
+        return result
+    with f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            if k in keys:
+                result[keys[k]] = float(v)
+    return result
+
+
+def write_per_pos_state(state_path, t, pos_results, bg_pos_index):
+    """Write drift_state.txt with per-position entries."""
+    valid_results = [r for r in pos_results if r.get("valid") and not r.get("jump")]
+    any_jump = any(r.get("jump", False) for r in pos_results)
+
+    if valid_results:
+        avg_dx = float(np.mean([r["cumulative_dx_um"] for r in valid_results]))
+        avg_dy = float(np.mean([r["cumulative_dy_um"] for r in valid_results]))
+        avg_step_dx = float(np.mean([r["dx_um"] for r in valid_results]))
+        avg_step_dy = float(np.mean([r["dy_um"] for r in valid_results]))
+        avg_corr = float(np.mean([r["corr"] for r in valid_results]))
+    else:
+        avg_dx = avg_dy = 0.0
+        avg_step_dx = avg_step_dy = 0.0
+        avg_corr = 0.0
+
+    lines = [
+        "# drift_state.txt - written by compute_drift_online.py",
+        f"STATUS={'correction_ready' if valid_results else 'correction_skipped'}",
+        f"TIMEPOINT={t}",
+        f"PER_POS=true",
+        f"CUMULATIVE_DX_UM={avg_dx:.6f}",
+        f"CUMULATIVE_DY_UM={avg_dy:.6f}",
+        f"DX_UM={avg_step_dx:.6f}",
+        f"DY_UM={avg_step_dy:.6f}",
+        f"ECC_CORRELATION={avg_corr:.6f}",
+        f"CORRECTION_VALID={'true' if valid_results and not any_jump else 'false'}",
+        f"JUMP_DETECTED={'true' if any_jump else 'false'}",
+    ]
+    for r in pos_results:
+        i = r["pos_idx"]
+        lines.extend([
+            f"CUMULATIVE_DX_UM_{i}={r['cumulative_dx_um']:.6f}",
+            f"CUMULATIVE_DY_UM_{i}={r['cumulative_dy_um']:.6f}",
+            f"DX_UM_{i}={r['dx_um']:.6f}",
+            f"DY_UM_{i}={r['dy_um']:.6f}",
+            f"EMA_TX_PX_{i}={r['ema_tx']:.6f}",
+            f"EMA_TY_PX_{i}={r['ema_ty']:.6f}",
+            f"CORRECTION_VALID_{i}={'true' if r['valid'] and not r['jump'] else 'false'}",
+            f"ECC_CORRELATION_{i}={r['corr']:.6f}",
+        ])
+    lines.append(f"TIMESTAMP={datetime.now().isoformat()}")
+    with open(state_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def load_per_pos_kf_state(kf_path, pos_label, R_nm2):
+    """Load Kalman-filter state for a single position.
+
+    The KF-state file stores one nested dict per position label. Returns a
+    default state (zero position, P = R) when the file does not exist or
+    the label has no entry yet.
+    """
+    default = {"kf_pos_tx_nm": 0.0, "kf_P_tx": R_nm2,
+               "kf_pos_ty_nm": 0.0, "kf_P_ty": R_nm2}
+    try:
+        f = open(kf_path, encoding="utf-8")
+    except FileNotFoundError:
+        return default
+    with f:
+        data = json.load(f)
+    entry = data.get(pos_label)
+    if not isinstance(entry, dict):
+        return default
+    return {k: entry.get(k, default[k]) for k in default}
+
+
+def save_all_kf_states(kf_path, kf_updates):
+    """Merge per-pos KF-state updates into the on-disk JSON file.
+
+    ``kf_updates`` maps pos_label -> state dict. Existing entries for other
+    positions are preserved.
+    """
+    try:
+        f = open(kf_path, encoding="utf-8")
+    except FileNotFoundError:
+        existing = {}
+    else:
+        with f:
+            existing = json.load(f)
+    existing.update(kf_updates)
+    with open(kf_path, "w", encoding="utf-8") as f:
+        json.dump(existing, f, indent=2)
+
+
+# ================================================================
+# Core: process one position
+# ================================================================
+
+def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
+                          cfg, rois, grid_ref_u8, pos_map, grid_cal,
+                          prev_state, kf_state):
+    """Full drift pipeline for one position.
+
+    Returns dict with:
+        pos_idx, pos_label, dx_um, dy_um, cumulative_dx_um, cumulative_dy_um,
+        valid, jump, corr, ema_tx, ema_ty, kf_update, channel_details
+    """
+    t_start = datetime.now()
+    n_channels = len(rois)
+    vmin = cfg.get("ecc_vmin", -5.0)
+    vmax = cfg.get("ecc_vmax", 2.0)
+    ecc_min_corr = cfg.get("ecc_min_corr", 0.0)
+    jump_thresh = cfg.get("jump_thresh_um", 1.0)
+    max_total = cfg.get("max_total_corr_um", 15.0)
+    pixel_scale_um = cfg.get("pixel_scale_um", 0.3462)
+    sx_sign = cfg.get("shift_sign_x", 1)
+    sy_sign = cfg.get("shift_sign_y", 1)
+    grid_z_index = cfg.get("grid_z_index", 0)
+    enable_third_pass = cfg.get("enable_third_pass", True)
+    tilt_crop_h = cfg.get("tilt_crop_h", 0)
+    ecc_crop_h = cfg.get("ecc_crop_h", 0)
+    use_tilt = tilt_crop_h > 0 and ecc_crop_h > 0
+    pos_split = cfg.get("pos_split", 3)
+    fit_right = pos_idx >= pos_split
+    ema_alpha = cfg.get("correction_ema_alpha", 1.0)
+    use_kalman = cfg.get("use_kalman_filter", False)
+
+    fail_result = {
+        "pos_idx": pos_idx, "pos_label": pos_label,
+        "dx_um": 0.0, "dy_um": 0.0,
+        "cumulative_dx_um": prev_state["cumulative_dx_um"],
+        "cumulative_dy_um": prev_state["cumulative_dy_um"],
+        "valid": False, "jump": False, "corr": 0.0,
+        "ema_tx": prev_state.get("ema_tx_px", 0.0) or 0.0,
+        "ema_ty": prev_state.get("ema_ty_px", 0.0) or 0.0,
+        "kf_update": None, "channel_details": [],
+    }
+
+    # ---- Phase reconstruction ----
+    if not Path(raw_path).exists():
+        print(f"  [{pos_label}] ERROR: raw image not found: {raw_path}")
+        return fail_result
+
+    try:
+        phase_raw = _reconstruct_phase_raw(raw_path, cfg, pos_idx)
+    except Exception as ex:
+        print(f"  [{pos_label}] ERROR: phase reconstruction failed: {ex}")
+        return fail_result
+
+    # Save raw phase (no BG subtraction) - matches batch step0's output_phase_raw/
+    raw_out_dir = Path(raw_path).parent / "output_phase_raw"
+    raw_out_dir.mkdir(exist_ok=True)
+    raw_out_path = raw_out_dir / (Path(raw_path).stem + "_phase.tif")
+    tifffile.imwrite(str(raw_out_path), phase_raw.astype(np.float32))
+
+    phase = phase_raw - bg_phase if bg_phase is not None else phase_raw.copy()
+
+    # Mean removal
+    h_p, w_p = phase.shape
+    region = phase[1:h_p - 1, 1:w_p // 2]
+    if region.size > 0:
+        phase -= np.mean(region)
+
+    # Gradient removal
+    gradient_sigma = cfg.get("gradient_sigma", 0)
+    if gradient_sigma > 0:
+        from scipy.ndimage import gaussian_filter
+        phase = phase - gaussian_filter(phase, sigma=gradient_sigma, mode="nearest")
+
+    # Save BG-subtracted phase
+    out_dir = Path(raw_path).parent / "output_phase"
+    out_dir.mkdir(exist_ok=True)
+    out_path = out_dir / (Path(raw_path).stem + "_phase.tif")
+    tifffile.imwrite(str(out_path), phase.astype(np.float32))
+
+    # ---- Channel crops (tilt or backsub) ----
+    # None entries mark channels whose tilt wide-crop went OOB; downstream
+    # ECC skips them rather than falling back to a narrower crop.
     current_crops = []
-    for ch_idx, roi in enumerate(rois):
+    for roi in rois:
         if use_tilt:
             crop = _tilt_correct(phase, roi["cy"], roi["cx"], roi["crop_w"],
-                                 tilt_crop_h, ecc_crop_h, fit_right=tilt_fit_right)
+                                 tilt_crop_h, ecc_crop_h, fit_right=fit_right)
         else:
-            crop = extract_rect_roi(phase, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"])
+            crop = extract_rect_roi(phase, roi["cy"], roi["cx"],
+                                    roi["crop_w"], roi["crop_h"])
             offset = compute_backsub_offset(crop, cfg)
             crop = crop + offset
         current_crops.append(crop)
 
-    # ---- 2-pass ECC（チャネル並列）----
-    # キャッシュはスレッド間で共有するためロックを使う
-    grid_half_cache    = {}   # (xi, yi) → list of float32 full-crops (pass 2)
-    grid_half_u8_cache = {}   # (xi, yi) → list of uint8 full-crops (pass 2)
-    _cache_lock = threading.Lock()
-
-    def _align_ch(ch_idx):
-        ref_u8_p1 = grid_ref_crops_u8[ch_idx] if ch_idx < len(grid_ref_crops_u8) else grid_ref_crops_u8[-1]
-        cur_crop   = current_crops[ch_idx]
-        roi        = rois[ch_idx] if ch_idx < len(rois) else rois[-1]
-
-        # ---- Pass 1: grid(0,0) full-crop ECC ----
-        result1 = ecc_align(ref_u8_p1, to_uint8(cur_crop, vmin, vmax))
-        if result1 is None:
-            return ch_idx, None, "pass1_failed", {}
-
-        fine1_x, fine1_y, corr1 = result1
-        # Pass 1 offset は (0,0) なので shift1 = fine1
-        shift1_x, shift1_y = fine1_x, fine1_y
-
-        if not use_second_pass:
-            return ch_idx, (shift1_x, shift1_y, corr1), "pass1_only", {
-                "tx1": shift1_x, "ty1": shift1_y, "corr1": corr1,
-                "xi": 0, "yi": 0,
-                "tx2": shift1_x, "ty2": shift1_y, "corr2": corr1,
-            }
-
-        # ---- Pass 2: nearest grid half-crop ECC ----
-        xi2, yi2 = _select_nearest_grid(
-            shift1_x, shift1_y, pos_map,
-            sx_sign, sy_sign, x_step, y_step, pixel_scale_um,
-            grid_cal=grid_cal
-        )
-        offset_x2, offset_y2 = _get_grid_offset_px(
-            xi2, yi2, sx_sign, sy_sign, x_step, y_step, pixel_scale_um,
-            grid_cal=grid_cal
-        )
-
-        # full-crop をロード（キャッシュ利用）
-        with _cache_lock:
-            if (xi2, yi2) not in grid_half_cache:
-                try:
-                    halves = _load_grid_ref_full(
-                        pos_map, xi2, yi2, rois, n_channels,
-                        grid_z_index, cfg,
-                        tilt_crop_h=tilt_crop_h, ecc_crop_h=ecc_crop_h,
-                        fit_right=tilt_fit_right
-                    )
-                    grid_half_cache[(xi2, yi2)]    = halves
-                    grid_half_u8_cache[(xi2, yi2)] = [to_uint8(h, vmin, vmax) for h in halves]
-                    print(f"    [grid cache] ({xi2:+d},{yi2:+d}) loaded")
-                except FileNotFoundError as ex:
-                    print(f"    [WARNING] ch{ch_idx:02d} half-crop load failed: {ex} → pass1 result")
-                    return ch_idx, (shift1_x, shift1_y, corr1), "pass2_load_failed", {
-                        "tx1": shift1_x, "ty1": shift1_y, "corr1": corr1,
-                        "xi": xi2, "yi": yi2,
-                        "tx2": shift1_x, "ty2": shift1_y, "corr2": corr1,
-                    }
-
-        ref_u8_p2 = grid_half_u8_cache[(xi2, yi2)][ch_idx]
-        result2 = ecc_align(ref_u8_p2, to_uint8(cur_crop, vmin, vmax))
-
-        if result2 is None:
-            # Pass 2 失敗 → Pass 1 結果を採用
-            print(f"    ch{ch_idx:02d}: Pass2 ECC failed → using pass1  "
-                  f"shift=({shift1_x:+.3f},{shift1_y:+.3f})px  corr1={corr1:.4f}")
-            return ch_idx, (shift1_x, shift1_y, corr1), "pass2_ecc_failed", {
-                "tx1": shift1_x, "ty1": shift1_y, "corr1": corr1,
-                "xi": xi2, "yi": yi2,
-                "tx2": shift1_x, "ty2": shift1_y, "corr2": corr1,
-            }
-
-        fine2_x, fine2_y, corr2 = result2
-        # grid(xi2,yi2) からのfineシフト + grid(0,0)基準オフセット → 絶対シフト
-        shift2_x = fine2_x + offset_x2
-        shift2_y = fine2_y + offset_y2
-
-        # ---- Pass 3: shift2 から再グリッド選択 ----
-        if enable_third_pass:
-            xi3, yi3 = _select_nearest_grid(
-                shift2_x, shift2_y, pos_map,
-                sx_sign, sy_sign, x_step, y_step, pixel_scale_um,
-                grid_cal=grid_cal
-            )
-
-            if (xi3, yi3) == (xi2, yi2):
-                print(f"    ch{ch_idx:02d}: "
-                      f"pass1=({shift1_x:+.3f},{shift1_y:+.3f})px corr1={corr1:.4f}  "
-                      f"grid2=({xi2:+d},{yi2:+d})  "
-                      f"pass2=({shift2_x:+.3f},{shift2_y:+.3f})px corr2={corr2:.4f}  "
-                      f"[pass3=skip]")
-                return ch_idx, (shift2_x, shift2_y, corr2), "pass2_ok", {
-                    "tx1": shift1_x, "ty1": shift1_y, "corr1": corr1,
-                    "xi": xi2, "yi": yi2,
-                    "tx2": shift2_x, "ty2": shift2_y, "corr2": corr2,
-                    "xi3": xi3, "yi3": yi3,
-                    "tx3": shift2_x, "ty3": shift2_y, "corr3": corr2,
-                }
-
-            offset_x3, offset_y3 = _get_grid_offset_px(
-                xi3, yi3, sx_sign, sy_sign, x_step, y_step, pixel_scale_um,
-                grid_cal=grid_cal
-            )
-
-            with _cache_lock:
-                if (xi3, yi3) not in grid_half_cache:
-                    try:
-                        halves3 = _load_grid_ref_full(
-                            pos_map, xi3, yi3, rois, n_channels,
-                            grid_z_index, cfg,
-                            tilt_crop_h=tilt_crop_h, ecc_crop_h=ecc_crop_h,
-                            fit_right=tilt_fit_right
-                        )
-                        grid_half_cache[(xi3, yi3)]    = halves3
-                        grid_half_u8_cache[(xi3, yi3)] = [to_uint8(h, vmin, vmax) for h in halves3]
-                        print(f"    [grid cache] ({xi3:+d},{yi3:+d}) loaded")
-                    except FileNotFoundError as ex:
-                        print(f"    [WARNING] ch{ch_idx:02d} pass3 load failed: {ex} → pass2 result")
-                        print(f"    ch{ch_idx:02d}: "
-                              f"pass1=({shift1_x:+.3f},{shift1_y:+.3f})px corr1={corr1:.4f}  "
-                              f"grid2=({xi2:+d},{yi2:+d})  "
-                              f"pass2=({shift2_x:+.3f},{shift2_y:+.3f})px corr2={corr2:.4f}  "
-                              f"[pass3=load_failed]")
-                        return ch_idx, (shift2_x, shift2_y, corr2), "pass3_load_failed", {
-                            "tx1": shift1_x, "ty1": shift1_y, "corr1": corr1,
-                            "xi": xi2, "yi": yi2,
-                            "tx2": shift2_x, "ty2": shift2_y, "corr2": corr2,
-                            "xi3": xi3, "yi3": yi3,
-                            "tx3": shift2_x, "ty3": shift2_y, "corr3": corr2,
-                        }
-
-            ref_u8_p3 = grid_half_u8_cache[(xi3, yi3)][ch_idx]
-            result3 = ecc_align(ref_u8_p3, to_uint8(cur_crop, vmin, vmax))
-
-            if result3 is None:
-                print(f"    ch{ch_idx:02d}: Pass3 ECC failed → using pass2  "
-                      f"shift=({shift2_x:+.3f},{shift2_y:+.3f})px  corr2={corr2:.4f}")
-                return ch_idx, (shift2_x, shift2_y, corr2), "pass3_ecc_failed", {
-                    "tx1": shift1_x, "ty1": shift1_y, "corr1": corr1,
-                    "xi": xi2, "yi": yi2,
-                    "tx2": shift2_x, "ty2": shift2_y, "corr2": corr2,
-                    "xi3": xi3, "yi3": yi3,
-                    "tx3": shift2_x, "ty3": shift2_y, "corr3": corr2,
-                }
-
-            fine3_x, fine3_y, corr3 = result3
-            shift3_x = fine3_x + offset_x3
-            shift3_y = fine3_y + offset_y3
-
-            print(f"    ch{ch_idx:02d}: "
-                  f"pass1=({shift1_x:+.3f},{shift1_y:+.3f})px corr1={corr1:.4f}  "
-                  f"grid2=({xi2:+d},{yi2:+d})  "
-                  f"pass2=({shift2_x:+.3f},{shift2_y:+.3f})px corr2={corr2:.4f}  "
-                  f"grid3=({xi3:+d},{yi3:+d})  "
-                  f"pass3=({shift3_x:+.3f},{shift3_y:+.3f})px corr3={corr3:.4f}")
-            return ch_idx, (shift3_x, shift3_y, corr3), "pass3_ok", {
-                "tx1": shift1_x, "ty1": shift1_y, "corr1": corr1,
-                "xi": xi2, "yi": yi2,
-                "tx2": shift2_x, "ty2": shift2_y, "corr2": corr2,
-                "xi3": xi3, "yi3": yi3,
-                "tx3": shift3_x, "ty3": shift3_y, "corr3": corr3,
-            }
-
-        # enable_third_pass=False → pass2 をそのまま使用
-        print(f"    ch{ch_idx:02d}: "
-              f"pass1=({shift1_x:+.3f},{shift1_y:+.3f})px corr1={corr1:.4f}  "
-              f"grid=({xi2:+d},{yi2:+d})  "
-              f"pass2=({shift2_x:+.3f},{shift2_y:+.3f})px corr2={corr2:.4f}")
-        return ch_idx, (shift2_x, shift2_y, corr2), "pass2_ok", {
-            "tx1": shift1_x, "ty1": shift1_y, "corr1": corr1,
-            "xi": xi2, "yi": yi2,
-            "tx2": shift2_x, "ty2": shift2_y, "corr2": corr2,
-        }
-
-    n_ch = min(n_channels, len(current_crops))
-    with concurrent.futures.ThreadPoolExecutor(max_workers=n_ch) as ex:
-        ch_results = list(ex.map(_align_ch, range(n_ch)))
+    # ---- Multi-pass ECC per channel ----
+    # Grid cache local to this position (no threading issues)
+    grid_half_cache = {}
+    grid_half_u8_cache = {}
 
     tx_list, ty_list, corr_list = [], [], []
-    valid_ch_indices = []  # tx_list の各要素に対応する ch_idx
-    ch_detail_map = {}     # ch_idx -> detail dict
-    for ch_idx, result, status, detail in ch_results:
-        ch_detail_map[ch_idx] = dict(detail, status=status)
-        if result is not None:
-            tx, ty, corr = result
-            tx_list.append(tx)
-            ty_list.append(ty)
-            corr_list.append(corr)
-            valid_ch_indices.append(ch_idx)
+    valid_ch_indices = []
+    channel_details = []
+
+    for ch_idx in range(min(n_channels, len(current_crops))):
+        ref_u8_p1 = grid_ref_u8[ch_idx] if ch_idx < len(grid_ref_u8) else grid_ref_u8[-1]
+        cur_crop = current_crops[ch_idx]
+
+        if cur_crop is None or ref_u8_p1 is None:
+            channel_details.append({"ch": ch_idx, "outlier": True, "status": "tilt_bounds_ng"})
+            continue
+
+        # Pass 1: grid(0,0)
+        result1 = ecc_align(ref_u8_p1, to_uint8(cur_crop, vmin, vmax))
+        if result1 is None:
+            channel_details.append({"ch": ch_idx, "outlier": True, "status": "pass1_failed"})
+            continue
+
+        fine1_x, fine1_y, corr1 = result1
+        shift1_x, shift1_y = fine1_x, fine1_y
+        detail = {"tx1": shift1_x, "ty1": shift1_y, "corr1": corr1,
+                  "xi": 0, "yi": 0}
+
+        # Pass 2: nearest grid
+        xi2, yi2 = _select_nearest_grid(shift1_x, shift1_y, pos_map, grid_cal)
+        offset_x2, offset_y2 = _get_grid_offset_px(xi2, yi2, grid_cal)
+
+        if (xi2, yi2) not in grid_half_cache:
+            halves = _load_grid_ref_full(
+                pos_map, xi2, yi2, rois, n_channels,
+                grid_z_index, cfg,
+                tilt_crop_h=tilt_crop_h, ecc_crop_h=ecc_crop_h,
+                fit_right=fit_right)
+            grid_half_cache[(xi2, yi2)] = halves
+            grid_half_u8_cache[(xi2, yi2)] = [
+                None if h is None else to_uint8(h, vmin, vmax) for h in halves]
+
+        ref_u8_p2 = grid_half_u8_cache[(xi2, yi2)][ch_idx]
+        if ref_u8_p2 is None:
+            result2 = None
         else:
-            print(f"    ch{ch_idx:02d}: ECC failed ({status})")
+            result2 = ecc_align(ref_u8_p2, to_uint8(cur_crop, vmin, vmax))
+        if result2 is None:
+            detail.update({"xi": xi2, "yi": yi2, "tx2": shift1_x, "ty2": shift1_y,
+                           "corr2": corr1, "status": "pass2_ecc_failed"})
+            tx_list.append(shift1_x); ty_list.append(shift1_y); corr_list.append(corr1)
+            valid_ch_indices.append(ch_idx)
+            channel_details.append({"ch": ch_idx, "outlier": False, **detail})
+            continue
 
+        fine2_x, fine2_y, corr2 = result2
+        shift2_x = fine2_x + offset_x2
+        shift2_y = fine2_y + offset_y2
+        detail.update({"xi": xi2, "yi": yi2, "tx2": shift2_x, "ty2": shift2_y, "corr2": corr2})
+
+        # Pass 3
+        final_shift_x, final_shift_y, final_corr = shift2_x, shift2_y, corr2
+        final_status = "pass2_ok"
+
+        if enable_third_pass:
+            xi3, yi3 = _select_nearest_grid(shift2_x, shift2_y, pos_map, grid_cal)
+
+            if (xi3, yi3) != (xi2, yi2):
+                offset_x3, offset_y3 = _get_grid_offset_px(xi3, yi3, grid_cal)
+
+                if (xi3, yi3) not in grid_half_cache:
+                    halves3 = _load_grid_ref_full(
+                        pos_map, xi3, yi3, rois, n_channels,
+                        grid_z_index, cfg,
+                        tilt_crop_h=tilt_crop_h, ecc_crop_h=ecc_crop_h,
+                        fit_right=fit_right)
+                    grid_half_cache[(xi3, yi3)] = halves3
+                    grid_half_u8_cache[(xi3, yi3)] = [
+                        None if h is None else to_uint8(h, vmin, vmax) for h in halves3]
+
+                ref_u8_p3 = grid_half_u8_cache[(xi3, yi3)][ch_idx]
+                if ref_u8_p3 is None:
+                    result3 = None
+                else:
+                    result3 = ecc_align(ref_u8_p3, to_uint8(cur_crop, vmin, vmax))
+                if result3 is not None:
+                    fine3_x, fine3_y, corr3 = result3
+                    final_shift_x = fine3_x + offset_x3
+                    final_shift_y = fine3_y + offset_y3
+                    final_corr = corr3
+                    final_status = "pass3_ok"
+                    detail.update({"xi3": xi3, "yi3": yi3,
+                                   "tx3": final_shift_x, "ty3": final_shift_y, "corr3": corr3})
+
+        detail["status"] = final_status
+        tx_list.append(final_shift_x)
+        ty_list.append(final_shift_y)
+        corr_list.append(final_corr)
+        valid_ch_indices.append(ch_idx)
+        channel_details.append({"ch": ch_idx, "outlier": False, **detail})
+
+    # ---- All channels failed ----
     if not tx_list:
-        print("ERROR: ECC failed on all channels")
-        prev_state = read_state(state_path)
-        write_state(state_path, t, 0.0, 0.0,
-                    prev_state["cumulative_dx_um"], prev_state["cumulative_dy_um"],
-                    False, 0.0, False)
-        sys.exit(0)
+        print(f"  [{pos_label}] ERROR: ECC failed on all channels")
+        return fail_result
 
-    # チャネル平均（MAD 外れ値除去）
+    # ---- Channel averaging (outlier removal) ----
     n_ch_raw = len(tx_list)
-    if n_ch_raw >= 3:
-        out_x = _remove_outliers_mad(tx_list)
-        out_y = _remove_outliers_mad(ty_list)
-        is_out = out_x | out_y
-        used_idx = [i for i, o in enumerate(is_out) if not o]
-        if len(used_idx) == 0:
-            used_idx = list(range(n_ch_raw))
-        excl = [i for i in range(n_ch_raw) if is_out[i]]
-        if excl:
-            print(f"  [外れ値除去] idx={excl}: {len(excl)}ch除外")
-    else:
-        used_idx = list(range(n_ch_raw))
+    low_corr_mask = np.zeros(n_ch_raw, dtype=bool)
+    if ecc_min_corr > 0:
+        low_corr_mask = np.array([c < ecc_min_corr for c in corr_list])
 
-    tx_arr   = np.array(tx_list)
-    ty_arr   = np.array(ty_list)
+    if n_ch_raw >= 3:
+        is_out = _remove_outliers_mad(tx_list) | _remove_outliers_mad(ty_list) | low_corr_mask
+        used_idx = [i for i, o in enumerate(is_out) if not o]
+        if not used_idx:
+            used_idx = list(range(n_ch_raw))
+    else:
+        is_out = low_corr_mask
+        used_idx = [i for i, o in enumerate(is_out) if not o]
+        if not used_idx:
+            used_idx = list(range(n_ch_raw))
+
+    # Mark outliers in channel_details
+    detail_idx = 0
+    for cd in channel_details:
+        if cd.get("status") != "pass1_failed":
+            if detail_idx < len(is_out):
+                cd["outlier"] = bool(is_out[detail_idx])
+            detail_idx += 1
+
+    tx_arr = np.array(tx_list)
+    ty_arr = np.array(ty_list)
     corr_arr = np.array(corr_list)
-    tx_avg   = float(np.mean(tx_arr[used_idx]))
-    ty_avg   = float(np.mean(ty_arr[used_idx]))
+    tx_avg = float(np.mean(tx_arr[used_idx]))
+    ty_avg = float(np.mean(ty_arr[used_idx]))
     corr_avg = float(np.mean(corr_arr[used_idx]))
 
-    # ---- EMA フィルタ（correction_ema_alpha < 1.0 で有効）----
-    prev_state = read_state(state_path)
-    ema_alpha  = cfg.get("correction_ema_alpha", 1.0)
+    # ---- EMA filter ----
     prev_ema_tx = prev_state["ema_tx_px"]
     prev_ema_ty = prev_state["ema_ty_px"]
-    if prev_ema_tx is None:                        # 初回フレーム: フィルタなし
+    if prev_ema_tx is None:
         tx_filt, ty_filt = tx_avg, ty_avg
     else:
         tx_filt = ema_alpha * tx_avg + (1.0 - ema_alpha) * prev_ema_tx
         ty_filt = ema_alpha * ty_avg + (1.0 - ema_alpha) * prev_ema_ty
-    if ema_alpha < 1.0:
-        print(f"  EMA(α={ema_alpha}): tx={tx_filt:+.4f}px  ty={ty_filt:+.4f}px")
 
-    # ---- Kalman フィルタ（pos-only random walk、use_kalman_filter: true で有効）----
-    # 方向別 Q/R 設定対応: kf_R_ty_nm2 (image X ECC) / kf_R_tx_nm2 (image Y ECC)
-    # analyze_stage_repeatability 実測値より:
-    #   R_ty = (33.1/√12)² ≈  91 nm²  (image X, K_ss ≈ 0.95)
-    #   R_tx = (57.3/√12)² ≈ 274 nm²  (image Y, K_ss ≈ 0.87)
-    #   Q    = σ_stage²    ≈ 1650 nm²  (stage repositioning noise が主因)
-    # Q >> R のため高ゲイン設計が正しい（旧 R=12100 は 130× 過大だった）
-    use_kalman          = cfg.get("use_kalman_filter", False)
-    kf_K_tx             = kf_K_ty = kf_P_tx = kf_P_ty = None
-    kf_innov_tx         = kf_innov_ty = None
-    kf_pos_ty_nm_new    = kf_pos_tx_nm_new = None
+    # ---- Sign/scale conversion (pixel -> um, image -> stage) ----
+    correction_stage_x_um = sx_sign * ty_filt * pixel_scale_um
+    correction_stage_y_um = sy_sign * tx_filt * pixel_scale_um
+
+    # ---- Kalman filter ----
+    kf_update = None
     if use_kalman:
-        kf_Q        = cfg.get("kf_Q_pos_nm2", 548.0)
-        kf_R        = cfg.get("kf_R_nm2",     454.0)
-        # 方向別 Q/R（未指定時は kf_Q / kf_R にフォールバック）
-        # ty state は tx_avg (image X 由来), tx state は ty_avg (image Y 由来)
-        kf_Q_ty     = cfg.get("kf_Q_ty_nm2",  kf_Q)
-        kf_Q_tx     = cfg.get("kf_Q_tx_nm2",  kf_Q)
-        kf_R_ty     = cfg.get("kf_R_ty_nm2",  kf_R)
-        kf_R_tx     = cfg.get("kf_R_tx_nm2",  kf_R)
-        kf_file     = cfg.get("kf_state_file",
-                               str(Path(state_path).parent / "drift_kf_state.json"))
+        kf_Q_ty = cfg.get("kf_Q_ty_nm2", cfg.get("kf_Q_pos_nm2", 548.0))
+        kf_Q_tx = cfg.get("kf_Q_tx_nm2", cfg.get("kf_Q_pos_nm2", 548.0))
+        kf_R_ty = cfg.get("kf_R_ty_nm2", cfg.get("kf_R_nm2", 454.0))
+        kf_R_tx = cfg.get("kf_R_tx_nm2", cfg.get("kf_R_nm2", 454.0))
         px_scale_nm = pixel_scale_um * 1000.0
-        kf_state    = load_kf_state(kf_file, max(kf_R_ty, kf_R_tx))
 
-        # open-loop 再構成位置 [nm]: 累積補正 + 現フレーム ECC 残差
-        z_ty_nm      = tx_avg * px_scale_nm * sy_sign
-        z_tx_nm      = ty_avg * px_scale_nm * sx_sign
+        z_ty_nm = tx_avg * px_scale_nm * sy_sign
+        z_tx_nm = ty_avg * px_scale_nm * sx_sign
         ol_pos_ty_nm = prev_state["cumulative_dy_um"] * 1000.0 + z_ty_nm
         ol_pos_tx_nm = prev_state["cumulative_dx_um"] * 1000.0 + z_tx_nm
 
-        # イノベーション（update 前の予測誤差）
-        kf_innov_ty = abs(ol_pos_ty_nm - kf_state["kf_pos_ty_nm"])
-        kf_innov_tx = abs(ol_pos_tx_nm - kf_state["kf_pos_tx_nm"])
-
-        # pos-only random walk Kalman update（方向別 Q/R）
         pos_ty_new, P_ty_new, K_ty = kf_step_posonly_nm(
             ol_pos_ty_nm, kf_state["kf_pos_ty_nm"], kf_state["kf_P_ty"], kf_Q_ty, kf_R_ty)
         pos_tx_new, P_tx_new, K_tx = kf_step_posonly_nm(
             ol_pos_tx_nm, kf_state["kf_pos_tx_nm"], kf_state["kf_P_tx"], kf_Q_tx, kf_R_tx)
 
-        save_kf_state(kf_file, pos_tx_new, P_tx_new, pos_ty_new, P_ty_new)
+        correction_stage_y_um = pos_ty_new / 1000.0 - prev_state["cumulative_dy_um"]
+        correction_stage_x_um = pos_tx_new / 1000.0 - prev_state["cumulative_dx_um"]
 
-        kf_pos_ty_nm_new = pos_ty_new
-        kf_pos_tx_nm_new = pos_tx_new
-        kf_P_ty          = P_ty_new
-        kf_P_tx          = P_tx_new
-        kf_K_ty          = K_ty
-        kf_K_tx          = K_tx
-        print(f"  KF pos-only: "
-              f"ol_ty={ol_pos_ty_nm:.0f}nm pos={pos_ty_new:.0f}nm K={K_ty:.3f}(R={kf_R_ty:.0f})  "
-              f"ol_tx={ol_pos_tx_nm:.0f}nm pos={pos_tx_new:.0f}nm K={K_tx:.3f}(R={kf_R_tx:.0f})")
+        kf_update = {
+            "kf_pos_tx_nm": float(pos_tx_new), "kf_P_tx": float(P_tx_new),
+            "kf_pos_ty_nm": float(pos_ty_new), "kf_P_ty": float(P_ty_new),
+        }
 
-    # channel_details: valid_ch_indices の順序で outlier フラグを付与
-    is_out_arr = is_out if n_ch_raw >= 3 else np.zeros(n_ch_raw, dtype=bool)
-    channel_details = []
-    for list_idx, ch_idx in enumerate(valid_ch_indices):
-        d = ch_detail_map.get(ch_idx, {})
-        channel_details.append({
-            "ch": ch_idx,
-            "tx1": round(d.get("tx1", 0.0), 6), "ty1": round(d.get("ty1", 0.0), 6),
-            "corr1": round(d.get("corr1", 0.0), 6),
-            "xi": d.get("xi", 0), "yi": d.get("yi", 0),
-            "tx2": round(d.get("tx2", 0.0), 6), "ty2": round(d.get("ty2", 0.0), 6),
-            "corr2": round(d.get("corr2", 0.0), 6),
-            "outlier": bool(is_out_arr[list_idx]),
-            "status": d.get("status", ""),
-        })
-    # ECC failed チャネルも記録
-    for ch_idx in sorted(set(ch_detail_map) - set(valid_ch_indices)):
-        d = ch_detail_map[ch_idx]
-        channel_details.append({"ch": ch_idx, "outlier": True, "status": d.get("status", "failed")})
-    print(f"  ECC平均: tx={tx_avg:+.4f}px  ty={ty_avg:+.4f}px  corr={corr_avg:.4f}  "
-          f"(使用{len(used_idx)}/{n_ch_raw}ch)")
-
-    # ---- 符号・スケール変換（pixel → μm、画像軸 → ステージ軸）----
-    shift_x = tx_filt  # 画像X方向ずれ [px]（EMAフィルタ済み）
-    shift_y = ty_filt  # 画像Y方向ずれ [px]（EMAフィルタ済み）
-
-    correction_stage_x_um = sx_sign * shift_y * pixel_scale_um  # ステージX方向補正 [μm]
-    correction_stage_y_um = sy_sign * shift_x * pixel_scale_um  # ステージY方向補正 [μm]
-
-    # pos-only KF: 推定絶対位置から incremental 補正に変換
-    if use_kalman and kf_pos_ty_nm_new is not None:
-        correction_stage_y_um = kf_pos_ty_nm_new / 1000.0 - prev_state["cumulative_dy_um"]
-        correction_stage_x_um = kf_pos_tx_nm_new / 1000.0 - prev_state["cumulative_dx_um"]
-
-    # ---- 累積ドリフト計算 ----
-    # 1枚目（state ファイル未存在 = ema_tx_px が None）は grid 撮影→タイムラプス開始間の
-    # オフセット補正なので cumulative には加算しない
+    # ---- Cumulative drift ----
     is_first_frame = prev_state["ema_tx_px"] is None
     if is_first_frame:
-        cum_dx = 0.0
-        cum_dy = 0.0
+        cum_dx = cum_dy = 0.0
     else:
         cum_dx = prev_state["cumulative_dx_um"] + correction_stage_x_um
         cum_dy = prev_state["cumulative_dy_um"] + correction_stage_y_um
 
-    print(f"  Correction: stage_x={correction_stage_x_um:+.4f}um  stage_y={correction_stage_y_um:+.4f}um")
-    print(f"  Cumulative: stage_x={cum_dx:+.4f}um  stage_y={cum_dy:+.4f}um")
-
-    # ---- ジャンプ検出 ----
-    step_um  = (correction_stage_x_um**2 + correction_stage_y_um**2) ** 0.5
+    # ---- Jump detection ----
+    step_um = (correction_stage_x_um**2 + correction_stage_y_um**2) ** 0.5
     total_um = (cum_dx**2 + cum_dy**2) ** 0.5
     if jump_thresh is None:
         jump = total_um > max_total
@@ -876,65 +900,494 @@ def main():
         jump = (step_um > jump_thresh) or (total_um > max_total)
 
     if jump:
-        thresh_str = "off" if jump_thresh is None else f"{jump_thresh}um"
-        print(f"  [JUMP] step={step_um:.3f}um (thresh={thresh_str}), "
-              f"total={total_um:.3f}um (max={max_total}um) -> skipped")
-        write_state(state_path, t,
-                    correction_stage_x_um, correction_stage_y_um,
-                    prev_state["cumulative_dx_um"], prev_state["cumulative_dy_um"],
-                    False, corr_avg, True,
-                    ema_tx=tx_filt, ema_ty=ty_filt)
-    else:
-        # prev_frame_crops.tif を更新（互換性維持）
-        current_crops_arr = np.stack([c.astype(np.float32) for c in current_crops], axis=0)
-        tifffile.imwrite(str(prev_crops_path), current_crops_arr)
-        write_state(state_path, t,
-                    correction_stage_x_um, correction_stage_y_um,
-                    cum_dx, cum_dy,
-                    True, corr_avg, False,
-                    ema_tx=tx_filt, ema_ty=ty_filt)
-        print(f"  [OK] Correction valid")
+        cum_dx = prev_state["cumulative_dx_um"]
+        cum_dy = prev_state["cumulative_dy_um"]
 
-    # ---- ログ追記 ----
-    log_entry = {
-        "timepoint":             t,
-        "timestamp":             datetime.now().isoformat(),
-        "sample_raw":            str(sample_raw),
-        "bg_raw":                str(bg_raw) if bg_raw else None,
-        "used_prev_frame":       False,
-        "n_channels_used":       len(used_idx),
-        "n_channels_raw":        n_ch_raw,
-        "tx_avg_px":             tx_avg,
-        "ty_avg_px":             ty_avg,
-        "ecc_correlation":       corr_avg,
-        "correction_stage_x_um": correction_stage_x_um,
-        "correction_stage_y_um": correction_stage_y_um,
-        "cumulative_dx_um":      cum_dx,
-        "cumulative_dy_um":      cum_dy,
-        "jump_detected":         jump,
-        "correction_valid":      not jump,
-        "two_pass_ecc":          use_second_pass,
-        "tx_filt_px":            round(tx_filt, 6),
-        "ty_filt_px":            round(ty_filt, 6),
-        "kf_active":             use_kalman,
-        "kf_K_tx":               round(kf_K_tx, 4) if kf_K_tx is not None else None,
-        "kf_K_ty":               round(kf_K_ty, 4) if kf_K_ty is not None else None,
-        "kf_P_tx_nm2":           round(kf_P_tx, 2) if kf_P_tx is not None else None,
-        "kf_P_ty_nm2":           round(kf_P_ty, 2) if kf_P_ty is not None else None,
-        "kf_innovation_tx_nm":   round(kf_innov_tx, 2) if kf_innov_tx is not None else None,
-        "kf_innovation_ty_nm":   round(kf_innov_ty, 2) if kf_innov_ty is not None else None,
-        "channel_details":       sorted(channel_details, key=lambda x: x["ch"]),
+    elapsed = (datetime.now() - t_start).total_seconds()
+    status_str = "JUMP" if jump else "OK"
+    print(f"  [{pos_label}] {status_str}  "
+          f"dx={correction_stage_x_um:+.4f}um dy={correction_stage_y_um:+.4f}um  "
+          f"cum=({cum_dx:+.3f},{cum_dy:+.3f})um  "
+          f"corr={corr_avg:.3f}  {len(used_idx)}/{n_ch_raw}ch  {elapsed:.1f}s")
+
+    return {
+        "pos_idx": pos_idx,
+        "pos_label": pos_label,
+        "dx_um": correction_stage_x_um,
+        "dy_um": correction_stage_y_um,
+        "cumulative_dx_um": cum_dx,
+        "cumulative_dy_um": cum_dy,
+        "valid": True,
+        "jump": jump,
+        "corr": corr_avg,
+        "ema_tx": tx_filt,
+        "ema_ty": ty_filt,
+        "kf_update": kf_update,
+        "channel_details": sorted(channel_details, key=lambda x: x["ch"]),
+        "n_channels_used": len(used_idx),
+        "n_channels_raw": n_ch_raw,
+        "tx_avg_px": tx_avg,
+        "ty_avg_px": ty_avg,
+        "raw_path": str(raw_path),
     }
+
+
+# ================================================================
+# Phase B: crop-subtracted save (grid_subtract on all positions)
+# ================================================================
+# Phase B runs AFTER Phase A (drift feedback) in the same process. For each
+# Pos with a valid Phase A result, it:
+#   (a) reconstructs the raw timelapse phase (RAW_CROP from optical_config),
+#   (b) selects the nearest grid Pos from the measured calibration,
+#   (c) loads the grid reference (raw reconstruction, prefer prerecon TIF),
+#   (d) runs grid_subtract.process_single_frame for byte-compatible output,
+#   (e) writes per-channel TIFs atomically,
+#   (f) appends one entry to pos_shifts_cal_online.json per Pos.
+# Budget-limited via crop_sub_max_seconds; leftover Pos fall back to offline.
+
+
+def _save_crop_sub_one_pos(args):
+    """Phase B worker: save crop-subtracted per-channel TIFs for one (t, pos).
+
+    Must be module-level for ProcessPoolExecutor pickling. Returns a dict
+    describing the outcome; main collects these to update the per-Pos
+    pos_shifts_cal_online.json.
+    """
+    (t, pos_label, sx, sy, cfg, rois, crop_sub_root_str) = args
+    try:
+        script_dir = cfg.get("script_dir", "")
+        if script_dir and script_dir not in sys.path:
+            sys.path.insert(0, script_dir)
+
+        import grid_subtract as gs
+        from optical_config import RAW_CROP
+
+        crop_sub_root = Path(crop_sub_root_str)
+        save_dir = Path(cfg["save_dir"])
+        raw_tl_z = cfg.get("raw_tl_z_index", 0)
+        raw_holo = save_dir / pos_label / f"img_{t:09d}_ph_{raw_tl_z:03d}.tif"
+        if not raw_holo.exists():
+            return {"pos_label": pos_label, "status": "missing_holo",
+                    "path": str(raw_holo)}
+
+        qpi_params = gs._make_qpi_params_raw(raw_holo, RAW_CROP)
+        tl_img = gs._reconstruct_raw(raw_holo, qpi_params, RAW_CROP)
+
+        m = re.match(r"Pos(\d+)", pos_label)
+        pos_num = int(m.group(1)) if m else 0
+        fit_right = pos_num >= cfg.get("pos_split", 33)
+
+        grid_dir = Path(cfg["grid_dir"])
+        pos_map = gs.scan_grid_positions(grid_dir, pos_label)
+        if not pos_map:
+            return {"pos_label": pos_label, "status": "no_pos_map"}
+        cal_path = grid_dir / f"grid_calibration_{pos_label}.json"
+        if not cal_path.exists():
+            return {"pos_label": pos_label, "status": "no_grid_cal",
+                    "path": str(cal_path)}
+        grid_cal = gs.load_grid_calibration(str(cal_path))
+
+        xi, yi, dist_um, dx_um, dy_um, cal_dx, cal_dy, residual_x, residual_y = gs.select_grid(
+            sx, sy, pos_map, grid_cal,
+            pixel_scale_um=cfg["pixel_scale_um"],
+            x_step=cfg.get("crop_sub_x_step_um", 0.1),
+            y_step=cfg.get("crop_sub_y_step_um", 0.1),
+            shift_sign_x=-1, shift_sign_y=-1,
+        )
+
+        grid_pos_dir = pos_map.get((xi, yi))
+        grid_img = None
+        if grid_pos_dir is not None:
+            z_g = cfg.get("raw_grid_z_index", 18)
+            prerecon = grid_pos_dir / "output_phase_raw" / f"img_000000000_ph_{z_g:03d}_phase.tif"
+            if prerecon.exists():
+                grid_img = tifffile.imread(str(prerecon)).astype(np.float64)
+            else:
+                grid_holo = grid_pos_dir / f"img_000000000_ph_{z_g:03d}.tif"
+                if grid_holo.exists():
+                    g_qpi = gs._make_qpi_params_raw(grid_holo, RAW_CROP)
+                    grid_img = gs._reconstruct_raw(grid_holo, g_qpi, RAW_CROP)
+
+        tilt_h = cfg.get("tilt_crop_h_raw", 270)
+        per_channel_out, _ = gs.process_single_frame(
+            tl_img, sx, sy, rois,
+            cal_dx, cal_dy, residual_x, residual_y,
+            grid_img,
+            output_crop_h_override=tilt_h,
+            tilt_crop_h_raw=tilt_h,
+            use_raw_phase=True,
+            apply_subpixel_correction=True,
+            fit_right=fit_right,
+            apply_inverse_shift=False,
+        )
+
+        out_base = (crop_sub_root / pos_label / "output_phase" /
+                    "channels" / "crop_sub_rawraw")
+        tif_name = raw_holo.name
+        for ch in range(len(rois)):
+            ch_dir = out_base / f"ch{ch:02d}"
+            ch_dir.mkdir(parents=True, exist_ok=True)
+            final = ch_dir / tif_name
+            tmp = ch_dir / (tif_name + ".tmp")
+            tifffile.imwrite(str(tmp), per_channel_out[ch].astype(np.float32))
+            os.replace(str(tmp), str(final))
+
+        return {
+            "pos_label": pos_label,
+            "status": "ok",
+            "frame_entry": {
+                "frame_index": int(t),
+                "shift_x_avg": float(sx),
+                "shift_y_avg": float(sy),
+                "grid_xi": int(xi),
+                "grid_yi": int(yi),
+                "residual_x_px": float(residual_x),
+                "residual_y_px": float(residual_y),
+                "grid_nearest_dist_um": (float(dist_um)
+                                          if dist_um is not None else None),
+            },
+        }
+    except Exception as e:
+        import traceback
+        return {"pos_label": pos_label, "status": "error",
+                "error": repr(e), "tb": traceback.format_exc()}
+
+
+def _append_online_pos_shifts(crop_sub_root, pos_label, frame_entry, cfg):
+    """Atomic append of one frame entry to pos_shifts_cal_online.json for a Pos.
+
+    frame_results is a sparse list indexed by frame_index (padded with None).
+    Safe for re-run: the same t simply overwrites the entry. On first write,
+    populates top-level metadata so correct_0pergluc.py can consume the JSON
+    directly without a synthesized grid_subtract_log.json.
+    """
+    json_path = (Path(crop_sub_root) / pos_label / "output_phase" /
+                 "channels" / "pos_shifts_cal_online.json")
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+
+    pos_num = _pos_index_from_label(pos_label)
+    pos_split = int(cfg.get("pos_split", 0))
+    raw_crop = (cfg["crop_before"] if pos_num < pos_split
+                else cfg["crop_after"])
+
+    default = {
+        "schema_version": 2,
+        "source": "online_crop_sub",
+        "base_label": pos_label,
+        "grid_dir": cfg.get("grid_dir", ""),
+        "grid_z_index": int(cfg.get("raw_grid_z_index", 18)),
+        "tl_z_index": int(cfg.get("raw_tl_z_index", 0)),
+        "x_step_um": float(cfg.get("crop_sub_x_step_um", 0.1)),
+        "y_step_um": float(cfg.get("crop_sub_y_step_um", 0.1)),
+        "shift_sign_x": int(cfg.get("shift_sign_x", -1)),
+        "shift_sign_y": int(cfg.get("shift_sign_y", -1)),
+        "apply_subpixel_correction": True,
+        "apply_inverse_shift": False,
+        "use_raw_phase": True,
+        "raw_crop": list(raw_crop),
+        "tilt_crop_h_raw": int(cfg.get("tilt_crop_h_raw", 270)),
+        "frame_results": [],
+    }
+
+    data = default
+    if json_path.exists():
+        try:
+            with open(json_path, encoding="utf-8") as f:
+                loaded = json.load(f)
+            # Preserve existing metadata; backfill any keys missing in old files.
+            for k, v in default.items():
+                loaded.setdefault(k, v)
+            loaded["schema_version"] = default["schema_version"]
+            data = loaded
+        except Exception:
+            pass
+
+    fr = data.setdefault("frame_results", [])
+    t_idx = int(frame_entry["frame_index"])
+    while len(fr) <= t_idx:
+        fr.append(None)
+    fr[t_idx] = frame_entry
+    data["n_frames_seen"] = sum(1 for x in fr if x is not None)
+
+    tmp = json_path.with_suffix(".json.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(str(tmp), str(json_path))
+
+
+def _phase_b_save_crop_sub(t, sample_positions, all_results, cfg, rois,
+                           deadline_monotonic):
+    """Orchestrate Phase B: reconstruct + crop-subtract + save for all Pos.
+
+    Budget-limited: submits tasks to a fresh ProcessPoolExecutor and cancels
+    anything not finished by ``deadline_monotonic`` (monotonic clock).
+    Positions whose Phase A result is invalid/jump are skipped (offline
+    fallback will fill them).
+    """
+    crop_sub_root = Path(cfg["crop_sub_root"])
+    min_free_gb = cfg.get("crop_sub_min_free_gb", 2.0)
+    crop_sub_root.mkdir(parents=True, exist_ok=True)
+    try:
+        free_gb = _shutil.disk_usage(str(crop_sub_root)).free / 1e9
+        if free_gb < min_free_gb:
+            print(f"[phase B] disk free {free_gb:.1f} GB < min {min_free_gb} GB; skipping")
+            return
+    except Exception as e:
+        print(f"[phase B] disk_usage check failed: {e}")
+
+    # Use raw ECC-average shift (tx_avg_px / ty_avg_px). This matches
+    # compute_pos_shifts.shift_x_avg used by offline grid_subtract, so online
+    # and offline crop-subs share the same grid selection and residuals.
+    result_map = {r["pos_idx"]: r for r in all_results
+                  if r.get("valid") and not r.get("jump")}
+
+    tasks = []
+    skipped = 0
+    for pos in sample_positions:
+        r = result_map.get(pos["index"])
+        if r is None:
+            skipped += 1
+            continue
+        sx = r.get("tx_avg_px")
+        sy = r.get("ty_avg_px")
+        if sx is None or sy is None:
+            skipped += 1
+            continue
+        tasks.append((t, pos["label"], float(sx), float(sy),
+                      cfg, rois, str(crop_sub_root)))
+
+    if not tasks:
+        print(f"[phase B] no valid positions ({skipped} skipped)")
+        return
+
+    max_workers = cfg.get("crop_sub_max_workers", 0)
+    if max_workers <= 0:
+        max_workers = max(1, os.cpu_count() - 4)
+    max_workers = min(max_workers, len(tasks))
+
+    remaining = deadline_monotonic - time.monotonic()
+    if remaining <= 1.0:
+        print(f"[phase B] no budget left ({remaining:.1f}s); skipping")
+        return
+
+    print(f"[phase B] T={t}  {len(tasks)} pos  workers={max_workers}  "
+          f"budget={remaining:.0f}s  (skipped={skipped})")
+    t0 = time.monotonic()
+
+    results = []
+    with ProcessPoolExecutor(max_workers=max_workers) as pool:
+        futures = [pool.submit(_save_crop_sub_one_pos, a) for a in tasks]
+        done, not_done = wait(futures, timeout=remaining,
+                              return_when=ALL_COMPLETED)
+        for f in done:
+            try:
+                results.append(f.result())
+            except Exception as e:
+                results.append({"status": "exception", "error": repr(e)})
+        if not_done:
+            print(f"[phase B] budget exceeded; {len(not_done)} tasks canceled")
+            for f in not_done:
+                f.cancel()
+
+    ok = [r for r in results if r and r.get("status") == "ok"]
+    failed = [r for r in results if r and r.get("status") != "ok"]
+    elapsed = time.monotonic() - t0
+    print(f"[phase B] done  {len(ok)} ok  {len(failed)} failed  {elapsed:.1f}s")
+    for r in failed[:5]:
+        print(f"  - {r.get('pos_label')}: {r.get('status')} "
+              f"{r.get('error', r.get('path', ''))}")
+
+    for r in ok:
+        try:
+            _append_online_pos_shifts(crop_sub_root, r["pos_label"],
+                                      r["frame_entry"], cfg)
+        except Exception as e:
+            print(f"  [phase B] JSON append failed for {r['pos_label']}: {e}")
+
+
+# ================================================================
+# Main
+# ================================================================
+
+def main():
+    args = parse_args()
+    cfg = load_config(args.config)
+    t = args.timepoint
+
+    # ---- Load positions ----
+    positions = load_positions_csv(cfg["positions_csv"])
+    bg_pos_index = cfg["bg_pos_index"]
+    bg_label = positions[bg_pos_index]["label"]
+    sample_positions = [p for p in positions if p["index"] != bg_pos_index]
+
+    # ---- Grouping ----
+    interval = cfg.get("drift_sample_interval", 1)
+    group_leaders = sample_positions[::interval] if interval > 1 else sample_positions
+    group_map = {}
+    for i, pos in enumerate(sample_positions):
+        leader_idx = min((i // interval) * interval, len(sample_positions) - 1) if interval > 1 else i
+        group_map[pos["index"]] = sample_positions[leader_idx]["index"]
+
+    print(f"[T={t}] compute_drift_online.py  "
+          f"{len(group_leaders)} leaders / {len(sample_positions)} positions  "
+          f"interval={interval}")
+
+    # ---- Load channel ROIs ----
+    with open(cfg["channel_rois_json"], encoding="utf-8") as f:
+        rois = json.load(f)
+    n_channels = len(rois)
+
+    # ---- BG image path ----
+    bg_raw = get_raw_path(cfg["save_dir"], bg_label, t)
+    if not bg_raw.exists():
+        print(f"WARNING: BG image not found: {bg_raw}")
+        bg_raw = None
+
+    # ---- Pre-reconstruct BG phase once per crop variant ----
+    # Reconstructed here (in main) so every worker does not redo the BG FFT +
+    # unwrap_phase on each sample position (saves one BG reconstruction per
+    # Pos per timepoint).
+    leader_indices = [ld["index"] for ld in group_leaders]
+    t_bg_start = datetime.now()
+    bg_phases = reconstruct_bg_phase_variants(bg_raw, cfg, leader_indices)
+    if bg_raw is not None:
+        variants = [k for k, v in bg_phases.items() if v is not None]
+        print(f"  BG phase reconstructed ({','.join(variants) or 'none'}) "
+              f"in {(datetime.now() - t_bg_start).total_seconds():.2f}s")
+
+    # ---- Load grid references and calibration for leaders ----
+    # Both grid TIFFs and grid_calibration_{label}.json are mandatory:
+    # missing files raise FileNotFoundError and abort the whole session,
+    # rather than silently skipping a leader.
+    grid_dir = Path(cfg["grid_dir"])
+    leader_data = {}
+    for leader in group_leaders:
+        label = leader["label"]
+        _, u8_crops = load_grid_ref_crops_for_pos(label, cfg, rois)
+        pos_map = scan_grid_positions(str(grid_dir), label)
+        grid_cal = load_grid_cal_for_pos(label, cfg)
+        leader_data[leader["index"]] = {
+            "u8_crops": u8_crops,
+            "pos_map": pos_map,
+            "grid_cal": grid_cal,
+        }
+        print(f"  {label}: {len(pos_map)} grid pos, {len(grid_cal)} cal")
+
+    # ---- Load previous states and KF states ----
+    state_path = cfg["state_file"]
+    kf_path = cfg.get("kf_state_file",
+                       str(Path(cfg["session_dir"]) / "drift_kf_state.json"))
+    kf_R = max(cfg.get("kf_R_ty_nm2", 454.0), cfg.get("kf_R_tx_nm2", 454.0))
+
+    # ---- Process leaders in parallel (ProcessPoolExecutor) ----
+    max_workers = cfg.get("max_drift_workers", 0)
+    if max_workers <= 0:
+        max_workers = max(1, os.cpu_count() - 4)
+    max_workers = min(max_workers, len(group_leaders))
+
+    task_args = [
+        (leader["index"], leader["label"], state_path, kf_path, kf_R)
+        for leader in group_leaders
+    ]
+
+    print(f"  Processing with {max_workers} workers (ProcessPool)...")
+    with ProcessPoolExecutor(
+        max_workers=max_workers,
+        initializer=_init_drift_worker,
+        initargs=(cfg, rois, leader_data, bg_phases, t),
+    ) as pool:
+        leader_results = list(pool.map(_process_leader_task, task_args))
+
+    # Filter out None results (skipped leaders)
+    leader_results = [r for r in leader_results if r is not None]
+
+    # ---- Apply group mapping ----
+    leader_result_map = {r["pos_idx"]: r for r in leader_results}
+    all_results = []
+    for pos in sample_positions:
+        leader_idx = group_map[pos["index"]]
+        if leader_idx in leader_result_map:
+            if pos["index"] == leader_idx:
+                all_results.append(leader_result_map[leader_idx])
+            else:
+                # Copy leader's correction for group member
+                lr = leader_result_map[leader_idx]
+                all_results.append({
+                    "pos_idx": pos["index"],
+                    "pos_label": pos["label"],
+                    "dx_um": lr["dx_um"],
+                    "dy_um": lr["dy_um"],
+                    "cumulative_dx_um": lr["cumulative_dx_um"],
+                    "cumulative_dy_um": lr["cumulative_dy_um"],
+                    "valid": lr["valid"],
+                    "jump": lr["jump"],
+                    "corr": lr["corr"],
+                    "ema_tx": lr["ema_tx"],
+                    "ema_ty": lr["ema_ty"],
+                    "kf_update": None,
+                    "channel_details": [],
+                })
+
+    # ---- Write per-pos state ----
+    write_per_pos_state(state_path, t, all_results, bg_pos_index)
+
+    # ---- Save KF states ----
+    kf_updates = {}
+    for r in leader_results:
+        if r.get("kf_update"):
+            kf_updates[r["pos_label"]] = r["kf_update"]
+    if kf_updates:
+        save_all_kf_states(kf_path, kf_updates)
+
+    # ---- Write log ----
+    log_path = cfg["log_file"]
+    log_entries = []
+    for r in leader_results:
+        log_entries.append({
+            "timepoint": t,
+            "timestamp": datetime.now().isoformat(),
+            "pos_idx": r["pos_idx"],
+            "pos_label": r["pos_label"],
+            "raw_path": r.get("raw_path"),
+            "n_channels_used": r.get("n_channels_used", 0),
+            "n_channels_raw": r.get("n_channels_raw", 0),
+            "tx_avg_px": r.get("tx_avg_px", 0.0),
+            "ty_avg_px": r.get("ty_avg_px", 0.0),
+            "ecc_correlation": r["corr"],
+            "correction_stage_x_um": r["dx_um"],
+            "correction_stage_y_um": r["dy_um"],
+            "cumulative_dx_um": r["cumulative_dx_um"],
+            "cumulative_dy_um": r["cumulative_dy_um"],
+            "jump_detected": r["jump"],
+            "correction_valid": r["valid"] and not r["jump"],
+            "channel_details": r.get("channel_details", []),
+        })
+
     try:
         with open(log_path, encoding="utf-8") as f:
             log = json.load(f)
     except Exception:
         log = []
-    log.append(log_entry)
+    log.append({"timepoint": t, "per_pos": True, "positions": log_entries})
     with open(log_path, "w", encoding="utf-8") as f:
         json.dump(log, f, indent=2, ensure_ascii=False)
 
-    print(f"[T={t}] done  status: {'corrected' if not jump else 'skipped'}")
+    n_valid = sum(1 for r in all_results if r["valid"] and not r["jump"])
+    n_jump = sum(1 for r in all_results if r["jump"])
+    print(f"[T={t}] done  {n_valid} valid, {n_jump} jump, "
+          f"{len(all_results) - n_valid - n_jump} failed")
+
+    # ---- Phase B: crop-subtracted save (optional) ----
+    if cfg.get("enable_crop_sub_save", False):
+        budget = float(cfg.get("crop_sub_max_seconds", 200.0))
+        deadline = time.monotonic() + budget
+        try:
+            _phase_b_save_crop_sub(t, sample_positions, all_results, cfg, rois,
+                                   deadline)
+        except Exception as e:
+            import traceback
+            print(f"[phase B] fatal: {e}")
+            traceback.print_exc()
 
 
 if __name__ == "__main__":

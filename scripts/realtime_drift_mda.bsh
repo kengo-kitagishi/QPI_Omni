@@ -82,7 +82,6 @@ long   INTERVAL_MS    = (long)(cfg.getDouble("interval_sec") * 1000);
 long   SETTLE_MS      = (long)cfg.getDouble("settle_ms");
 long   PFS_SETTLE_MS  = (long)cfg.getDouble("pfs_settle_ms");
 double EXPOSURE_MS    = cfg.getDouble("exposure_ms");
-int    REF_POS_INDEX  = cfg.getInt("ref_pos_index");
 int    BG_POS_INDEX   = cfg.getInt("bg_pos_index");
 String XY_STAGE       = cfg.getString("xy_stage_device");
 String Z_DEVICE       = cfg.getString("z_offset_device");
@@ -251,9 +250,7 @@ print(" N=" + N_TIMEPOINTS + "  interval=" + (INTERVAL_MS/1000) + "s");
 print("========================================\n");
 
 String bgLabel  = (String)posLabels.get(BG_POS_INDEX);
-String refLabel = (String)posLabels.get(REF_POS_INDEX);
 print("BG Pos:  [" + BG_POS_INDEX + "] " + bgLabel);
-print("Ref Pos: [" + REF_POS_INDEX + "] " + refLabel);
 
 double totalCorrX = 0.0;
 double totalCorrY = 0.0;
@@ -271,19 +268,43 @@ if (!FORCE_FRESH_START && stateFileObj.exists()) {
         int lastTP = Integer.parseInt(tpStr);
         if (lastTP >= 0 && lastTP < N_TIMEPOINTS - 1) {
             startT = lastTP + 1;
-            double resumeCumDx = 0.0, resumeCumDy = 0.0;
+            double fallbackDx = 0.0, fallbackDy = 0.0;
             try {
-                resumeCumDx = Double.parseDouble((String)resumeState.get("CUMULATIVE_DX_UM"));
-                resumeCumDy = Double.parseDouble((String)resumeState.get("CUMULATIVE_DY_UM"));
+                fallbackDx = Double.parseDouble((String)resumeState.get("CUMULATIVE_DX_UM"));
+                fallbackDy = Double.parseDouble((String)resumeState.get("CUMULATIVE_DY_UM"));
             } catch (Exception e) {}
+            int nRestored = 0;
+            double sumDx = 0.0, sumDy = 0.0;
+            int nSample = 0;
             for (int i = 0; i < nPositions; i++) {
-                corrX[i] = baseX[i] - resumeCumDx;
-                corrY[i] = baseY[i] - resumeCumDy;
+                double cdx = fallbackDx, cdy = fallbackDy;
+                String sx = (String)resumeState.get("CUMULATIVE_DX_UM_" + i);
+                String sy = (String)resumeState.get("CUMULATIVE_DY_UM_" + i);
+                if (sx != null && sy != null) {
+                    try {
+                        cdx = Double.parseDouble(sx);
+                        cdy = Double.parseDouble(sy);
+                        nRestored++;
+                    } catch (Exception e) {}
+                }
+                corrX[i] = baseX[i] - cdx;
+                corrY[i] = baseY[i] - cdy;
+                if (i != BG_POS_INDEX) {
+                    sumDx += cdx;
+                    sumDy += cdy;
+                    nSample++;
+                }
             }
-            totalCorrX = -resumeCumDx;
-            totalCorrY = -resumeCumDy;
+            if (nSample > 0) {
+                totalCorrX = -(sumDx / nSample);
+                totalCorrY = -(sumDy / nSample);
+            } else {
+                totalCorrX = -fallbackDx;
+                totalCorrY = -fallbackDy;
+            }
             print("[RESUME] Resuming from T=" + startT +
-                  "  cumDx=" + fmtD(resumeCumDx,3) + "um  cumDy=" + fmtD(resumeCumDy,3) + "um");
+                  "  per-Pos restored=" + nRestored + "/" + nPositions +
+                  "  avgCum=(" + fmtD(-totalCorrX,3) + "," + fmtD(-totalCorrY,3) + ")um");
             print("[RESUME] Save dir: " + SAVE_DIR);
         }
     }
@@ -300,9 +321,6 @@ for (int t = startT; t < N_TIMEPOINTS; t++) {
     print("  Start: " + new SimpleDateFormat("HH:mm:ss").format(new Date()));
 
     // ---- Acquire all positions ----
-    String bgRawPath  = "";
-    String refRawPath = "";
-
     for (int i = 0; i < nPositions; i++) {
         String posLabel  = (String)posLabels.get(i);
         String frameFile = "img_" + padLeft(t, 9) + "_ph_000.tif";
@@ -312,45 +330,54 @@ for (int t = startT; t < N_TIMEPOINTS; t++) {
         setChannelPh();
         snapAndSave(savePath);
         print("  [T=" + t + "] " + posLabel + " -> " + frameFile);
-
-        if (i == BG_POS_INDEX)  bgRawPath  = savePath;
-        if (i == REF_POS_INDEX) refRawPath = savePath;
     }
 
     // ---- Return to Pos0 (standby during drift computation + wait) ----
     moveToPosition(0);
     print("  Returned to Pos[0] (standby)");
 
-    // ---- Drift computation ----
+    // ---- Drift computation (per-Pos corrections) ----
     if (t == 0) {
         print("  T=0: initializing reference frame...");
         String[] cmd = {
             PYTHON_EXE, COMPUTE_SCRIPT,
             "--timepoint", "0",
-            "--sample-raw", refRawPath,
-            "--bg-raw", bgRawPath,
             "--config", CONFIG_FILE
         };
         int exitCode0 = callPython(cmd, 180000L);
         if (exitCode0 == 0) {
             HashMap state0 = readState(STATE_FILE);
-            boolean valid0 = "true".equals(state0.get("CORRECTION_VALID"));
-            boolean jump0  = "true".equals(state0.get("JUMP_DETECTED"));
-            double cumDx0 = 0.0, cumDy0 = 0.0;
-            try {
-                cumDx0 = Double.parseDouble((String)state0.get("CUMULATIVE_DX_UM"));
-                cumDy0 = Double.parseDouble((String)state0.get("CUMULATIVE_DY_UM"));
-            } catch (Exception e) {}
-            if (valid0 && !jump0) {
-                for (int i = 0; i < nPositions; i++) {
-                    corrX[i] = baseX[i] - cumDx0;
-                    corrY[i] = baseY[i] - cumDy0;
+            boolean anyJump0 = "true".equals(state0.get("JUMP_DETECTED"));
+            int nValid0 = 0, nFail0 = 0;
+            double sumDx0 = 0.0, sumDy0 = 0.0;
+            for (int i = 0; i < nPositions; i++) {
+                if (i == BG_POS_INDEX) continue;
+                boolean vi = "true".equals(state0.get("CORRECTION_VALID_" + i));
+                if (vi) {
+                    try {
+                        double cdx = Double.parseDouble((String)state0.get("CUMULATIVE_DX_UM_" + i));
+                        double cdy = Double.parseDouble((String)state0.get("CUMULATIVE_DY_UM_" + i));
+                        corrX[i] = baseX[i] - cdx;
+                        corrY[i] = baseY[i] - cdy;
+                        sumDx0 += cdx; sumDy0 += cdy;
+                        nValid0++;
+                    } catch (Exception e) { nFail0++; }
+                } else {
+                    nFail0++;
                 }
-                totalCorrX = -cumDx0;
-                totalCorrY = -cumDy0;
-                print("  T=0: pre-correction applied: cumDx=" + fmtD(cumDx0,3) + "um  cumDy=" + fmtD(cumDy0,3) + "um");
+            }
+            if (nValid0 > 0) {
+                double avgDx = sumDx0 / nValid0;
+                double avgDy = sumDy0 / nValid0;
+                corrX[BG_POS_INDEX] = baseX[BG_POS_INDEX] - avgDx;
+                corrY[BG_POS_INDEX] = baseY[BG_POS_INDEX] - avgDy;
+                totalCorrX = -avgDx;
+                totalCorrY = -avgDy;
+                print("  T=0: per-Pos pre-correction applied  valid=" + nValid0 +
+                      "/" + (nPositions-1) + " fail=" + nFail0 +
+                      "  avgCum=(" + fmtD(avgDx,3) + "," + fmtD(avgDy,3) + ")um");
             } else {
-                print("  T=0: reference initialized (jump detected or invalid, no correction)");
+                print("  T=0: reference initialized (no valid Pos, jump=" + anyJump0 + ", no correction)");
             }
         } else {
             print("  T=0: reference initialized (Python failed, no correction)");
@@ -361,49 +388,60 @@ for (int t = startT; t < N_TIMEPOINTS; t++) {
         String[] cmd = {
             PYTHON_EXE, COMPUTE_SCRIPT,
             "--timepoint", String.valueOf(t),
-            "--sample-raw", refRawPath,
-            "--bg-raw",     bgRawPath,
             "--config",     CONFIG_FILE
         };
         int exitCode = callPython(cmd, 180000L);
 
         if (exitCode == 0) {
             HashMap state = readState(STATE_FILE);
-            boolean valid = "true".equals(state.get("CORRECTION_VALID"));
-            boolean jump  = "true".equals(state.get("JUMP_DETECTED"));
-            double dx = 0.0, dy = 0.0;
-            try {
-                dx = Double.parseDouble((String)state.get("DX_UM"));
-                dy = Double.parseDouble((String)state.get("DY_UM"));
-            } catch (Exception e) {}
 
-            double cumDx = 0.0, cumDy = 0.0;
-            try {
-                cumDx = Double.parseDouble((String)state.get("CUMULATIVE_DX_UM"));
-                cumDy = Double.parseDouble((String)state.get("CUMULATIVE_DY_UM"));
-            } catch (Exception e) {}
-
-            double corrEcc = 0.0;
-            try {
-                corrEcc = Double.parseDouble((String)state.get("ECC_CORRELATION"));
-            } catch (Exception e) {}
-
-            if (valid && !jump) {
-                for (int i = 0; i < nPositions; i++) {
-                    corrX[i] = baseX[i] - cumDx;
-                    corrY[i] = baseY[i] - cumDy;
+            int nValid = 0, nFail = 0, nJump = 0;
+            double sumDx = 0.0, sumDy = 0.0;
+            double sumStepDx = 0.0, sumStepDy = 0.0;
+            double sumCorr = 0.0;
+            for (int i = 0; i < nPositions; i++) {
+                if (i == BG_POS_INDEX) continue;
+                String validStr = (String)state.get("CORRECTION_VALID_" + i);
+                boolean vi = "true".equals(validStr);
+                if (vi) {
+                    try {
+                        double cdx = Double.parseDouble((String)state.get("CUMULATIVE_DX_UM_" + i));
+                        double cdy = Double.parseDouble((String)state.get("CUMULATIVE_DY_UM_" + i));
+                        corrX[i] = baseX[i] - cdx;
+                        corrY[i] = baseY[i] - cdy;
+                        sumDx += cdx; sumDy += cdy;
+                        try {
+                            sumStepDx += Double.parseDouble((String)state.get("DX_UM_" + i));
+                            sumStepDy += Double.parseDouble((String)state.get("DY_UM_" + i));
+                            sumCorr   += Double.parseDouble((String)state.get("ECC_CORRELATION_" + i));
+                        } catch (Exception e) {}
+                        nValid++;
+                    } catch (Exception e) { nFail++; }
+                } else {
+                    nFail++;
+                    // Per-Pos failure: keep previous corrX[i]/corrY[i] (no drift progression this frame)
                 }
-                totalCorrX = -cumDx;
-                totalCorrY = -cumDy;
+            }
+
+            if (nValid > 0) {
+                double avgDx = sumDx / nValid;
+                double avgDy = sumDy / nValid;
+                corrX[BG_POS_INDEX] = baseX[BG_POS_INDEX] - avgDx;
+                corrY[BG_POS_INDEX] = baseY[BG_POS_INDEX] - avgDy;
+                totalCorrX = -avgDx;
+                totalCorrY = -avgDy;
+                double avgStepDx = sumStepDx / nValid;
+                double avgStepDy = sumStepDy / nValid;
+                double avgCorr   = sumCorr   / nValid;
                 consecutiveFailures = 0;
-                print("  [OK] dx=" + fmtD(dx,3) + "um  dy=" + fmtD(dy,3) + "um  corr=" + fmtD(corrEcc,3));
-                print("  Cumulative: x=" + fmtD(totalCorrX,3) + "um  y=" + fmtD(totalCorrY,3) + "um");
-            } else if (jump) {
-                consecutiveFailures++;
-                print("  [JUMP] dx=" + fmtD(dx,3) + "um  dy=" + fmtD(dy,3) + "um -> skipped");
+                print("  [OK] valid=" + nValid + "/" + (nPositions-1) +
+                      " fail=" + nFail +
+                      "  avgStep=(" + fmtD(avgStepDx,3) + "," + fmtD(avgStepDy,3) + ")um" +
+                      "  avgCorr=" + fmtD(avgCorr,3));
+                print("  avgCumulative: x=" + fmtD(totalCorrX,3) + "um  y=" + fmtD(totalCorrY,3) + "um");
             } else {
                 consecutiveFailures++;
-                print("  [FAIL] Correction invalid (ECC failed)");
+                print("  [FAIL] All positions failed ECC (fail=" + nFail + ")");
             }
 
             if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
@@ -447,7 +485,7 @@ for (int t = startT; t < N_TIMEPOINTS; t++) {
 print("\n========================================");
 print(" Timelapse complete");
 print(" Total: " + N_TIMEPOINTS + " timepoints");
-print(" Final cumulative correction: x=" + fmtD(totalCorrX,3) + "um  y=" + fmtD(totalCorrY,3) + "um");
+print(" Final avg cumulative correction (per-Pos mean): x=" + fmtD(totalCorrX,3) + "um  y=" + fmtD(totalCorrY,3) + "um");
 print(" Saved to: " + SAVE_DIR);
 print("========================================");
 print("Run pipeline_full.py for post-processing.");
