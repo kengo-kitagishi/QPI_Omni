@@ -115,14 +115,15 @@ def _fmt_ts(ts: str) -> str:
     return dt.strftime("%H:%M")
 
 
-def get_session_date(entries: list) -> str:
+def get_session_date(entries: list) -> str | None:
+    """エントリからJST日付を取得。タイムスタンプが見つからなければ None を返す。"""
     for e in entries:
         ts = e.get("timestamp", "")
         if ts:
             dt = _ts_to_jst(ts)
             if dt:
                 return dt.strftime("%Y-%m-%d")
-    return datetime.now(JST).strftime("%Y-%m-%d")
+    return None
 
 
 def get_last_entry_time(entries: list) -> datetime | None:
@@ -1051,6 +1052,10 @@ def run(args: argparse.Namespace) -> int:
                 if not args.dry_run:
                     now_iso = datetime.now(JST).isoformat()
                     date_str = get_session_date(load_entries(jsonl_path))
+                    if date_str is None:
+                        # タイムスタンプが取得できない（GDrive同期途中等）→ DB登録をスキップ
+                        print(f"  SKIP (no timestamp): {jsonl_path.name}")
+                        continue
                     session_db.upsert_session(conn, {
                         "session_id": session_id,
                         "date": date_str,
