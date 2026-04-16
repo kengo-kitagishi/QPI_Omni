@@ -9,12 +9,37 @@ from numpy.typing import NDArray
 # import muscopy.cfg as mcfg
 # from muscopy.cfg import OffsetRegions
 
-# if mcfg._cp:
-#     import cupy as xp
-# else:
-#     import numpy as xp
-
 import numpy as xp
+
+# Auto-detect CUDA_PATH for pip-installed nvidia packages (must be before cupy import)
+import os as _os, sys as _sys
+if not _os.environ.get("CUDA_PATH"):
+    _nvrtc = __import__("pathlib").Path(_sys.prefix) / "Lib/site-packages/nvidia/cuda_nvrtc"
+    if _nvrtc.exists():
+        _os.environ["CUDA_PATH"] = str(_nvrtc)
+
+_HAS_CUPY = False
+try:
+    import cupy as _cp
+    _HAS_CUPY = True
+except ImportError:
+    pass
+
+
+def set_backend(backend: str = "numpy"):
+    """Switch computation backend between numpy (CPU) and cupy (GPU).
+
+    Call this before any reconstruction. Default is numpy so existing
+    scripts are unaffected.
+    """
+    global xp, _HAS_CUPY
+    if backend == "cupy":
+        if not _HAS_CUPY:
+            raise RuntimeError("CuPy is not installed")
+        import cupy
+        xp = cupy
+    else:
+        xp = np
 
 
 @dataclass
@@ -164,6 +189,7 @@ def get_spectrum(array: xp.array, params: QPIParameters, crop_center: bool = Fal
     Returns:
         xp.array: cropped spectrum of the hologram array
     """
+    array = xp.asarray(array)
     array_fft = xp.fft.fftshift(xp.fft.fft2(array))
     mask = make_disk(params.offaxis_center,
                      params.aperturesize / 2, params.img_shape)
