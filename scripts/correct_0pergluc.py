@@ -44,9 +44,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 from grid_subtract import (
     extract_rect_roi,
     apply_inverse_shift_warp,
-    _reconstruct_raw,
-    _make_qpi_params_raw,
-    load_grid_holo_path,
     load_grid_calibration,
     scan_grid_positions,
 )
@@ -61,19 +58,17 @@ def _grid_prerecon_raw_path(pos_dir, z_index):
 
 
 def _load_or_reconstruct_raw(pos_dir, z_index, qpi_params_holder, raw_crop):
-    """保存済み raw を優先、無ければ on-the-fly 再構成。
+    """Load pre-reconstructed raw phase. Raises if not found.
 
-    qpi_params_holder: dict with "params" key (lazy init)。
-    Returns (image, source) where source ∈ {"prerecon", "onthefly"}.
+    Returns (image, source) where source is always "prerecon".
     """
     prerecon = _grid_prerecon_raw_path(pos_dir, z_index)
-    if prerecon.exists():
-        return tifffile.imread(str(prerecon)).astype(np.float64), "prerecon"
-    if qpi_params_holder.get("params") is None:
-        holo_for_params = load_grid_holo_path(pos_dir, z_index)
-        qpi_params_holder["params"] = _make_qpi_params_raw(holo_for_params, raw_crop)
-    holo = load_grid_holo_path(pos_dir, z_index)
-    return _reconstruct_raw(holo, qpi_params_holder["params"], raw_crop), "onthefly"
+    if not prerecon.exists():
+        raise FileNotFoundError(
+            f"Pre-reconstructed raw phase not found: {prerecon}\n"
+            f"Run batch_reconstruction_grid.py first."
+        )
+    return tifffile.imread(str(prerecon)).astype(np.float64), "prerecon"
 
 
 def _cal_dx_dy(xi, yi, grid_cal, pixel_scale_um, x_step_um, y_step_um,

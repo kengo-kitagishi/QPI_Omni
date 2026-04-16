@@ -219,33 +219,13 @@ def apply_inverse_shift_warp(img, shift_x, shift_y):
 
 # ============================================================
 # raw-raw モード用ヘルパー（USE_RAW_PHASE=True 時のみ使用）
+# Canonical reconstruction is in batch_reconstruction_grid.py.
+# Aliases kept for compute_drift_online.py compatibility (real-time use).
 # ============================================================
-
-def _make_qpi_params_raw(holo_path, crop):
-    """生ホログラム1枚から QPIParameters を生成する（pipeline_full._make_qpi_params と同等）。"""
-    from PIL import Image
-    from qpi import QPIParameters
-    from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
-    img = np.array(Image.open(str(holo_path)))
-    rs, re_, cs, ce = crop
-    cropped = img[rs:re_, cs:ce]
-    return QPIParameters(
-        wavelength=WAVELENGTH, NA=NA,
-        img_shape=cropped.shape, pixelsize=PIXELSIZE,
-        offaxis_center=OFFAXIS_CENTER,
-    )
-
-
-def _reconstruct_raw(holo_path, qpi_params, crop):
-    """Pos0 参照なしで位相（unwrap済み）を返す（pipeline_full._reconstruct と同等）。"""
-    from PIL import Image
-    from qpi import get_field
-    from skimage.restoration import unwrap_phase
-    img = np.array(Image.open(str(holo_path)))
-    rs, re_, cs, ce = crop
-    img = img[rs:re_, cs:ce]
-    field = get_field(img, qpi_params)
-    return unwrap_phase(np.angle(field))
+from batch_reconstruction_grid import (
+    make_qpi_params as _make_qpi_params_raw,
+    reconstruct_image as _reconstruct_raw,
+)
 
 
 def load_timelapse_holos(tl_dir, z_index):
@@ -487,27 +467,24 @@ def main():
         if _candidate.exists() and any(_candidate.glob("img_*_phase.tif")):
             _tl_phase_dir = _candidate
             print(f"[auto-detect] using pre-reconstructed raw at {_candidate}")
-    _use_prerecon = (_tl_phase_dir is not None)
     _qpi_params_raw = None
-    _tl_raw_source = None  # "prerecon" | "onthefly"
+    _tl_raw_source = None  # "prerecon"
     if USE_RAW_PHASE:
-        if _use_prerecon:
-            # Pre-reconstructed raw phase: read tif instead of reconstructing
+        if _tl_phase_dir is not None:
             phase_dir = Path(_tl_phase_dir)
             tl_frames = sorted(phase_dir.glob("img_*_phase.tif"))
             if not tl_frames:
-                print(f"ERROR: pre-recon phase not found: {phase_dir}/img_*_phase.tif")
-                sys.exit(1)
+                raise FileNotFoundError(
+                    f"Pre-reconstructed raw phase not found: {phase_dir}/img_*_phase.tif\n"
+                    f"Run batch_reconstruction_grid.py / batch_pipeline_all_pos.py first."
+                )
             _tl_raw_source = "prerecon"
             print(f"[pre-recon mode] {len(tl_frames)} frames from {phase_dir}")
         else:
-            tl_frames = load_timelapse_holos(tl_dir, RAW_TL_Z_INDEX)
-            if not tl_frames:
-                print(f"ERROR: 生ホログラムが見つかりません: {tl_dir}/img_*_ph_{RAW_TL_Z_INDEX:03d}.tif")
-                sys.exit(1)
-            _qpi_params_raw = _make_qpi_params_raw(tl_frames[0], RAW_CROP)
-            _tl_raw_source = "onthefly"
-            print(f"[raw mode] QPIParams 作成完了  ホログラム: {tl_frames[0].name}")
+            raise FileNotFoundError(
+                f"output_phase_raw/ not found under {tl_dir}\n"
+                f"Run batch_pipeline_all_pos.py (Step 0) first to generate output_phase_raw/."
+            )
     else:
         tl_frames = load_timelapse_frames(tl_dir, TL_Z_INDEX)
         if not tl_frames:
@@ -530,18 +507,6 @@ def main():
     yi_vals = [k[1] for k in pos_map]
     print(f"  x範囲: [{min(xi_vals)}, {max(xi_vals)}], y範囲: [{min(yi_vals)}, {max(yi_vals)}]")
 
-    # _qpi_params_raw is needed for any on-the-fly grid reconstruction.
-    # If tlapse used pre-recon, build it from a grid hologram only if at least
-    # one grid point lacks pre-saved raw (lazy: try first, fall back if needed).
-    def _ensure_qpi_params_raw():
-        nonlocal _qpi_params_raw
-        if _qpi_params_raw is not None:
-            return
-        grid_origin = pos_map.get((0, 0), next(iter(pos_map.values())))
-        _grid_holo = load_grid_holo_path(grid_origin, RAW_GRID_Z_INDEX)
-        _qpi_params_raw = _make_qpi_params_raw(_grid_holo, RAW_CROP)
-        print(f"[on-the-fly grid] QPIParams from grid hologram: {_grid_holo.name}")
-
     # --- グリッドキャリブレーション読み込み ---
     grid_cal = {}
     if GRID_CALIBRATION_JSON:
@@ -558,7 +523,7 @@ def main():
 
     # --- グリッド画像キャッシュ ---
     grid_img_cache = {}
-    _grid_raw_sources = {}  # key -> "prerecon" | "onthefly"
+    _grid_raw_sources = {}  # key -> "prerecon" | "phase"
 
     def _grid_prerecon_path(pos_dir, z_index):
         return pos_dir / "output_phase_raw" / f"img_000000000_ph_{z_index:03d}_phase.tif"
@@ -569,14 +534,13 @@ def main():
             pos_dir = pos_map[key]
             if USE_RAW_PHASE:
                 prerecon = _grid_prerecon_path(pos_dir, RAW_GRID_Z_INDEX)
-                if prerecon.exists():
-                    grid_img_cache[key] = tifffile.imread(str(prerecon)).astype(np.float64)
-                    _grid_raw_sources[key] = "prerecon"
-                else:
-                    _ensure_qpi_params_raw()
-                    holo_path = load_grid_holo_path(pos_dir, RAW_GRID_Z_INDEX)
-                    grid_img_cache[key] = _reconstruct_raw(holo_path, _qpi_params_raw, RAW_CROP)
-                    _grid_raw_sources[key] = "onthefly"
+                if not prerecon.exists():
+                    raise FileNotFoundError(
+                        f"Pre-reconstructed raw phase not found: {prerecon}\n"
+                        f"Run batch_reconstruction_grid.py first."
+                    )
+                grid_img_cache[key] = tifffile.imread(str(prerecon)).astype(np.float64)
+                _grid_raw_sources[key] = "prerecon"
             else:
                 grid_img_cache[key] = load_grid_image(pos_dir, GRID_Z_INDEX)
                 _grid_raw_sources[key] = "phase"
@@ -643,13 +607,7 @@ def main():
             "is_outlier_timeseries": frame_results[t].get("is_outlier_timeseries", False)
         }
 
-        if USE_RAW_PHASE:
-            if _use_prerecon:
-                tl_img = tifffile.imread(str(tl_frames[t])).astype(np.float64)
-            else:
-                tl_img = _reconstruct_raw(tl_frames[t], _qpi_params_raw, RAW_CROP)
-        else:
-            tl_img = tifffile.imread(str(tl_frames[t])).astype(np.float64)
+        tl_img = tifffile.imread(str(tl_frames[t])).astype(np.float64)
 
         grid_img = grid_img_cache.get((xi, yi))  # pre-populated; None if missing
 

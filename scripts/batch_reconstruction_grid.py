@@ -153,6 +153,15 @@ def make_qpi_params(sample_img_path: Path, crop):
     )
 
 
+def reconstruct_from_holo(holo_path, crop):
+    """One-shot: create QPIParameters and reconstruct unwrapped phase in one call.
+
+    Convenience wrapper around make_qpi_params + reconstruct_image.
+    """
+    qpi = make_qpi_params(holo_path, crop)
+    return reconstruct_image(holo_path, qpi, crop)
+
+
 def _reconstruct_grid_point(args):
     """ProcessPoolExecutor ワーカー: 1グリッドポイントの全 z スライスを再構成して保存。
 

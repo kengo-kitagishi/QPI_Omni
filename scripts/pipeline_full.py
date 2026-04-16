@@ -293,29 +293,12 @@ def _load_backsub_module():
 
 
 # -----------------------------------------------------------
-# QPI 再構成コア（grid / timelapse 共用）
+# QPI reconstruction — imported from batch_reconstruction_grid
 # -----------------------------------------------------------
-def _make_qpi_params(img_path: Path, crop):
-    from PIL import Image
-    from qpi import QPIParameters
-    img = np.array(Image.open(str(img_path)))
-    rs, re_, cs, ce = crop
-    cropped = img[rs:re_, cs:ce]
-    return QPIParameters(
-        wavelength=WAVELENGTH, NA=NA,
-        img_shape=cropped.shape, pixelsize=PIXELSIZE,
-        offaxis_center=OFFAXIS_CENTER,
-    )
-
-def _reconstruct(img_path: Path, qpi_params, crop) -> np.ndarray:
-    from PIL import Image
-    from qpi import get_field
-    from skimage.restoration import unwrap_phase
-    img = np.array(Image.open(str(img_path)))
-    rs, re_, cs, ce = crop
-    img = img[rs:re_, cs:ce]
-    field = get_field(img, qpi_params)
-    return unwrap_phase(np.angle(field))
+from batch_reconstruction_grid import (
+    make_qpi_params as _make_qpi_params,
+    reconstruct_image as _reconstruct,
+)
 
 def _get_z_index(path: Path) -> int:
     m = re.search(r"_ph_(\d+)", path.stem)
@@ -336,11 +319,17 @@ def _scan_grid_folders(grid_dir: Path):
 
 
 def _worker_grid_point(args):
-    """step_grid_reconstruction のワーカー: 1グリッドポイントを再構成して保存。"""
+    """step_grid_reconstruction のワーカー: 1グリッドポイントを再構成して保存。
+
+    Saves two outputs per z slice:
+      - output_phase/     : BG-subtracted + region mean subtracted (for ECC)
+      - output_phase_raw/ : raw phase, no BG subtraction (for grid_subtract / correct_0pergluc)
+    """
     xi, yi, tgt_dir_str, bg_dir_str, crop, pos_num = args
     tgt_dir = Path(tgt_dir_str)
     bg_dir  = Path(bg_dir_str)
     out_dir = tgt_dir / "output_phase"
+    raw_out_dir = tgt_dir / "output_phase_raw"
 
     z_tgt = {_get_z_index(p): p for p in sorted(tgt_dir.glob("img_*_ph_*.tif"))}
     z_bg  = {_get_z_index(p): p for p in sorted(bg_dir.glob("img_*_ph_*.tif"))}
@@ -348,6 +337,7 @@ def _worker_grid_point(args):
         return xi, yi, False, "z画像なし"
 
     out_dir.mkdir(exist_ok=True)
+    raw_out_dir.mkdir(exist_ok=True)
     sample = next(iter(z_tgt.values()))
     try:
         qpi = _make_qpi_params(sample, crop)
@@ -357,13 +347,18 @@ def _worker_grid_point(args):
     folder_ok = True
     for z_idx, tgt_path in sorted(z_tgt.items()):
         out_path = out_dir / (tgt_path.stem + "_phase.tif")
-        if GRID_SKIP_IF_EXISTS and out_path.exists():
+        raw_out_path = raw_out_dir / (tgt_path.stem + "_phase.tif")
+        if GRID_SKIP_IF_EXISTS and out_path.exists() and raw_out_path.exists():
             continue
         if z_idx not in z_bg:
             folder_ok = False
             continue
         try:
-            phase = _reconstruct(tgt_path, qpi, crop) - _reconstruct(z_bg[z_idx], qpi, crop)
+            phase_target = _reconstruct(tgt_path, qpi, crop)
+            # Save raw phase (no BG subtraction)
+            if not raw_out_path.exists():
+                tifffile.imwrite(str(raw_out_path), phase_target.astype(np.float32))
+            phase = phase_target - _reconstruct(z_bg[z_idx], qpi, crop)
             h, w = phase.shape
             if pos_num < POS_SPLIT:
                 region = phase[1:h-1, 1:w//2]
@@ -378,17 +373,28 @@ def _worker_grid_point(args):
 
 
 def _worker_tl_frame(args):
-    """step_timelapse_reconstruction のワーカー: 1フレームを再構成して保存。"""
-    tif_str, bg_str, out_str, crop, pos_num, qpi, skip_if_exists = args
+    """step_timelapse_reconstruction のワーカー: 1フレームを再構成して保存。
+
+    Saves two outputs:
+      - output_phase/     : BG-subtracted + region mean subtracted (for ECC)
+      - output_phase_raw/ : raw phase, no BG subtraction (for grid_subtract)
+    """
+    tif_str, bg_str, out_str, raw_out_str, crop, pos_num, qpi, skip_if_exists = args
     tif_path = Path(tif_str)
     bg_path  = Path(bg_str)
     out_path = Path(out_str)
+    raw_out_path = Path(raw_out_str)
 
-    if skip_if_exists and out_path.exists():
+    if skip_if_exists and out_path.exists() and raw_out_path.exists():
         return out_str, "skip", None
 
     try:
-        phase = _reconstruct(tif_path, qpi, crop) - _reconstruct(bg_path, qpi, crop)
+        tgt_phase = _reconstruct(tif_path, qpi, crop)
+        # Save raw phase (no BG subtraction)
+        if not raw_out_path.exists():
+            raw_out_path.parent.mkdir(parents=True, exist_ok=True)
+            tifffile.imwrite(str(raw_out_path), tgt_phase.astype(np.float32))
+        phase = tgt_phase - _reconstruct(bg_path, qpi, crop)
         h, w  = phase.shape
         if pos_num < POS_SPLIT:
             region = phase[1:h-1, 1:w//2]
@@ -515,15 +521,20 @@ def step_timelapse_reconstruction(tl_dir: Path):
             print(f"  [SKIP] {pos_dir.name}: tif なし")
             continue
 
-        # スキップ判定（全フレーム再構成済みか）
-        if TL_SKIP_IF_EXISTS and out_dir.exists():
-            done = set(p.name for p in out_dir.glob("*.tif"))
-            if all((p.stem + "_phase.tif") in done for p in tif_files):
+        # スキップ判定（全フレーム再構成済みか — output_phase + output_phase_raw 両方）
+        raw_out_dir_check = pos_dir / "output_phase_raw"
+        if TL_SKIP_IF_EXISTS and out_dir.exists() and raw_out_dir_check.exists():
+            done_phase = set(p.name for p in out_dir.glob("*.tif"))
+            done_raw = set(p.name for p in raw_out_dir_check.glob("*.tif"))
+            if all((p.stem + "_phase.tif") in done_phase and
+                   (p.stem + "_phase.tif") in done_raw for p in tif_files):
                 print(f"  [SKIP already] {pos_dir.name}")
                 processed.append(pos_dir)
                 continue
 
         out_dir.mkdir(exist_ok=True)
+        raw_out_dir = pos_dir / "output_phase_raw"
+        raw_out_dir.mkdir(exist_ok=True)
         print(f"\n  {pos_dir.name}  crop={crop}  ({len(tif_files)} フレーム)")
 
         # QPIParams（最初のフレームから作成）
@@ -539,8 +550,9 @@ def step_timelapse_reconstruction(tl_dir: Path):
         tasks = []
         for tif_path in tif_files:
             out_path = out_dir / (tif_path.stem + "_phase.tif")
+            raw_out_path = raw_out_dir / (tif_path.stem + "_phase.tif")
             bg_path = bg_files.get(tif_path.name, bg_fallback) if bg_is_timelapse else bg_fallback
-            tasks.append((str(tif_path), str(bg_path), str(out_path), crop, pos_num, qpi, TL_SKIP_IF_EXISTS))
+            tasks.append((str(tif_path), str(bg_path), str(out_path), str(raw_out_path), crop, pos_num, qpi, TL_SKIP_IF_EXISTS))
 
         n_ok = n_skip = n_err = 0
         if N_WORKERS_TL == 1:

@@ -74,7 +74,8 @@ POS_SPLIT   = 33
 CROP_BEFORE = (0, 2048, 400, 2448)   # Pos < POS_SPLIT
 CROP_AFTER  = (0, 2048, 0, 2048)     # Pos >= POS_SPLIT
 
-# Reconstruction
+# Reconstruction — canonical functions from batch_reconstruction_grid
+from batch_reconstruction_grid import reconstruct_from_holo, reconstruct_image, make_qpi_params
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 
 # ECC / compute_pos_shifts (confirmed 2026-04-13)
@@ -213,21 +214,6 @@ def _release_bg_shm(shm):
         pass
 
 
-def _recon_phase_from_holo(holo_path, crop):
-    """Reconstruct unwrapped phase from a hologram at `crop`."""
-    from PIL import Image
-    from qpi import QPIParameters, get_field
-    from skimage.restoration import unwrap_phase
-    rs, re_, cs, ce = crop
-    img = np.array(Image.open(str(holo_path)))[rs:re_, cs:ce]
-    qp = QPIParameters(
-        wavelength=WAVELENGTH, NA=NA,
-        img_shape=img.shape, pixelsize=PIXELSIZE,
-        offaxis_center=OFFAXIS_CENTER,
-    )
-    return unwrap_phase(np.angle(get_field(img, qp)))
-
-
 def _bg_recon_one(args):
     """Worker: reconstruct one Pos0 BG frame for a given crop and save as float32 tif."""
     bg_path_str, crop, out_path_str = args
@@ -235,7 +221,7 @@ def _bg_recon_one(args):
     if out_path.exists():
         return True
     try:
-        phase = _recon_phase_from_holo(bg_path_str, crop)
+        phase = reconstruct_from_holo(bg_path_str, crop)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         tifffile.imwrite(str(out_path), phase.astype(np.float32))
         return True
@@ -291,7 +277,7 @@ def _reconstruct_one(args):
         return True
 
     try:
-        tgt_phase = _recon_phase_from_holo(tgt_path, crop)
+        tgt_phase = reconstruct_from_holo(tgt_path, crop)
 
         # Save raw phase (for grid_subtract - no BG subtraction)
         if not raw_out_path.exists():
