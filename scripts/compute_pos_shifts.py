@@ -19,7 +19,10 @@ import concurrent.futures
 import threading
 import re as _re
 
-from tilt_utils import tilt_fit_crop
+from ecc_utils import (
+    tilt_fit_crop, extract_rect_roi, ecc_align, mad, remove_outliers_mad,
+    to_uint8 as _to_uint8_fixed,
+)
 
 # ============================================================
 # 設定パラメータ
@@ -120,9 +123,7 @@ def to_uint8(img, vmin=VMIN, vmax=VMAX):
     if USE_PERCENTILE_NORM:
         vmin = float(np.percentile(img, PERCENTILE_LO))
         vmax = float(np.percentile(img, PERCENTILE_HI))
-    clipped = np.clip(img, vmin, vmax)
-    normalized = (clipped - vmin) / (vmax - vmin)
-    return (normalized * 255).astype(np.uint8)
+    return _to_uint8_fixed(img, vmin, vmax)
 
 
 def compute_backsub_offset(img: np.ndarray) -> float:
@@ -170,17 +171,7 @@ def compute_backsub_offset(img: np.ndarray) -> float:
         return float(-peak_value)
 
 
-def ecc_align(ref_u8, tl_u8):
-    """ECC アライメントで (shift_x, shift_y, correlation) を返す。失敗時は None。"""
-    warp_matrix = np.eye(2, 3, dtype=np.float32)
-    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-8)
-    try:
-        correlation, warp_matrix = cv2.findTransformECC(
-            ref_u8, tl_u8, warp_matrix, cv2.MOTION_TRANSLATION, criteria
-        )
-        return float(warp_matrix[0, 2]), float(warp_matrix[1, 2]), float(correlation)
-    except Exception:
-        return None
+# ecc_align is imported from ecc_utils
 
 
 def phase_align(ref_img, tl_img):
@@ -195,20 +186,7 @@ def phase_align(ref_img, tl_img):
         return None
 
 
-def mad(arr):
-    """Median Absolute Deviation"""
-    m = np.median(arr)
-    return np.median(np.abs(arr - m))
-
-
-def remove_outliers_mad(values, thresh):
-    """外れ値フラグを返す。values: list of float, thresh: MAD閾値倍率。"""
-    arr = np.array(values, dtype=np.float64)
-    m = np.median(arr)
-    md = mad(arr)
-    if md == 0:
-        return np.zeros(len(arr), dtype=bool)
-    return np.abs(arr - m) > thresh * md
+# mad and remove_outliers_mad are imported from ecc_utils
 
 
 def detect_timeseries_outliers(shift_avg, window, thresh):
@@ -234,7 +212,7 @@ def load_grid_refs(channels_dir, n_channels):
     グリッドの x+0_y+0 画像を読み込み、各チャネルのROIでcropして
     per-channel基準画像リストを返す。
     """
-    from channel_crop import extract_rect_roi
+    # extract_rect_roi imported at top level from ecc_utils
 
     # 候補を優先順に試す:
     #   1. output_phase/*_ph_ZZZ_phase.tif  (pipeline_full.py 再構成済み)
@@ -340,7 +318,7 @@ def load_grid_ref_mn(pos_map, xi, yi, rois, n_channels):
     grid(xi, yi) の各チャネル ROI crop を返す。
     固定 (cx, cy) で crop するので pre-cropped stacks と直接比較可能。
     """
-    from channel_crop import extract_rect_roi
+    # extract_rect_roi imported at top level from ecc_utils
     pos_dir = pos_map[(xi, yi)]
     fname = f"img_000000000_ph_{GRID_Z_INDEX:03d}_phase.tif"
     path = pos_dir / "output_phase" / fname
@@ -364,7 +342,7 @@ def load_grid_ref_mn(pos_map, xi, yi, rois, n_channels):
 
 def load_grid_ref_mn_half(pos_map, xi, yi, rois, n_channels):
     """grid(xi, yi) の各チャネル ROI full crop を返す（2段階ECC用）。"""
-    from channel_crop import extract_rect_roi
+    # extract_rect_roi imported at top level from ecc_utils
     pos_dir = pos_map[(xi, yi)]
     fname = f"img_000000000_ph_{GRID_Z_INDEX:03d}_phase.tif"
     path = pos_dir / "output_phase" / fname

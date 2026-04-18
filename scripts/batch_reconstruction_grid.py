@@ -54,7 +54,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 # 設定パラメータ
 # ============================================================
 # pipeline_full.py の GRID_DIR と揃えること
-GRID_DIR = r"C:\grid_0pergluc_60ms_1"
+GRID_DIR = r"C:\260416\2per_gridgluc_2"
 
 # BG として使うベースラベル（pipeline_full: GRID_BG_BASE_LABEL）
 BG_BASE_LABEL = "Pos0"
@@ -74,7 +74,7 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 # pos_number < POS_SPLIT → 右側 (400:2448)  センサー幅2448
 # pos_number >= POS_SPLIT → 左側 (0:2048)
 # ※ BG（Pos0）はターゲットの pos_number で決まる crop を使う（常に右ではない）
-POS_SPLIT    = 33
+POS_SPLIT    = 31
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 
@@ -82,7 +82,7 @@ CROP_AFTER   = (0, 2048,   0, 2048)
 MEAN_REGION = None
 
 # 再構成済み（output_phase に *_phase.tif が既存）の場合スキップするか（pipeline: GRID_SKIP_IF_EXISTS）
-SKIP_IF_EXISTS = False
+SKIP_IF_EXISTS = True
 
 # PNG カラーマップも保存するか
 SAVE_PNG = False
@@ -90,7 +90,7 @@ PNG_DPI  = 150
 PNG_VMIN = -2.0
 PNG_VMAX =  2.0
 # 並列処理ワーカー数（pipeline_full: N_WORKERS_GRID と同じ）
-N_WORKERS = 16
+N_WORKERS = 4
 # ============================================================
 
 # QPIインポート
@@ -100,7 +100,7 @@ except ImportError:
     print("ERROR: qpi モジュールが見つかりません。QPI_Omni/scripts が PYTHONPATH にあるか確認してください。")
     sys.exit(1)
 
-# GPU acceleration
+# GPU acceleration (get_field uses CuPy FFT, unwrap_phase is CPU-only)
 _USE_GPU = False
 if _HAS_CUPY:
     try:
@@ -112,6 +112,10 @@ if _HAS_CUPY:
     except Exception as e:
         print(f"GPU init failed, using CPU: {e}")
         set_backend("numpy")
+
+# GPU uses single process (CuPy context init overhead makes multiprocess slower)
+if _USE_GPU:
+    N_WORKERS = 1
 
 
 def scan_grid_folders(grid_dir: Path):
@@ -195,6 +199,12 @@ def _reconstruct_grid_point(args):
       - output_phase_raw/ : raw phase, no BG subtraction (for grid_subtract / correct_0pergluc)
     """
     xi, yi, target_dir_str, bg_dir_str, crop, pos_number = args
+    # Re-init CuPy in spawned worker (Windows spawn resets qpi.xp to numpy)
+    if _HAS_CUPY:
+        try:
+            set_backend("cupy")
+        except Exception:
+            pass
     target_dir  = Path(target_dir_str)
     bg_dir      = Path(bg_dir_str)
     out_dir     = target_dir / "output_phase"
@@ -255,6 +265,44 @@ def _reconstruct_grid_point(args):
     return xi, yi, folder_ok, None
 
 
+def _reconstruct_bg_raw(args):
+    """Save raw phase (no BG subtraction) for BG folders with both crops.
+
+    Downstream scripts (correct_0pergluc) need Pos0 output_phase_raw
+    with CROP_BEFORE (for Pos < POS_SPLIT) and CROP_AFTER (for Pos >= POS_SPLIT).
+    """
+    xi, yi, bg_dir_str = args
+    # Re-init CuPy in spawned worker (Windows spawn resets qpi.xp to numpy)
+    if _HAS_CUPY:
+        try:
+            set_backend("cupy")
+        except Exception:
+            pass
+    bg_dir = Path(bg_dir_str)
+
+    for crop_name, crop in [("before", CROP_BEFORE), ("after", CROP_AFTER)]:
+        raw_out_dir = bg_dir / "output_phase_raw" if crop_name == "before" else bg_dir / "output_phase_raw_crop_after"
+        raw_out_dir.mkdir(exist_ok=True)
+        z_files = {get_z_index(p): p for p in get_z_files(bg_dir)}
+        if not z_files:
+            return xi, yi, False, "z files not found"
+        sample_path = next(iter(z_files.values()))
+        try:
+            qpi_params = make_qpi_params(sample_path, crop)
+        except Exception as e:
+            return xi, yi, False, f"QPIParams ({crop_name}): {e}"
+        for z_idx, path in sorted(z_files.items()):
+            out_path = raw_out_dir / (path.stem + "_phase.tif")
+            if out_path.exists():
+                continue
+            try:
+                phase = reconstruct_image(path, qpi_params, crop)
+                tifffile.imwrite(str(out_path), phase.astype(np.float32))
+            except Exception:
+                pass
+    return xi, yi, True, None
+
+
 def _parse_cli():
     p = argparse.ArgumentParser(
         description="グリッド各点の生ホロを BG 引き算付きで output_phase に再構成する。",
@@ -313,6 +361,23 @@ def main():
     print(f"BG ベースラベル: {bg_label}  ({len(bg_map)} 座標点)")
     print(f"対象ベースラベル: {target_labels}  (計 {sum(len(folders[l]) for l in target_labels if l in folders)} フォルダ)")
 
+    # --- BG (Pos0) raw phase with both crops ---
+    print(f"\n{'='*60}")
+    print(f"  BG raw phase ({bg_label}) - both crops  ({len(bg_map)} points)")
+    print(f"{'='*60}")
+    bg_tasks = [(xi, yi, str(d)) for (xi, yi), d in sorted(bg_map.items())]
+    if N_WORKERS == 1:
+        bg_results = [_reconstruct_bg_raw(t) for t in tqdm(bg_tasks, desc=f"{bg_label} BG")]
+    else:
+        bg_results = []
+        with ProcessPoolExecutor(max_workers=N_WORKERS) as executor:
+            futures = {executor.submit(_reconstruct_bg_raw, t): t for t in bg_tasks}
+            for fut in tqdm(as_completed(futures), total=len(bg_tasks), desc=f"{bg_label} BG"):
+                bg_results.append(fut.result())
+    bg_ok = sum(1 for _, _, ok, _ in bg_results if ok)
+    bg_err = sum(1 for _, _, ok, _ in bg_results if not ok)
+    print(f"  BG raw: {bg_ok} OK, {bg_err} errors")
+
     total_ok = 0
     total_err = 0
 
@@ -347,20 +412,17 @@ def main():
         if not tasks:
             continue
 
-        if _USE_GPU:
-            print(f"  GPU sequential: {len(tasks)} points")
-            results = [_reconstruct_grid_point(t) for t in tqdm(tasks, desc=base_label)]
+        n_workers_display = N_WORKERS if N_WORKERS is not None else os.cpu_count()
+        gpu_tag = " + CuPy" if _USE_GPU else ""
+        print(f"  Parallel: {len(tasks)} points / {n_workers_display} workers{gpu_tag}")
+        if N_WORKERS == 1:
+            results = [_reconstruct_grid_point(args) for args in tqdm(tasks, desc=base_label)]
         else:
-            n_workers_display = N_WORKERS if N_WORKERS is not None else os.cpu_count()
-            print(f"  CPU parallel: {len(tasks)} points / {n_workers_display} workers")
-            if N_WORKERS == 1:
-                results = [_reconstruct_grid_point(args) for args in tqdm(tasks, desc=base_label)]
-            else:
-                results = []
-                with ProcessPoolExecutor(max_workers=N_WORKERS) as executor:
-                    futures = {executor.submit(_reconstruct_grid_point, args): args for args in tasks}
-                    for fut in tqdm(as_completed(futures), total=len(tasks), desc=base_label):
-                        results.append(fut.result())
+            results = []
+            with ProcessPoolExecutor(max_workers=N_WORKERS) as executor:
+                futures = {executor.submit(_reconstruct_grid_point, args): args for args in tasks}
+                for fut in tqdm(as_completed(futures), total=len(tasks), desc=base_label):
+                    results.append(fut.result())
 
         for xi, yi, folder_ok, err_msg in results:
             if folder_ok:

@@ -182,7 +182,7 @@ SHIFTS_APPLY_SHIFT_AND_CROP      = False   # True で crop_subtracted を出力�
 # 270px wide crop → slope+intercept 補正 → 中央 80px → ECC を行う。
 SHIFTS_USE_SLOPE_CORRECTION      = False
 SHIFTS_TILT_CROP_H               = 270
-SHIFTS_ECC_CROP_H                = 160     # ECC に使う crop の X 幅
+SHIFTS_ECC_CROP_H                = 80      # ECC に使う crop の X 幅
 
 # ============================================================
 # grid_subtract パラメータ

@@ -94,68 +94,21 @@ def load_config(path):
         return json.load(f)
 
 
-def extract_rect_roi(img, cy, cx, crop_w, crop_h):
-    h, w = img.shape
-    y1 = cy - crop_w // 2; y2 = y1 + crop_w
-    x1 = cx - crop_h // 2; x2 = x1 + crop_h
-    pad_y0 = max(0, -y1); y1 = max(0, y1)
-    pad_y1 = max(0, y2 - h); y2 = min(h, y2)
-    pad_x0 = max(0, -x1); x1 = max(0, x1)
-    pad_x1 = max(0, x2 - w); x2 = min(w, x2)
-    crop = img[y1:y2, x1:x2]
-    if any([pad_y0, pad_y1, pad_x0, pad_x1]):
-        crop = np.pad(crop, ((pad_y0, pad_y1), (pad_x0, pad_x1)), mode="constant")
-    return crop
+from ecc_utils import (
+    tilt_fit_crop, extract_rect_roi, to_uint8, ecc_align,
+    mad, remove_outliers_mad,
+)
 
 
-def _tilt_correct(img_f64, cy, cx, crop_w, crop_h_out):
-    big   = extract_rect_roi(img_f64, cy, cx, crop_w, TILT_CROP_H).astype(np.float64)
-    x     = np.arange(TILT_CROP_H, dtype=np.float64)
-    prof  = big.mean(axis=0)
-    fit_n = max(1, TILT_CROP_H // 3)
-    a, b  = np.polyfit(x[:fit_n], prof[:fit_n], 1)
-    corrected = big - (a * x + b)[np.newaxis, :]
-    start = (TILT_CROP_H - crop_h_out) // 2
-    return corrected[:, start : start + crop_h_out]
-
-
-def to_uint8_fixed(img, vmin, vmax):
-    clipped = np.clip(img, vmin, vmax)
-    return ((clipped - vmin) / (vmax - vmin) * 255).astype(np.uint8)
-
-
-def ecc_align(ref_u8, tl_u8):
-    warp_matrix = np.eye(2, 3, dtype=np.float32)
-    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-8)
-    try:
-        corr, warp_matrix = cv2.findTransformECC(
-            ref_u8, tl_u8, warp_matrix, cv2.MOTION_TRANSLATION, criteria)
-        return float(warp_matrix[0, 2]), float(warp_matrix[1, 2]), float(corr)
-    except Exception:
-        return None
-
-
-def _mad(arr):
-    return float(np.median(np.abs(arr - np.median(arr))))
-
-
-def _remove_outliers_mad(values, thresh):
-    arr = np.array(values, dtype=np.float64)
-    md = _mad(arr)
-    if md == 0:
-        return np.zeros(len(arr), dtype=bool)
-    return np.abs(arr - np.median(arr)) > thresh * md
-
-
-def get_crops_u8(img_f64, rois, n_channels, vmin, vmax):
-    return [
-        to_uint8_fixed(
-            _tilt_correct(img_f64, rois[ch]["cy"], rois[ch]["cx"],
-                          rois[ch]["crop_w"], ECC_CROP_H),
-            vmin, vmax,
-        )
-        for ch in range(n_channels)
-    ]
+def get_crops_u8(img_f64, rois, n_channels, vmin, vmax, fit_right: bool = False):
+    """Return tilt-corrected uint8 crops for all channels (None if OOB)."""
+    crops = []
+    for ch in range(n_channels):
+        tc = tilt_fit_crop(img_f64, rois[ch]["cy"], rois[ch]["cx"],
+                           rois[ch]["crop_w"], ECC_CROP_H, TILT_CROP_H,
+                           fit_right=fit_right)
+        crops.append(to_uint8(tc, vmin, vmax) if tc is not None else None)
+    return crops
 
 
 def load_phase_image(grid_dir, label, z_index):
@@ -251,6 +204,10 @@ def center_ecc(ref_img, calib_img, rois, n_channels, vmin, vmax):
     tx_list, ty_list, corr_list = [], [], []
     per_ch = []
     for ch in range(n_channels):
+        if ref_crops[ch] is None or calib_crops[ch] is None:
+            per_ch.append({"ch": ch, "tx": None, "ty": None,
+                           "corr": None, "excluded": True, "reason": "tilt_oob"})
+            continue
         res = ecc_align(ref_crops[ch], calib_crops[ch])
         if res is None:
             per_ch.append({"ch": ch, "tx": None, "ty": None,
@@ -266,8 +223,8 @@ def center_ecc(ref_img, calib_img, rois, n_channels, vmin, vmax):
 
     n_raw = len(tx_list)
     if n_raw >= 3:
-        is_out = (_remove_outliers_mad(tx_list, MAD_THRESH)
-                  | _remove_outliers_mad(ty_list, MAD_THRESH))
+        is_out = (remove_outliers_mad(tx_list, MAD_THRESH)
+                  | remove_outliers_mad(ty_list, MAD_THRESH))
     else:
         is_out = np.zeros(n_raw, dtype=bool)
 

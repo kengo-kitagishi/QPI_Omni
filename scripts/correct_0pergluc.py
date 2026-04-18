@@ -47,9 +47,9 @@ from grid_subtract import (
     load_grid_calibration,
     scan_grid_positions,
 )
-from compute_pos_shifts import compute_backsub_offset, to_uint8, ecc_align
+from compute_pos_shifts import compute_backsub_offset
 from optical_config import RAW_CROP as _OPTICAL_RAW_CROP
-from tilt_utils import tilt_fit_crop, apply_2pi_tilt_crop
+from ecc_utils import tilt_fit_crop, apply_2pi_tilt_crop, to_uint8, ecc_align
 
 
 def _grid_prerecon_raw_path(pos_dir, z_index):
@@ -196,7 +196,8 @@ def _ecc_per_channel(g0_full, g2_full, rois, fit_right):
             continue
         g0_crop_bc = g0_crop + compute_backsub_offset(g0_crop)
         g2_crop_bc = g2_crop + compute_backsub_offset(g2_crop)
-        result = ecc_align(to_uint8(g2_crop_bc), to_uint8(g0_crop_bc))
+        result = ecc_align(to_uint8(g2_crop_bc, -5.0, 2.0),
+                           to_uint8(g0_crop_bc, -5.0, 2.0))
         if result:
             all_tx.append(result[0])
             all_ty.append(result[1])

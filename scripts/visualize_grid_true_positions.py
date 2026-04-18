@@ -47,8 +47,7 @@ Z_IDX      = 9
 
 # ECC パラメータ (compute_pos_shifts.py と同値)
 VMIN, VMAX       = -5.0, 2.0
-ECC_MAX_ITER     = 100000
-ECC_EPSILON      = 1e-8
+# ECC convergence params now in ecc_utils
 
 # Tilt 補正パラメータ (compute_pos_shifts.py と同値)
 TILT_CROP_H = 270   # X 方向の big crop 幅 [px]
@@ -80,65 +79,10 @@ PX2UM   = pixel_scale_um
 
 # ---- ユーティリティ関数 ----
 
-def extract_rect_roi(img, cy, cx, crop_w, crop_h):
-    """(cy, cx) 中心で (crop_w rows x crop_h cols) を切り出す（パディングあり）。"""
-    h, w = img.shape
-    y1 = cy - crop_w // 2; y2 = y1 + crop_w
-    x1 = cx - crop_h // 2; x2 = x1 + crop_h
-    pad_y0 = max(0, -y1); y1 = max(0, y1)
-    pad_y1 = max(0, y2 - h); y2 = min(h, y2)
-    pad_x0 = max(0, -x1); x1 = max(0, x1)
-    pad_x1 = max(0, x2 - w); x2 = min(w, x2)
-    crop = img[y1:y2, x1:x2]
-    if any([pad_y0, pad_y1, pad_x0, pad_x1]):
-        crop = np.pad(crop, ((pad_y0, pad_y1), (pad_x0, pad_x1)), mode="constant")
-    return crop
-
-
-def _tilt_correct(img_f64, cy, cx, crop_w, crop_h_out):
-    """
-    compute_pos_shifts.py の _tilt_correct と同じ処理。
-    big crop (TILT_CROP_H cols) → 左1/3 slope fit → 補正 → 中央 crop_h_out cols。
-    """
-    big   = extract_rect_roi(img_f64, cy, cx, crop_w, TILT_CROP_H).astype(np.float64)
-    x     = np.arange(TILT_CROP_H, dtype=np.float64)
-    prof  = big.mean(axis=0)
-    fit_n = max(1, TILT_CROP_H // 3)
-    a, b  = np.polyfit(x[:fit_n], prof[:fit_n], 1)
-    corrected = big - (a * x + b)[np.newaxis, :]
-    start = (TILT_CROP_H - crop_h_out) // 2
-    return corrected[:, start : start + crop_h_out]
-
-
-def to_uint8(img, vmin=VMIN, vmax=VMAX):
-    clipped    = np.clip(img, vmin, vmax)
-    normalized = (clipped - vmin) / (vmax - vmin)
-    return (normalized * 255).astype(np.uint8)
-
-
-def ecc_align(ref_u8, tl_u8):
-    """
-    ECC で (tx, ty, corr) を返す。失敗時は None。
-    findTransformECC(ref, tl) → actual_dx = -tx,  actual_dy = -ty
-    """
-    warp_matrix = np.eye(2, 3, dtype=np.float32)
-    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, ECC_MAX_ITER, ECC_EPSILON)
-    try:
-        corr, warp_matrix = cv2.findTransformECC(
-            ref_u8, tl_u8, warp_matrix, cv2.MOTION_TRANSLATION, criteria)
-        return float(warp_matrix[0, 2]), float(warp_matrix[1, 2]), float(corr)
-    except Exception:
-        return None
-
-
-def remove_outliers_mad(values, thresh):
-    """MAD 外れ値フラグを返す。compute_pos_shifts.py と同じ実装。"""
-    arr = np.array(values, dtype=np.float64)
-    m   = np.median(arr)
-    md  = np.median(np.abs(arr - m))
-    if md == 0:
-        return np.zeros(len(arr), dtype=bool)
-    return np.abs(arr - m) > thresh * md
+from ecc_utils import (
+    tilt_fit_crop, extract_rect_roi, to_uint8, ecc_align,
+    remove_outliers_mad,
+)
 
 
 def _channel_average(tx_list, ty_list, corr_list):
@@ -186,10 +130,15 @@ def load_phase_image(pos_dir, z_idx):
     return tifffile.imread(str(path)).astype(np.float64)
 
 
-def make_crops_u8(img_f64, rois):
-    """各チャネル ROI に _tilt_correct + to_uint8 を適用して crops リストを返す。"""
-    return [to_uint8(_tilt_correct(img_f64, roi["cy"], roi["cx"], roi["crop_w"], ECC_CROP_H))
-            for roi in rois]
+def make_crops_u8(img_f64, rois, fit_right: bool = False):
+    """Return tilt-corrected uint8 crops for all channels (None if OOB)."""
+    crops = []
+    for roi in rois:
+        tc = tilt_fit_crop(img_f64, roi["cy"], roi["cx"],
+                           roi["crop_w"], ECC_CROP_H, TILT_CROP_H,
+                           fit_right=fit_right)
+        crops.append(to_uint8(tc, VMIN, VMAX) if tc is not None else None)
+    return crops
 
 
 # ---- 直接ECC 方式 ----

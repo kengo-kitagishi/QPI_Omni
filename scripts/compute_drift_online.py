@@ -108,76 +108,17 @@ def compute_backsub_offset(img, cfg) -> float:
         return float(-peak_value)
 
 
-def extract_rect_roi(img, cy, cx, crop_w, crop_h):
-    """Extract a (crop_w x crop_h) ROI centred at (cy, cx), zero-padding edges."""
-    h, w = img.shape
-    y1 = cy - crop_w // 2; y2 = y1 + crop_w
-    x1 = cx - crop_h // 2; x2 = x1 + crop_h
-    pad_y0 = max(0, -y1); y1 = max(0, y1)
-    pad_y1 = max(0, y2 - h); y2 = min(h, y2)
-    pad_x0 = max(0, -x1); x1 = max(0, x1)
-    pad_x1 = max(0, x2 - w); x2 = min(w, x2)
-    crop = img[y1:y2, x1:x2]
-    if any([pad_y0, pad_y1, pad_x0, pad_x1]):
-        crop = np.pad(crop, ((pad_y0, pad_y1), (pad_x0, pad_x1)), mode="constant")
-    return crop
-
-
-from tilt_utils import tilt_fit_crop
+from ecc_utils import (
+    tilt_fit_crop, extract_rect_roi, to_uint8, ecc_align,
+    mad, remove_outliers_mad,
+)
 
 
 def _tilt_correct(img_f64, cy, cx, crop_w, tilt_crop_h, ecc_crop_h,
                   fit_right: bool = False):
-    """Shared tilt-correction wrapper (see tilt_utils.tilt_fit_crop).
-
-    Returns ``None`` when the wider ROI would require zero-padding; callers
-    must treat that as "skip this channel from ECC" rather than fall back to
-    a different crop shape.
-    """
+    """Thin wrapper binding tilt_crop_h/ecc_crop_h to tilt_fit_crop."""
     return tilt_fit_crop(img_f64, cy, cx, crop_w, ecc_crop_h, tilt_crop_h,
                          fit_right=fit_right)
-
-
-def to_uint8(img, vmin, vmax):
-    """Linearly map ``img`` in [vmin, vmax] to uint8 [0, 255] (for ECC input)."""
-    clipped = np.clip(img, vmin, vmax)
-    return ((clipped - vmin) / (vmax - vmin) * 255).astype(np.uint8)
-
-
-# ================================================================
-# ECC alignment and outlier rejection
-# ================================================================
-
-def ecc_align(ref_u8, tl_u8):
-    """ECC translation alignment between two uint8 images.
-
-    Returns (tx, ty, correlation) on success, or ``None`` if ECC fails to
-    converge. Criteria match ``cv2.findTransformECC`` defaults in style, with
-    max_iter=100000 and epsilon=1e-8 for high-precision sub-pixel shifts.
-    """
-    warp_matrix = np.eye(2, 3, dtype=np.float32)
-    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-8)
-    try:
-        corr, warp_matrix = cv2.findTransformECC(
-            ref_u8, tl_u8, warp_matrix, cv2.MOTION_TRANSLATION, criteria,
-        )
-        return float(warp_matrix[0, 2]), float(warp_matrix[1, 2]), float(corr)
-    except cv2.error:
-        return None
-
-
-def _mad(arr):
-    m = np.median(arr)
-    return float(np.median(np.abs(arr - m)))
-
-
-def _remove_outliers_mad(values, thresh=5.0):
-    """Return a boolean mask marking MAD-based outliers (|x - med| > thresh * MAD)."""
-    arr = np.array(values, dtype=np.float64)
-    md = _mad(arr)
-    if md == 0:
-        return np.zeros(len(arr), dtype=bool)
-    return np.abs(arr - np.median(arr)) > thresh * md
 
 
 # ================================================================
@@ -265,13 +206,18 @@ def _load_grid_ref_full(pos_map, xi, yi, rois, n_channels, z_index, cfg,
 _wk = {}  # worker-process shared data (set by _init_drift_worker)
 
 
-def _init_drift_worker(cfg, rois, leader_data_dict, bg_phases, t):
+def _init_drift_worker(cfg, rois, leader_data_dict, bg_phases, t,
+                       pre_phases=None):
     """Initialize worker process with shared data.
 
     ``bg_phases`` is a dict ``{"before": ndarray|None, "after": ndarray|None}``
     of pre-reconstructed BG phases (one per crop variant). Workers pick the
     matching one by ``pos_index`` and subtract directly — no redundant BG
     reconstruction per position.
+
+    ``pre_phases`` is a dict ``{pos_idx: ndarray}`` of raw phases
+    pre-reconstructed on GPU in the main process. When available, workers skip
+    the FFT+unwrap step entirely.
     """
     global _wk
     script_dir = cfg.get("script_dir", "")
@@ -281,6 +227,7 @@ def _init_drift_worker(cfg, rois, leader_data_dict, bg_phases, t):
         'cfg': cfg, 'rois': rois,
         'leader_data': leader_data_dict,
         'bg_phases': bg_phases, 't': t,
+        'pre_phases': pre_phases or {},
     }
 
 
@@ -299,11 +246,12 @@ def _process_leader_task(args):
     ld = _wk['leader_data'][idx]
     pos_split = _wk['cfg'].get("pos_split", 3)
     bg_phase = _wk['bg_phases']["after" if idx >= pos_split else "before"]
+    pre_phase = _wk.get('pre_phases', {}).get(idx)
     return _process_one_position(
         idx, label, str(raw_path), bg_phase,
         _wk['cfg'], _wk['rois'],
         ld['u8_crops'], ld['pos_map'], ld['grid_cal'],
-        prev, kf_st)
+        prev, kf_st, pre_phase_raw=pre_phase)
 
 
 # ================================================================
@@ -379,7 +327,12 @@ def _reconstruct_phase_raw(raw_path, cfg, pos_index=0):
         img_shape=img_crop.shape, pixelsize=PIXELSIZE,
         offaxis_center=OFFAXIS_CENTER,
     )
-    return unwrap_phase(np.angle(get_field(img_crop, qpi_params)))
+    field = get_field(img_crop, qpi_params)
+    if hasattr(field, "get"):  # CuPy array -> numpy
+        angle = np.angle(field.get())
+    else:
+        angle = np.angle(field)
+    return unwrap_phase(angle)
 
 
 def reconstruct_bg_phase_variants(bg_path, cfg, pos_indices):
@@ -615,8 +568,11 @@ def save_all_kf_states(kf_path, kf_updates):
 
 def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
                           cfg, rois, grid_ref_u8, pos_map, grid_cal,
-                          prev_state, kf_state):
+                          prev_state, kf_state, pre_phase_raw=None):
     """Full drift pipeline for one position.
+
+    When ``pre_phase_raw`` is provided (GPU pre-reconstructed in main process),
+    the FFT+unwrap step is skipped entirely.
 
     Returns dict with:
         pos_idx, pos_label, dx_um, dy_um, cumulative_dx_um, cumulative_dy_um,
@@ -654,15 +610,17 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
     }
 
     # ---- Phase reconstruction ----
-    if not Path(raw_path).exists():
+    if pre_phase_raw is not None:
+        phase_raw = pre_phase_raw
+    elif not Path(raw_path).exists():
         print(f"  [{pos_label}] ERROR: raw image not found: {raw_path}")
         return fail_result
-
-    try:
-        phase_raw = _reconstruct_phase_raw(raw_path, cfg, pos_idx)
-    except Exception as ex:
-        print(f"  [{pos_label}] ERROR: phase reconstruction failed: {ex}")
-        return fail_result
+    else:
+        try:
+            phase_raw = _reconstruct_phase_raw(raw_path, cfg, pos_idx)
+        except Exception as ex:
+            print(f"  [{pos_label}] ERROR: phase reconstruction failed: {ex}")
+            return fail_result
 
     # Save raw phase (no BG subtraction) - matches batch step0's output_phase_raw/
     raw_out_dir = Path(raw_path).parent / "output_phase_raw"
@@ -818,7 +776,7 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
         low_corr_mask = np.array([c < ecc_min_corr for c in corr_list])
 
     if n_ch_raw >= 3:
-        is_out = _remove_outliers_mad(tx_list) | _remove_outliers_mad(ty_list) | low_corr_mask
+        is_out = remove_outliers_mad(tx_list, 5.0) | remove_outliers_mad(ty_list, 5.0) | low_corr_mask
         used_idx = [i for i, o in enumerate(is_out) if not o]
         if not used_idx:
             used_idx = list(range(n_ch_raw))
@@ -1237,6 +1195,24 @@ def main():
         rois = json.load(f)
     n_channels = len(rois)
 
+    # ---- GPU init (main process only, not in workers) ----
+    _use_gpu = False
+    try:
+        from qpi import set_backend, _HAS_CUPY
+        if _HAS_CUPY:
+            import cupy as _cp
+            _cp.array([1.0]) * 2  # smoke test
+            set_backend("cupy")
+            _use_gpu = True
+            gpu_name = _cp.cuda.runtime.getDeviceProperties(0)['name'].decode()
+            print(f"  GPU mode: {gpu_name}")
+    except Exception as e:
+        print(f"  GPU init failed, using CPU: {e}")
+        try:
+            set_backend("numpy")
+        except Exception:
+            pass
+
     # ---- BG image path ----
     bg_raw = get_raw_path(cfg["save_dir"], bg_label, t)
     if not bg_raw.exists():
@@ -1246,14 +1222,37 @@ def main():
     # ---- Pre-reconstruct BG phase once per crop variant ----
     # Reconstructed here (in main) so every worker does not redo the BG FFT +
     # unwrap_phase on each sample position (saves one BG reconstruction per
-    # Pos per timepoint).
+    # Pos per timepoint).  When GPU is available, get_field uses CuPy FFT.
     leader_indices = [ld["index"] for ld in group_leaders]
     t_bg_start = datetime.now()
     bg_phases = reconstruct_bg_phase_variants(bg_raw, cfg, leader_indices)
     if bg_raw is not None:
         variants = [k for k, v in bg_phases.items() if v is not None]
-        print(f"  BG phase reconstructed ({','.join(variants) or 'none'}) "
+        gpu_tag = " (GPU)" if _use_gpu else ""
+        print(f"  BG phase reconstructed ({','.join(variants) or 'none'}){gpu_tag} "
               f"in {(datetime.now() - t_bg_start).total_seconds():.2f}s")
+
+    # ---- Pre-reconstruct leader sample phases (GPU in main) ----
+    # Workers receive numpy arrays and skip FFT+unwrap entirely.
+    pre_phases = {}
+    t_pre_start = datetime.now()
+    for leader in group_leaders:
+        raw_path = get_raw_path(cfg['save_dir'], leader['label'], t)
+        if raw_path.exists():
+            try:
+                pre_phases[leader['index']] = _reconstruct_phase_raw(
+                    str(raw_path), cfg, leader['index'])
+            except Exception as e:
+                print(f"  [{leader['label']}] phase pre-recon failed: {e}")
+    n_pre = len(pre_phases)
+    if n_pre > 0:
+        gpu_tag = " (GPU)" if _use_gpu else ""
+        print(f"  Pre-reconstructed {n_pre}/{len(group_leaders)} leader phases{gpu_tag} "
+              f"in {(datetime.now() - t_pre_start).total_seconds():.2f}s")
+
+    # Reset backend before spawning workers (workers must not use GPU)
+    if _use_gpu:
+        set_backend("numpy")
 
     # ---- Load grid references and calibration for leaders ----
     # Both grid TIFFs and grid_calibration_{label}.json are mandatory:
@@ -1294,7 +1293,7 @@ def main():
     with ProcessPoolExecutor(
         max_workers=max_workers,
         initializer=_init_drift_worker,
-        initargs=(cfg, rois, leader_data, bg_phases, t),
+        initargs=(cfg, rois, leader_data, bg_phases, t, pre_phases),
     ) as pool:
         leader_results = list(pool.map(_process_leader_task, task_args))
 

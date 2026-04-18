@@ -25,7 +25,7 @@
   "shift_sign_x": 1,
   "shift_sign_y": 1,
   "pixel_scale_um": 0.34567514677103717,
-  "pos_split": 33,
+  "pos_split": 31,
   "crop_before": [
     0,
     2048,

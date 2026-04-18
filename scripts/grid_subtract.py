@@ -26,7 +26,7 @@ N_PARALLEL_FRAMES = 8
 sys.path.insert(0, str(Path(__file__).parent))
 from compute_pos_shifts import compute_backsub_offset
 from optical_config import RAW_CROP as _OPTICAL_RAW_CROP
-from tilt_utils import apply_2pi_tilt_crop
+from ecc_utils import apply_2pi_tilt_crop, extract_rect_roi
 
 # ============================================================
 # 設定パラメータ
@@ -114,19 +114,7 @@ POS_SPLIT        = 33
 # ============================================================
 
 
-def extract_rect_roi(img, cy, cx, crop_w, crop_h):
-    """channel_crop.py と同じROI crop ロジック"""
-    h, w = img.shape
-    y1 = cy - crop_w // 2; y2 = y1 + crop_w
-    x1 = cx - crop_h // 2; x2 = x1 + crop_h
-    pad_y0 = max(0, -y1); y1 = max(0, y1)
-    pad_y1 = max(0, y2 - h); y2 = min(h, y2)
-    pad_x0 = max(0, -x1); x1 = max(0, x1)
-    pad_x1 = max(0, x2 - w); x2 = min(w, x2)
-    crop = img[y1:y2, x1:x2]
-    if any([pad_y0, pad_y1, pad_x0, pad_x1]):
-        crop = np.pad(crop, ((pad_y0, pad_y1), (pad_x0, pad_x1)), mode="constant")
-    return crop
+# extract_rect_roi is imported from ecc_utils
 
 
 def load_grid_calibration(json_path):

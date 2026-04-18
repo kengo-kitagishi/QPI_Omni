@@ -47,24 +47,24 @@ from pathlib import Path
 # ============================================================
 
 # 出力先ディレクトリ
-BASE_DIR = r"D:\AquisitionData\Kitagishi\260331"
+BASE_DIR = r"C:\260416"
 
 # 補正する timelapse.pos（base positions のみ含む）
-TIMELAPSE_POS = r"D:\AquisitionData\Kitagishi\260331\timelapse.pos"
+TIMELAPSE_POS = r"D:\AquisitionData\Kitagishi\260416\timelapse.pos"
 
 # 今日の calibration データフォルダ
 # grid データ（Pos1_x+0_y+0）のとき CALIB_SUFFIX = "x+0_y+0"
 # focus/timelapse データ（Pos1）のとき CALIB_SUFFIX = ""
 CALIB_SUFFIX   = ""
-CALIB_GRID_DIR = r"E:\Acuisition\kitagishi\260331\focus_check_3"
+CALIB_GRID_DIR = r"C:\260416\_for_0per_gridgluc_2"
 
 # Day-1 固定参照 grid フォルダ
 # PosN_x+0_y+0/output_phase/*_phase.tif が再構成済みであること
-REF_GRID_DIR   = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
+REF_GRID_DIR   = r"C:\260416\2per_gridgluc_1"
 
 # z インデックス（img_000000000_ph_{Z:03d}_phase.tif）
-REF_Z_INDEX   = 10   # REF 側（再構成済みファイルに合わせる）
-CALIB_Z_INDEX = 10   # CALIB 側（z=0=index10 の in-focus フレーム）
+REF_Z_INDEX   = 5    # REF 側（260416: 11枚z-stack, z=0=index5）
+CALIB_Z_INDEX = 0    # CALIB 側（single z 撮影）
 
 # CALIB_GRID の BG base label（再構成時の BG 差し引きに使う Pos0_x+0_y+0）
 CALIB_BG_BASE_LABEL = "Pos0"
@@ -98,81 +98,21 @@ def load_config(path):
         return json.load(f)
 
 
-def extract_rect_roi(img, cy, cx, crop_w, crop_h):
-    """calibrate_grid_positions.py と同一実装。"""
-    h, w = img.shape
-    y1 = cy - crop_w // 2; y2 = y1 + crop_w
-    x1 = cx - crop_h // 2; x2 = x1 + crop_h
-    pad_y0 = max(0, -y1); y1 = max(0, y1)
-    pad_y1 = max(0, y2 - h); y2 = min(h, y2)
-    pad_x0 = max(0, -x1); x1 = max(0, x1)
-    pad_x1 = max(0, x2 - w); x2 = min(w, x2)
-    crop = img[y1:y2, x1:x2]
-    if any([pad_y0, pad_y1, pad_x0, pad_x1]):
-        crop = np.pad(crop, ((pad_y0, pad_y1), (pad_x0, pad_x1)), mode="constant")
-    return crop
-
-
-def _tilt_correct(img_f64, cy, cx, crop_w, crop_h_out, fit_right: bool = False):
-    """
-    compute_pos_shifts.py と同一実装。
-    big crop (TILT_CROP_H cols) → 背景側1/3 slope+intercept fit → 補正 → 中央 crop_h_out cols。
-    fit_right=False: 左1/3（Pos_num < POS_SPLIT）、True: 右1/3（Pos_num >= POS_SPLIT）。
-    """
-    big   = extract_rect_roi(img_f64, cy, cx, crop_w, TILT_CROP_H).astype(np.float64)
-    x     = np.arange(TILT_CROP_H, dtype=np.float64)
-    prof  = big.mean(axis=0)
-    fit_n = max(1, TILT_CROP_H // 3)
-    if fit_right:
-        a, b = np.polyfit(x[-fit_n:], prof[-fit_n:], 1)
-    else:
-        a, b = np.polyfit(x[:fit_n], prof[:fit_n], 1)
-    corrected = big - (a * x + b)[np.newaxis, :]
-    start = (TILT_CROP_H - crop_h_out) // 2
-    return corrected[:, start : start + crop_h_out]
-
-
-def to_uint8_fixed(img, vmin, vmax):
-    """固定 vmin/vmax で uint8 化（percentile normalization なし）。"""
-    clipped = np.clip(img, vmin, vmax)
-    return ((clipped - vmin) / (vmax - vmin) * 255).astype(np.uint8)
-
-
-def ecc_align(ref_u8, tl_u8):
-    """(tx, ty, correlation) を返す。失敗時は None。"""
-    warp_matrix = np.eye(2, 3, dtype=np.float32)
-    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-8)
-    try:
-        corr, warp_matrix = cv2.findTransformECC(
-            ref_u8, tl_u8, warp_matrix, cv2.MOTION_TRANSLATION, criteria)
-        return float(warp_matrix[0, 2]), float(warp_matrix[1, 2]), float(corr)
-    except Exception:
-        return None
-
-
-def _mad(arr):
-    m = np.median(arr)
-    return float(np.median(np.abs(arr - m)))
-
-
-def _remove_outliers_mad(values, thresh):
-    arr = np.array(values, dtype=np.float64)
-    md = _mad(arr)
-    if md == 0:
-        return np.zeros(len(arr), dtype=bool)
-    return np.abs(arr - np.median(arr)) > thresh * md
+from ecc_utils import (
+    tilt_fit_crop, extract_rect_roi, to_uint8, ecc_align,
+    mad, remove_outliers_mad,
+)
 
 
 def get_crops_u8(img_f64, rois, n_channels, vmin, vmax, fit_right: bool = False):
-    """全チャネルの tilt 補正済み uint8 crop を返す。"""
-    return [
-        to_uint8_fixed(
-            _tilt_correct(img_f64, rois[ch]["cy"], rois[ch]["cx"],
-                          rois[ch]["crop_w"], ECC_CROP_H, fit_right),
-            vmin, vmax,
-        )
-        for ch in range(n_channels)
-    ]
+    """Return tilt-corrected uint8 crops for all channels (None if OOB)."""
+    crops = []
+    for ch in range(n_channels):
+        tc = tilt_fit_crop(img_f64, rois[ch]["cy"], rois[ch]["cx"],
+                           rois[ch]["crop_w"], ECC_CROP_H, TILT_CROP_H,
+                           fit_right=fit_right)
+        crops.append(to_uint8(tc, vmin, vmax) if tc is not None else None)
+    return crops
 
 
 def load_phase_image(grid_dir, label, z_index):
@@ -289,6 +229,10 @@ def center_ecc(ref_img, calib_img, rois, n_channels, vmin, vmax, fit_right: bool
     tx_list, ty_list, corr_list = [], [], []
     per_ch = []
     for ch in range(n_channels):
+        if ref_crops[ch] is None or calib_crops[ch] is None:
+            per_ch.append({"ch": ch, "tx": None, "ty": None,
+                           "corr": None, "excluded": True, "reason": "tilt_oob"})
+            continue
         res = ecc_align(ref_crops[ch], calib_crops[ch])
         if res is None:
             per_ch.append({"ch": ch, "tx": None, "ty": None,
@@ -304,7 +248,7 @@ def center_ecc(ref_img, calib_img, rois, n_channels, vmin, vmax, fit_right: bool
 
     n_raw = len(tx_list)
     if n_raw >= 3:
-        is_out = _remove_outliers_mad(tx_list, MAD_THRESH) | _remove_outliers_mad(ty_list, MAD_THRESH)
+        is_out = remove_outliers_mad(tx_list, MAD_THRESH) | remove_outliers_mad(ty_list, MAD_THRESH)
     else:
         is_out = np.zeros(n_raw, dtype=bool)
 
@@ -335,7 +279,7 @@ def center_ecc(ref_img, calib_img, rois, n_channels, vmin, vmax, fit_right: bool
 # メイン
 # ============================================================
 
-def _run_channel_detect(pos_dir: Path):
+def _run_channel_detect(pos_dir: Path, z_index: int = 0):
     """channel_crop.py --detect を output_phase/ の phase 画像に対して実行する。
     out_dir = img_dir / "channels" なので --dir に output_phase/ を渡すことで
     output_phase/channels/channel_rois.json に出力される。
@@ -343,14 +287,67 @@ def _run_channel_detect(pos_dir: Path):
     import subprocess
     script = Path(__file__).resolve().parent / "channel_crop.py"
     output_phase_dir = pos_dir / "output_phase"
+    pattern = f"img_*_ph_{z_index:03d}_phase.tif"
     cmd = [sys.executable, str(script),
            "--dir", str(output_phase_dir),
-           "--pattern", "img_*_ph_000_phase.tif",
+           "--pattern", pattern,
            "--detect"]
     print(f"  実行: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=False)
     if result.returncode != 0:
-        print(f"  [!] channel_crop.py --detect が失敗 (returncode={result.returncode})")
+        print(f"  [!] channel_crop.py --detect failed (returncode={result.returncode})")
+
+
+def _plot_corrections(log_entries, base_dir):
+    """Plot per-pos ECC correction summary and save via figure_logger."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from figure_logger import save_figure
+
+    labels, corr_x, corr_y = [], [], []
+    for entry in log_entries:
+        cc = entry.get("center_correction")
+        if cc is None:
+            continue
+        labels.append(entry["base_label"])
+        corr_x.append(cc["pos_correct_x_um"])
+        corr_y.append(cc["pos_correct_y_um"])
+
+    if not labels:
+        print("  [figure] no valid corrections to plot")
+        return
+
+    pos_idx = [int(re.match(r"Pos(\d+)", lb).group(1)) for lb in labels]
+    corr_x = np.array(corr_x)
+    corr_y = np.array(corr_y)
+
+    fig, axes = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
+
+    axes[0].bar(pos_idx, corr_x * 1000, width=0.8, color="tab:blue", alpha=0.8)
+    axes[0].axhline(0, color="k", lw=0.5)
+    axes[0].set_ylabel("Stage X correction (nm)")
+    axes[0].set_title("Per-position ECC correction (REF grid -> CALIB)")
+
+    axes[1].bar(pos_idx, corr_y * 1000, width=0.8, color="tab:orange", alpha=0.8)
+    axes[1].axhline(0, color="k", lw=0.5)
+    axes[1].set_ylabel("Stage Y correction (nm)")
+    axes[1].set_xlabel("Position index")
+
+    for ax in axes:
+        ax.tick_params(labelsize=9)
+
+    fig.tight_layout()
+    save_figure(
+        fig,
+        params={"ref_grid": str(REF_GRID_DIR), "calib_grid": str(CALIB_GRID_DIR),
+                "ref_z": REF_Z_INDEX, "calib_z": CALIB_Z_INDEX,
+                "n_positions": len(labels)},
+        description="Per-position ECC correction for grid pos calibration",
+        data={"pos_idx": np.array(pos_idx),
+              "corr_x_um": corr_x, "corr_y_um": corr_y},
+    )
+    plt.close(fig)
 
 
 def main():
@@ -421,7 +418,7 @@ def main():
                             / "output_phase" / "channels" / "channel_rois.json")
         if not perpos_rois_path.exists():
             print(f"  [channel_detect] channel_rois.json なし → 自動 detect: {ref_label}")
-            _run_channel_detect(Path(REF_GRID_DIR) / ref_label)
+            _run_channel_detect(Path(REF_GRID_DIR) / ref_label, z_index=REF_Z_INDEX)
         if not perpos_rois_path.exists():
             raise FileNotFoundError(
                 f"channel_rois.json の生成に失敗しました: {perpos_rois_path}\n"
@@ -562,6 +559,10 @@ def main():
             "per_pos":         log_entries,
         }, f, indent=2, ensure_ascii=False)
     print(f"ログ: {out_log}")
+
+    # ---- correction summary figure ----
+    _plot_corrections(log_entries, base_dir)
+
     print("\n--- 完了 ---")
 
 

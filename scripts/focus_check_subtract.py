@@ -344,7 +344,7 @@ def process_pos(pos_label: str,
     warp_matrix = np.eye(2, 3, dtype=np.float32)
     if rois:
         # チャンネルごとに tilt_correct → ECC → MAD 外れ値除去（compute_pos_shifts と同一パターン）
-        from compute_pos_shifts import _tilt_correct, remove_outliers_mad
+        from ecc_utils import tilt_fit_crop, remove_outliers_mad
 
         fit_right = pos_number >= POS_SPLIT
         tx_list, ty_list, ch_names = [], [], []
@@ -352,8 +352,11 @@ def process_pos(pos_label: str,
             cy     = roi_info["cy"]
             cx     = roi_info["cx"]
             crop_w = roi_info.get("crop_w", 256)
-            ref_crop = _tilt_correct(ref_img.astype(np.float64), cy, cx, crop_w, ECC_CROP_H, fit_right)
-            src_crop = _tilt_correct(src_img.astype(np.float64), cy, cx, crop_w, ECC_CROP_H, fit_right)
+            ref_crop = tilt_fit_crop(ref_img.astype(np.float64), cy, cx, crop_w, ECC_CROP_H, TILT_CROP_H, fit_right=fit_right)
+            src_crop = tilt_fit_crop(src_img.astype(np.float64), cy, cx, crop_w, ECC_CROP_H, TILT_CROP_H, fit_right=fit_right)
+            if ref_crop is None or src_crop is None:
+                print(f"    ch{ch_idx}: skipped (tilt OOB)")
+                continue
             warp_ch, corr_ch = compute_ecc_warp(ref_crop, src_crop)
             if warp_ch is not None:
                 tx_list.append(warp_ch[0, 2])
@@ -502,7 +505,7 @@ def find_best_focus_z(z_list: list, diff_frames: list, pos_label: str,
     except ImportError:
         save_figure = None
 
-    from compute_pos_shifts import _tilt_correct
+    from ecc_utils import tilt_fit_crop as _tilt_fit
 
     # チャンネルごとのフレームリストを作成（compute_pos_shifts と同一パターン）
     if rois:
@@ -513,7 +516,7 @@ def find_best_focus_z(z_list: list, diff_frames: list, pos_label: str,
             cx     = roi_info["cx"]
             crop_w = roi_info.get("crop_w", 256)
             channels[f"ch{ch_idx}"] = [
-                _tilt_correct(f.astype(np.float64), cy, cx, crop_w, ECC_CROP_H, fit_right)
+                _tilt_fit(f.astype(np.float64), cy, cx, crop_w, ECC_CROP_H, TILT_CROP_H, fit_right=fit_right)
                 for f in diff_frames
             ]
     else:

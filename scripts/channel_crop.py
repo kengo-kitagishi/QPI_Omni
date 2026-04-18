@@ -194,21 +194,13 @@ def run_detect(img_path: Path, crop_w: int, crop_h: int, out_dir: Path,
     # ── cx MAD 外れ値除外 ──
     rois_raw = _filter_cx_mad(rois_raw, mad_thresh=cx_mad_thresh)
 
-    # ── フィルタ: cx 範囲 + 画像境界クリッピング除外 ──
+    # ── フィルタ: cx 範囲チェックのみ ──
     rois = []
     for roi in rois_raw:
         cy_, cx_, cw_, ch_ = roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"]
         # cx 範囲チェック
         if not (cx_min <= cx_ <= cx_max):
             print(f"  skip cy={cy_}: cx={cx_} outside [{cx_min}, {cx_max}]")
-            continue
-        # 縦方向クリッピングチェック
-        if cy_ - cw_ // 2 < 0 or cy_ - cw_ // 2 + cw_ > h:
-            print(f"  skip cy={cy_}: vertical clipping (cy±{cw_//2} vs h={h})")
-            continue
-        # 横方向クリッピングチェック
-        if cx_ - ch_ // 2 < 0 or cx_ - ch_ // 2 + ch_ > w:
-            print(f"  skip cy={cy_}: horizontal clipping (cx±{ch_//2} vs w={w})")
             continue
         rois.append(roi)
 
