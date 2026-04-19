@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-07_segmentation.py（251105）のバッチ版。ロジックは単一 Pos のスクリプトと同一。
+Batch version of 07_segmentation.py (251105). Logic is identical to the single-Pos script.
 
-各 Pos の ``output_phase/channels/crop_sub_rawraw`` 直下にある ``ch00``, ``ch01``, … を
-（存在するものだけ）順に処理する。Pos ごとに ch の数が違ってもよい。
+Processes ``ch00``, ``ch01``, ... directories (only those that exist) directly under
+``output_phase/channels/crop_sub_rawraw`` for each Pos. The number of channels may differ
+per Pos.
 
-**パラメータは CLI ではなく、下の「バッチ設定」ブロックを編集する。**
+**Parameters are edited in the "Batch settings" block below, not via CLI.**
 
-``cellpose_omni.dynamics`` が連続 N 回 ``No cell pixels found.`` を出したら、その ch は
-細胞なしチャネルとみなして残フレームをスキップする（``NO_CELL_PIXEL_STREAK``、0 で無効）。
+If ``cellpose_omni.dynamics`` outputs ``No cell pixels found.`` for N consecutive frames,
+that channel is considered cell-free and remaining frames are skipped
+(``NO_CELL_PIXEL_STREAK``, set to 0 to disable).
 
-例::
+Example::
 
     python scripts/run_omnipose_chm_batch.py
 """
@@ -45,24 +47,24 @@ NCHAN = 1
 NCLASSES = 3
 USE_GPU = True
 
-# ==== バッチ設定（必要に応じて変更） ====
+# ==== Batch settings (modify as needed) ====
 TIMELAPSE_ROOT = r"F:\260405\ph_260405"
 POS_START = 3
 POS_END = 21
-# 全 ch を回す: None  /  単一 ch のみ: 整数 M で chMM のみ（例: 1 → ch01）
+# Process all channels: None  /  Single channel only: integer M for chMM only (e.g. 1 -> ch01)
 CH_ONLY = None
 MODEL_PATH = r"C:\Users\QPI\Desktop\train\omni_model\models\cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_2026_04_13_10_54_41.173761"
-# 連続 N 回 No cell pixels で ch 打ち切り。0 で無効。
+# Abort channel after N consecutive "No cell pixels" detections. 0 to disable.
 NO_CELL_PIXEL_STREAK = 20
 
 _CH_DIR_PATTERN = re.compile(r"^ch\d+$")
 
-# dynamics.py が INFO で出す文言（連続検出用）
+# Log message from dynamics.py at INFO level (for consecutive detection)
 _NO_CELL_PIXELS_LOG_HANDLER: logging.Handler | None = None
 
 
 class _NoCellPixelsLogHandler(logging.Handler):
-    """1 回の model.eval 内で 'No cell pixels found.' が出たか（emit のたびに True）。"""
+    """Tracks whether 'No cell pixels found.' appeared in a single model.eval call (set True on each emit)."""
 
     def __init__(self) -> None:
         super().__init__(level=logging.INFO)

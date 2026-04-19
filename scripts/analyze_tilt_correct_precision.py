@@ -1,18 +1,18 @@
 """
 analyze_tilt_correct_precision.py
 ----------------------------------
-ph_3/Pos0 (100フレーム・温度ドリフトなし) を使って
-_tilt_correct あり/なしの ECC 精度を比較する。
+Compare ECC precision with/without _tilt_correct using
+ph_3/Pos0 (100 frames, no thermal drift).
 
-真のドリフトがないデータでECCを回すと、
-  ECC shift の std across 100 frames = ECC精度の下限（精度誤差）
+Running ECC on data with no real drift:
+  std of ECC shift across 100 frames = lower bound of ECC precision (precision error)
 
-参照 grid  : F:\\grid_2pergluc_60ms_1\\Pos1_x+0_y+0\\output_phase\\img_000000000_ph_009_phase.tif
-テスト     : D:\\AquisitionData\\Kitagishi\\basler_image_seq\\ph_3\\Pos0\\output_phase\\img_*_ph_000_phase.tif
+Reference grid : F:\\grid_2pergluc_60ms_1\\Pos1_x+0_y+0\\output_phase\\img_000000000_ph_009_phase.tif
+Test           : D:\\AquisitionData\\Kitagishi\\basler_image_seq\\ph_3\\Pos0\\output_phase\\img_*_ph_000_phase.tif
 
-Raw ECC        : extract_rect_roi → compute_backsub_offset → to_uint8 → ecc_align
-Tilt-corrected : _tilt_correct(tilt_crop_h=270, ecc_crop_h=80, fit_right=False) → to_uint8 → ecc_align
-                 （compute_drift_online._tilt_correct と完全に同一の処理）
+Raw ECC        : extract_rect_roi -> compute_backsub_offset -> to_uint8 -> ecc_align
+Tilt-corrected : _tilt_correct(tilt_crop_h=270, ecc_crop_h=80, fit_right=False) -> to_uint8 -> ecc_align
+                 (identical processing as compute_drift_online._tilt_correct)
 """
 
 import json
@@ -38,7 +38,7 @@ from compute_drift_online import (
 from figure_logger import save_figure
 
 # ============================================================
-# 設定
+# Settings
 # ============================================================
 PHASE_DIR = Path(r"D:\AquisitionData\Kitagishi\basler_image_seq\ph_3\Pos0\output_phase")
 
@@ -55,12 +55,12 @@ ECC_VMIN       = -5.0
 ECC_VMAX       =  2.0
 TILT_CROP_H    = 270
 ECC_CROP_H     = 80
-FIT_RIGHT      = False   # pos1 < pos_split=33 → 左1/3をBGフィット
+FIT_RIGHT      = False   # pos1 < pos_split=33 -> fit left 1/3 as BG
 # ============================================================
 
 
 def compute_x_tilt_slope(phase_img: np.ndarray, cy: int, cx: int, crop_w: int) -> float:
-    """270px cropの左1/3 (90px) でX方向チルトslopeを推定する [rad/px]。"""
+    """Estimate X-direction tilt slope [rad/px] from the left 1/3 (90px) of a 270px crop."""
     big = extract_rect_roi(phase_img, cy, cx, crop_w, TILT_CROP_H).astype(np.float64)
     prof = big.mean(axis=0)
     n_fit = max(3, TILT_CROP_H // 3)
@@ -91,7 +91,7 @@ def main():
         offset = compute_backsub_offset(crop_raw, cfg_dummy)
         raw_ref_u8.append(to_uint8(crop_raw + offset, ECC_VMIN, ECC_VMAX))
 
-        # Tilt-corrected ref: _tilt_correct (slope+intercept両方引く)
+        # Tilt-corrected ref: _tilt_correct (subtract both slope and intercept)
         crop_corr = _tilt_correct(
             grid_phase, roi["cy"], roi["cx"], roi["crop_w"],
             TILT_CROP_H, ECC_CROP_H, fit_right=FIT_RIGHT
@@ -156,7 +156,7 @@ def main():
                   f"tx_corr_mean={np.nanmean(tx_corr[:, t_idx]):.4f}px")
 
     # ---- Statistics ----
-    tx_raw_nm   = tx_raw  * PIXEL_SCALE_UM * 1000   # px → nm
+    tx_raw_nm   = tx_raw  * PIXEL_SCALE_UM * 1000   # px -> nm
     tx_corr_nm  = tx_corr * PIXEL_SCALE_UM * 1000
 
     # std across frames (= ECC precision error per channel)

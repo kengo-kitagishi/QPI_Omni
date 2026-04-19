@@ -8,7 +8,7 @@ Backward-compatible command:
 New verification/consulting commands:
     python scripts/clickup_helper.py doctor
     python scripts/clickup_helper.py agenda --days 7 --verify
-    python scripts/clickup_helper.py advise --text "図1の修正をやる" --due 2026-03-10
+    python scripts/clickup_helper.py advise --text "Fix figure 1" --due 2026-03-10
 """
 
 from __future__ import annotations
@@ -37,10 +37,10 @@ DEFAULT_LISTS = {
     "code": "901813997608",        # QPI > 4_CODE
     "manuscript": "901813997612",  # QPI > 5_MANUSCRIPT
     "slide": "901813997621",       # QPI > 6_SLIDE
-    "meeting": "901813997648",     # MEETING > 学術発表
-    "competition": "901814044181", # T&F > 大会
-    "other": "901814001256",       # OTHERs > インテリア
-    "daily": "901814085779",       # OTHERs > 日常
+    "meeting": "901813997648",     # MEETING > Academic Presentation
+    "competition": "901814044181", # T&F > Competition
+    "other": "901814001256",       # OTHERs > Interior
+    "daily": "901814085779",       # OTHERs > Daily
 }
 
 TIME_PRESETS = {
@@ -338,7 +338,7 @@ def _default_medium_flow_steps() -> List[Dict[str, object]]:
 
 def _default_medium_flow_rules() -> List[Dict[str, object]]:
     # User-fixed sequence:
-    # 細胞導入完了 +2d -> 2%2% +2d -> 2%Low% +1d -> Low%0% +2d -> 0%2% +2d -> 2%2%
+    # Cell insertion done +2d -> 2%2% +2d -> 2%Low% +1d -> Low%0% +2d -> 0%2% +2d -> 2%2%
     return [
         {
             "step": "pre_culture",
@@ -369,7 +369,7 @@ def _default_medium_flow_rules() -> List[Dict[str, object]]:
 
 
 def _default_medium_flow_t0_offset_map() -> Dict[int, str]:
-    # Supports names like "培地交換（T0+48h）" where concentration pair is omitted.
+    # Supports names like "medium change (T0+48h)" where concentration pair is omitted.
     # Mapping is user policy: 48h->2%2%, 96h->2%Low, 120h->Low0, 168h->0%2%, 216h->2%2%.
     return {
         48: "change_2_2",
@@ -2671,9 +2671,9 @@ def command_add(args: argparse.Namespace, cfg: HelperConfig) -> int:
 
     result = client.request("POST", f"/list/{list_id}/task", payload=payload)
 
-    print(f"作成完了: {result.get('name', args.name)}")
+    print(f"Created: {result.get('name', args.name)}")
     print(f"URL: {result.get('url', '')}")
-    print(f"時間: {date_str} {start_hour:02d}:00〜{end_hour:02d}:00 ({cfg.timezone})")
+    print(f"Time: {date_str} {start_hour:02d}:00-{end_hour:02d}:00 ({cfg.timezone})")
     return 0
 
 
@@ -3120,9 +3120,9 @@ def command_review(args: argparse.Namespace, cfg: HelperConfig) -> int:
     print(f"- findings: {len(findings)}")
 
     if not findings:
-        print("[result] 大きな違和感は見つかりませんでした。")
+        print("[result] No significant issues found.")
     else:
-        print("[result] 見直し候補")
+        print("[result] Review candidates")
         for idx, item in enumerate(findings, start=1):
             print(
                 f"{idx}. [{item['severity']}] [{item['type']}] "
@@ -3476,10 +3476,10 @@ def build_workflow_order_findings(
                     "workflow_group": group_name,
                     "workflow_stage": tag.stage,
                     "reason": (
-                        f"workflow順序が逆転: stage={tag.stage} より前段 "
-                        f"({', '.join(stage_names)}) が後に配置"
+                        f"Workflow order reversed: stages before stage={tag.stage} "
+                        f"({', '.join(stage_names)}) are scheduled after it"
                     ),
-                    "action": "後ろ倒しして工程順を揃える",
+                    "action": "Defer to align with workflow order",
                     "suggested_slot_start": suggestion_slot.slot_start.isoformat() if suggestion_slot else None,
                     "suggested_slot_end": suggestion_slot.slot_end.isoformat() if suggestion_slot else None,
                 }
@@ -3546,11 +3546,10 @@ def build_medium_flow_gap_findings(
                     "list_key": task.list_key,
                     "medium_flow_step": step_id,
                     "reason": (
-                        f"{medium_flow_step_label(cfg, step_id)} は "
-                        f"{' / '.join(pred_labels) if pred_labels else '前段'} の "
-                        f"{gap_text}後以降に配置する必要があります"
+                        f"{medium_flow_step_label(cfg, step_id)} must be scheduled at least "
+                        f"{gap_text} after {' / '.join(pred_labels) if pred_labels else 'predecessor'}"
                     ),
-                    "action": "チェーン順に後ろ倒し",
+                    "action": "Defer to respect chain order",
                     "suggested_slot_start": suggestion_slot.slot_start.isoformat() if suggestion_slot else None,
                     "suggested_slot_end": suggestion_slot.slot_end.isoformat() if suggestion_slot else None,
                 }
@@ -3567,7 +3566,7 @@ def build_medium_flow_gap_findings(
         end_before = end_before_detail["end_before"] if end_before_detail else None
         if end_before is not None and task.start_at > end_before:
             succ_step = str(end_before_detail.get("successor_step", "")) if end_before_detail else ""
-            succ_label = medium_flow_step_label(cfg, succ_step) if succ_step else "後段タスク"
+            succ_label = medium_flow_step_label(cfg, succ_step) if succ_step else "successor task"
             succ_gap_minutes = int(end_before_detail.get("gap_minutes", 0)) if end_before_detail else 0
             succ_gap_text = (
                 f"{succ_gap_minutes // 60}h"
@@ -3583,10 +3582,10 @@ def build_medium_flow_gap_findings(
                     "list_key": task.list_key,
                     "medium_flow_step": step_id,
                     "reason": (
-                        f"{medium_flow_step_label(cfg, step_id)} は "
-                        f"{succ_label} の {succ_gap_text}前までに配置する必要があります"
+                        f"{medium_flow_step_label(cfg, step_id)} must be scheduled at least "
+                        f"{succ_gap_text} before {succ_label}"
                     ),
-                    "action": "チェーン順に前倒し",
+                    "action": "Move earlier to respect chain order",
                     "suggested_slot_start": None,
                     "suggested_slot_end": None,
                 }
@@ -3633,8 +3632,8 @@ def build_no_schedule_day_findings(
                 "task_id": task.task_id,
                 "task_name": task.name,
                 "list_key": task.list_key,
-                "reason": f"大会日({day.isoformat()})に予定が入っています",
-                "action": "大会日の翌日以降に移動",
+                "reason": f"Task scheduled on competition day ({day.isoformat()})",
+                "action": "Move to the day after competition day or later",
                 "suggested_slot_start": suggestion_slot.slot_start.isoformat() if suggestion_slot else None,
                 "suggested_slot_end": suggestion_slot.slot_end.isoformat() if suggestion_slot else None,
             }
@@ -3683,11 +3682,11 @@ def build_review_findings(
                 "task_name": right.name,
                 "list_key": right.list_key,
                 "reason": (
-                    f"{left.start_at.strftime('%m-%d %H:%M')} {left.name} と重なっています"
+                    f"Overlaps with {left.name} at {left.start_at.strftime('%m-%d %H:%M')}"
                     if left.start_at
-                    else "他タスクと重なっています"
+                    else "Overlaps with another task"
                 ),
-                "action": "後ろにずらす",
+                "action": "Shift later",
                 "suggested_slot_start": suggestion_slot.slot_start.isoformat() if suggestion_slot else None,
                 "suggested_slot_end": suggestion_slot.slot_end.isoformat() if suggestion_slot else None,
             }
@@ -3707,11 +3706,11 @@ def build_review_findings(
                 "task_name": task.name,
                 "list_key": task.list_key,
                 "reason": (
-                    f"終了予定 {task.end_at.strftime('%m-%d %H:%M')} が締切 {task.due_at.strftime('%m-%d %H:%M')} を超過"
+                    f"End time {task.end_at.strftime('%m-%d %H:%M')} exceeds deadline {task.due_at.strftime('%m-%d %H:%M')}"
                     if task.end_at and task.due_at
-                    else "締切超過が発生"
+                    else "Deadline exceeded"
                 ),
-                "action": "前倒しまたは分割",
+                "action": "Move earlier or split",
                 "suggested_slot_start": None,
                 "suggested_slot_end": None,
             }
@@ -3797,9 +3796,9 @@ def build_review_findings(
                 "task_name": task.name,
                 "list_key": task.list_key,
                 "reason": (
-                    f"低優先カテゴリ({policy.category})で、期限圧力タスク {backlog_pressure} 件あり"
+                    f"Low-priority category ({policy.category}) with {backlog_pressure} deadline-pressure tasks pending"
                 ),
-                "action": "後ろ倒しを検討",
+                "action": "Consider deferring",
                 "suggested_slot_start": suggestion_slot.slot_start.isoformat() if suggestion_slot else None,
                 "suggested_slot_end": suggestion_slot.slot_end.isoformat() if suggestion_slot else None,
             }
@@ -3829,8 +3828,8 @@ def build_review_findings(
                 "task_id": task.task_id,
                 "task_name": task.name,
                 "list_key": task.list_key,
-                "reason": "締切未設定タスクが直近枠を消費",
-                "action": "必要なら後ろに移動",
+                "reason": "Task without deadline is consuming a near-term slot",
+                "action": "Move later if not urgent",
                 "suggested_slot_start": suggestion_slot.slot_start.isoformat() if suggestion_slot else None,
                 "suggested_slot_end": suggestion_slot.slot_end.isoformat() if suggestion_slot else None,
             }
@@ -4227,7 +4226,7 @@ def command_advise(args: argparse.Namespace, cfg: HelperConfig) -> int:
             print("- jog-window optimization: waiting-task detected, but no jog anchors found")
     print(f"- due: {args.due or '(none)'}")
     if has_deadline_signal(args.text, cfg) and not args.due:
-        print("- note: deadline signal detected (feedback/review系). --due 指定を推奨")
+        print("- note: deadline signal detected (feedback/review type). --due recommended")
     blocked_days = build_no_schedule_days(snapshot, cfg)
     if blocked_days:
         print(f"- blocked no-schedule days: {len(blocked_days)}")
@@ -4240,17 +4239,17 @@ def command_advise(args: argparse.Namespace, cfg: HelperConfig) -> int:
             print(f"  - {w}")
 
     if not candidates:
-        print("[result] 候補が見つかりませんでした。--days を増やしてください。")
+        print("[result] No candidates found. Try increasing --days.")
         return 1
 
-    print("[result] 候補")
+    print("[result] Candidates")
     for idx, cand in enumerate(candidates, start=1):
         if cand.label == "direct":
-            label = "空き枠に追加"
+            label = "Add to free slot"
         elif cand.label == "split":
-            label = "分割枠"
+            label = "Split slot"
         else:
-            label = "組み替え"
+            label = "Rearrange"
         print(
             f"{idx}. {label}: {cand.slot_start.strftime('%Y-%m-%d %H:%M')} - "
             f"{cand.slot_end.strftime('%H:%M')} [{cand.list_key}]"

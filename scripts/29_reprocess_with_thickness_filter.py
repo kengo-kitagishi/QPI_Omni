@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-既存の結果から1ピクセル未満の厚みをマスク外として再処理
+Reprocess existing results by masking out sub-pixel thickness regions
 
-既存のz-stack TIFFファイルとphase画像から、
-min_thickness_px=1.0 でフィルタリングして再計算
+Recompute from existing z-stack TIFF files and phase images,
+filtering with min_thickness_px=1.0
 """
 # %%
 import os
@@ -19,34 +19,34 @@ def reprocess_condition(condition_dir, min_thickness_px=1.0,
                         pixel_size_um=0.348, wavelength_nm=663, n_medium=1.333, alpha_ri=0.00018,
                         voxel_z_um=0.3):
     """
-    1つの条件ディレクトリを再処理
-    
+    Reprocess a single condition directory
+
     Parameters
     ----------
     condition_dir : str
-        timeseries_density_output_* ディレクトリ
+        timeseries_density_output_* directory
     min_thickness_px : float
-        最小厚み閾値（ピクセル単位）
+        Minimum thickness threshold (in pixels)
     pixel_size_um : float
-        ピクセルサイズ（µm）
+        Pixel size (um)
     wavelength_nm : float
-        波長（nm）
+        Wavelength (nm)
     n_medium : float
-        培地の屈折率
+        Refractive index of the medium
     alpha_ri : float
-        比屈折率増分（ml/mg）
+        Specific refractive index increment (ml/mg)
     voxel_z_um : float
-        Z方向のボクセルサイズ（µm、discreteモード用）
+        Voxel size in Z direction (um, for discrete mode)
     """
     print(f"\nProcessing: {os.path.basename(condition_dir)}")
     
-    # 出力ディレクトリ（元のディレクトリ名 + _filtered）
+    # Output directory (original directory name + _filtered)
     output_dir = condition_dir + f"_filtered_{min_thickness_px}px"
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(os.path.join(output_dir, "density_tiff"), exist_ok=True)
     os.makedirs(os.path.join(output_dir, "csv_data"), exist_ok=True)
     
-    # z-stack TIFFファイルを検索
+    # Search for z-stack TIFF files
     zstack_files = glob.glob(os.path.join(condition_dir, "density_tiff", "*_zstack.tif"))
     phase_files = glob.glob(os.path.join(condition_dir, "density_tiff", "*_phase.tif"))
     
@@ -56,14 +56,14 @@ def reprocess_condition(condition_dir, min_thickness_px=1.0,
     
     print(f"  Found {len(zstack_files)} z-stack files")
     
-    # thickness_modeを推定
+    # Estimate thickness_mode
     dirname = os.path.basename(condition_dir)
     if 'discrete' in dirname:
         thickness_mode = 'discrete'
-        # voxel_z_umは引数から使用
+        # Use voxel_z_um from argument
     else:
         thickness_mode = 'continuous'
-        # continuousモードではvoxel_z_umは使わないが、念のため
+        # voxel_z_um is not used in continuous mode, but kept for safety
     
     wavelength_um = wavelength_nm / 1000.0
     
@@ -72,32 +72,32 @@ def reprocess_condition(condition_dir, min_thickness_px=1.0,
     for zstack_file in tqdm(zstack_files, desc="  Processing files"):
         roi_str = os.path.basename(zstack_file).replace('_zstack.tif', '')
         
-        # 対応するphaseファイルを探す
+        # Find corresponding phase file
         phase_file = zstack_file.replace('_zstack.tif', '_phase.tif')
         
         if not os.path.exists(phase_file):
             print(f"    Warning: Phase file not found for {roi_str}")
             continue
         
-        # z-stackとphase画像を読み込み
+        # Load z-stack and phase image
         zstack_map_original = tifffile.imread(zstack_file).astype(np.float32)
         phase_img = tifffile.imread(phase_file).astype(np.float32)
         
-        # 最小厚み閾値フィルタリング
+        # Minimum thickness threshold filtering
         if thickness_mode == 'discrete':
-            # スライス数をピクセル単位に換算して閾値判定
+            # Convert slice count to pixel units for threshold check
             thickness_px_for_threshold = zstack_map_original * (voxel_z_um / pixel_size_um)
         else:
             thickness_px_for_threshold = zstack_map_original
         
-        # 閾値未満を0にする
+        # Set values below threshold to 0
         zstack_map_filtered = np.where(
             thickness_px_for_threshold >= min_thickness_px,
             zstack_map_original,
             0
         )
         
-        # マスク
+        # Mask
         mask_original = zstack_map_original > 0
         mask_filtered = zstack_map_filtered > 0
         
@@ -108,34 +108,34 @@ def reprocess_condition(condition_dir, min_thickness_px=1.0,
             print(f"    Warning: No pixels remain after filtering for {roi_str}")
             continue
         
-        # 厚みをµm単位に変換
+        # Convert thickness to um units
         if thickness_mode == 'discrete':
             thickness_um = zstack_map_filtered * voxel_z_um
         else:
             thickness_um = zstack_map_filtered * pixel_size_um
         
-        # RI計算
+        # RI calculation
         ri_map = np.full_like(phase_img, n_medium, dtype=np.float64)
         thickness_um_safe = np.where(thickness_um > 0, thickness_um, np.nan)
         ri_map[mask_filtered] = n_medium + (phase_img[mask_filtered] * wavelength_um) / (2 * np.pi * thickness_um_safe[mask_filtered])
         
-        # 質量濃度計算
+        # Mass concentration calculation
         concentration_map = np.zeros_like(ri_map)
         concentration_map[mask_filtered] = (ri_map[mask_filtered] - n_medium) / alpha_ri
         
-        # フィルタリングされた領域（mask外）を明示的にクリア
+        # Explicitly clear filtered regions (outside mask)
         ri_map[~mask_filtered] = n_medium
         concentration_map[~mask_filtered] = 0.0
         
-        # 体積計算
+        # Volume calculation
         pixel_area_um2 = pixel_size_um ** 2
         volume_um3 = np.sum(thickness_um[mask_filtered]) * pixel_area_um2
         
-        # Total mass計算
+        # Total mass calculation
         pixel_volumes = thickness_um[mask_filtered] * pixel_area_um2
         total_mass_pg = np.sum(concentration_map[mask_filtered] * pixel_volumes)
         
-        # 統計情報
+        # Statistics
         stats = {
             'roi_str': roi_str,
             'pixels_before': pixels_before,
@@ -155,13 +155,13 @@ def reprocess_condition(condition_dir, min_thickness_px=1.0,
         
         summary_data.append(stats)
         
-        # フィルタリング後のデータを保存
+        # Save filtered data
         tifffile.imwrite(os.path.join(output_dir, "density_tiff", f"{roi_str}_zstack.tif"), zstack_map_filtered.astype(np.float32))
         tifffile.imwrite(os.path.join(output_dir, "density_tiff", f"{roi_str}_ri.tif"), ri_map.astype(np.float32))
         tifffile.imwrite(os.path.join(output_dir, "density_tiff", f"{roi_str}_concentration.tif"), concentration_map.astype(np.float32))
         tifffile.imwrite(os.path.join(output_dir, "density_tiff", f"{roi_str}_phase.tif"), phase_img.astype(np.float32))
         
-        # CSVデータを保存
+        # Save CSV data
         y_coords, x_coords = np.where(mask_filtered)
         
         if thickness_mode == 'discrete':
@@ -184,7 +184,7 @@ def reprocess_condition(condition_dir, min_thickness_px=1.0,
         pixel_data.to_csv(csv_path, index=False)
     
     if len(summary_data) > 0:
-        # サマリーCSVを保存
+        # Save summary CSV
         summary_df = pd.DataFrame(summary_data)
         summary_csv = os.path.join(output_dir, "filtering_summary.csv")
         summary_df.to_csv(summary_csv, index=False)
@@ -199,56 +199,56 @@ def reprocess_condition(condition_dir, min_thickness_px=1.0,
         return None
 
 def main():
-    """メイン実行"""
+    """Main execution"""
     parser = argparse.ArgumentParser(
-        description='既存の結果から1ピクセル未満の厚みをマスク外として再処理',
+        description='Reprocess existing results by masking out sub-pixel thickness regions',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-使用例:
-  # カレントディレクトリの全条件を処理
+Examples:
+  # Process all conditions in the current directory
   python 29_reprocess_with_thickness_filter.py
-  
-  # 特定のディレクトリ内の全条件を処理
+
+  # Process all conditions in a specific directory
   python 29_reprocess_with_thickness_filter.py -d G:\\test_dens_est
-  
-  # 特定の条件のみ処理
+
+  # Process a specific condition only
   python 29_reprocess_with_thickness_filter.py -c timeseries_density_output_ellipse_subpixel5
-  
-  # 複数の条件を処理
+
+  # Process multiple conditions
   python 29_reprocess_with_thickness_filter.py -c *ellipse*subpixel5*
-  
-  # パラメータを指定
+
+  # Specify parameters
   python 29_reprocess_with_thickness_filter.py -t 0.5 --voxel-z 0.3
-  
-  # 確認なしで実行
+
+  # Run without confirmation
   python 29_reprocess_with_thickness_filter.py -y
 """
     )
     
     parser.add_argument('-d', '--base-dir', type=str, default='.',
-                        help='基準ディレクトリ（デフォルト: カレントディレクトリ）')
+                        help='Base directory (default: current directory)')
     parser.add_argument('-c', '--conditions', type=str, nargs='*', default=None,
-                        help='処理する条件ディレクトリ（ワイルドカード可）。指定しない場合は全条件')
+                        help='Condition directories to process (wildcards allowed). If not specified, all conditions')
     parser.add_argument('-t', '--min-thickness', type=float, default=1.0,
-                        help='最小厚み閾値（ピクセル単位、デフォルト: 1.0）')
+                        help='Minimum thickness threshold (in pixels, default: 1.0)')
     parser.add_argument('--pixel-size', type=float, default=0.348,
-                        help='ピクセルサイズ（µm、デフォルト: 0.348）')
+                        help='Pixel size (um, default: 0.348)')
     parser.add_argument('--wavelength', type=float, default=663,
-                        help='波長（nm、デフォルト: 663）')
+                        help='Wavelength (nm, default: 663)')
     parser.add_argument('--n-medium', type=float, default=1.333,
-                        help='培地の屈折率（デフォルト: 1.333）')
+                        help='Refractive index of the medium (default: 1.333)')
     parser.add_argument('--alpha-ri', type=float, default=0.00018,
-                        help='比屈折率増分（ml/mg、デフォルト: 0.00018）')
+                        help='Specific refractive index increment (ml/mg, default: 0.00018)')
     parser.add_argument('--voxel-z', type=float, default=0.3,
-                        help='Z方向のボクセルサイズ（µm、デフォルト: 0.3）')
+                        help='Voxel size in Z direction (um, default: 0.3)')
     parser.add_argument('-y', '--yes', action='store_true',
-                        help='確認なしで実行')
+                        help='Run without confirmation')
     parser.add_argument('--list-only', action='store_true',
-                        help='条件リストのみ表示して終了')
+                        help='Show condition list only and exit')
     
-    # Jupyter環境での実行に対応
+    # Support execution in Jupyter environment
     if 'ipykernel' in sys.modules:
-        # Jupyter環境の場合、sys.argvから--f引数を除外
+        # In Jupyter environment, exclude --f argument from sys.argv
         filtered_argv = [arg for arg in sys.argv if not arg.startswith('--f=') and not arg.startswith('-f=')]
         args = parser.parse_args(filtered_argv[1:] if len(filtered_argv) > 1 else [])
     else:
@@ -258,7 +258,7 @@ def main():
     print("Re-process with Thickness Filter")
     print("="*80)
     
-    # パラメータ
+    # Parameters
     MIN_THICKNESS_PX = args.min_thickness
     PIXEL_SIZE_UM = args.pixel_size
     WAVELENGTH_NM = args.wavelength
@@ -275,25 +275,25 @@ def main():
     print(f"  Alpha RI: {ALPHA_RI} ml/mg")
     print(f"  Voxel Z: {VOXEL_Z_UM} µm")
     
-    # 条件ディレクトリを検索
+    # Search for condition directories
     if args.conditions:
-        # 指定された条件のみ
+        # Only specified conditions
         condition_dirs = []
         for pattern in args.conditions:
             if not os.path.isabs(pattern):
                 pattern = os.path.join(args.base_dir, pattern)
             matched = glob.glob(pattern)
-            # ディレクトリのみ
+            # Directories only
             matched = [d for d in matched if os.path.isdir(d)]
             condition_dirs.extend(matched)
-        # 重複削除
+        # Remove duplicates
         condition_dirs = list(set(condition_dirs))
     else:
-        # 全条件を自動検索
+        # Auto-search all conditions
         pattern = os.path.join(args.base_dir, 'timeseries_density_output_*')
         condition_dirs = glob.glob(pattern)
     
-    # すでにフィルタリング済みのディレクトリを除外
+    # Exclude already filtered directories
     condition_dirs = [d for d in condition_dirs if '_filtered_' not in d and os.path.isdir(d)]
     condition_dirs = sorted(condition_dirs)
     
@@ -304,7 +304,7 @@ def main():
         print(f"Search pattern: {pattern if not args.conditions else args.conditions}")
         return
     
-    # 条件リスト表示
+    # Display condition list
     print("\nConditions to process:")
     for i, d in enumerate(condition_dirs, 1):
         print(f"  {i}. {os.path.basename(d)}")
@@ -313,14 +313,14 @@ def main():
         print("\n(--list-only mode: exiting)")
         return
     
-    # ユーザーに確認
+    # Confirm with user
     if not args.yes:
         response = input(f"\nProcess all {len(condition_dirs)} conditions? [y/N]: ")
         if response.lower() != 'y':
             print("Cancelled")
             return
     
-    # 全条件を処理
+    # Process all conditions
     all_summaries = []
     
     for condition_dir in condition_dirs:
@@ -344,7 +344,7 @@ def main():
             traceback.print_exc()
     
     if len(all_summaries) > 0:
-        # 全条件のサマリーを結合
+        # Combine summaries from all conditions
         combined_summary = pd.concat(all_summaries, ignore_index=True)
         combined_summary.to_csv('reprocessed_all_conditions_summary.csv', index=False)
         

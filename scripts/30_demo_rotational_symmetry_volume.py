@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
 Rotational Symmetry Volume Estimation
-eLife 2021 (Odermatt et al.) のアルゴリズムを実装
+Implementation of the algorithm from eLife 2021 (Odermatt et al.)
 
-細胞輪郭から回転対称を仮定して体積を計算する方法：
-1. 細胞の長軸を決定
-2. 長軸に垂直な断面線を一定間隔で配置
-3. 各断面線と輪郭の交点を計算
-4. 中心線を更新（交点の中点を通る）
-5. 断面線の傾きを更新（中心線に垂直）
-6. 回転対称を仮定して各断面の体積を合計
+Method to compute cell volume assuming rotational symmetry from cell contour:
+1. Determine the long axis of the cell
+2. Place cross-section lines perpendicular to the long axis at regular intervals
+3. Compute intersection points of each cross-section line with the contour
+4. Update centerline (passing through midpoints of intersections)
+5. Update cross-section line angles (perpendicular to centerline)
+6. Sum volumes of each cross-section assuming rotational symmetry
 
 Reference:
 Odermatt et al. (2021) eLife 10:e64901
@@ -29,17 +29,17 @@ from scipy.optimize import minimize
 import cv2
 
 class RotationalSymmetryVolumeEstimator:
-    """回転対称を仮定した体積推定"""
+    """Volume estimation assuming rotational symmetry"""
     
     def __init__(self, pixel_size_um=0.08625, section_interval_um=0.25):
         """
         Parameters
         ----------
         pixel_size_um : float
-            ピクセルサイズ (um)
+            Pixel size (um)
         section_interval_um : float
-            断面線の間隔 (um)
-            論文では250nm = 0.25 um
+            Cross-section line interval (um)
+            250nm = 0.25 um in the paper
         """
         self.pixel_size_um = pixel_size_um
         self.section_interval_um = section_interval_um
@@ -51,18 +51,18 @@ class RotationalSymmetryVolumeEstimator:
     
     def fit_minimum_bounding_rectangle(self, contour):
         """
-        最小外接矩形を計算（長軸決定用）
-        
+        Compute minimum bounding rectangle (for determining long axis)
+
         Returns
         -------
         center : tuple
-            中心座標 (x, y)
+            Center coordinates (x, y)
         size : tuple
-            サイズ (width, height)
+            Size (width, height)
         angle : float
-            角度（ラジアン）
+            Angle (radians)
         """
-        # OpenCVを使用
+        # Using OpenCV
         rect = cv2.minAreaRect(contour.astype(np.float32))
         center, size, angle_deg = rect
         angle_rad = np.deg2rad(angle_deg)
@@ -71,20 +71,20 @@ class RotationalSymmetryVolumeEstimator:
     
     def get_long_axis(self, contour):
         """
-        細胞の長軸を決定
-        
+        Determine the long axis of the cell
+
         Returns
         -------
         axis_start : ndarray
-            長軸の始点 (x, y)
+            Start point of long axis (x, y)
         axis_end : ndarray
-            長軸の終点 (x, y)
+            End point of long axis (x, y)
         angle : float
-            長軸の角度（ラジアン）
+            Angle of long axis (radians)
         """
         center, size, angle = self.fit_minimum_bounding_rectangle(contour)
         
-        # 長い方を長軸とする
+        # Use the longer side as the long axis
         width, height = size
         if width > height:
             length = width
@@ -93,7 +93,7 @@ class RotationalSymmetryVolumeEstimator:
             length = height
             axis_angle = angle + np.pi/2
         
-        # 長軸の始点と終点
+        # Start and end points of the long axis
         dx = length/2 * np.cos(axis_angle)
         dy = length/2 * np.sin(axis_angle)
         
@@ -104,52 +104,52 @@ class RotationalSymmetryVolumeEstimator:
     
     def compute_perpendicular_sections(self, axis_start, axis_end, n_sections):
         """
-        長軸に垂直な断面線の位置を計算
-        
+        Compute positions of cross-section lines perpendicular to the long axis
+
         Returns
         -------
         section_centers : ndarray
-            各断面の中心位置 (n_sections, 2)
+            Center positions of each cross-section (n_sections, 2)
         section_angle : float
-            断面線の角度（長軸に垂直）
+            Angle of cross-section lines (perpendicular to long axis)
         """
-        # 長軸に沿って等間隔に点を配置
+        # Place points at equal intervals along the long axis
         t = np.linspace(0, 1, n_sections)
         section_centers = axis_start[np.newaxis, :] + t[:, np.newaxis] * (axis_end - axis_start)[np.newaxis, :]
         
-        # 長軸の角度
+        # Angle of the long axis
         axis_vec = axis_end - axis_start
         axis_angle = np.arctan2(axis_vec[1], axis_vec[0])
         
-        # 断面線の角度（長軸に垂直）
+        # Angle of cross-section lines (perpendicular to long axis)
         section_angle = axis_angle + np.pi/2
         
         return section_centers, section_angle
     
     def find_contour_intersections(self, section_center, section_angle, contour, line_length=500):
         """
-        断面線と輪郭の交点を探す
-        
+        Find intersection points between cross-section line and contour
+
         Returns
         -------
         intersections : list of ndarray
-            交点の座標リスト
+            List of intersection coordinates
         """
-        # 断面線を定義（十分長く）
+        # Define cross-section line (long enough)
         dx = line_length * np.cos(section_angle)
         dy = line_length * np.sin(section_angle)
         
         line_start = section_center - np.array([dx, dy])
         line_end = section_center + np.array([dx, dy])
         
-        # 輪郭との交点を探す
+        # Find intersections with the contour
         intersections = []
         
         for i in range(len(contour)):
             p1 = contour[i]
             p2 = contour[(i+1) % len(contour)]
             
-            # 線分の交差判定
+            # Line segment intersection check
             intersection = self.line_segment_intersection(
                 line_start, line_end, p1, p2
             )
@@ -161,19 +161,19 @@ class RotationalSymmetryVolumeEstimator:
     
     def line_segment_intersection(self, p1, p2, p3, p4):
         """
-        2つの線分の交点を計算
-        
+        Compute intersection point of two line segments
+
         Parameters
         ----------
         p1, p2 : ndarray
-            線分1の端点
+            Endpoints of line segment 1
         p3, p4 : ndarray
-            線分2の端点
-        
+            Endpoints of line segment 2
+
         Returns
         -------
         intersection : ndarray or None
-            交点の座標、交差しない場合はNone
+            Intersection coordinates, None if no intersection
         """
         x1, y1 = p1
         x2, y2 = p2
@@ -197,52 +197,52 @@ class RotationalSymmetryVolumeEstimator:
     
     def compute_cell_volume(self, mask, return_details=False):
         """
-        細胞マスクから体積を計算
-        
+        Compute volume from a cell mask
+
         Parameters
         ----------
         mask : ndarray
-            2Dバイナリマスク
+            2D binary mask
         return_details : bool
-            詳細情報を返すか
-        
+            Whether to return detailed information
+
         Returns
         -------
         volume_um3 : float
-            体積 (um^3)
+            Volume (um^3)
         details : dict (optional)
-            詳細情報
+            Detailed information
         """
-        # 輪郭を抽出
+        # Extract contour
         contours = measure.find_contours(mask, 0.5)
         
         if len(contours) == 0:
             return None
         
-        # 最大の輪郭を使用
+        # Use the largest contour
         contour = max(contours, key=lambda x: len(x))
         
-        # Y, X順なのでX, Y順に変換
+        # Convert from Y, X order to X, Y order
         contour = contour[:, ::-1]
         
-        # 長軸を決定
+        # Determine long axis
         axis_start, axis_end, axis_angle = self.get_long_axis(contour)
         
-        # 長軸の長さ
+        # Length of long axis
         axis_length = np.linalg.norm(axis_end - axis_start)
         
-        # 断面の数を計算
+        # Compute number of cross-sections
         n_sections = int(axis_length / self.section_interval_px)
         
         if n_sections < 2:
             return None
         
-        # 断面位置を初期化
+        # Initialize cross-section positions
         section_centers, section_angle = self.compute_perpendicular_sections(
             axis_start, axis_end, n_sections
         )
         
-        # 各断面で輪郭との交点を探し、中心線を更新
+        # Find contour intersections at each cross-section and update centerline
         centerline = []
         radii = []
         valid_sections = []
@@ -253,19 +253,19 @@ class RotationalSymmetryVolumeEstimator:
             )
             
             if len(intersections) >= 2:
-                # 交点を距離でソート
+                # Sort intersections by distance
                 intersections = np.array(intersections)
                 distances = np.linalg.norm(intersections - section_centers[i], axis=1)
                 sorted_idx = np.argsort(distances)
                 
-                # 最も遠い2点を使用（細胞の両側）
+                # Use the two farthest points (both sides of the cell)
                 p1 = intersections[sorted_idx[-1]]
                 p2 = intersections[sorted_idx[-2]]
                 
-                # 中点を計算
+                # Compute midpoint
                 midpoint = (p1 + p2) / 2
                 
-                # 半径を計算（回転対称を仮定）
+                # Compute radius (assuming rotational symmetry)
                 radius = np.linalg.norm(p1 - p2) / 2
                 
                 centerline.append(midpoint)
@@ -278,39 +278,39 @@ class RotationalSymmetryVolumeEstimator:
         centerline = np.array(centerline)
         radii = np.array(radii)
         
-        # 体積を計算（円柱の和）
+        # Compute volume (sum of cylinders)
         total_volume_px3 = 0
         
         for i in range(len(radii)):
-            # 各断面を円柱として計算
+            # Compute each cross-section as a cylinder
             r = radii[i]
             h = self.section_interval_px
             
-            # 円柱の体積: V = π * r^2 * h
+            # Cylinder volume: V = pi * r^2 * h
             volume = np.pi * r**2 * h
             total_volume_px3 += volume
         
-        # ピクセル → um変換
+        # Pixel to um conversion
         volume_um3 = total_volume_px3 * (self.pixel_size_um ** 3)
         
-        # 表面積も計算（オプション）
+        # Compute surface area (optional)
         surface_area_px2 = 0
         for i in range(len(radii)):
             r = radii[i]
             h = self.section_interval_px
             
-            # 円柱の側面積: A = 2π * r * h
+            # Cylinder lateral area: A = 2*pi * r * h
             area = 2 * np.pi * r * h
             surface_area_px2 += area
         
-        # 両端のキャップ（球冠として近似）
+        # End caps (approximated as spherical caps)
         if len(radii) > 0:
-            # 始端
+            # Start cap
             r_start = radii[0]
             cap_area_start = np.pi * r_start**2
             surface_area_px2 += cap_area_start
             
-            # 終端
+            # End cap
             r_end = radii[-1]
             cap_area_end = np.pi * r_end**2
             surface_area_px2 += cap_area_end
@@ -335,25 +335,25 @@ class RotationalSymmetryVolumeEstimator:
     
     def visualize_segmentation(self, mask, details, save_path='segmentation_visualization.png'):
         """
-        セグメンテーション結果を可視化
+        Visualize segmentation results
         """
         fig, axes = plt.subplots(1, 2, figsize=(16, 8))
         
-        # 元のマスク + 輪郭
+        # Original mask + contour
         ax = axes[0]
         ax.imshow(mask, cmap='gray', alpha=0.5)
         
-        # 輪郭
+        # Contour
         contour = details['contour']
         ax.plot(contour[:, 0], contour[:, 1], 'b-', linewidth=2, label='Contour')
         
-        # 長軸
+        # Long axis
         axis_start = details['axis_start']
         axis_end = details['axis_end']
         ax.plot([axis_start[0], axis_end[0]], [axis_start[1], axis_end[1]], 
                'r-', linewidth=2, label='Long axis')
         
-        # 中心線
+        # Centerline
         centerline = details['centerline']
         ax.plot(centerline[:, 0], centerline[:, 1], 'g-', linewidth=2, label='Centerline')
         
@@ -363,11 +363,11 @@ class RotationalSymmetryVolumeEstimator:
         ax.set_xlim(np.min(contour[:, 0]) - 10, np.max(contour[:, 0]) + 10)
         ax.set_ylim(np.min(contour[:, 1]) - 10, np.max(contour[:, 1]) + 10)
         
-        # 断面と半径
+        # Cross-sections and radii
         ax = axes[1]
         ax.imshow(mask, cmap='gray', alpha=0.5)
         
-        # 断面線を描画
+        # Draw cross-section lines
         centerline = details['centerline']
         radii = details['radii']
         section_angle = details['axis_angle'] + np.pi/2
@@ -376,7 +376,7 @@ class RotationalSymmetryVolumeEstimator:
             center = centerline[i]
             radius = radii[i]
             
-            # 断面線
+            # Cross-section line
             dx = radius * np.cos(section_angle)
             dy = radius * np.sin(section_angle)
             
@@ -384,7 +384,7 @@ class RotationalSymmetryVolumeEstimator:
                    [center[1] - dy, center[1] + dy], 
                    'c-', linewidth=1, alpha=0.5)
             
-            # 円を描画（回転対称を表現）
+            # Draw circle (representing rotational symmetry)
             circle = plt.Circle((center[0], center[1]), radius, 
                                fill=False, color='yellow', linewidth=1, alpha=0.5)
             ax.add_patch(circle)
@@ -405,23 +405,23 @@ class RotationalSymmetryVolumeEstimator:
 
 
 def demo_with_test_cell():
-    """テスト細胞でデモ"""
+    """Demo with a test cell"""
     print("\n" + "="*60)
     print("DEMO: Rotational Symmetry Volume Estimation")
     print("="*60)
     
-    # 推定器を作成
+    # Create estimator
     estimator = RotationalSymmetryVolumeEstimator(
         pixel_size_um=0.08625,
         section_interval_um=0.25  # 250 nm
     )
     
-    # テスト用の細長い楕円を作成（分裂酵母のような形状）
+    # Create elongated ellipse for testing (fission yeast-like shape)
     from skimage.draw import ellipse
     
     img = np.zeros((300, 300), dtype=np.uint8)
     
-    # 縦長の楕円
+    # Vertically elongated ellipse
     rr, cc = ellipse(150, 150, 100, 30, rotation=np.deg2rad(15))
     img[rr, cc] = 255
     
@@ -431,7 +431,7 @@ def demo_with_test_cell():
     print(f"Mask shape: {mask.shape}")
     print(f"Foreground pixels: {np.sum(mask)}")
     
-    # 体積を計算
+    # Compute volume
     volume, details = estimator.compute_cell_volume(mask, return_details=True)
     
     print(f"\n=== Results ===")
@@ -440,19 +440,19 @@ def demo_with_test_cell():
     print(f"Number of sections: {details['n_sections']}")
     print(f"Mean radius: {np.mean(details['radii']) * estimator.pixel_size_um:.3f} um")
     
-    # 可視化
+    # Visualize
     estimator.visualize_segmentation(mask, details, 'rotational_symmetry_demo.png')
     
     return estimator, details
 
 
 def compare_with_pomegranate():
-    """Pomegranateアルゴリズムとの比較"""
+    """Comparison with the Pomegranate algorithm"""
     print("\n" + "="*60)
     print("COMPARISON: Rotational Symmetry vs Pomegranate")
     print("="*60)
     
-    # 両方の推定器を作成
+    # Create both estimators
     from timeseries_volume_from_roiset import TimeSeriesVolumeTracker
     
     rot_estimator = RotationalSymmetryVolumeEstimator(
@@ -468,12 +468,12 @@ def compare_with_pomegranate():
         image_height=512
     )
     
-    # テスト用の楕円
+    # Test ellipse
     from skimage.draw import ellipse
     
     results_comparison = []
     
-    # 様々なサイズ・形状でテスト
+    # Test with various sizes and shapes
     test_cases = [
         {'r_major': 60, 'r_minor': 20, 'name': 'Elongated (3:1)'},
         {'r_major': 50, 'r_minor': 30, 'name': 'Moderate (5:3)'},
@@ -486,11 +486,11 @@ def compare_with_pomegranate():
         img[rr, cc] = 255
         mask = img > 0
         
-        # 回転対称法
+        # Rotational symmetry method
         vol_rot = rot_estimator.compute_cell_volume(mask)
         
-        # Pomegranate法（簡易版）
-        # ROI情報を作成
+        # Pomegranate method (simplified version)
+        # Create ROI info
         roi_info = {
             'name': case['name'],
             'type': 2,  # Ellipse
@@ -504,15 +504,15 @@ def compare_with_pomegranate():
             'bytes': b''
         }
         
-        # マスクを直接使用
+        # Use mask directly
         distance_map = ndimage.distance_transform_edt(mask)
         max_dist = np.max(distance_map)
         
-        # 簡易的なPomegranate体積推定
+        # Simplified Pomegranate volume estimation
         elongation_factor = pom_tracker.elongation_factor
         z_slices = int(2 * (np.ceil(max_dist * elongation_factor) + 2))
         
-        # 近似: 楕円体の体積
+        # Approximation: ellipsoid volume
         vol_pom_approx = (4/3) * np.pi * case['r_major'] * case['r_minor'] * max_dist * (pom_tracker.voxel_xy**3)
         
         results_comparison.append({
@@ -531,10 +531,10 @@ def compare_with_pomegranate():
 
 
 if __name__ == "__main__":
-    # デモ実行
+    # Run demo
     estimator, details = demo_with_test_cell()
-    
-    # 比較実行
+
+    # Run comparison
     # comparison = compare_with_pomegranate()
     
     print("\n" + "="*60)

@@ -3,10 +3,10 @@ batch_pipeline_all_pos.py
 -------------------------
 Full analysis pipeline for ALL Pos in a timelapse dataset.
 
-起動のたびに次を行う（batch_pipeline_progress.json は再開に使わない）:
-  - 先頭: Grid 0%% 再構成（batch_reconstruction_grid.py）
-  - batch_pipeline_progress.json を削除し、POS_START–POS_END 範囲の各 Pos の
-    output_phase / output_phase_raw を削除してから、再構成〜step4 を通しで実行
+On every launch (batch_pipeline_progress.json is NOT used for resumption):
+  - First: Grid 0%% reconstruction (batch_reconstruction_grid.py)
+  - Delete batch_pipeline_progress.json, remove output_phase / output_phase_raw
+    for each Pos in the POS_START–POS_END range, then run reconstruction through step4
 
 Steps per Pos:
   0. Reconstruction  (raw holo -> phase, with Pos0 BG subtraction)
@@ -20,7 +20,7 @@ Do NOT copy params from pipeline_full.py (stale).
 
 Usage:
     python scripts/batch_pipeline_all_pos.py
-    python scripts/batch_pipeline_all_pos.py --skip-grid-0per   # 0%% グリッド再構成のみ省略
+    python scripts/batch_pipeline_all_pos.py --skip-grid-0per   # skip only 0%% grid reconstruction
 """
 import argparse
 import json
@@ -60,7 +60,7 @@ N_WORKERS_RECON = 24
 # compute_pos_shifts workers
 N_WORKERS_ECC = 24
 
-# 実行中の記録用（次回起動では読まず、起動時に削除する）
+# Progress log for the current run (not read on next launch; deleted at startup)
 PROGRESS_LOG = TIMELAPSE_ROOT / "batch_pipeline_progress.json"
 
 # BG (Pos0) phase cache dirs — precomputed once per crop, reused across all Pos
@@ -137,7 +137,7 @@ def step_grid_0per_reconstruction(grid_dir: Path) -> bool:
 
 
 def _reset_timelapse_for_full_run():
-    """進捗を無視して最初から: ログ削除 + 各 Pos の再構成出力を削除。"""
+    """Ignore progress and start from scratch: delete log + remove reconstruction outputs for each Pos."""
     if PROGRESS_LOG.exists():
         PROGRESS_LOG.unlink()
     for pos_num in range(POS_START, POS_END + 1):
@@ -724,31 +724,31 @@ def step4_correct_0pergluc(pos_num, pos_dir):
 # Main
 # ============================================================
 def main():
-    ap = argparse.ArgumentParser(description="Full batch pipeline (毎回 grid 0%% + タイムラプス全ステップを最初から)")
+    ap = argparse.ArgumentParser(description="Full batch pipeline (runs grid 0%% + all timelapse steps from scratch every time)")
     ap.add_argument(
         "--skip-grid-0per",
         action="store_true",
-        help="先頭の Grid 0%% 再構成のみ省略（既に batch_reconstruction_grid 済みのとき）",
+        help="Skip only the initial Grid 0%% reconstruction (when batch_reconstruction_grid has already been run)",
     )
     ap.add_argument(
         "--no-reset",
         action="store_true",
-        help="output_phase / output_phase_raw を削除せず、既存成果物から再開する",
+        help="Do not delete output_phase / output_phase_raw; resume from existing artifacts",
     )
     ap.add_argument(
         "--consume-online-crop-sub",
         type=str,
         default=None,
         metavar="CROP_SUB_ROOT",
-        help="compute_drift_online.py が書いた crop_sub_rawraw を再利用。"
-             "Pos 単位で完全なら step0/2/3 を skip し、step4 のみ実行。"
-             "不完全な Pos は従来パイプラインに fallback。",
+        help="Reuse crop_sub_rawraw written by compute_drift_online.py. "
+             "If complete per Pos, skip step0/2/3 and run only step4. "
+             "Incomplete Pos fall back to the standard pipeline.",
     )
     ap.add_argument(
         "--move-online-tifs",
         action="store_true",
-        help="--consume-online-crop-sub と併用。online TIF を copy ではなく move する "
-             "(E: のディスクを解放)。",
+        help="Use with --consume-online-crop-sub. Move online TIFs instead of copying "
+             "(frees disk space on E:).",
     )
     args = ap.parse_args()
 

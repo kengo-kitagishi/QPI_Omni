@@ -1,20 +1,20 @@
 """
 visualize_timelapse_qc.py
 --------------------------
-タイムラプスTIFシーケンスのQC可視化スクリプト。
+QC visualization script for timelapse TIF sequences.
 
-対象データ:
-  - 511×511 再構成位相画像 (output_phase/)
-  - 40×440 crop_subtracted/*.tif (compute_pos_shifts.py 出力)
-  - 40×440 output_phase_iarpls/*.tif (timelapse_iarpls_bgsub.py 出力)
+Target data:
+  - 511x511 reconstructed phase images (output_phase/)
+  - 40x440 crop_subtracted/*.tif (compute_pos_shifts.py output)
+  - 40x440 output_phase_iarpls/*.tif (timelapse_iarpls_bgsub.py output)
 
-生成する図:
-  Fig1  Frame montage         : 等間隔サンプリングしたフレームのグリッド表示
-  Fig2  Temporal profile map  : 列平均プロファイル × 時刻 ヒートマップ
-  Fig3  Frame statistics      : mean/std/p5/p95 の時系列 + ジャンプ検出
-  Fig4  Histogram evolution   : 等間隔フレームの輝度ヒストグラム重ね書き
-  Fig5  Inter-frame MAD       : フレーム間差分の時系列 + 行/列ヒートマップ
-  Fig6  Before/after compare  : TIF_DIR_B 指定時のみ (iarpls 前後比較)
+Generated figures:
+  Fig1  Frame montage         : Grid display of evenly sampled frames
+  Fig2  Temporal profile map  : Column-mean profile x time heatmap
+  Fig3  Frame statistics      : mean/std/p5/p95 time series + jump detection
+  Fig4  Histogram evolution   : Overlaid intensity histograms of evenly spaced frames
+  Fig5  Inter-frame MAD       : Inter-frame difference time series + row/column heatmaps
+  Fig6  Before/after compare  : Only when TIF_DIR_B is specified (iarpls before/after comparison)
 """
 
 import sys
@@ -31,37 +31,37 @@ sys.path.insert(0, str(Path(__file__).parent))
 from figure_logger import save_figure
 
 # ============================================================
-# 設定パラメータ
+# Configuration parameters
 # ============================================================
 
 # --- Primary input ---
-TIF_DIR_A = r"C:\ph\Pos1\output_phase_iarpls"        # 検査対象ディレクトリ
+TIF_DIR_A = r"C:\ph\Pos1\output_phase_iarpls"        # Target directory to inspect
 TIF_PATTERN = "img_*_ph_000_phase.tif"
 
 # --- Optional comparison (None = skip) ---
-TIF_DIR_B = r"C:\ph\Pos1\output_phase\channels\crop_subtracted"   # iarpls前との比較
+TIF_DIR_B = r"C:\ph\Pos1\output_phase\channels\crop_subtracted"   # Comparison with pre-iarpls
 
 # --- Optional spatial crop applied after loading ---
-# 511×511 画像から 40×440 ROI を切り出す場合に設定。
-# None = 切り出しなし（40×440 TIF を直接読む場合も None でよい）
-# 形式: (cy, cx, crop_h, crop_w) — timelapse_iarpls_bgsub.py と同じ規約
-ROI_CROP = None   # 40×440 TIF を直接読むので不要
+# Set when cropping a 40x440 ROI from a 511x511 image.
+# None = no cropping (also use None when reading 40x440 TIFs directly)
+# Format: (cy, cx, crop_h, crop_w) -- same convention as timelapse_iarpls_bgsub.py
+ROI_CROP = None   # Not needed since reading 40x440 TIFs directly
 
-# 光学パラメータ（x軸をμm表示にしたい場合）
-PIXEL_SCALE_UM = 0.34568   # px → μm。None で px 表示
-INTERVAL_MIN   = 5.0       # タイムポイント間の時間 [分]
+# Optical parameters (for displaying x-axis in um)
+PIXEL_SCALE_UM = 0.34568   # px -> um. None for px display
+INTERVAL_MIN   = 5.0       # Time between timepoints [min]
 
-# --- 表示 & サンプリング ---
-VMIN, VMAX      = -1.0, 1.0  # フレーム表示のカラーマップ範囲
+# --- Display & sampling ---
+VMIN, VMAX      = -1.0, 1.0  # Colormap range for frame display
 FRAME_STEP      = None       # None = auto (RAM ~60 frames)
-N_MONTAGE_FRAMES = 16        # montage に表示するフレーム数
-N_HIST_FRAMES   = 24         # histogram overlay のフレーム数
+N_MONTAGE_FRAMES = 16        # Number of frames to show in montage
+N_HIST_FRAMES   = 24         # Number of frames for histogram overlay
 MAX_FRAMES      = None       # None = all
 # ============================================================
 
 
 def extract_rect_roi(img, cy, cx, crop_h, crop_w):
-    """timelapse_iarpls_bgsub.py と同じ ROI crop ロジック。"""
+    """Same ROI crop logic as timelapse_iarpls_bgsub.py."""
     h, w = img.shape[-2], img.shape[-1]
     y1 = cy - crop_h // 2;  y2 = y1 + crop_h
     x1 = cx - crop_w // 2;  x2 = x1 + crop_w
@@ -86,10 +86,10 @@ def mad(arr):
 
 
 def load_sequence(tif_dir, pattern, step, max_frames, roi_crop):
-    """ソートされた TIF シーケンスを読み込む。返値: (stack: N×H×W, file_indices: list[int])"""
+    """Load a sorted TIF sequence. Returns: (stack: NxHxW, file_indices: list[int])"""
     files = sorted(Path(tif_dir).glob(pattern))
     if not files:
-        raise FileNotFoundError(f"TIF が見つかりません: {tif_dir}/{pattern}")
+        raise FileNotFoundError(f"TIF not found: {tif_dir}/{pattern}")
     if max_frames is not None:
         files = files[:max_frames]
     total = len(files)
@@ -112,7 +112,7 @@ def load_sequence(tif_dir, pattern, step, max_frames, roi_crop):
 
 
 def set_pub_style():
-    """Publication-quality matplotlib スタイル設定。"""
+    """Publication-quality matplotlib style settings."""
     matplotlib.rcParams.update({
         "font.family": "sans-serif",
         "font.sans-serif": ["Arial", "DejaVu Sans"],
@@ -130,7 +130,7 @@ def set_pub_style():
 
 
 def x_ticks(ax, n_cols, pixel_scale_um, axis="x"):
-    """x or y 軸を px / μm 表示に設定。"""
+    """Set x or y axis display to px / um."""
     if pixel_scale_um is None:
         label = "x (px)" if axis == "x" else "y (px)"
         if axis == "x":
@@ -152,7 +152,7 @@ def x_ticks(ax, n_cols, pixel_scale_um, axis="x"):
 # Figure 1: Frame montage
 # ============================================================
 def fig_montage(stack, indices, total, n_show=16, vmin=-1.0, vmax=1.0, interval_min=5.0):
-    """等間隔サンプリングしたフレームを 4×N グリッドで表示。"""
+    """Display evenly sampled frames in a 4xN grid."""
     sel_idx = np.round(np.linspace(0, len(stack) - 1, n_show)).astype(int)
     n_cols = 4
     n_rows = int(np.ceil(n_show / n_cols))
@@ -190,8 +190,8 @@ def fig_montage(stack, indices, total, n_show=16, vmin=-1.0, vmax=1.0, interval_
 # ============================================================
 def fig_profile_heatmap(stack, indices, total, pixel_scale_um=None, interval_min=5.0):
     """
-    左: 列平均プロファイル (mean over rows) × 時刻 ヒートマップ
-    右: 行平均プロファイル (mean over cols) × 時刻 ヒートマップ
+    Left: Column-mean profile (mean over rows) x time heatmap
+    Right: Row-mean profile (mean over cols) x time heatmap
     """
     col_mean = stack.mean(axis=1)   # (N, W)
     row_mean = stack.mean(axis=2)   # (N, H)
@@ -199,7 +199,7 @@ def fig_profile_heatmap(stack, indices, total, pixel_scale_um=None, interval_min
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
-    # --- 列平均プロファイルヒートマップ ---
+    # --- Column-mean profile heatmap ---
     ax = axes[0]
     im = ax.imshow(col_mean, aspect="auto", origin="upper",
                    extent=[0, stack.shape[2] - 1, times[-1], times[0]],
@@ -214,7 +214,7 @@ def fig_profile_heatmap(stack, indices, total, pixel_scale_um=None, interval_min
         ax.set_xticks(ticks)
         ax.set_xticklabels([f"{t * pixel_scale_um:.1f}" for t in ticks])
 
-    # --- 行平均プロファイルヒートマップ ---
+    # --- Row-mean profile heatmap ---
     ax = axes[1]
     im = ax.imshow(row_mean, aspect="auto", origin="upper",
                    extent=[0, stack.shape[1] - 1, times[-1], times[0]],
@@ -238,7 +238,7 @@ def fig_profile_heatmap(stack, indices, total, pixel_scale_um=None, interval_min
 # Figure 3: Frame statistics over time
 # ============================================================
 def fig_frame_stats(stack, indices, interval_min=5.0):
-    """mean / std / p5 / p95 の時系列と外れ値フレームのハイライト。"""
+    """Time series of mean / std / p5 / p95 with outlier frame highlighting."""
     times = np.array(indices) * interval_min
 
     stat_funcs = {
@@ -255,7 +255,7 @@ def fig_frame_stats(stack, indices, interval_min=5.0):
         vals = fn(stack)
         ax.plot(times, vals, lw=0.8, color="#2166ac")
 
-        # ジャンプ検出: 差分の MAD ベース外れ値
+        # Jump detection: MAD-based outlier on differences
         diff = np.abs(np.diff(vals))
         if len(diff) > 3:
             m = mad(diff)
@@ -289,7 +289,7 @@ def fig_frame_stats(stack, indices, interval_min=5.0):
 # Figure 4: Histogram evolution
 # ============================================================
 def fig_histogram(stack, indices, n_frames=24, vmin=-1.0, vmax=1.0):
-    """等間隔フレームのヒストグラムを時刻でカラーマップして重ね書き。"""
+    """Overlay histograms of evenly spaced frames colored by time."""
     sel_idx = np.round(np.linspace(0, len(stack) - 1, n_frames)).astype(int)
     cmap = plt.cm.coolwarm
     bins = np.linspace(vmin - 0.5, vmax + 0.5, 120)
@@ -320,27 +320,27 @@ def fig_histogram(stack, indices, n_frames=24, vmin=-1.0, vmax=1.0):
 # ============================================================
 def fig_interframe_mad(stack, indices, interval_min=5.0):
     """
-    上: フレーム間 MAD の時系列
-    中: 列ごとの inter-frame diff ヒートマップ (W × time)
-    下: 行ごとの inter-frame diff ヒートマップ (H × time)
+    Top: Inter-frame MAD time series
+    Middle: Column-wise inter-frame diff heatmap (W x time)
+    Bottom: Row-wise inter-frame diff heatmap (H x time)
     """
     if len(stack) < 2:
-        print("[skip] inter-frame MAD: フレーム数が 2 未満")
+        print("[skip] inter-frame MAD: fewer than 2 frames")
         return None, None
 
     diff = np.abs(np.diff(stack, axis=0))   # (N-1, H, W)
     mad_per_frame   = np.median(diff.reshape(len(diff), -1), axis=1)
-    col_mad = diff.mean(axis=1)   # (N-1, W) — 行方向平均
-    row_mad = diff.mean(axis=2)   # (N-1, H) — 列方向平均
+    col_mad = diff.mean(axis=1)   # (N-1, W) -- mean over rows
+    row_mad = diff.mean(axis=2)   # (N-1, H) -- mean over columns
     times_diff = (np.array(indices[1:]) + np.array(indices[:-1])) / 2 * interval_min
 
     fig = plt.figure(figsize=(14, 10))
     gs = GridSpec(3, 2, figure=fig, height_ratios=[1.5, 1, 1])
 
-    # -- 上: MAD 時系列 --
+    # -- Top: MAD time series --
     ax0 = fig.add_subplot(gs[0, :])
     ax0.plot(times_diff, mad_per_frame, lw=0.8, color="#2166ac")
-    # スパイク検出
+    # Spike detection
     m = mad(mad_per_frame)
     if m > 0:
         spike_mask = mad_per_frame > 3 * m
@@ -353,7 +353,7 @@ def fig_interframe_mad(stack, indices, interval_min=5.0):
     ax0.set_title("Inter-frame MAD over time")
     ax0.grid(True, lw=0.4, alpha=0.5)
 
-    # -- 中: 列ごとヒートマップ --
+    # -- Middle: Column-wise heatmap --
     ax1 = fig.add_subplot(gs[1, :])
     im1 = ax1.imshow(col_mad.T, aspect="auto", origin="upper",
                      extent=[times_diff[0], times_diff[-1], stack.shape[2] - 1, 0],
@@ -363,7 +363,7 @@ def fig_interframe_mad(stack, indices, interval_min=5.0):
     ax1.set_ylabel("x (px)")
     ax1.set_title("Column-wise inter-frame diff (mean over rows)")
 
-    # -- 下: 行ごとヒートマップ --
+    # -- Bottom: Row-wise heatmap --
     ax2 = fig.add_subplot(gs[2, :])
     im2 = ax2.imshow(row_mad.T, aspect="auto", origin="upper",
                      extent=[times_diff[0], times_diff[-1], stack.shape[1] - 1, 0],
@@ -385,7 +385,7 @@ def fig_interframe_mad(stack, indices, interval_min=5.0):
 # Figure 6: Before/after comparison (TIF_DIR_B != None)
 # ============================================================
 def fig_before_after(stack_a, stack_b, indices, vmin=-1.0, vmax=1.0, interval_min=5.0):
-    """4フレームについて DIR_A / DIR_B の画像と列平均プロファイルを比較。"""
+    """Compare DIR_A / DIR_B images and column-mean profiles for 4 frames."""
     n = min(len(stack_a), len(stack_b))
     sel = [0, n // 3, 2 * n // 3, n - 1]
 
@@ -443,7 +443,7 @@ def main():
     if TIF_DIR_B is not None:
         print(f"Loading DIR_B: {TIF_DIR_B}")
         stack_b, indices_b, _ = load_sequence(TIF_DIR_B, TIF_PATTERN, actual_step, MAX_FRAMES, ROI_CROP)
-        # DIR_B のフレーム数を DIR_A に合わせる
+        # Match DIR_B frame count to DIR_A
         min_n = min(len(stack_a), len(stack_b))
         stack_a  = stack_a[:min_n]
         stack_b  = stack_b[:min_n]

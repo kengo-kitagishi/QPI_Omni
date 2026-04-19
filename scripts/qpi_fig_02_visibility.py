@@ -2,19 +2,19 @@
 """
 qpi_fig_02_visibility.py
 
-ホログラムから Visibility を計算する手順を示す6パネル図（修論用）。
+6-panel figure showing the visibility calculation procedure from a hologram (for thesis).
 
-パネル構成（2行×3列）:
-  上段: a(Hologram) | c(Interferometric Amp) | e(Interferometric OPD)
-  下段: b(2D FFT)   | d(Non-interferometric Amp) | f(Visibility = 2β/α)
+Panel layout (2 rows x 3 columns):
+  Top:    a(Hologram) | c(Interferometric Amp) | e(Interferometric OPD)
+  Bottom: b(2D FFT)   | d(Non-interferometric Amp) | f(Visibility = 2*beta/alpha)
 
-矢印:
-  a → b: FFT (下向き)
-  b → c: IFFT (干渉項)
-  b → d: IFFT (非干渉項)
-  c,d → f: ratio (Visibility)
+Arrows:
+  a -> b: FFT (downward)
+  b -> c: IFFT (interferometric term)
+  b -> d: IFFT (non-interferometric term)
+  c,d -> f: ratio (Visibility)
 
-参照: Park et al., Fig. 7.1 スタイル
+Reference: Park et al., Fig. 7.1 style
 """
 
 import sys
@@ -37,7 +37,7 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 from figure_logger import save_figure
 
 # ============================================================
-# 設定 — 実データに合わせて変更
+# Settings - modify to match actual data
 # ============================================================
 
 DEFAULT_HOLOGRAM_PATH = (
@@ -45,17 +45,17 @@ DEFAULT_HOLOGRAM_PATH = (
     r"\Pos1\img_000000000_ph_000.tif"
 )
 
-# 右チャンネル (260321 Pos < 31): col 400-2448
-# optical_config.py の CROP_REGION (208-2256) は汎用値なので使わない
+# Right channel (260321 Pos < 31): col 400-2448
+# CROP_REGION (208-2256) in optical_config.py is a generic value, not used here
 CROP = (0, 2048, 400, 2448)
 DEFAULT_EXPORT_SINGLE_PANELS = True
 DEFAULT_SINGLE_PANEL_TIF_BASE = (
     Path(__file__).resolve().parents[1] / "results" / "figures" / "visibility_single_panels"
 )
 INTERFERO_AMP_VMIN = 0.0
-INTERFERO_AMP_VMAX = 16000.0   # 250 × 64
+INTERFERO_AMP_VMAX = 16000.0   # 250 * 64
 NON_INTERFERO_AMP_VMIN = 0.0
-NON_INTERFERO_AMP_VMAX = 32000.0  # 500 × 64
+NON_INTERFERO_AMP_VMAX = 32000.0  # 500 * 64
 VISIBILITY_VMIN = 0.3
 VISIBILITY_VMAX = 1.0
 
@@ -100,7 +100,7 @@ EXPORT_SINGLE_PANELS = DEFAULT_EXPORT_SINGLE_PANELS and (not _args.no_single_pan
 RUN_TAG_OVERRIDE = _args.run_tag
 
 # ============================================================
-# ホログラム読み込み
+# Load hologram
 # ============================================================
 
 def load_hologram(path, crop):
@@ -121,7 +121,7 @@ if os.path.exists(HOLOGRAM_PATH):
     HOLOGRAM_VMAX = float(np.percentile(holo, 99))
 else:
     print(f"[WARNING] File not found: {HOLOGRAM_PATH}")
-    print("  → プレースホルダー（ランダムフリンジ）を使用します")
+    print("  -> Using placeholder (random fringes)")
     rng = np.random.default_rng(42)
     H, W = 2048, 2048
     yy, xx = np.mgrid[:H, :W]
@@ -138,7 +138,7 @@ else:
 H, W = holo.shape
 
 # ============================================================
-# QPIパラメータ
+# QPI parameters
 # ============================================================
 
 params = QPIParameters(
@@ -158,20 +158,20 @@ print(f"  img_center   = {img_center}")
 # ============================================================
 
 fft_full = np.fft.fftshift(np.fft.fft2(holo))      # (H, W) complex
-fft_log  = np.log1p(np.abs(fft_full))               # 可視化用 log magnitude
+fft_log  = np.log1p(np.abs(fft_full))               # log magnitude for visualization
 
 # ============================================================
-# 干渉項（サイドバンド / 1次光）抽出 → β
+# Interferometric term (sideband / 1st order) extraction -> beta
 # ============================================================
 
 sb_mask    = make_disk(OFFAXIS_CENTER, ap // 2, (H, W))
 sb_cropped = crop_array(fft_full * sb_mask, OFFAXIS_CENTER, ap)   # (ap, ap)
 sb_field   = np.fft.ifft2(np.fft.ifftshift(sb_cropped))
 
-beta       = np.abs(sb_field)                        # 干渉項振幅
-opd        = unwrap_phase(np.angle(sb_field))        # 位相 [rad]
+beta       = np.abs(sb_field)                        # interferometric amplitude
+opd        = unwrap_phase(np.angle(sb_field))        # phase [rad]
 
-# BG 引き算（--background-path が指定された場合）
+# BG subtraction (when --background-path is specified)
 _OPD_BG_SUBTRACTED = False
 if BACKGROUND_PATH and os.path.exists(BACKGROUND_PATH):
     _holo_bg   = load_hologram(BACKGROUND_PATH, CROP)
@@ -183,29 +183,29 @@ if BACKGROUND_PATH and os.path.exists(BACKGROUND_PATH):
     print(f"  BG-subtracted OPD: {BACKGROUND_PATH}")
 
 # ============================================================
-# 非干渉項（DC / 0次光）抽出 → α
+# Non-interferometric term (DC / 0th order) extraction -> alpha
 # ============================================================
 
 dc_mask    = make_disk(img_center, ap // 2, (H, W))
 dc_cropped = crop_array(fft_full * dc_mask, img_center, ap)       # (ap, ap)
 dc_field   = np.fft.ifft2(np.fft.ifftshift(dc_cropped))
 
-alpha      = np.abs(dc_field)                        # 非干渉項振幅
+alpha      = np.abs(dc_field)                        # non-interferometric amplitude
 
 # ============================================================
-# Visibility V = 2β / α
+# Visibility V = 2*beta / alpha
 # ============================================================
 
 with np.errstate(divide="ignore", invalid="ignore"):
     visibility = 2.0 * beta / alpha
     visibility[~np.isfinite(visibility)] = 0.0
 
-print(f"  β (mean, center 80%) = {np.percentile(beta, [10, 90])}")
-print(f"  α (mean, center 80%) = {np.percentile(alpha, [10, 90])}")
+print(f"  beta (mean, center 80%) = {np.percentile(beta, [10, 90])}")
+print(f"  alpha (mean, center 80%) = {np.percentile(alpha, [10, 90])}")
 print(f"  V (mean)             = {np.mean(visibility[visibility > 0]):.3f}")
 
 # ============================================================
-# 描画
+# Drawing
 # ============================================================
 
 FONT = {"fontsize": 9, "fontweight": "bold"}
@@ -283,10 +283,10 @@ ax_b.set_title("2D FFT", **FONT)
 plt.colorbar(im_b, ax=ax_b, fraction=0.046, pad=0.04).set_label("log|FFT|", fontsize=7)
 ax_b.set_axis_off()
 
-# 2つの円: +1次(r), DC中心(2r)
+# Two circles: +1st order (r), DC center (2r)
 radius = ap // 2
 circle_specs = [
-    ((OFFAXIS_CENTER[1], OFFAXIS_CENTER[0]), radius),       # +1次
+    ((OFFAXIS_CENTER[1], OFFAXIS_CENTER[0]), radius),       # +1st order
     ((img_center[1], img_center[0]), radius * 2),           # DC (2r)
 ]
 for (cx, cy), rr in circle_specs:
@@ -330,7 +330,7 @@ plt.colorbar(im_f, ax=ax_f, fraction=0.046, pad=0.04)
 ax_f.set_axis_off()
 
 # ============================================================
-# 単一パネル保存（レンジ確認用）
+# Single panel saving (for range verification)
 # ============================================================
 if EXPORT_SINGLE_PANELS:
     run_tag = RUN_TAG_OVERRIDE or datetime.now().strftime("%Y%m%dT%H%M%S")
@@ -385,7 +385,7 @@ if EXPORT_SINGLE_PANELS:
     )
 
 # ============================================================
-# 保存
+# Save
 # ============================================================
 
 save_figure(
@@ -401,7 +401,7 @@ save_figure(
     },
     description=(
         "Visibility calculation procedure: "
-        "Hologram → FFT → IFFT(sideband/DC) → Amplitude & OPD → Visibility"
+        "Hologram -> FFT -> IFFT(sideband/DC) -> Amplitude & OPD -> Visibility"
     ),
 )
 

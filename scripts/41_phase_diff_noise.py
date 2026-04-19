@@ -1,14 +1,14 @@
 # %%
 # ============================================================
-# 41_phase_diff_noise.py — 位相再構成後の時間ノイズ評価
+# 41_phase_diff_noise.py — Temporal noise evaluation after phase reconstruction
 # ============================================================
-# 目的: ホログラム隣接ペアを位相再構成し、差分から temporal noise を
-#       [mrad/frame] および [nm OPD/frame] で定量化する。
-#       論文 eq. A.9 / A.12 / A.14 の理論限界と比較する。
+# Objective: Reconstruct phase from adjacent hologram pairs, quantify
+#            temporal noise from differences in [mrad/frame] and [nm OPD/frame].
+#            Compare with theoretical limits from paper eq. A.9 / A.12 / A.14.
 #
-# 対比:
-#   40_qpi_noise_analysis.py UC_DIFF → 生画像 [ADU] の差分（センサーノイズのみ）
-#   41_phase_diff_noise.py    → 位相再構成後 [rad] の差分（光学ノイズ全体）
+# Comparison:
+#   40_qpi_noise_analysis.py UC_DIFF -> raw image [ADU] difference (sensor noise only)
+#   41_phase_diff_noise.py           -> post-reconstruction [rad] difference (total optical noise)
 # ============================================================
 
 import os
@@ -23,48 +23,48 @@ from qpi import QPIParameters, get_field, _get_dc_ac, _get_visibility, _get_phas
 from figure_logger import save_figure
 
 # ============================================================
-# 設定
+# Settings
 # ============================================================
 
 # %%
-# --- 光学パラメータ ---
+# --- Optical parameters ---
 
 WAVELENGTH     = 658e-9          # [m]
 NA             = 0.95
-PIXELSIZE      = 3.45e-6 / 40   # [m/px]  3.45 µm カメラ画素 / 40x 対物
-OFFAXIS_CENTER = (1710, 644)     # (row, col) — FFT空間でのオフアクシス中心
+PIXELSIZE      = 3.45e-6 / 40   # [m/px]  3.45 um camera pixel / 40x objective
+OFFAXIS_CENTER = (1710, 644)     # (row, col) — off-axis center in FFT space
 
-# --- センサーパラメータ（Basler acA2440-75um, EMVA1288 準拠）---
-SENSOR_FULL_WELL_E  = 10340      # [e⁻] Full Well Capacity
-SENSOR_BIT_DEPTH    = 12         # 有効ビット深度
-SENSOR_GAIN         = 1.0        # ソフトウェアゲイン設定（0 dB = 1.0）
+# --- Sensor parameters (Basler acA2440-75um, EMVA1288 compliant) ---
+SENSOR_FULL_WELL_E  = 10340      # [e-] Full Well Capacity
+SENSOR_BIT_DEPTH    = 12         # Effective bit depth
+SENSOR_GAIN         = 1.0        # Software gain setting (0 dB = 1.0)
 SENSOR_CONVERSION_GAIN = SENSOR_FULL_WELL_E / (2 ** SENSOR_BIT_DEPTH) / SENSOR_GAIN
 # ≈ 2.52 e⁻/ADU
 
-# 読み出しノイズ [e⁻]。EMVA1288 実測値がある場合に入力。
-# None の場合はショットノイズのみ（σ_total = σ_shot）。
-# Basler acA2440-75um 代表値: ~3 e⁻
+# Read noise [e-]. Enter EMVA1288 measured value if available.
+# If None, shot noise only (sigma_total = sigma_shot).
+# Basler acA2440-75um typical value: ~3 e-
 SENSOR_READ_NOISE_E = None       # e.g. 3.0
 
-# --- データ設定 ---
+# --- Data settings ---
 
-DATA_DIR          = r"F:\basler\exp200ms_int1000ms_300frame\Pos0"   # ホログラム TIFF が並ぶディレクトリ
-FRAME_INTERVAL_S  = 1.0     # [s] フレーム間隔（時間軸変換用）。5分=300, 1s=1.0
-CROP_SIDE         = None         # "right" → 右端, "left" → 左端, None → CROP_REGION を直接使う
-CROP_SIZE         = 2048         # CROP_SIDE 使用時の正方形サイズ [px]
-CROP_REGION       = None         # None or (r0, r1, c0, c1)（CROP_SIDE=None のときだけ参照）
-ROI_SIZE          = 80           # ノイズ計測 ROI サイズ [px]（論文準拠 80×80）
-ROI_CENTER        = None         # None → 再構成画像の中央。(row, col) で明示指定も可
-PAIR_START_1BASED = 1            # 解析開始ペア番号（1 始まり）
-PAIR_END_1BASED   = 150           # 解析終了ペア番号（1 始まり）
+DATA_DIR          = r"F:\basler\exp200ms_int1000ms_300frame\Pos0"   # Directory containing hologram TIFFs
+FRAME_INTERVAL_S  = 1.0     # [s] Frame interval (for time axis conversion). 5min=300, 1s=1.0
+CROP_SIDE         = None         # "right" -> right edge, "left" -> left edge, None -> use CROP_REGION directly
+CROP_SIZE         = 2048         # Square size [px] when using CROP_SIDE
+CROP_REGION       = None         # None or (r0, r1, c0, c1) (referenced only when CROP_SIDE=None)
+ROI_SIZE          = 80           # Noise measurement ROI size [px] (paper-consistent 80x80)
+ROI_CENTER        = None         # None -> reconstructed image center. Can specify (row, col) explicitly
+PAIR_START_1BASED = 1            # Analysis start pair number (1-based)
+PAIR_END_1BASED   = 150           # Analysis end pair number (1-based)
 
 # ============================================================
-# 初期化・パラメータ確認
+# Initialization and parameter check
 # ============================================================
 
 # %%
 
-print("=== 41_phase_diff_noise: 位相再構成ノイズ評価 ===")
+print("=== 41_phase_diff_noise: Phase reconstruction noise evaluation ===")
 print(f"  Conversion gain: {SENSOR_CONVERSION_GAIN:.4f} e⁻/ADU")
 if SENSOR_READ_NOISE_E is not None:
     sigma_s_adu = SENSOR_READ_NOISE_E / SENSOR_CONVERSION_GAIN
@@ -73,7 +73,7 @@ else:
     sigma_s_adu = None
     print("  Read noise: not set (shot noise only)")
 
-# ファイルリスト取得
+# Get file list
 _exts = {".tif", ".tiff", ".png"}
 _files = sorted(
     f for f in os.listdir(DATA_DIR)
@@ -81,12 +81,12 @@ _files = sorted(
 )
 N_total = len(_files)
 n_pairs_total = N_total // 2
-print(f"  全フレーム数: {N_total} → 総ペア数: {n_pairs_total}")
+print(f"  Total frames: {N_total} -> total pairs: {n_pairs_total}")
 
 if N_total == 0:
-    raise FileNotFoundError(f"ホログラムファイルが見つかりません: {DATA_DIR}")
+    raise FileNotFoundError(f"No hologram files found: {DATA_DIR}")
 
-# 1 枚プローブ読み込みで画像サイズを確定、CROP_REGION を解決
+# Load one probe image to determine size and resolve CROP_REGION
 _probe_raw = tifffile.imread(os.path.join(DATA_DIR, _files[0])).astype(np.float64)
 _H_full, _W_full = _probe_raw.shape[:2]
 
@@ -98,11 +98,11 @@ elif CROP_SIDE == "left":
 if CROP_REGION is not None:
     r0, r1, c0, c1 = CROP_REGION
     _probe_raw = _probe_raw[r0:r1, c0:c1]
-    print(f"  クロップ: {CROP_SIDE or 'manual'}  rows {r0}:{r1}, cols {c0}:{c1}")
+    print(f"  Crop: {CROP_SIDE or 'manual'}  rows {r0}:{r1}, cols {c0}:{c1}")
 img_shape = _probe_raw.shape[:2]
-print(f"  画像サイズ (after crop): {img_shape}")
+print(f"  Image size (after crop): {img_shape}")
 
-# QPIParameters 生成（aperturesize は自動計算）
+# Generate QPIParameters (aperturesize is auto-computed)
 params = QPIParameters(
     wavelength=WAVELENGTH,
     NA=NA,
@@ -122,22 +122,22 @@ print(f"  A_aperture:   {A_aperture:.0f} px²")
 print(f"  A_sensor:     {A_sensor:.0f} px²")
 print(f"  A_ap/A_sen:   {A_aperture/A_sensor:.4f}")
 
-# ペア範囲チェック
+# Pair range check
 pair_start_idx = PAIR_START_1BASED - 1
 pair_end_idx   = PAIR_END_1BASED   - 1
 if pair_start_idx < 0 or pair_end_idx < pair_start_idx:
-    raise ValueError(f"ペア番号の範囲が無効です: {PAIR_START_1BASED}-{PAIR_END_1BASED}")
+    raise ValueError(f"Invalid pair range: {PAIR_START_1BASED}-{PAIR_END_1BASED}")
 if pair_end_idx >= n_pairs_total:
     raise ValueError(
-        f"ペア番号が範囲外: 要求 {PAIR_START_1BASED}-{PAIR_END_1BASED}, "
-        f"利用可能 1-{n_pairs_total}"
+        f"Pair number out of range: requested {PAIR_START_1BASED}-{PAIR_END_1BASED}, "
+        f"available 1-{n_pairs_total}"
     )
 
 selected_pair_idx = np.arange(pair_start_idx, pair_end_idx + 1, dtype=int)
 n_pairs = len(selected_pair_idx)
-print(f"\n  解析対象ペア: {PAIR_START_1BASED}-{PAIR_END_1BASED} (N={n_pairs})")
+print(f"\n  Analysis target pairs: {PAIR_START_1BASED}-{PAIR_END_1BASED} (N={n_pairs})")
 
-# ROI 設定（再構成画像座標で定義）
+# ROI setup (defined in reconstructed image coordinates)
 _half = ROI_SIZE // 2
 if ROI_CENTER is None:
     cr, cc = aperturesize // 2, aperturesize // 2
@@ -145,11 +145,11 @@ else:
     cr, cc = ROI_CENTER
 rs, re = cr - _half, cr + _half
 cs, ce = cc - _half, cc + _half
-print(f"  ROI: rows {rs}:{re}, cols {cs}:{ce}  ({ROI_SIZE}×{ROI_SIZE} px, 再構成画像座標)")
+print(f"  ROI: rows {rs}:{re}, cols {cs}:{ce}  ({ROI_SIZE}x{ROI_SIZE} px, reconstructed image coords)")
 
 
 def _load_holo(fname: str) -> np.ndarray:
-    """ホログラム 1 枚を読み込み float64 で返す（CROP_REGION を適用）"""
+    """Load one hologram as float64 (with CROP_REGION applied)"""
     raw = tifffile.imread(os.path.join(DATA_DIR, fname)).astype(np.float64)
     if CROP_REGION is not None:
         r0, r1, c0, c1 = CROP_REGION
@@ -158,7 +158,7 @@ def _load_holo(fname: str) -> np.ndarray:
 
 
 # ============================================================
-# ペアごとのループ
+# Per-pair loop
 # ============================================================
 
 # %%
@@ -168,7 +168,7 @@ noise_rad_vals  = []   # [rad/frame]
 noise_nm_vals   = []   # [nm OPD/frame]
 diff_roi_stack  = []   # [pair, y, x] : temporal-axis diagnostics
 
-# 理論値は最初の有効ペアから 1 回だけ計算する
+# Theoretical values are computed only once from the first valid pair
 sigma_shot_mrad   = None
 sigma_sensor_mrad = None
 sigma_total_mrad  = None
@@ -180,7 +180,7 @@ for _i in selected_pair_idx:
     holo0 = _load_holo(_files[2 * _i    ])
     holo1 = _load_holo(_files[2 * _i + 1])
 
-    # 位相再構成
+    # Phase reconstruction
     field0 = get_field(holo0, params)
     field1 = get_field(holo1, params)
 
@@ -189,7 +189,7 @@ for _i in selected_pair_idx:
 
     diff = phase1 - phase0
 
-    # ROI 内の std / √2 = per-frame noise
+    # std within ROI / sqrt(2) = per-frame noise
     diff_roi = diff[rs:re, cs:ce]
     noise_rad = float(np.std(diff_roi) / np.sqrt(2))
     noise_nm  = noise_rad * WAVELENGTH / (2 * np.pi) * 1e9
@@ -199,16 +199,16 @@ for _i in selected_pair_idx:
     noise_nm_vals.append(noise_nm)
     diff_roi_stack.append(diff_roi.copy())
 
-    # 理論値計算（最初のペアのみ）
+    # Theoretical value calculation (first pair only)
     if sigma_shot_mrad is None:
         dc, ac = _get_dc_ac(holo0, params)
         vis    = _get_visibility(dc, ac)
         vis_roi = vis[rs:re, cs:ce]
         dc_abs_roi = np.abs(dc)[rs:re, cs:ce]
 
-        # σ_shot (eq. A.9): 実測ホログラムから得た visibility/DC を
-        # 実測ノイズと同じ ROI (80x80) で評価する
-        N_electron_map = dc_abs_roi * SENSOR_CONVERSION_GAIN  # ADU → e⁻
+        # sigma_shot (eq. A.9): evaluate visibility/DC from measured hologram
+        # in the same ROI (80x80) as the measured noise
+        N_electron_map = dc_abs_roi * SENSOR_CONVERSION_GAIN  # ADU -> e-
         sigma_shot_map = _get_phase_noise(
             vis_roi, aperturesize, N_electron_map, img_shape
         )
@@ -246,7 +246,7 @@ noise_mrad_vals = noise_rad_vals * 1e3
 diff_roi_stack = np.stack(diff_roi_stack, axis=0)
 
 # ============================================================
-# 集計・stdout 出力
+# Summary and stdout output
 # ============================================================
 
 # %%
@@ -256,33 +256,33 @@ noise_std_mrad  = float(noise_mrad_vals.std())
 noise_mean_nm   = float(noise_nm_vals.mean())
 noise_std_nm    = float(noise_nm_vals.std())
 
-# 追加診断:
-# 1) pixel-wise temporal std: 各画素で pair 軸 std を計算し、ROI 内平均
-# 2) ROI-mean temporal std: 各 pair の ROI 平均値の時系列 std
+# Additional diagnostics:
+# 1) pixel-wise temporal std: compute std along pair axis per pixel, then average within ROI
+# 2) ROI-mean temporal std: std of the time series of ROI-averaged values across pairs
 temporal_std_map_rad = np.std(diff_roi_stack, axis=0) / np.sqrt(2)
 temporal_std_map_mean_mrad = float(np.mean(temporal_std_map_rad) * 1e3)
 temporal_std_map_std_mrad  = float(np.std(temporal_std_map_rad) * 1e3)
 roi_mean_series_rad = np.mean(diff_roi_stack, axis=(1, 2))
 roi_mean_temporal_std_mrad = float(np.std(roi_mean_series_rad) / np.sqrt(2) * 1e3)
 
-print("\n--- 実測値の定義 ---")
+print("\n--- Measured value definition ---")
 print(
     "  main metric = mean_i[ std_xy( phi(2i+1)-phi(2i) ) / sqrt(2) ] "
-    "(ROI内・空間stdをペア平均)"
+    "(spatial std within ROI, averaged over pairs)"
 )
-print("\n--- 実測値 ---")
+print("\n--- Measured values ---")
 print(f"  main noise [mrad/frame]: {noise_mean_mrad:.2f} ± {noise_std_mrad:.2f}")
 print(f"  main noise [nm OPD/frame]: {noise_mean_nm:.3f} ± {noise_std_nm:.3f}")
 print(
     f"  temporal pixel std mean [mrad/frame]: {temporal_std_map_mean_mrad:.2f} "
-    f"(ROI内pixel-wise temporal stdの平均, spatial std={temporal_std_map_std_mrad:.2f})"
+    f"(mean of pixel-wise temporal std within ROI, spatial std={temporal_std_map_std_mrad:.2f})"
 )
 print(
     f"  ROI-mean temporal std [mrad/frame]: {roi_mean_temporal_std_mrad:.3f} "
-    f"(ROI平均位相差の時間ばらつき)"
+    f"(temporal variability of ROI-averaged phase difference)"
 )
 
-print("\n--- 理論限界（最初のペアから算出）---")
+print("\n--- Theoretical limits (computed from first pair) ---")
 print(f"  σ_shot   : {sigma_shot_mrad:.3f} mrad  /  {sigma_shot_nm:.4f} nm  (eq. A.9)")
 if sigma_s_adu is not None:
     print(f"  σ_sensor : {sigma_sensor_mrad:.3f} mrad  /  {sigma_sensor_nm:.4f} nm  (eq. A.12)")
@@ -292,19 +292,19 @@ print(f"  σ_total  : {sigma_total_mrad:.3f} mrad  /  {sigma_total_nm:.4f} nm  (
 
 ratio_shot  = noise_mean_mrad / sigma_shot_mrad  if sigma_shot_mrad  > 0 else np.nan
 ratio_total = noise_mean_mrad / sigma_total_mrad if sigma_total_mrad > 0 else np.nan
-print(f"\n  実測 / σ_shot  = {ratio_shot:.2f}x")
-print(f"  実測 / σ_total = {ratio_total:.2f}x")
+print(f"\n  measured / sigma_shot  = {ratio_shot:.2f}x")
+print(f"  measured / sigma_total = {ratio_total:.2f}x")
 
 # ============================================================
-# プロット
+# Plotting
 # ============================================================
 
 # %%
-# --- 図1: combined (mrad + nm) ---
+# --- Fig 1: combined (mrad + nm) ---
 
 fig_combined, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
 
-# 上段: mrad
+# Upper panel: mrad
 axes[0].plot(time_min, noise_mrad_vals, lw=0.8, color="steelblue", label="measured")
 axes[0].axhline(noise_mean_mrad, color="red",   ls="--",
                 label=f"mean = {noise_mean_mrad:.2f} mrad")
@@ -321,7 +321,7 @@ axes[0].set_title(
 axes[0].legend(fontsize=8)
 axes[0].grid(True, alpha=0.4)
 
-# 下段: nm OPD
+# Lower panel: nm OPD
 axes[1].plot(time_min, noise_nm_vals, lw=0.8, color="darkorange", label="measured")
 axes[1].axhline(noise_mean_nm, color="red",   ls="--",
                 label=f"mean = {noise_mean_nm:.3f} nm")
@@ -388,7 +388,7 @@ save_figure(
     fig_combined,
     params=_params_common,
     description=(
-        f"位相再構成ノイズ評価（combined）: "
+        f"Phase reconstruction noise evaluation (combined): "
         f"measured={noise_mean_mrad:.2f}±{noise_std_mrad:.2f} mrad "
         f"({noise_mean_nm:.3f}±{noise_std_nm:.3f} nm), "
         f"σ_shot={sigma_shot_mrad:.2f} mrad, σ_total={sigma_total_mrad:.2f} mrad, "
@@ -399,7 +399,7 @@ save_figure(
 )
 
 # %%
-# --- 図2: mrad のみ ---
+# --- Fig 2: mrad only ---
 
 fig_mrad, ax_mrad = plt.subplots(figsize=(10, 4))
 ax_mrad.plot(time_min, noise_mrad_vals, lw=0.8, color="steelblue", label="measured")
@@ -427,7 +427,7 @@ save_figure(
     fig_mrad,
     params={**_params_common, "panel": "mrad_only"},
     description=(
-        f"位相再構成ノイズ（mrad only）: "
+        f"Phase reconstruction noise (mrad only): "
         f"measured={noise_mean_mrad:.2f} mrad, σ_shot={sigma_shot_mrad:.2f} mrad, "
         f"measured/shot={ratio_shot:.2f}x"
     ),
@@ -435,7 +435,7 @@ save_figure(
 )
 
 # %%
-# --- 図3: nm OPD のみ ---
+# --- Fig 3: nm OPD only ---
 
 fig_nm, ax_nm = plt.subplots(figsize=(10, 4))
 ax_nm.plot(time_min, noise_nm_vals, lw=0.8, color="darkorange", label="measured")
@@ -463,13 +463,13 @@ save_figure(
     fig_nm,
     params={**_params_common, "panel": "nm_only"},
     description=(
-        f"位相再構成ノイズ（nm OPD only）: "
+        f"Phase reconstruction noise (nm OPD only): "
         f"measured={noise_mean_nm:.3f} nm, σ_shot={sigma_shot_nm:.4f} nm, "
         f"measured/shot={ratio_shot:.2f}x"
     ),
     data=_data_common,
 )
 
-print(f"\n完了: {n_pairs} ペア測定 (pair {PAIR_START_1BASED}-{PAIR_END_1BASED})")
+print(f"\nDone: {n_pairs} pairs measured (pair {PAIR_START_1BASED}-{PAIR_END_1BASED})")
 
 # %%

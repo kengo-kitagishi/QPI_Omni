@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-フィルタリング済みデータの可視化を生成するスクリプト
+Script to generate visualizations of filtered data
 
-filtered_*px ディレクトリのdensity_tiffから可視化画像を生成
+Generates visualization images from density_tiff in filtered_*px directories
 """
 # %%
 import os
@@ -20,9 +20,9 @@ from tqdm import tqdm
 def create_visualization(zstack_file, phase_file, ri_file, concentration_file, 
                          roi_str, output_dir, pixel_size_um=0.348, 
                          wavelength_nm=663, n_medium=1.333):
-    """1つのROIの可視化を作成"""
+    """Create visualization for a single ROI"""
     
-    # データ読み込み
+    # Load data
     zstack_map = tifffile.imread(zstack_file).astype(np.float32)
     phase_img = tifffile.imread(phase_file).astype(np.float32)
     ri_map = tifffile.imread(ri_file).astype(np.float32)
@@ -34,15 +34,15 @@ def create_visualization(zstack_file, phase_file, ri_file, concentration_file,
         print(f"  Warning: No valid pixels in {roi_str}")
         return False
     
-    # フィルタリングされた領域（mask外）を明示的にクリア
-    # ri_mapは培地の屈折率に、concentration_mapは0に設定
+    # Explicitly clear filtered region (outside mask)
+    # Set ri_map to medium refractive index, concentration_map to 0
     ri_map[~mask] = n_medium
     concentration_map[~mask] = 0.0
     
-    # 厚みをµm単位に変換
+    # Convert thickness to µm units
     thickness_um = zstack_map * pixel_size_um
     
-    # 統計計算
+    # Compute statistics
     stats = {
         'volume_um3': np.sum(thickness_um[mask]) * (pixel_size_um ** 2),
         'ri_mean': np.mean(ri_map[mask]),
@@ -52,14 +52,14 @@ def create_visualization(zstack_file, phase_file, ri_file, concentration_file,
         'zstack_max': np.max(zstack_map),
     }
     
-    # フレーム番号を抽出
+    # Extract frame number
     frame_number = roi_str.split('_Frame_')[-1] if '_Frame_' in roi_str else 'Unknown'
     
-    # プロット作成
+    # Create plot
     fig = plt.figure(figsize=(26, 12))
     gs = fig.add_gridspec(2, 4, hspace=0.3, wspace=0.3)
     
-    # 1. 元画像 + ROI + マスク輪郭線
+    # 1. Original image + ROI + mask contour
     ax1 = fig.add_subplot(gs[0, 0])
     im1 = ax1.imshow(phase_img, cmap='gray', vmin=-0.5, vmax=2.5)
     ax1.set_title(f'Original Image + Mask Contour\nFrame {frame_number}', 
@@ -68,13 +68,13 @@ def create_visualization(zstack_file, phase_file, ri_file, concentration_file,
     ax1.set_ylabel('Y (pixels)')
     plt.colorbar(im1, ax=ax1, label='Intensity')
     
-    # マスク輪郭線を描画
+    # Draw mask contour
     binary_mask = (zstack_map > 0).astype(np.uint8)
     contours = measure.find_contours(binary_mask, 0.5)
     for contour in contours:
         ax1.plot(contour[:, 1], contour[:, 0], 'c-', linewidth=2, alpha=0.8)
     
-    # 2. Z-stackマップ（厚みマップ）
+    # 2. Z-stack map (thickness map)
     ax2 = fig.add_subplot(gs[0, 1])
     im2 = ax2.imshow(thickness_um, cmap='viridis', vmin=0, vmax=12)
     ax2.set_title(f'Thickness Map\n(max={stats["zstack_max"]*pixel_size_um:.2f} µm)', 
@@ -83,7 +83,7 @@ def create_visualization(zstack_file, phase_file, ri_file, concentration_file,
     ax2.set_ylabel('Y (pixels)')
     plt.colorbar(im2, ax=ax2, label='Thickness (µm)')
     
-    # 3. 屈折率マップ（RI map）
+    # 3. Refractive index map (RI map)
     ax3 = fig.add_subplot(gs[0, 2])
     im3 = ax3.imshow(ri_map, cmap='jet', vmin=1.3, vmax=1.39)
     ax3.set_title(f'Refractive Index Map\n(mean={stats["ri_mean"]:.6f})', 
@@ -91,10 +91,10 @@ def create_visualization(zstack_file, phase_file, ri_file, concentration_file,
     ax3.set_xlabel('X (pixels)')
     ax3.set_ylabel('Y (pixels)')
     cbar3 = plt.colorbar(im3, ax=ax3, label='RI')
-    # 培地RIを示す線を追加
+    # Add line indicating medium RI
     cbar3.ax.axhline(y=n_medium, color='cyan', linestyle='--', linewidth=2, alpha=0.8)
     
-    # 4. 質量濃度マップ（mg/ml）
+    # 4. Protein concentration map (mg/ml)
     ax4 = fig.add_subplot(gs[0, 3])
     im4 = ax4.imshow(concentration_map, cmap='hot', vmin=0, vmax=450)
     ax4.set_title(f'Protein Concentration Map\n(mean={stats["concentration_mean"]:.1f} mg/ml)', 
@@ -103,7 +103,7 @@ def create_visualization(zstack_file, phase_file, ri_file, concentration_file,
     ax4.set_ylabel('Y (pixels)')
     plt.colorbar(im4, ax=ax4, label='Concentration (mg/ml)')
     
-    # 5. ΔRI マップ（培地との差）
+    # 5. Delta RI map (difference from medium)
     ax5 = fig.add_subplot(gs[1, 0])
     delta_ri = ri_map - n_medium
     im5 = ax5.imshow(delta_ri, cmap='plasma', vmin=-0.1, vmax=0.3)
@@ -120,10 +120,10 @@ def create_visualization(zstack_file, phase_file, ri_file, concentration_file,
         ri_masked = ri_map[mask]
         ax6.scatter(thickness_masked, ri_masked, alpha=0.3, s=10, c='blue')
         
-        # 培地RIの参照線
+        # Medium RI reference line
         ax6.axhline(y=n_medium, color='cyan', linestyle='--', linewidth=2,
                    label=f'Medium RI: {n_medium:.3f}')
-        # 平均RIの参照線
+        # Mean RI reference line
         ax6.axhline(y=stats['ri_mean'], color='red', linestyle='--', linewidth=2,
                    label=f'Mean RI: {stats["ri_mean"]:.6f}')
         
@@ -135,7 +135,7 @@ def create_visualization(zstack_file, phase_file, ri_file, concentration_file,
         ax6.legend()
         ax6.grid(True, alpha=0.3)
     
-    # 7. RI分布
+    # 7. RI distribution
     ax7 = fig.add_subplot(gs[1, 2])
     if np.any(mask):
         ri_masked = ri_map[mask].flatten()
@@ -151,7 +151,7 @@ def create_visualization(zstack_file, phase_file, ri_file, concentration_file,
         ax7.legend()
         ax7.grid(True, alpha=0.3)
     
-    # 8. 質量濃度分布
+    # 8. Protein concentration distribution
     ax8 = fig.add_subplot(gs[1, 3])
     if np.any(mask):
         concentration_masked = concentration_map[mask].flatten()
@@ -176,21 +176,21 @@ def create_visualization(zstack_file, phase_file, ri_file, concentration_file,
 
 def process_filtered_directory(filtered_dir, pixel_size_um=0.348, wavelength_nm=663, 
                                n_medium=1.333, alpha_ri=0.00018):
-    """1つのフィルタリング済みディレクトリを処理"""
+    """Process a single filtered directory"""
     dirname = os.path.basename(filtered_dir)
     print(f"\nProcessing: {dirname}")
     
-    # density_tiffディレクトリ
+    # density_tiff directory
     density_dir = os.path.join(filtered_dir, "density_tiff")
     if not os.path.exists(density_dir):
         print(f"  Error: density_tiff directory not found")
         return 0
     
-    # visualizationsディレクトリを作成
+    # Create visualizations directory
     viz_dir = os.path.join(filtered_dir, "visualizations")
     os.makedirs(viz_dir, exist_ok=True)
     
-    # z-stackファイルを検索
+    # Search for z-stack files
     zstack_files = glob.glob(os.path.join(density_dir, "*_zstack.tif"))
     
     if len(zstack_files) == 0:
@@ -204,12 +204,12 @@ def process_filtered_directory(filtered_dir, pixel_size_um=0.348, wavelength_nm=
     for zstack_file in tqdm(zstack_files, desc="  Creating visualizations"):
         roi_str = os.path.basename(zstack_file).replace('_zstack.tif', '')
         
-        # 対応するファイルを探す
+        # Find corresponding files
         phase_file = zstack_file.replace('_zstack.tif', '_phase.tif')
         ri_file = zstack_file.replace('_zstack.tif', '_ri.tif')
         concentration_file = zstack_file.replace('_zstack.tif', '_concentration.tif')
         
-        # ファイルの存在確認
+        # Check file existence
         if not all([os.path.exists(f) for f in [phase_file, ri_file, concentration_file]]):
             print(f"    Warning: Missing files for {roi_str}")
             continue
@@ -234,45 +234,45 @@ def process_filtered_directory(filtered_dir, pixel_size_um=0.348, wavelength_nm=
     return success_count
 
 def main():
-    """メイン実行"""
+    """Main execution"""
     parser = argparse.ArgumentParser(
-        description='フィルタリング済みデータの可視化を生成',
+        description='Generate visualizations of filtered data',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-使用例:
-  # 全てのフィルタリング済みデータの可視化を生成
+Examples:
+  # Generate visualizations for all filtered data
   python 31_create_filtered_visualizations.py
-  
-  # 特定のフィルタ閾値のみ
+
+  # Only a specific filter threshold
   python 31_create_filtered_visualizations.py --filter-pattern "*filtered_1.0px"
-  
-  # 基準ディレクトリを指定
+
+  # Specify base directory
   python 31_create_filtered_visualizations.py -d G:\\test_dens_est
-  
-  # パラメータを指定
+
+  # Specify parameters
   python 31_create_filtered_visualizations.py --pixel-size 0.348 --wavelength 663
-  
-  # 確認なしで実行
+
+  # Run without confirmation
   python 31_create_filtered_visualizations.py -y
 """
     )
     
     parser.add_argument('-d', '--base-dir', type=str, default='.',
-                        help='基準ディレクトリ（デフォルト: カレントディレクトリ）')
+                        help='Base directory (default: current directory)')
     parser.add_argument('--filter-pattern', type=str, default='*filtered_*',
-                        help='フィルタディレクトリパターン（デフォルト: *filtered_*）')
+                        help='Filter directory pattern (default: *filtered_*)')
     parser.add_argument('--pixel-size', type=float, default=0.348,
-                        help='ピクセルサイズ（µm、デフォルト: 0.348）')
+                        help='Pixel size in µm (default: 0.348)')
     parser.add_argument('--wavelength', type=float, default=663,
-                        help='波長（nm、デフォルト: 663）')
+                        help='Wavelength in nm (default: 663)')
     parser.add_argument('--n-medium', type=float, default=1.333,
-                        help='培地の屈折率（デフォルト: 1.333）')
+                        help='Medium refractive index (default: 1.333)')
     parser.add_argument('--alpha-ri', type=float, default=0.00018,
-                        help='比屈折率増分（ml/mg、デフォルト: 0.00018）')
+                        help='Specific refractive index increment in ml/mg (default: 0.00018)')
     parser.add_argument('-y', '--yes', action='store_true',
-                        help='確認なしで実行')
+                        help='Run without confirmation')
     
-    # Jupyter環境での実行に対応
+    # Support execution in Jupyter environment
     if 'ipykernel' in sys.modules:
         filtered_argv = [arg for arg in sys.argv if not arg.startswith('--f=') and not arg.startswith('-f=')]
         args = parser.parse_args(filtered_argv[1:] if len(filtered_argv) > 1 else [])
@@ -290,7 +290,7 @@ def main():
     print(f"  Medium RI: {args.n_medium}")
     print(f"  Alpha RI: {args.alpha_ri} ml/mg")
     
-    # フィルタリング済みディレクトリを検索
+    # Search for filtered directories
     pattern = os.path.join(args.base_dir, f'timeseries_density_output_{args.filter_pattern}')
     filtered_dirs = glob.glob(pattern)
     filtered_dirs = [d for d in filtered_dirs if os.path.isdir(d)]
@@ -302,20 +302,20 @@ def main():
         print(f"Search pattern: {pattern}")
         return
     
-    # リスト表示
+    # Display list
     print("\nDirectories to process:")
     for i, d in enumerate(filtered_dirs, 1):
         dirname = os.path.basename(d)
         print(f"  {i}. {dirname}")
     
-    # 確認
+    # Confirmation
     if not args.yes:
         response = input(f"\nCreate visualizations for all {len(filtered_dirs)} directories? [y/N]: ")
         if response.lower() != 'y':
             print("Cancelled")
             return
     
-    # 各ディレクトリを処理
+    # Process each directory
     total_viz = 0
     
     for filtered_dir in filtered_dirs:

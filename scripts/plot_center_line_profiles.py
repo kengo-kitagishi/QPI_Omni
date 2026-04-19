@@ -1,15 +1,15 @@
 """
 plot_center_line_profiles.py
 ----------------------------
-スタックされたTIFFの各フレームについて、真ん中の横線（端から端まで）に沿った
-ピクセル値をプロットし、データをCSVで保存する。
+For each frame of a stacked TIFF, plot pixel values along the center
+horizontal line (edge to edge) and save data to CSV.
 
-使い方:
+Usage:
   python plot_center_line_profiles.py
 
-出力:
-  - 図: results/figures/ に保存
-  - データ: results/center_line_profiles.csv
+Output:
+  - Figures: saved to results/figures/
+  - Data: results/center_line_profiles.csv
 """
 import sys
 from pathlib import Path
@@ -28,21 +28,21 @@ TIFF_PATH = r"D:\AquisitionData\Kitagishi\260310\timelapse_11day_exp200ms_1pos_E
 N_PROFILES = 10
 FRAME_OFFSET = 12
 
-# (x範囲, y範囲, 出力サフィックス) のリスト。None は全体
-# 全体:-5~1, x150_250:-1~1, x320_420:-5~-3
+# List of (x_range, y_range, output_suffix). None means full range
+# full:-5~1, x150_250:-1~1, x320_420:-5~-3
 PLOT_REGIONS = [
-    (None, (-5.0, 1.0), "full"),       # 全体
+    (None, (-5.0, 1.0), "full"),       # Full range
     ((150, 250), (-1.0, 1.0), "x150_250"),
     ((320, 420), (-5.0, -3.0), "x320_420"),
 ]
-OFFSETS_TO_RUN = [0, 10, 20]  # 3セット
+OFFSETS_TO_RUN = [0, 10, 20]  # 3 sets
 
 
 def load_tiff_stack(path: str) -> np.ndarray:
-    """TIFFスタックを読み込み (T, H, W) または (H, W) を返す"""
+    """Load a TIFF stack and return (T, H, W) or (H, W)"""
     img = Image.open(path)
     frames = []
-    for i in range(1000):  # 十分な枚数
+    for i in range(1000):  # Sufficient number of frames
         try:
             img.seek(i)
             frames.append(np.array(img))
@@ -54,10 +54,10 @@ def load_tiff_stack(path: str) -> np.ndarray:
 
 
 def pick_frame_indices(n_total: int, n_pick: int, offset: int = 0) -> np.ndarray:
-    """スタック全体から均等に n_pick 枚を選ぶ。offset で選択範囲をずらす"""
+    """Evenly pick n_pick frames from the entire stack. offset shifts the selection range"""
     if n_total <= n_pick:
         return np.arange(n_total)
-    # offset でずらした範囲内で均等に選択
+    # Evenly select within the range shifted by offset
     start = min(offset, n_total - n_pick)
     end = n_total - 1
     indices = np.linspace(start, end, n_pick, dtype=int)

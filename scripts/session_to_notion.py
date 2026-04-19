@@ -2,14 +2,14 @@
 """
 session_to_notion.py
 
-Claude Code のセッション jsonl を解析して、Notion に作業ログを投稿する。
+Parse Claude Code session jsonl and post work logs to Notion.
 
-使い方:
-  python3 session_to_notion.py                # 最新セッションを自動選択
-  python3 session_to_notion.py /path/to.jsonl # 指定したセッション
+Usage:
+  python3 session_to_notion.py                # Auto-select latest session
+  python3 session_to_notion.py /path/to.jsonl # Specified session
 
-出力:
-  QPI Research Notes データベースに作業ログページを作成する。
+Output:
+  Creates a work log page in the QPI Research Notes database.
 """
 
 import json
@@ -21,7 +21,7 @@ import urllib.request
 import urllib.error
 
 # ──────────────────────────────────────────
-# 設定
+# Configuration
 # ──────────────────────────────────────────
 
 NOTION_TOKEN = os.environ.get("NOTION_TOKEN", "")
@@ -31,7 +31,7 @@ DATABASE_ID = "312eda96-228e-8165-9726-cd75b221357a"
 SESSION_DIR = Path.home() / ".claude/projects/-Users-kitak-QPI-Omni"
 
 # ──────────────────────────────────────────
-# jsonl パース
+# jsonl parsing
 # ──────────────────────────────────────────
 
 def load_entries(path: Path) -> list:
@@ -49,7 +49,7 @@ def load_entries(path: Path) -> list:
 
 
 def extract_user_messages(entries: list) -> list[dict]:
-    """ユーザーのテキストメッセージを時系列で抽出する。"""
+    """Extract user text messages in chronological order."""
     msgs = []
     for e in entries:
         if e.get("type") != "user":
@@ -58,26 +58,26 @@ def extract_user_messages(entries: list) -> list[dict]:
         content = msg.get("content", "")
         ts = e.get("timestamp", "")
 
-        # content が文字列の場合 = ユーザーの発言
+        # content is string = user message
         if isinstance(content, str) and content.strip():
-            # system-reminderタグを除去
+            # Strip system-reminder tags
             text = _strip_system_tags(content)
             if text.strip():
                 msgs.append({"ts": ts, "text": text.strip()})
 
-        # content がリストの場合: text ブロックだけ取り出す
+        # content is list: extract text blocks only
         elif isinstance(content, list):
             for block in content:
                 if isinstance(block, dict) and block.get("type") == "text":
                     text = _strip_system_tags(block["text"])
                     if text.strip():
                         msgs.append({"ts": ts, "text": text.strip()})
-                        break  # 1エントリ1メッセージ
+                        break  # 1 entry = 1 message
     return msgs
 
 
 def _strip_system_tags(text: str) -> str:
-    """<system-reminder>...</system-reminder> などのタグを除去する。"""
+    """Remove tags such as <system-reminder>...</system-reminder>."""
     import re
     text = re.sub(r"<system-reminder>.*?</system-reminder>", "", text, flags=re.DOTALL)
     text = re.sub(r"<[a-zA-Z-]+>.*?</[a-zA-Z-]+>", "", text, flags=re.DOTALL)
@@ -85,7 +85,7 @@ def _strip_system_tags(text: str) -> str:
 
 
 def extract_tool_uses(entries: list) -> list[dict]:
-    """アシスタントが実行したツール呼び出しを時系列で抽出する。"""
+    """Extract tool calls made by the assistant in chronological order."""
     uses = []
     for e in entries:
         if e.get("type") != "assistant":
@@ -107,7 +107,7 @@ def extract_tool_uses(entries: list) -> list[dict]:
 
 
 def extract_edited_files(tool_uses: list) -> list[str]:
-    """Edit / Write されたファイルパスの一覧を返す（重複除去）。"""
+    """Return list of file paths that were Edit/Write'd (deduplicated)."""
     files = []
     seen = set()
     for tu in tool_uses:
@@ -120,7 +120,7 @@ def extract_edited_files(tool_uses: list) -> list[str]:
 
 
 def extract_bash_commands(tool_uses: list) -> list[dict]:
-    """Bash コマンドだけ抽出する。"""
+    """Extract only Bash commands."""
     cmds = []
     for tu in tool_uses:
         if tu["name"] == "Bash":
@@ -132,21 +132,21 @@ def extract_bash_commands(tool_uses: list) -> list[dict]:
 
 
 def guess_title_and_description(user_msgs: list[dict]) -> tuple[str, str]:
-    """最初のユーザーメッセージからタイトルと説明を推定する。"""
+    """Infer title and description from the first user message."""
     if not user_msgs:
-        return "[作業ログ] セッション", ""
+        return "[Work log] Session", ""
     first = user_msgs[0]["text"]
-    # 50文字でトリム
+    # Trim to 50 chars
     desc = first[:200]
     title_raw = first[:50].replace("\n", " ")
-    title = f"[作業ログ] {title_raw}"
+    title = f"[Work log] {title_raw}"
     if len(first) > 50:
         title += "…"
     return title, desc
 
 
 def get_session_date(entries: list) -> str:
-    """セッションの最初のタイムスタンプから日付を返す。"""
+    """Return the date from the first timestamp in the session."""
     for e in entries:
         ts = e.get("timestamp", "")
         if ts:
@@ -160,7 +160,7 @@ def get_session_date(entries: list) -> str:
 
 
 # ──────────────────────────────────────────
-# Notion API ヘルパー
+# Notion API helpers
 # ──────────────────────────────────────────
 
 def notion_request(method: str, endpoint: str, body: dict = None) -> dict:
@@ -177,12 +177,12 @@ def notion_request(method: str, endpoint: str, body: dict = None) -> dict:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         err = e.read().decode()
-        print(f"Notion API エラー {e.code}: {err}", file=sys.stderr)
+        print(f"Notion API error {e.code}: {err}", file=sys.stderr)
         raise
 
 
 def _rich_text(content: str) -> list:
-    # Notion の rich_text は 2000文字制限
+    # Notion rich_text has a 2000-character limit
     chunks = []
     for i in range(0, len(content), 2000):
         chunks.append({"type": "text", "text": {"content": content[i:i+2000]}})
@@ -229,7 +229,7 @@ def divider() -> dict:
 
 
 # ──────────────────────────────────────────
-# Notion ページ作成
+# Notion page creation
 # ──────────────────────────────────────────
 
 def build_page_blocks(
@@ -240,10 +240,10 @@ def build_page_blocks(
 ) -> list[dict]:
     blocks = []
 
-    # ── 何をしたかった ──
-    blocks.append(heading2("何をしたかった"))
+    # ── What was intended ──
+    blocks.append(heading2("What was intended"))
     if user_msgs:
-        # 最初の5メッセージを並べる
+        # Show the first 5 messages
         for m in user_msgs[:5]:
             text = m["text"]
             ts_str = ""
@@ -257,22 +257,22 @@ def build_page_blocks(
                     pass
             blocks.append(bullet(f"{ts_str}{text[:300]}"))
     else:
-        blocks.append(paragraph("（ユーザーメッセージなし）"))
+        blocks.append(paragraph("(No user messages)"))
 
     blocks.append(divider())
 
-    # ── 作成・変更したファイル ──
-    blocks.append(heading2("作成・変更したファイル"))
+    # ── Created/modified files ──
+    blocks.append(heading2("Created/modified files"))
     if edited_files:
         for fp in edited_files:
             blocks.append(bullet(fp))
     else:
-        blocks.append(paragraph("（なし）"))
+        blocks.append(paragraph("(None)"))
 
     blocks.append(divider())
 
-    # ── 実行コマンド ──
-    blocks.append(heading2("実行コマンド（Bash）"))
+    # ── Executed commands ──
+    blocks.append(heading2("Executed commands (Bash)"))
     if bash_cmds:
         for cmd_info in bash_cmds[:30]:
             desc = cmd_info.get("desc", "")
@@ -280,25 +280,25 @@ def build_page_blocks(
             label = f"# {desc}\n{cmd}" if desc else cmd
             blocks.append(code_block(label[:2000], "bash"))
     else:
-        blocks.append(paragraph("（Bash コマンドなし）"))
+        blocks.append(paragraph("(No Bash commands)"))
 
     blocks.append(divider())
 
-    # ── ツール使用サマリ ──
-    blocks.append(heading2("ツール使用サマリ"))
+    # ── Tool usage summary ──
+    blocks.append(heading2("Tool usage summary"))
     tool_summary: dict[str, int] = {}
     for tu in tool_uses:
         tool_summary[tu["name"]] = tool_summary.get(tu["name"], 0) + 1
     if tool_summary:
-        lines = [f"{name}: {count}回" for name, count in sorted(tool_summary.items(), key=lambda x: -x[1])]
+        lines = [f"{name}: {count}x" for name, count in sorted(tool_summary.items(), key=lambda x: -x[1])]
         blocks.append(paragraph(" / ".join(lines)))
     else:
-        blocks.append(paragraph("（なし）"))
+        blocks.append(paragraph("(None)"))
 
     blocks.append(divider())
 
-    # ── ユーザーメッセージ全文（後半含む）──
-    blocks.append(heading2("会話の流れ（ユーザー発言）"))
+    # ── Full user messages (including later ones) ──
+    blocks.append(heading2("Conversation flow (user messages)"))
     for m in user_msgs:
         text = m["text"]
         ts_str = ""
@@ -314,9 +314,9 @@ def build_page_blocks(
 
     blocks.append(divider())
 
-    # ── フィードバック ──
-    blocks.append(heading2("フィードバック"))
-    blocks.append(paragraph("（後で自分で書く）"))
+    # ── Feedback ──
+    blocks.append(heading2("Feedback"))
+    blocks.append(paragraph("(To be filled in later)"))
 
     return blocks
 
@@ -339,7 +339,7 @@ def create_notion_page(title: str, date_str: str, description: str, blocks: list
                 "select": {"name": "作業ログ"}
             },
         },
-        # Notion API は 1回で最大 100ブロックまで
+        # Notion API allows up to 100 blocks per request
         "children": blocks[:100],
     }
     if script:
@@ -350,20 +350,20 @@ def create_notion_page(title: str, date_str: str, description: str, blocks: list
 
 
 def append_blocks(page_id: str, blocks: list[dict]):
-    """100ブロックを超える場合は分割して追加する。"""
+    """Append blocks in chunks of 100 when exceeding the limit."""
     for i in range(0, len(blocks), 100):
         chunk = blocks[i:i+100]
         notion_request("PATCH", f"blocks/{page_id}/children", {"children": chunk})
 
 
 # ──────────────────────────────────────────
-# メイン
+# Main
 # ──────────────────────────────────────────
 
 def find_latest_session() -> Path:
     jsonl_files = sorted(SESSION_DIR.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not jsonl_files:
-        raise FileNotFoundError(f"セッションファイルが見つかりません: {SESSION_DIR}")
+        raise FileNotFoundError(f"No session files found: {SESSION_DIR}")
     return jsonl_files[0]
 
 
@@ -371,42 +371,42 @@ def run(jsonl_path: Path | None = None):
     if jsonl_path is None:
         jsonl_path = find_latest_session()
 
-    print(f"セッションファイル: {jsonl_path}")
+    print(f"Session file: {jsonl_path}")
     entries = load_entries(jsonl_path)
-    print(f"  エントリ数: {len(entries)}")
+    print(f"  Entries: {len(entries)}")
 
     user_msgs = extract_user_messages(entries)
     tool_uses = extract_tool_uses(entries)
     bash_cmds = extract_bash_commands(tool_uses)
     edited_files = extract_edited_files(tool_uses)
 
-    print(f"  ユーザーメッセージ: {len(user_msgs)}件")
-    print(f"  ツール呼び出し: {len(tool_uses)}件 (Bash: {len(bash_cmds)}件)")
-    print(f"  編集ファイル: {len(edited_files)}件")
+    print(f"  User messages: {len(user_msgs)}")
+    print(f"  Tool calls: {len(tool_uses)} (Bash: {len(bash_cmds)})")
+    print(f"  Edited files: {len(edited_files)}")
 
     date_str = get_session_date(entries)
     title, desc = guess_title_and_description(user_msgs)
 
-    # スクリプト名を編集ファイルから推定
+    # Infer script name from edited files
     script_str = ", ".join(
         Path(fp).name for fp in edited_files if fp.endswith(".py")
     )
 
-    print(f"\nNotionページ作成: {title}")
-    print(f"  日付: {date_str}")
+    print(f"\nCreating Notion page: {title}")
+    print(f"  Date: {date_str}")
 
     blocks = build_page_blocks(user_msgs, tool_uses, bash_cmds, edited_files)
 
-    # 最初の100ブロックを本文として作成
+    # Create page with the first 100 blocks as body
     result = create_notion_page(title, date_str, desc, blocks[:100], script=script_str)
     page_id = result["id"]
     page_url = result.get("url", f"https://notion.so/{page_id.replace('-', '')}")
 
-    # 残りのブロックを追加
+    # Append remaining blocks
     if len(blocks) > 100:
         append_blocks(page_id, blocks[100:])
 
-    print(f"\n完了: {page_url}")
+    print(f"\nDone: {page_url}")
     return page_url
 
 

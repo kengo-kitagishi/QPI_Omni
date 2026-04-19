@@ -5,44 +5,44 @@ from cellpose_omni import io
 from cellpose_omni.models import CellposeModel
 import os, numpy as np, tifffile, traceback
 
-# ==== 設定（必要に応じて変更） ====
-# 入力ディレクトリ（推論対象画像）
+# ==== Settings (modify as needed) ====
+# Input directory (images for inference)
 indir = r"F:\260405\ph_260405\Pos2\output_phase\channels\crop_sub_rawraw\ch01"
-# 出力ディレクトリ（マスク等の保存先）
+# Output directory (where masks etc. are saved)
 outdir = os.path.join(indir, "inference_out")
 os.makedirs(outdir, exist_ok=True)
 
-# 学習済みモデルパス
+# Trained model path
 model_path = r"C:\Users\QPI\Desktop\train\omni_model\models\cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_2026_04_13_10_54_41.173761"
-# 推論設定（チューニング可能）
+# Inference settings (tunable)
 USE_GPU = True
 NCHAN = 1
 NCLASSES = 3
 
-# Omnipose eval のハイパラ（kNNエラー対策で緩めに）
+# Omnipose eval hyperparameters (relaxed to mitigate kNN errors)
 EVAL_PARAMS = dict(
     channels=None,
     channel_axis=None,
     diameter=30,
-    normalize=True,    # 学習時と同じ1st-99th percentile正規化
-    tile=False,        # タイル処理はしない（揺らぎ抑制）
+    normalize=True,    # Same 1st-99th percentile normalization as during training
+    tile=False,        # Disable tiling (to suppress fluctuation)
     net_avg=True,
     omni=True,
     verbose=False,
-    # 以下を調整して "点が少なすぎる" 問題を回避
-    flow_threshold=0.11,   # デフォルトより低めにして検出点を確保
-    mask_threshold=0,   # 低めでマスクを多めに拾う
-    min_size=10           # 小さなゴミは除去
+    # Adjust the following to avoid the "too few points" problem
+    flow_threshold=0.11,   # Lower than default to ensure enough detected points
+    mask_threshold=0,   # Lower to pick up more masks
+    min_size=10           # Remove small debris
 )
 
-# ==== ファイル取得（安全化） ====
+# ==== Get files (with safety handling) ====
 files = io.get_image_files(indir, mask_filter='_masks', look_one_level_down=False)
 
-# generator の可能性を潰す & 要素取り出し
+# Convert generator to list if needed & extract elements
 if not isinstance(files, (list, tuple)):
     files = list(files)
 
-# io.get_image_files が (path,) で返す可能性に対応（要素がタプルなら先頭を使う）
+# Handle case where io.get_image_files returns (path,) tuples (use first element)
 proc_files = []
 for f in files:
     if isinstance(f, (list, tuple)):
@@ -55,7 +55,7 @@ files = proc_files
 print(f"Found {len(files)} files for inference")
 assert files, "No images found."
 
-# ==== モデル読み込み ====
+# ==== Load model ====
 model = CellposeModel(gpu=USE_GPU, pretrained_model=model_path, omni=True, nchan=NCHAN, nclasses=NCLASSES, dim=2)
 
 skipped = 0
@@ -64,12 +64,12 @@ processed = 0
 
 for i, f in enumerate(files, 1):
     try:
-        # 画像読み込み（tifffileで堅牢に）
+        # Load image (robustly via tifffile)
         img = tifffile.imread(f)
     except Exception as e:
         print(f"[{i}/{len(files)}] {os.path.basename(f)}  ❌ failed to read: {e}")
         traceback.print_exc()
-        # 出力用に空マスクを残しておく（必要であれば削除）
+        # Leave an empty mask for output (remove if not needed)
         empty_mask = np.zeros((1 if img is None else img.shape[0], 1 if img is None else img.shape[1]), dtype=np.uint16)
         try:
             tifffile.imwrite(os.path.join(outdir, os.path.basename(f).replace(".tif", "_masks.tif")), empty_mask)
@@ -83,18 +83,18 @@ for i, f in enumerate(files, 1):
     try:
         masks, flows, _ = model.eval([img], **EVAL_PARAMS)
     except ValueError as e:
-        # ここで kNN 周り等の ValueError が出ることがある（点が少なすぎる等）
+        # ValueError can occur here from kNN etc. (too few points, etc.)
         print(f"  ⚠ Skipping due to ValueError: {e}")
-        # 空マスクを保存しておく（後で一括処理しやすいように）
+        # Save an empty mask (to facilitate batch processing later)
         empty_mask = np.zeros_like(img, dtype=np.uint16)
         tifffile.imwrite(os.path.join(outdir, os.path.basename(f).replace(".tif", "_masks.tif")), empty_mask)
-        # もし輪郭画像も揃えたい場合は白背景で保存
+        # Save with white background if contour images should also be aligned
         tifffile.imwrite(os.path.join(outdir, os.path.basename(f).replace(".tif", "_binary.tif")),
                          np.full_like(empty_mask, 255, dtype=np.uint8))
         skipped += 1
         continue
     except Exception as e:
-        # その他の例外はログに残してスキップ
+        # Log other exceptions and skip
         print(f"  ⚠ Skipped due to unexpected error: {e}")
         traceback.print_exc()
         empty_mask = np.zeros_like(img, dtype=np.uint16)
@@ -104,7 +104,7 @@ for i, f in enumerate(files, 1):
         error_count += 1
         continue
 
-    # masks が None か、全てゼロ（細胞なし）をチェック
+    # Check if masks is None or all zeros (no cells)
     if masks is None or (isinstance(masks, (list, tuple, np.ndarray)) and np.max(masks) == 0):
         print("  → No cells detected (saving empty mask).")
         empty_mask = np.zeros_like(img, dtype=np.uint16)
@@ -114,12 +114,12 @@ for i, f in enumerate(files, 1):
         skipped += 1
         continue
 
-    # 正常系：マスク保存
+    # Normal case: save masks
     base = os.path.splitext(os.path.basename(f))[0]
     try:
         out_mask = masks[0].astype(np.uint16)
         tifffile.imwrite(os.path.join(outdir, f"{base}_masks.tif"), out_mask)
-        # 輪郭保存（白背景=255、線は0 にする既存形式を踏襲）
+        # Save contours (following existing format: white background=255, lines=0)
         m = out_mask
         border = ((m != np.roll(m,  1, 0)) |
                   (m != np.roll(m, -1, 0)) |

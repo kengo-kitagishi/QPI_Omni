@@ -23,8 +23,8 @@ medium RI offset, which this script removes.
 Usage:
   1. Run grid_subtract.py as usual (no changes needed).
   2. Set GLUCOSE_0_START / GLUCOSE_0_END below.
-  3. 複数 Pos: PH_SESSION_ROOT + POS_NUMBERS_TO_RUN（空でなければ一括）。
-     単一 Pos: POS_NUMBERS_TO_RUN = [] とし OUTPUT_DIR 等を指定。
+  3. Multiple Pos: PH_SESSION_ROOT + POS_NUMBERS_TO_RUN (batch if non-empty).
+     Single Pos: Set POS_NUMBERS_TO_RUN = [] and specify OUTPUT_DIR etc.
   4. Run:  python scripts/correct_0pergluc.py
 """
 import numpy as np
@@ -53,7 +53,7 @@ from ecc_utils import tilt_fit_crop, apply_2pi_tilt_crop, to_uint8, ecc_align
 
 
 def _grid_prerecon_raw_path(pos_dir, z_index):
-    """output_phase_raw 配下の保存済み raw phase TIF パス。"""
+    """Path to saved raw phase TIF under output_phase_raw."""
     return Path(pos_dir) / "output_phase_raw" / f"img_000000000_ph_{z_index:03d}_phase.tif"
 
 
@@ -73,7 +73,7 @@ def _load_or_reconstruct_raw(pos_dir, z_index, qpi_params_holder, raw_crop):
 
 def _cal_dx_dy(xi, yi, grid_cal, pixel_scale_um, x_step_um, y_step_um,
                shift_sign_x, shift_sign_y):
-    """grid_subtract.py と同じ規則で (cal_dx, cal_dy) を返す。"""
+    """Return (cal_dx, cal_dy) using the same rules as grid_subtract.py."""
     if grid_cal and (xi, yi) in grid_cal:
         return grid_cal[(xi, yi)]
     if pixel_scale_um:
@@ -84,7 +84,7 @@ def _cal_dx_dy(xi, yi, grid_cal, pixel_scale_um, x_step_um, y_step_um,
 
 
 def _resolve_fit_right(base_label: str) -> bool:
-    """Pos番号と POS_SPLIT から背景fit側を決める。"""
+    """Determine background fit side from Pos number and POS_SPLIT."""
     if FIT_RIGHT is not None:
         return bool(FIT_RIGHT)
     match = re.match(r"Pos(\d+)", str(base_label))
@@ -93,7 +93,7 @@ def _resolve_fit_right(base_label: str) -> bool:
 
 
 def _resolve_raw_crop(log_data: dict):
-    """grid_subtract_log を優先し、無ければ現在設定の RAW_CROP を使う。"""
+    """Prefer grid_subtract_log, fall back to current RAW_CROP setting if absent."""
     raw_crop = log_data.get("raw_crop")
     if raw_crop is not None:
         return tuple(int(v) for v in raw_crop)
@@ -136,7 +136,7 @@ BASE_LABEL    = "Pos1"
 # Grid calibration JSON (for (xi,yi) -> (cal_dx, cal_dy) mapping)
 GRID_CALIBRATION_JSON = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1\grid_calibration_Pos1.json"
 
-# z-index デフォルト（grid_subtract_log に grid_z_index があればそちらを優先）
+# z-index default (grid_z_index from grid_subtract_log takes priority if available)
 GRID_Z_INDEX = 18
 
 # 0% glucose frame range [inclusive, exclusive)
@@ -152,17 +152,17 @@ POS_SPLIT       = 33       # must match compute_pos_shifts.py
 # Output crop height override (None -> use channel_rois.json crop_h)
 OUTPUT_CROP_H = None
 
-# --- 複数 Pos 一括（空リストなら下の単一路径設定のみ使用）---
+# --- Batch multiple Pos (if empty list, only the single path settings below are used) ---
 PH_SESSION_ROOT = r"D:\AquisitionData\Kitagishi\260405\ph_260405"
-# grid_subtract の出力サブフォルダ名（Pos1 と同じ構成を想定）
-# Pos ごとに grid_subtract の出力フォルダ名が違う場合は実行前に合わせる
+# grid_subtract output subfolder name (assumes same structure as Pos1)
+# If grid_subtract output folder names differ per Pos, align them before running
 CHANNEL_OUTPUT_SUBDIR = "crop_sub_rawraw"
 POS_NUMBERS_TO_RUN = []
 
-# ECC の背景フィット側（None なら Pos番号と POS_SPLIT から自動決定）
+# ECC background fit side (None to auto-determine from Pos number and POS_SPLIT)
 FIT_RIGHT = None
 
-# grid_subtract_log に base_label が無いときのフォルダ名プレフィックス（例: Pos0_x*_y*）
+# Folder name prefix when base_label is absent in grid_subtract_log (e.g., Pos0_x*_y*)
 GRID_POINTS_BASE_LABEL = "Pos0"
 
 # ============================================================
@@ -192,7 +192,7 @@ def _ecc_per_channel(g0_full, g2_full, rois, fit_right):
                                 roi["crop_w"], ECC_CROP_H, tilt_h,
                                 fit_right=fit_right)
         if g0_crop is None or g2_crop is None:
-            print(f"  [tilt bounds NG] ch{ch:02d} cx={roi['cx']} → skip from ECC median")
+            print(f"  [tilt bounds NG] ch{ch:02d} cx={roi['cx']} -> skip from ECC median")
             continue
         g0_crop_bc = g0_crop + compute_backsub_offset(g0_crop)
         g2_crop_bc = g2_crop + compute_backsub_offset(g2_crop)
@@ -437,8 +437,8 @@ def run_correct_0pergluc(
     # Build filename list (same filenames across all channels)
     filenames = [f.name for f in ch0_files]
 
-    # qpi_params は on-the-fly fallback が走るときだけ必要。
-    # 全 raw が保存済みなら生ホログラム不要なので、ここでは作らず None を渡す。
+    # qpi_params is only needed when on-the-fly fallback is triggered.
+    # If all raw images are pre-saved, raw holograms are not needed, so pass None here.
     qpi_params = None
     print(f"[raw] QPIParameters lazy-init (built only if on-the-fly fallback fires)")
 

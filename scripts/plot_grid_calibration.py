@@ -2,14 +2,14 @@
 """
 plot_grid_calibration.py
 ------------------------
-calibrate_grid_positions.py が出力した grid_calibration_PosN.json を読んで
-グリッド真位置を μm 単位で可視化する。
+Read grid_calibration_PosN.json output by calibrate_grid_positions.py and
+visualize the true grid positions in um.
 
-【4パネル】
-  Panel 1: Nominal vs Actual scatter (stage Y / stage X, μm)
-  Panel 2: Error quiver — nominal 位置から実位置への変位ベクトル (μm)
-  Panel 3: dx error heatmap (stage Y/X μm 軸, μm カラーバー)
-  Panel 4: ECC 相関係数ヒートマップ (stage Y/X μm 軸)
+[4 panels]
+  Panel 1: Nominal vs Actual scatter (stage Y / stage X, um)
+  Panel 2: Error quiver -- displacement vectors from nominal to actual position (um)
+  Panel 3: dx error heatmap (stage Y/X um axes, um colorbar)
+  Panel 4: ECC correlation heatmap (stage Y/X um axes)
 """
 import sys
 import json
@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from figure_logger import save_figure
 
 # ============================================================
-# 設定
+# Settings
 # ============================================================
 CALIB_JSON = (
     r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
@@ -32,7 +32,7 @@ CALIB_JSON = (
 )
 POS_LABEL  = "Pos1"
 
-# quiver 矢印スケール (1=実スケール; 大きくすると矢印が長くなる)
+# Quiver arrow scale (1=actual scale; larger values make arrows longer)
 QUIVER_SCALE = 1
 # ============================================================
 
@@ -43,7 +43,7 @@ def load_json(path):
 
 
 def to_grid(xi_arr, yi_arr, values, xi_u, yi_u):
-    """1D arrays → 2D grid  [xi_idx, yi_idx]  (origin lower = xi増加=上)"""
+    """1D arrays -> 2D grid  [xi_idx, yi_idx]  (origin lower = increasing xi = up)"""
     xi_map = {v: i for i, v in enumerate(xi_u)}
     yi_map = {v: i for i, v in enumerate(yi_u)}
     g = np.full((len(xi_u), len(yi_u)), np.nan)
@@ -64,22 +64,22 @@ def main():
     corr     = np.array([p["mean_correlation"] if p["mean_correlation"] is not None else np.nan
                          for p in positions])
 
-    # nominal 位置 (μm): stage X = xi*step, stage Y = yi*step
+    # Nominal positions (um): stage X = xi*step, stage Y = yi*step
     nom_stageX = xi_arr * x_step
     nom_stageY = yi_arr * y_step
 
-    # actual 位置 (μm): ECC の actual_dx/dy は image X/Y 方向。
-    # image X (dx) ↔ stage Y、image Y (dy) ↔ stage X の90度対応 +
-    # 実際の符号関係: stage+X → content shifts in -image_Y (= SHIFT_SIGN=-1 が正しい)
-    # よって: act_stageX = -actual_dy_px * psc, act_stageY = -actual_dx_px * psc
+    # Actual positions (um): ECC actual_dx/dy are in image X/Y direction.
+    # image X (dx) <-> stage Y, image Y (dy) <-> stage X (90-degree mapping) +
+    # Actual sign relationship: stage+X -> content shifts in -image_Y (= SHIFT_SIGN=-1 is correct)
+    # Therefore: act_stageX = -actual_dy_px * psc, act_stageY = -actual_dx_px * psc
     act_stageX = -np.array([p["actual_dy_px"] for p in positions]) * psc
     act_stageY = -np.array([p["actual_dx_px"] for p in positions]) * psc
 
-    # positioning error (μm) in stage space
+    # Positioning error (um) in stage space
     err_stageX = act_stageX - nom_stageX
     err_stageY = act_stageY - nom_stageY
 
-    # 全点の error magnitude
+    # Error magnitude for all points
     res = np.sqrt(err_stageX**2 + err_stageY**2)
 
     # 2D grid
@@ -89,7 +89,7 @@ def main():
     g_errY   = to_grid(xi_arr, yi_arr, err_stageY, xi_u, yi_u)
     g_corr   = to_grid(xi_arr, yi_arr, corr,       xi_u, yi_u)
 
-    # imshow extent (μm)
+    # imshow extent (um)
     yi_min_um  = yi_u[0]  * y_step
     yi_max_um  = yi_u[-1] * y_step
     xi_min_um  = xi_u[0]  * x_step
@@ -117,7 +117,7 @@ def main():
         fontsize=10,
     )
 
-    # stage 空間での extent: X軸=stage X (xi), Y軸=stage Y (yi)
+    # Extent in stage space: X-axis=stage X (xi), Y-axis=stage Y (yi)
     extent_st = [xi_min_um - half_x, xi_max_um + half_x,
                  yi_min_um - half_y, yi_max_um + half_y]
 
@@ -159,7 +159,7 @@ def main():
 
     # ── Panel 3: stage Y error heatmap ──────────────────────────────
     # g_errY[xi_idx, yi_idx] → .T → [yi_idx, xi_idx]
-    # origin="lower": row=yi_idx → Y軸=stage Y, col=xi_idx → X軸=stage X
+    # origin="lower": row=yi_idx -> Y-axis=stage Y, col=xi_idx -> X-axis=stage X
     ax3 = axes[2]
     im3 = ax3.imshow(
         g_errY.T, origin="lower", extent=extent_st,

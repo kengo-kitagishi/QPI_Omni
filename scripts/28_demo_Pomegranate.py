@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
 2D to 3D Reconstruction - Pomegranate Algorithm Analysis
-Pomegranateの3D再構成アルゴリズムの詳細解析と実装
+Detailed analysis and implementation of the Pomegranate 3D reconstruction algorithm
 
-原理:
-1. Distance Transform: 各ピクセルから境界までの距離 = 局所半径
-2. Medial Axis Transform: スケルトン + Distance Map
+Principle:
+1. Distance Transform: Distance from each pixel to the boundary = local radius
+2. Medial Axis Transform: Skeleton + Distance Map
 3. Spherical Cross-Section: r(z) = sqrt(R^2 - z^2)
-4. 3D Reconstruction: 各中心軸ピクセルから球体を展開
+4. 3D Reconstruction: Expand spheres from each medial axis pixel
 """
 # %%
 import numpy as np
@@ -22,18 +22,18 @@ from figure_logger import setup_autosave
 setup_autosave()
 
 class TwoD_to_ThreeD_Reconstructor:
-    """Pomegranateアルゴリズムによる2D→3D再構成"""
+    """2D to 3D reconstruction using the Pomegranate algorithm"""
     
     def __init__(self, voxel_xy=0.1, voxel_z=0.3, radius_enlarge=1.0):
         """
         Parameters
         ----------
         voxel_xy : float
-            XY方向のピクセルサイズ (um)
+            Pixel size in XY direction (um)
         voxel_z : float
-            Z方向のステップサイズ (um)
+            Step size in Z direction (um)
         radius_enlarge : float
-            半径の拡張量 (pixels)
+            Radius enlargement amount (pixels)
         """
         self.voxel_xy = voxel_xy
         self.voxel_z = voxel_z
@@ -47,24 +47,24 @@ class TwoD_to_ThreeD_Reconstructor:
         print(f"Radius Enlargement: {radius_enlarge} pixels")
     
     def load_2d_image(self, image_path):
-        """2D画像を読み込んでバイナリ化"""
+        """Load a 2D image and binarize it"""
         print(f"\n=== Loading Image ===")
         print(f"Path: {image_path}")
         
-        # 画像読み込み
+        # Load image
         img = tifffile.imread(image_path)
         
-        # 2D画像の場合
+        # For 2D images
         if img.ndim == 2:
             self.image_2d = img
-        # 3Dの場合は最大投影
+        # For 3D images, use max projection
         elif img.ndim == 3:
             print(f"  Input is 3D ({img.shape}), using max projection")
             self.image_2d = np.max(img, axis=0)
         else:
             raise ValueError(f"Unsupported image dimensions: {img.ndim}")
         
-        # バイナリ化 (Otsu)
+        # Binarize (Otsu)
         from skimage.filters import threshold_otsu
         threshold = threshold_otsu(self.image_2d)
         self.binary_2d = self.image_2d > threshold
@@ -75,7 +75,7 @@ class TwoD_to_ThreeD_Reconstructor:
         return self.binary_2d
     
     def create_from_roi_mask(self, binary_mask):
-        """ROIマスクから直接作成"""
+        """Create directly from an ROI mask"""
         self.binary_2d = binary_mask.astype(bool)
         print(f"=== Binary Mask Input ===")
         print(f"  Shape: {self.binary_2d.shape}")
@@ -83,20 +83,20 @@ class TwoD_to_ThreeD_Reconstructor:
         return self.binary_2d
     
     def compute_distance_map(self):
-        """Distance Transformを計算"""
+        """Compute the Distance Transform"""
         print(f"\n=== Step 1: Distance Transform ===")
         
         # Distance Transform (EDT: Euclidean Distance Transform)
         self.distance_map = ndimage.distance_transform_edt(self.binary_2d)
         
-        # 統計情報
+        # Statistics
         max_dist = np.max(self.distance_map)
         mean_dist = np.mean(self.distance_map[self.binary_2d])
         
         print(f"  Max Distance: {max_dist:.2f} pixels ({max_dist * self.voxel_xy:.3f} um)")
         print(f"  Mean Distance: {mean_dist:.2f} pixels ({mean_dist * self.voxel_xy:.3f} um)")
         
-        # Z方向のスライス数を推定
+        # Estimate the number of Z slices
         self.z_slices = int(2 * (np.ceil(max_dist * self.elongation_factor) + 2))
         self.mid_slice = self.z_slices // 2
         
@@ -106,7 +106,7 @@ class TwoD_to_ThreeD_Reconstructor:
         return self.distance_map
     
     def compute_skeleton(self):
-        """Skeleton (骨格化) を計算"""
+        """Compute the Skeleton (skeletonization)"""
         print(f"\n=== Step 2: Skeletonization ===")
         
         # Skeletonize (Zhang's algorithm)
@@ -119,7 +119,7 @@ class TwoD_to_ThreeD_Reconstructor:
         return self.skeleton
     
     def compute_medial_axis(self):
-        """Medial Axis Transform を計算"""
+        """Compute the Medial Axis Transform"""
         print(f"\n=== Step 3: Medial Axis Transform ===")
         
         # Medial Axis = Skeleton AND Distance Map
@@ -136,71 +136,71 @@ class TwoD_to_ThreeD_Reconstructor:
     
     def spherical_cross_section_radius(self, r0, z_distance):
         """
-        球体の断面半径を計算
-        
-        球の方程式: x^2 + y^2 + z^2 = R^2
-        z平面での断面: x^2 + y^2 = R^2 - z^2
-        断面半径: r(z) = sqrt(R^2 - z^2)
-        
+        Compute the cross-section radius of a sphere
+
+        Sphere equation: x^2 + y^2 + z^2 = R^2
+        Cross-section at z-plane: x^2 + y^2 = R^2 - z^2
+        Cross-section radius: r(z) = sqrt(R^2 - z^2)
+
         Parameters
         ----------
         r0 : float
-            基準半径 (pixels)
+            Base radius (pixels)
         z_distance : float
-            中心からのZ距離 (pixels, elongation factor補正済み)
-        
+            Z distance from center (pixels, corrected for elongation factor)
+
         Returns
         -------
         float
-            断面半径 (pixels)、負の場合は0
+            Cross-section radius (pixels), 0 if negative
         """
         r_squared = r0**2 - z_distance**2
         return np.sqrt(r_squared) if r_squared > 0 else 0
     
     def reconstruct_3d(self):
-        """3D再構成を実行"""
+        """Perform 3D reconstruction"""
         print(f"\n=== Step 4: 3D Reconstruction ===")
         
-        # 3Dスタックを初期化
+        # Initialize 3D stack
         height, width = self.binary_2d.shape
         self.stack_3d = np.zeros((self.z_slices, height, width), dtype=np.uint8)
         
-        # 中心軸の座標を取得
+        # Get medial axis coordinates
         medial_coords = np.argwhere(self.skeleton)
         total_voxels = len(medial_coords)
         
         print(f"  Processing {total_voxels} medial axis voxels...")
         
-        # 各中心軸ピクセルに対して処理
+        # Process each medial axis pixel
         processed_count = 0
         for idx, (y, x) in enumerate(medial_coords):
             if idx % 100 == 0:
                 print(f"    Progress: {idx}/{total_voxels} ({100*idx/total_voxels:.1f}%)")
             
-            # 基準半径を取得
+            # Get base radius
             r0 = self.medial_axis[y, x] + self.radius_enlarge
             
-            # 各Zスライスに対して球体断面を描画
+            # Draw spherical cross-sections for each Z slice
             for z in range(self.z_slices):
-                # Z距離を計算 (elongation factor補正)
+                # Compute Z distance (with elongation factor correction)
                 z_distance = (self.mid_slice - z) / self.elongation_factor
                 
-                # 球体の断面半径を計算
+                # Compute the cross-section radius of the sphere
                 segment_radius = self.spherical_cross_section_radius(r0, z_distance)
                 
-                # 閾値チェック
+                # Threshold check
                 if segment_radius > 2 * self.voxel_xy:
-                    # 円を描画
+                    # Draw circle
                     try:
                         from skimage.draw import disk as draw_disk
                         rr, cc = draw_disk((y, x), segment_radius, shape=(height, width))
                         
-                        # 範囲内のピクセルのみ
+                        # Only pixels within bounds
                         self.stack_3d[z, rr, cc] = 255
                         
                         processed_count += 1
                     except Exception as e:
-                        # 範囲外の場合はスキップ
+                        # Skip if out of bounds
                         pass
         
         print(f"  Successfully processed: {processed_count} voxel-slice pairs")
@@ -210,18 +210,18 @@ class TwoD_to_ThreeD_Reconstructor:
         return self.stack_3d
     
     def run_full_pipeline(self, input_source, is_file=True):
-        """完全なパイプラインを実行"""
+        """Run the full pipeline"""
         print("\n" + "="*50)
         print("FULL PIPELINE EXECUTION")
         print("="*50)
         
-        # 入力読み込み
+        # Load input
         if is_file:
             self.load_2d_image(input_source)
         else:
             self.create_from_roi_mask(input_source)
         
-        # パイプライン実行
+        # Execute pipeline
         self.compute_distance_map()
         self.compute_skeleton()
         self.compute_medial_axis()
@@ -234,7 +234,7 @@ class TwoD_to_ThreeD_Reconstructor:
         return self.stack_3d
     
     def save_results(self, output_dir="reconstruction_output"):
-        """結果を保存"""
+        """Save results"""
         os.makedirs(output_dir, exist_ok=True)
         
         print(f"\n=== Saving Results to {output_dir} ===")
@@ -267,7 +267,7 @@ class TwoD_to_ThreeD_Reconstructor:
         print(f"  Saved: {medial_path}")
     
     def visualize_algorithm(self, save_path="algorithm_visualization.png"):
-        """アルゴリズムの各ステップを可視化"""
+        """Visualize each step of the algorithm"""
         fig, axes = plt.subplots(2, 3, figsize=(18, 12))
         
         # 1. Original Binary
@@ -279,20 +279,20 @@ class TwoD_to_ThreeD_Reconstructor:
         # 2. Distance Map
         ax = axes[0, 1]
         im = ax.imshow(self.distance_map, cmap='hot')
-        ax.set_title('Step 1: Distance Transform\n(局所半径マップ)', fontsize=14, fontweight='bold')
+        ax.set_title('Step 1: Distance Transform\n(Local Radius Map)', fontsize=14, fontweight='bold')
         plt.colorbar(im, ax=ax, label='Distance (pixels)')
         ax.axis('off')
         
         # 3. Skeleton
         ax = axes[0, 2]
         ax.imshow(self.skeleton, cmap='gray')
-        ax.set_title('Step 2: Skeleton\n(中心軸抽出)', fontsize=14, fontweight='bold')
+        ax.set_title('Step 2: Skeleton\n(Center Axis Extraction)', fontsize=14, fontweight='bold')
         ax.axis('off')
         
         # 4. Medial Axis Transform
         ax = axes[1, 0]
         im = ax.imshow(self.medial_axis, cmap='hot')
-        ax.set_title('Step 3: Medial Axis Transform\n(中心軸 + 半径情報)', fontsize=14, fontweight='bold')
+        ax.set_title('Step 3: Medial Axis Transform\n(Center Axis + Radius Info)', fontsize=14, fontweight='bold')
         plt.colorbar(im, ax=ax, label='Radius (pixels)')
         ax.axis('off')
         
@@ -326,9 +326,9 @@ class TwoD_to_ThreeD_Reconstructor:
         print(f"\n=== Visualization saved: {save_path} ===")
         plt.show()
     
-    def create_test_ellipse(self, width=200, height=200, 
+    def create_test_ellipse(self, width=200, height=200,
                           semi_major=60, semi_minor=40, angle=30):
-        """テスト用の楕円画像を生成"""
+        """Generate an ellipse image for testing"""
         from skimage.draw import ellipse
         
         img = np.zeros((height, width), dtype=np.uint8)
@@ -348,38 +348,38 @@ class TwoD_to_ThreeD_Reconstructor:
 
 
 def demo_with_test_ellipse():
-    """テスト用楕円でデモ実行"""
+    """Run demo with a test ellipse"""
     print("\n" + "="*60)
     print("DEMO: Pomegranate Algorithm with Test Ellipse")
     print("="*60)
     
-    # Reconstructorを作成
+    # Create Reconstructor
     reconstructor = TwoD_to_ThreeD_Reconstructor(
         voxel_xy=0.1,   # 0.1 um/pixel
         voxel_z=0.3,    # 0.3 um/slice
         radius_enlarge=1.0
     )
     
-    # テスト楕円を作成
+    # Create test ellipse
     test_ellipse = reconstructor.create_test_ellipse(
         width=300, height=300,
         semi_major=80, semi_minor=50, angle=30
     )
     
-    # フルパイプライン実行
+    # Execute full pipeline
     stack_3d = reconstructor.run_full_pipeline(test_ellipse, is_file=False)
     
-    # 結果を保存
+    # Save results
     reconstructor.save_results("demo_output")
     
-    # 可視化
+    # Visualize
     reconstructor.visualize_algorithm("demo_algorithm_steps.png")
     
     return reconstructor
 
 
 if __name__ == "__main__":
-    # デモ実行
+    # Run demo
     reconstructor = demo_with_test_ellipse()
     
     print("\n" + "="*60)

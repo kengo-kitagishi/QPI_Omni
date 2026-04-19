@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """figure_inbox_to_obsidian.py
 
-figure-hub inbox の JSON メタデータを Obsidian の .md に変換する。
+Convert figure-hub inbox JSON metadata to Obsidian .md files.
 
-- 「どのコードを変えた時に出た図か」（git.changed_files）を記録
-- パラメータ・前回差分（diff_from_last）を記録
-- 図ファイル（PNG）を Obsidian の 99_Assets/figures/ にコピー
-- SQLite (session_db.py) に figure_events として記録
+- Record which code was changed when the figure was generated (git.changed_files)
+- Record parameters and diff from last run (diff_from_last)
+- Copy figure files (PNG) to Obsidian 99_Assets/figures/
+- Record as figure_events in SQLite (session_db.py)
 
-使い方:
-  python3 scripts/figure_inbox_to_obsidian.py              # 新規分のみ変換
-  python3 scripts/figure_inbox_to_obsidian.py --dry-run    # 確認のみ
-  python3 scripts/figure_inbox_to_obsidian.py --all        # 全件再変換
+Usage:
+  python3 scripts/figure_inbox_to_obsidian.py              # convert new entries only
+  python3 scripts/figure_inbox_to_obsidian.py --dry-run    # preview only
+  python3 scripts/figure_inbox_to_obsidian.py --all        # re-convert all entries
 
-出力先:
+Output:
   ~/Documents/Obsidian Vault/00_Inbox/figure_inbox/YYYY-MM-DD_<run_id>.md
   ~/Documents/Obsidian Vault/99_Assets/figures/<published_basename>.png
 """
@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import session_db
 
 # ────────────────────────────────────────────
-# 設定
+# Configuration
 # ────────────────────────────────────────────
 
 INBOX_ROOT = Path(
@@ -50,7 +50,7 @@ JST = timezone(timedelta(hours=9))
 
 
 # ────────────────────────────────────────────
-# ユーティリティ
+# Utilities
 # ────────────────────────────────────────────
 
 def _ts_to_jst_str(ts: str) -> str:
@@ -106,7 +106,7 @@ def _find_image_mac_path(meta: dict, json_path: Path) -> Path | None:
 
 
 # ────────────────────────────────────────────
-# JSON → Markdown レンダリング
+# JSON -> Markdown rendering
 # ────────────────────────────────────────────
 
 def render_figure_md(meta: dict, png_obsidian_name: str | None,
@@ -126,7 +126,7 @@ def render_figure_md(meta: dict, png_obsidian_name: str | None,
 
     lines = []
 
-    # ── フロントマター ──
+    # ── Frontmatter ──
     lines.extend([
         "---",
         "source: figure-inbox",
@@ -144,64 +144,64 @@ def render_figure_md(meta: dict, png_obsidian_name: str | None,
     lines.append("---")
     lines.append("")
 
-    # ── タイトル ──
-    lines.append(f"# 図: {date_str} | {script}")
+    # ── Title ──
+    lines.append(f"# Figure: {date_str} | {script}")
     lines.append("")
     if description:
-        lines.append(f"**説明**: {description}")
+        lines.append(f"**Description**: {description}")
         lines.append("")
 
-    lines.append(f"**生成時刻**: {ts_jst}")
+    lines.append(f"**Generated at**: {ts_jst}")
     lines.append("")
 
-    # ── パラメータ ──
+    # ── Parameters ──
     if params:
-        lines.append("## パラメータ")
+        lines.append("## Parameters")
         for k, v in params.items():
             lines.append(f"- `{k}`: {v}")
         lines.append("")
 
-    # ── 前回からの変更 ──
+    # ── Changes from last run ──
     if diff_from_last:
-        lines.append("## 前回からの変更 (`diff_from_last`)")
+        lines.append("## Changes from last run (`diff_from_last`)")
         for k, v in diff_from_last.items():
             from_val = v.get("from", "(new)") if isinstance(v, dict) else v
             to_val = v.get("to", v) if isinstance(v, dict) else v
             lines.append(f"- `{k}`: `{from_val}` → `{to_val}`")
         lines.append("")
 
-    # ── コード変更（git 情報） ──
+    # ── Code changes (git info) ──
     changed_files = git_info.get("changed_files", [])
     commit = git_info.get("commit", "")
     dirty = git_info.get("dirty", False)
 
-    lines.append("## コード変更（この図を生成した時の git 状態）")
+    lines.append("## Code changes (git state when this figure was generated)")
     if commit:
-        dirty_mark = " *(unstaged changes あり)*" if dirty else ""
+        dirty_mark = " *(unstaged changes present)*" if dirty else ""
         lines.append(f"**git commit**: `{commit}`{dirty_mark}")
     if changed_files:
         lines.append("")
-        lines.append("変更されていたファイル:")
+        lines.append("Changed files:")
         for f in changed_files:
             lines.append(f"- `{f}`")
     else:
-        lines.append("（git.changed_files: なし）")
+        lines.append("(git.changed_files: none)")
     lines.append("")
 
-    # ── データ情報 ──
+    # ── Data info ──
     if data_info:
-        lines.append("## データ情報")
+        lines.append("## Data info")
         for k, v in data_info.items():
             lines.append(f"- `{k}`: {v}")
         lines.append("")
 
-    # ── 実行環境 ──
+    # ── Runtime environment ──
     if runtime:
         hostname = runtime.get("hostname", "")
         python_ver = runtime.get("python", "")
         cwd = runtime.get("cwd", "")
         if hostname or python_ver:
-            lines.append("## 実行環境")
+            lines.append("## Runtime environment")
             if hostname:
                 lines.append(f"- hostname: `{hostname}`")
             if python_ver:
@@ -210,13 +210,13 @@ def render_figure_md(meta: dict, png_obsidian_name: str | None,
                 lines.append(f"- cwd: `{cwd}`")
             lines.append("")
 
-    # ── 図の埋め込み ──
+    # ── Embedded figure ──
     if png_obsidian_name:
-        lines.append("## 図")
+        lines.append("## Figure")
         lines.append(f"![[{png_obsidian_name}]]")
         lines.append("")
         if image_mac_path:
-            lines.append(f"*Claude Read用パス*: `{image_mac_path}`")
+            lines.append(f"*Claude Read path*: `{image_mac_path}`")
             lines.append("")
 
     inbox_file = meta.get("inbox_file", "").replace("\\", "/")
@@ -230,22 +230,22 @@ def render_figure_md(meta: dict, png_obsidian_name: str | None,
 
 
 # ────────────────────────────────────────────
-# メイン処理
+# Main processing
 # ────────────────────────────────────────────
 
 def find_inbox_jsons() -> list[Path]:
     if not INBOX_ROOT.exists():
-        print(f"WARNING: inbox ディレクトリが見つかりません: {INBOX_ROOT}", flush=True)
+        print(f"WARNING: inbox directory not found: {INBOX_ROOT}", flush=True)
         return []
     return sorted(INBOX_ROOT.glob("*/*/*/*.json"))
 
 
 def process_json(json_path: Path, dry_run: bool) -> dict | None:
-    """1つの inbox JSON を処理して .md ファイルを出力する。
+    """Process one inbox JSON and output a .md file.
 
     Returns:
-        dict with unique_key, meta, md_path, image_name  (成功時)
-        None  (失敗/スキップ時)
+        dict with unique_key, meta, md_path, image_name  (on success)
+        None  (on failure/skip)
     """
     try:
         meta = json.loads(json_path.read_text(encoding="utf-8"))
@@ -262,7 +262,7 @@ def process_json(json_path: Path, dry_run: bool) -> dict | None:
     fig_idx = meta.get("figure_index", 1)
     unique_key = f"{run_id}_f{fig_idx:03d}"
 
-    # 画像を Obsidian assets にコピー
+    # Copy image to Obsidian assets
     png_obsidian_name = None
     png_src = _find_image_mac_path(meta, json_path)
     obsidian_image_path = None
@@ -318,7 +318,7 @@ def process_json(json_path: Path, dry_run: bool) -> dict | None:
 
 
 def write_figure_to_db(conn, result: dict) -> None:
-    """処理結果を figure_events テーブルに書き込む。"""
+    """Write processing result to the figure_events table."""
     meta = result["meta"]
     git_info = meta.get("git", {})
     session_db.upsert_figure_event(conn, {
@@ -343,7 +343,7 @@ def run(args: argparse.Namespace) -> int:
     run_id = session_db.start_processing_run(conn, "figure_inbox_to_obsidian")
 
     json_files = find_inbox_jsons()
-    print(f"inbox JSON ファイル数: {len(json_files)}")
+    print(f"inbox JSON file count: {len(json_files)}")
 
     processed = 0
     skipped = 0
@@ -368,7 +368,7 @@ def run(args: argparse.Namespace) -> int:
             try:
                 result = process_json(json_path, args.dry_run)
             except Exception as e:
-                print(f"  ERROR: {json_path.name} の処理で例外: {type(e).__name__}: {e}",
+                print(f"  ERROR: exception while processing {json_path.name}: {type(e).__name__}: {e}",
                       file=sys.stderr)
                 traceback.print_exc()
                 skipped += 1
@@ -401,10 +401,10 @@ def run(args: argparse.Namespace) -> int:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="figure-hub inbox JSON → Obsidian .md 変換（SQLite 連携）"
+        description="Convert figure-hub inbox JSON to Obsidian .md (with SQLite integration)"
     )
-    parser.add_argument("--dry-run", action="store_true", help="ファイル書き出しなしで確認")
-    parser.add_argument("--all", action="store_true", help="処理済み含め全件再変換")
+    parser.add_argument("--dry-run", action="store_true", help="Preview without writing files")
+    parser.add_argument("--all", action="store_true", help="Re-convert all entries including already processed")
     return parser.parse_args()
 
 

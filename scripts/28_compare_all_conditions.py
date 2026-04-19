@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-全条件の結果を比較するスクリプト
+Script to compare results across all conditions.
 
-各条件のall_rois_summary.csvを読み込んで、体積・質量・RIなどを比較
+Loads all_rois_summary.csv from each condition and compares volume, mass, RI, etc.
 """
 # %%
 import os
@@ -14,7 +14,7 @@ from matplotlib.gridspec import GridSpec
 import seaborn as sns
 
 def parse_condition_name(dirname):
-    """ディレクトリ名から条件を解析"""
+    """Parse conditions from directory name"""
     # timeseries_density_output_ellipse_subpixel5_discrete_round
     parts = dirname.replace('timeseries_density_output_', '').split('_')
     
@@ -50,7 +50,7 @@ def parse_condition_name(dirname):
     return result
 
 def load_all_conditions(base_dir='.'):
-    """全条件のデータを読み込み"""
+    """Load data from all conditions"""
     pattern = os.path.join(base_dir, 'timeseries_density_output_*', 'all_rois_summary.csv')
     csv_files = glob.glob(pattern)
     
@@ -70,7 +70,7 @@ def load_all_conditions(base_dir='.'):
             df['thickness_mode'] = condition['thickness_mode']
             df['discretize_method'] = condition.get('discretize_method', None)
             
-            # 条件名を作成
+            # Create condition name
             if condition['thickness_mode'] == 'discrete':
                 df['condition_name'] = f"{condition['shape']}_sp{condition['subpixel']}_{condition['discretize_method']}"
             else:
@@ -91,24 +91,24 @@ def load_all_conditions(base_dir='.'):
     return combined_df
 
 def plot_comparison_by_condition(df, output_dir='condition_comparison'):
-    """条件ごとの比較プロット"""
+    """Comparison plot by condition"""
     os.makedirs(output_dir, exist_ok=True)
     
-    # 時間を計算（frame_number / 12 = 時間[h]）
+    # Calculate time (frame_number / 12 = time [h])
     if 'time_h' not in df.columns:
         df['time_h'] = df['frame_number'] / 12.0
     
-    # 条件のユニークリストを取得
+    # Get unique list of conditions
     conditions = df['condition_name'].unique()
     print(f"\nGenerating comparison plots for {len(conditions)} conditions...")
     
-    # 1. 全条件の体積比較
+    # 1. Volume comparison across all conditions
     fig, axes = plt.subplots(3, 1, figsize=(16, 14))
     
     for condition in conditions:
         subset = df[df['condition_name'] == condition]
         
-        # 時間ビンごとの平均を計算
+        # Calculate mean per time bin
         time_bins = np.arange(0, subset['time_h'].max() + 1, 1.0)
         time_centers = []
         volume_means = []
@@ -135,7 +135,7 @@ def plot_comparison_by_condition(df, output_dir='condition_comparison'):
                 else:
                     ri_means.append(np.nan)
         
-        # プロット
+        # Plot
         axes[0].plot(time_centers, volume_means, '-', alpha=0.7, label=condition, linewidth=1.5)
         axes[1].plot(time_centers, mass_means, '-', alpha=0.7, label=condition, linewidth=1.5)
         axes[2].plot(time_centers, ri_means, '-', alpha=0.7, label=condition, linewidth=1.5)
@@ -163,7 +163,7 @@ def plot_comparison_by_condition(df, output_dir='condition_comparison'):
     print(f"  Saved: all_conditions_timeseries.png")
     plt.close()
     
-    # 2. 条件ごとの平均値比較（バープロット）
+    # 2. Mean value comparison by condition (bar plot)
     summary_stats = []
     
     for condition in conditions:
@@ -180,7 +180,7 @@ def plot_comparison_by_condition(df, output_dir='condition_comparison'):
             'n_rois': len(subset)
         }
         
-        # 条件パラメータを追加
+        # Add condition parameters
         stats['shape'] = subset['shape'].iloc[0]
         stats['subpixel'] = subset['subpixel'].iloc[0]
         stats['thickness_mode'] = subset['thickness_mode'].iloc[0]
@@ -191,12 +191,12 @@ def plot_comparison_by_condition(df, output_dir='condition_comparison'):
     summary_df = pd.DataFrame(summary_stats)
     summary_df = summary_df.sort_values(['shape', 'subpixel', 'thickness_mode', 'discretize_method'])
     
-    # CSVに保存
+    # Save to CSV
     summary_csv = os.path.join(output_dir, 'condition_summary_statistics.csv')
     summary_df.to_csv(summary_csv, index=False)
     print(f"  Saved: condition_summary_statistics.csv")
     
-    # バープロット
+    # Bar plot
     fig, axes = plt.subplots(1, 3, figsize=(20, 6))
     
     x_pos = np.arange(len(summary_df))
@@ -227,15 +227,15 @@ def plot_comparison_by_condition(df, output_dir='condition_comparison'):
     print(f"  Saved: condition_comparison_bars.png")
     plt.close()
     
-    # 3. ヒートマップ（shape × subpixel × method）
+    # 3. Heatmaps (shape x subpixel x method)
     plot_heatmaps(summary_df, output_dir)
     
     return summary_df
 
 def plot_heatmaps(summary_df, output_dir):
-    """条件パラメータごとのヒートマップ"""
-    
-    # Continuousモードのヒートマップ
+    """Heatmaps by condition parameters"""
+
+    # Continuous mode heatmap
     continuous_df = summary_df[summary_df['thickness_mode'] == 'continuous']
     if len(continuous_df) > 0:
         fig, axes = plt.subplots(1, 3, figsize=(18, 6))
@@ -257,7 +257,7 @@ def plot_heatmaps(summary_df, output_dir):
         print(f"  Saved: heatmap_continuous.png")
         plt.close()
     
-    # Discreteモードのヒートマップ（discretize_method × subpixel）
+    # Discrete mode heatmap (discretize_method x subpixel)
     discrete_df = summary_df[summary_df['thickness_mode'] == 'discrete']
     if len(discrete_df) > 0:
         for shape in discrete_df['shape'].unique():
@@ -283,19 +283,19 @@ def plot_heatmaps(summary_df, output_dir):
             plt.close()
 
 def main():
-    """メイン実行"""
+    """Main execution"""
     print("="*80)
     print("Condition Comparison Analysis")
     print("="*80)
     
-    # データ読み込み
+    # Load data
     df = load_all_conditions()
     
     if df is None:
         print("No data found!")
         return
     
-    # 比較プロット生成
+    # Generate comparison plots
     summary_df = plot_comparison_by_condition(df)
     
     print("\n" + "="*80)

@@ -2,9 +2,9 @@
 """
 compute_pos_shifts.py
 ---------------------
-1つのPosのチャネルスタック群（channel_XX*.tif）に対して
-ECC or phase_correlationでフレームごとのシフト量を計算し、
-チャネル間で外れ値除去しながら平均してpos_shifts.jsonに保存する。
+Compute per-frame shift amounts for a single Pos's channel stacks
+(channel_XX*.tif) using ECC or phase_correlation, then average
+across channels with outlier removal and save to pos_shifts.json.
 """
 import numpy as np
 import tifffile
@@ -25,37 +25,37 @@ from ecc_utils import (
 )
 
 # ============================================================
-# 設定パラメータ
+# Configuration parameters
 # ============================================================
 CHANNELS_DIR = r"F:\260405\ph_260405\Pos1\output_phase\channels"
-CHANNEL_PATTERN = "channel_*.tif"      # backsub済みなら "channel_*_bg_corr.tif"
+CHANNEL_PATTERN = "channel_*.tif"      # use "channel_*_bg_corr.tif" if backsub is done
 
-# --- 基準画像の選択 ---
-# USE_GRID_REFERENCE = True  : グリッドの x+0_y+0 画像をcropして各チャネルの基準にする（推奨）
-# USE_GRID_REFERENCE = False : タイムラプスの REFERENCE_FRAME 番目を基準にする（従来方式）
+# --- Reference image selection ---
+# USE_GRID_REFERENCE = True  : Crop grid x+0_y+0 image as reference for each channel (recommended)
+# USE_GRID_REFERENCE = False : Use REFERENCE_FRAME-th frame from timelapse as reference (legacy)
 USE_GRID_REFERENCE  = True
 GRID_DIR            = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
-GRID_BASE_LABEL     = "Pos1"           # PosX_x+0_y+0 の PosX 部分
-POS_SPLIT           = 33              # drift_config の pos_split と一致させること
+GRID_BASE_LABEL     = "Pos1"           # PosX part of PosX_x+0_y+0
+POS_SPLIT           = 33              # Must match pos_split in drift_config
 GRID_Z_INDEX        = 18              # img_000000000_ph_{Z_INDEX:03d}.tif
 CHANNEL_ROIS_JSON   = r"F:\260405\ph_260405\Pos1\output_phase\channels\channel_rois.json"
 
-REFERENCE_FRAME = 150                  # USE_GRID_REFERENCE=False の場合のみ使用（1始まり）
+REFERENCE_FRAME = 150                  # Used only when USE_GRID_REFERENCE=False (1-based)
 
 ALIGNMENT_METHOD = 'ecc'              # 'ecc' or 'phase_correlation'
 VMIN = -5.0
-VMAX = 2.0                            # to_uint8の正規化範囲（ECC精度に影響）
+VMAX = 2.0                            # Normalization range for to_uint8 (affects ECC accuracy)
 USE_PERCENTILE_NORM = False
 PERCENTILE_LO       = 5
 PERCENTILE_HI       = 95
-OUTLIER_MAD_THRESH = 5.0              # チャネル間外れ値除去のMAD閾値
-OUTLIER_TIMESERIES_WINDOW = 11        # 時系列外れ値検出のメジアンフィルタ幅（奇数）
-OUTLIER_TIMESERIES_THRESH = 0.0       # 時系列MAD閾値（0で無効）
-ECC_MIN_CORR = 0.96                   # ECC スコアがこれ未満のチャネルを除外
+OUTLIER_MAD_THRESH = 5.0              # MAD threshold for inter-channel outlier removal
+OUTLIER_TIMESERIES_WINDOW = 11        # Median filter width for timeseries outlier detection (odd)
+OUTLIER_TIMESERIES_THRESH = 0.0       # Timeseries MAD threshold (0 to disable)
+ECC_MIN_CORR = 0.96                   # Exclude channels with ECC score below this
 OUTPUT_JSON = "pos_shifts_cal.json"
 
-# --- グリッド基準画像への gaussian_backsub 適用 ---
-# True にするとグリッド基準画像にも timelapse と同じ backsub を適用する
+# --- Apply gaussian_backsub to grid reference image ---
+# When True, apply the same backsub as timelapse to grid reference images
 APPLY_BACKSUB_TO_GRID_REF = True
 BACKSUB_MIN_PHASE   = -1.1
 BACKSUB_HIST_MIN    = -1.1
@@ -63,49 +63,50 @@ BACKSUB_HIST_MAX    =  1.5
 BACKSUB_N_BINS      = 512
 BACKSUB_SMOOTH_WINDOW = 20
 
-# --- 逐次追跡モード ---
-# True にすると前フレームのシフトから最近傍 grid(xi,yi) を基準に選ぶ
-USE_INCREMENTAL_TRACKING   = True    # デフォルト True（後から pipeline で上書き）
-X_STEP                     = 0.1    # グリッドステップ [μm]
-Y_STEP                     = 0.1    # グリッドステップ [μm]
-SHIFT_SIGN_X               = 1      # シフト符号（1 or -1）
+# --- Incremental tracking mode ---
+# When True, select nearest grid(xi,yi) as reference based on previous frame's shift
+USE_INCREMENTAL_TRACKING   = True    # Default True (overridden by pipeline later)
+X_STEP                     = 0.1    # Grid step [um]
+Y_STEP                     = 0.1    # Grid step [um]
+SHIFT_SIGN_X               = 1      # Shift sign (1 or -1)
 SHIFT_SIGN_Y               = 1
-JUMP_THRESH_UM             = 1.0   # 前フレームとのシフト差がこれ [μm] を超えたら外れ値（0で無効）
-MAX_FRAMES                 = None # テストラン用: None で全フレーム、整数で先頭 N フレームのみ
-# 光学パラメータ（pixel scale 計算用）
+JUMP_THRESH_UM             = 1.0   # Outlier if shift diff from previous frame exceeds this [um] (0 to disable)
+MAX_FRAMES                 = None # For test runs: None for all frames, integer for first N frames only
+# Optical parameters (for pixel scale calculation)
 SENSOR_PIXEL_SIZE          = 3.45e-6  # [m]
 MAGNIFICATION              = 40
 ORIGINAL_DIM               = 2048
 RECONSTRUCTED_DIM          = 511
-# グリッドキャリブレーション（calibrate_grid_positions.py の出力 JSON）
-# None → 名目値 (xi*X_STEP/pixel_scale_um) を使用
+# Grid calibration (output JSON from calibrate_grid_positions.py)
+# None -> use nominal values (xi*X_STEP/pixel_scale_um)
 GRID_CALIBRATION_JSON      = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1\grid_calibration_Pos1.json"
-# --- 2段階ECC（USE_INCREMENTAL_TRACKING=True 時のみ有効） ---
-USE_SECOND_PASS_ECC    = True    # True で2回目ECCを有効化
-FIRST_PASS_HALF        = False   # (無効化済み: pass1/2/3 ともに full crop を使用)
-SECOND_PASS_HALF       = 'right' # (無効化済み: full crop に統一)
-USE_THIRD_PASS_ECC     = True    # True で3回目ECC（pass2結果から最近傍grid再選択 → half ECC）
-# corr/shift データを NPZ + CSV に保存（True 推奨: subtract 画像との対応確認用）
+# --- 2-stage ECC (active only when USE_INCREMENTAL_TRACKING=True) ---
+USE_SECOND_PASS_ECC    = True    # True to enable 2nd ECC pass
+FIRST_PASS_HALF        = False   # (disabled: all passes use full crop)
+SECOND_PASS_HALF       = 'right' # (disabled: unified to full crop)
+USE_THIRD_PASS_ECC     = True    # True for 3rd ECC pass (re-select nearest grid from pass2 result -> half ECC)
+# Save corr/shift data as NPZ + CSV (True recommended: for verifying correspondence with subtracted images)
 SAVE_CORR_DATA         = True
-# --- 並列処理 ---
-N_WORKERS = None               # None = os.cpu_count(). 1 = 直列（デバッグ用）
+# --- Parallel processing ---
+N_WORKERS = None               # None = os.cpu_count(). 1 = serial (for debugging)
 
 # Timelapse z-index (used in slope correction mode)
 TL_Z_INDEX = 0                 # img_*_ph_{Z:03d}_phase.tif
 
 # ============================================================
-# X-tilt補正（gaussian_backsub の代替）
-# True にすると channel stacks を読まず output_phase/ のフル位相画像から
-# TILT_CROP_H px 幅の crop を取り、左1/3 で slope+intercept をフィットして
-# 補正した中央 crop_h px を ECC に使う。STEP_GAUSSIAN_BACKSUB は不要になる。
+# X-tilt correction (alternative to gaussian_backsub)
+# When True, instead of reading channel stacks, take a TILT_CROP_H px wide
+# crop from full phase images in output_phase/, fit slope+intercept on the
+# left 1/3, and use the corrected central crop_h px for ECC.
+# STEP_GAUSSIAN_BACKSUB becomes unnecessary.
 # ============================================================
-USE_SLOPE_CORRECTION = True    # True: bg_corr不要・フル位相画像を直接使用
-TILT_CROP_H          = 270     # 補正用横幅（左1/3 or 右1/3 が背景フィット領域）
-ECC_CROP_H           = 80      # ECC に使う crop の X 幅（TILT_CROP_H の中央から切り出す）
+USE_SLOPE_CORRECTION = True    # True: no bg_corr needed, use full phase images directly
+TILT_CROP_H          = 270     # Width for correction (left 1/3 or right 1/3 is the background fit region)
+ECC_CROP_H           = 80      # X width of crop used for ECC (cut from center of TILT_CROP_H)
 # ============================================================
 _m           = _re.match(r"Pos(\d+)", GRID_BASE_LABEL)
 _POS_NUM     = int(_m.group(1)) if _m else 1
-TILT_FIT_RIGHT = _POS_NUM >= POS_SPLIT  # Pos<POS_SPLIT: 左1/3 fit, Pos>=POS_SPLIT: 右1/3 fit
+TILT_FIT_RIGHT = _POS_NUM >= POS_SPLIT  # Pos<POS_SPLIT: left 1/3 fit, Pos>=POS_SPLIT: right 1/3 fit
 
 
 def _tilt_correct(img_f64, cy, cx, crop_w, crop_h_out, fit_right: bool = False):
@@ -128,9 +129,9 @@ def to_uint8(img, vmin=VMIN, vmax=VMAX):
 
 def compute_backsub_offset(img: np.ndarray) -> float:
     """
-    gaussian_backsub と同じ手法で背景ピークをガウスフィットし、
-    補正オフセット（= -peak_mean）を返す。ファイル保存なし。
-    img: float 配列（任意形状）
+    Gaussian-fit the background peak using the same method as gaussian_backsub,
+    and return the correction offset (= -peak_mean). No file saving.
+    img: float array (any shape)
     """
     from scipy.ndimage import uniform_filter1d
     from scipy.optimize import curve_fit
@@ -167,7 +168,7 @@ def compute_backsub_offset(img: np.ndarray) -> float:
         _, mean_fit, _ = popt
         return float(-mean_fit)
     except Exception as ex:
-        print(f"    [backsub] Gaussian fit 失敗 ({ex}), ピーク値で代用")
+        print(f"    [backsub] Gaussian fit failed ({ex}), using peak value as fallback")
         return float(-peak_value)
 
 
@@ -175,7 +176,7 @@ def compute_backsub_offset(img: np.ndarray) -> float:
 
 
 def phase_align(ref_img, tl_img):
-    """phase_cross_correlation で (shift_x, shift_y, correlation) を返す。失敗時は None。"""
+    """Return (shift_x, shift_y, correlation) using phase_cross_correlation. Returns None on failure."""
     from skimage import registration
     try:
         shift, error, _ = registration.phase_cross_correlation(
@@ -191,9 +192,9 @@ def phase_align(ref_img, tl_img):
 
 def detect_timeseries_outliers(shift_avg, window, thresh):
     """
-    時系列シフトに対してrolling median basedの外れ値検出。
-    window: メジアンフィルタ幅（奇数推奨）
-    thresh: MAD倍率（0で全フラグfalse）
+    Rolling median-based outlier detection for timeseries shifts.
+    window: median filter width (odd recommended)
+    thresh: MAD multiplier (0 to flag all as false)
     Returns: bool array, shape=(n_frames,)
     """
     if thresh <= 0:
@@ -209,15 +210,15 @@ def detect_timeseries_outliers(shift_avg, window, thresh):
 
 def load_grid_refs(channels_dir, n_channels):
     """
-    グリッドの x+0_y+0 画像を読み込み、各チャネルのROIでcropして
-    per-channel基準画像リストを返す。
+    Load grid x+0_y+0 image, crop with each channel's ROI,
+    and return a list of per-channel reference images.
     """
     # extract_rect_roi imported at top level from ecc_utils
 
-    # 候補を優先順に試す:
-    #   1. output_phase/*_ph_ZZZ_phase.tif  (pipeline_full.py 再構成済み)
-    #   2. output_phase/*_ph_ZZZ.tif        (旧命名)
-    #   3. *_ph_ZZZ.tif                     (未再構成の生画像 fallback)
+    # Try candidates in priority order:
+    #   1. output_phase/*_ph_ZZZ_phase.tif  (reconstructed by pipeline_full.py)
+    #   2. output_phase/*_ph_ZZZ.tif        (legacy naming)
+    #   3. *_ph_ZZZ.tif                     (unreconstructed raw image fallback)
     base_dir = Path(GRID_DIR) / f"{GRID_BASE_LABEL}_x+0_y+0"
     z_str = f"ph_{GRID_Z_INDEX:03d}"
 
@@ -229,20 +230,20 @@ def load_grid_refs(channels_dir, n_channels):
     grid_ref_path = next((p for p in candidates if p.exists()), None)
     if grid_ref_path is None:
         raise FileNotFoundError(
-            f"グリッド基準画像が見つかりません: {base_dir}\n"
-            f"  試したパス:\n" + "\n".join(f"    {p}" for p in candidates)
+            f"Grid reference image not found: {base_dir}\n"
+            f"  Tried paths:\n" + "\n".join(f"    {p}" for p in candidates)
         )
 
     rois_path = Path(CHANNEL_ROIS_JSON)
     if not rois_path.exists():
-        raise FileNotFoundError(f"channel_rois.json が見つかりません: {rois_path}")
+        raise FileNotFoundError(f"channel_rois.json not found: {rois_path}")
 
     grid_img = tifffile.imread(str(grid_ref_path)).astype(np.float64)
     with open(rois_path, encoding="utf-8") as f:
         rois = json.load(f)
 
-    print(f"グリッド基準画像: {grid_ref_path}")
-    print(f"  グリッド画像サイズ: {grid_img.shape}")
+    print(f"Grid reference image: {grid_ref_path}")
+    print(f"  Grid image size: {grid_img.shape}")
 
     refs = []
     for ch in range(n_channels):
@@ -270,25 +271,25 @@ def load_grid_refs(channels_dir, n_channels):
 
 def load_grid_calibration(json_path):
     """
-    grid_calibration.json を読み込み、(xi, yi) → (cal_dx_px, cal_dy_px) の dict を返す。
+    Load grid_calibration.json and return a dict of (xi, yi) -> (cal_dx_px, cal_dy_px).
 
-    calibrate_grid_positions.py は actual_dx_px = -tx（コンテンツ変位）で保存するが、
-    compute_pos_shifts.py の shift_x = +tx（ECC warp_matrix 生値）。
-    符号を揃えるため、ロード時に符号反転する。
+    calibrate_grid_positions.py saves actual_dx_px = -tx (content displacement),
+    but compute_pos_shifts.py uses shift_x = +tx (raw ECC warp_matrix value).
+    Sign is inverted on load to match conventions.
     """
     with open(json_path, encoding="utf-8") as f:
         data = json.load(f)
     cal = {}
     for entry in data.get("positions", []):
         cal[(entry["xi"], entry["yi"])] = (
-            -entry["actual_dx_px"],   # actual_dx = -tx → cal_dx = +tx (shift_x 規約に合わせる)
+            -entry["actual_dx_px"],   # actual_dx = -tx -> cal_dx = +tx (match shift_x convention)
             -entry["actual_dy_px"],
         )
     return cal
 
 
 def scan_grid_positions(grid_dir, base_label):
-    """(xi, yi) → folder_path のマップを返す。"""
+    """Return a map of (xi, yi) -> folder_path."""
     import re
     grid_dir = Path(grid_dir)
     pattern = re.compile(rf"^{re.escape(base_label)}_x([+-]?\d+)_y([+-]?\d+)$")
@@ -303,7 +304,7 @@ def scan_grid_positions(grid_dir, base_label):
 
 
 def find_nearest_grid(pos_map, dx_um, dy_um, x_step, y_step):
-    """最近傍 (xi, yi) と距離を返す。"""
+    """Return the nearest (xi, yi) and distance."""
     best_key, best_dist = None, float('inf')
     for (xi, yi) in pos_map:
         dist = ((xi * x_step - dx_um) ** 2 + (yi * y_step - dy_um) ** 2) ** 0.5
@@ -315,15 +316,15 @@ def find_nearest_grid(pos_map, dx_um, dy_um, x_step, y_step):
 
 def load_grid_ref_mn(pos_map, xi, yi, rois, n_channels):
     """
-    grid(xi, yi) の各チャネル ROI crop を返す。
-    固定 (cx, cy) で crop するので pre-cropped stacks と直接比較可能。
+    Return per-channel ROI crops from grid(xi, yi).
+    Uses fixed (cx, cy) for cropping so results are directly comparable with pre-cropped stacks.
     """
     # extract_rect_roi imported at top level from ecc_utils
     pos_dir = pos_map[(xi, yi)]
     fname = f"img_000000000_ph_{GRID_Z_INDEX:03d}_phase.tif"
     path = pos_dir / "output_phase" / fname
     if not path.exists():
-        raise FileNotFoundError(f"グリッド画像が見つかりません: {path}")
+        raise FileNotFoundError(f"Grid image not found: {path}")
     grid_img = tifffile.imread(str(path)).astype(np.float64)
     refs_out = []
     for ch in range(n_channels):
@@ -341,13 +342,13 @@ def load_grid_ref_mn(pos_map, xi, yi, rois, n_channels):
 
 
 def load_grid_ref_mn_half(pos_map, xi, yi, rois, n_channels):
-    """grid(xi, yi) の各チャネル ROI full crop を返す（2段階ECC用）。"""
+    """Return per-channel ROI full crops from grid(xi, yi) (for 2-stage ECC)."""
     # extract_rect_roi imported at top level from ecc_utils
     pos_dir = pos_map[(xi, yi)]
     fname = f"img_000000000_ph_{GRID_Z_INDEX:03d}_phase.tif"
     path = pos_dir / "output_phase" / fname
     if not path.exists():
-        raise FileNotFoundError(f"グリッド画像が見つかりません: {path}")
+        raise FileNotFoundError(f"Grid image not found: {path}")
     grid_img = tifffile.imread(str(path)).astype(np.float64)
     refs_out = []
     for ch in range(n_channels):
@@ -369,7 +370,7 @@ def load_grid_ref_mn_half(pos_map, xi, yi, rois, n_channels):
 
 
 def _select_nearest_grid(shift_x, shift_y, grid_cal, pos_map, pixel_scale_um):
-    """shift_x/y [px] から最近傍 (xi, yi) を返す。"""
+    """Return nearest (xi, yi) from shift_x/y [px]."""
     if grid_cal:
         best_key, best_dist = None, float('inf')
         for key, (adx, ady) in grid_cal.items():
@@ -388,7 +389,7 @@ def _select_nearest_grid(shift_x, shift_y, grid_cal, pos_map, pixel_scale_um):
 
 
 def _get_grid_offset(xi, yi, grid_cal, pixel_scale_um):
-    """grid(xi, yi) の content offset [px] (grid(0,0) 基準) を返す。"""
+    """Return content offset [px] of grid(xi, yi) relative to grid(0,0)."""
     if grid_cal and (xi, yi) in grid_cal:
         return grid_cal[(xi, yi)]
     return (SHIFT_SIGN_Y * yi * Y_STEP / pixel_scale_um,
@@ -397,8 +398,8 @@ def _get_grid_offset(xi, yi, grid_cal, pixel_scale_um):
 
 def _save_corr_npz_csv(records, channels_dir):
     """
-    corr データを NPZ（全データ）+ CSV（per-frame サマリー）として保存する。
-    subtract 画像と corr 値の対応確認用。
+    Save corr data as NPZ (all data) + CSV (per-frame summary).
+    For verifying correspondence between subtracted images and corr values.
     """
     import csv as _csv
     channels_dir = Path(channels_dir)
@@ -444,7 +445,7 @@ def _save_corr_npz_csv(records, channels_dir):
 
     npz_path = channels_dir / "pos_shifts_corr_data.npz"
     np.savez_compressed(str(npz_path), **save_dict)
-    print(f"  [corr_data] NPZ保存: {npz_path}")
+    print(f"  [corr_data] NPZ saved: {npz_path}")
 
     # per-frame summary CSV
     csv_path = channels_dir / "pos_shifts_corr_summary.csv"
@@ -484,12 +485,12 @@ def _save_corr_npz_csv(records, channels_dir):
                 p3 = [r["pass3_corr"] for r in recs_t if r.get("pass3_corr") is not None]
                 row["pass3_corr_mean"] = round(float(np.mean(p3)), 6) if p3 else ""
             writer.writerow(row)
-    print(f"  [corr_data] CSV保存: {csv_path}")
+    print(f"  [corr_data] CSV saved: {csv_path}")
 
 
 def _save_exclusion_summary_csv(frame_results, channels_dir):
     """
-    per-frame の除外チャネル内訳を CSV として保存する。
+    Save per-frame excluded channel breakdown as CSV.
     columns: frame_index, n_total, n_excl_failed, n_excl_low_ecc, n_excl_mad, n_used
     """
     import csv as _csv
@@ -514,13 +515,13 @@ def _save_exclusion_summary_csv(frame_results, channels_dir):
                 "n_excl_mad":     n_mad,
                 "n_used":         n_used,
             })
-    print(f"  [exclusion_summary] CSV保存: {csv_path}")
+    print(f"  [exclusion_summary] CSV saved: {csv_path}")
 
 
 def _frame_result_from_per_channel(t, per_channel):
     """
-    per_channel リストから外れ値除去・平均を計算し (frame_result, sx_avg, sy_avg) を返す。
-    全チャネル失敗時は sx_avg=sy_avg=None。
+    Compute outlier removal and averaging from per_channel list, returning
+    (frame_result, sx_avg, sy_avg). sx_avg=sy_avg=None when all channels fail.
     """
     valid = [c for c in per_channel if not c["excluded"]]
     if len(valid) == 0:
@@ -774,20 +775,20 @@ def _incr_compute_frame(t):
 def main():
     channels_dir = Path(CHANNELS_DIR)
     if not channels_dir.exists():
-        print(f"ERROR: CHANNELS_DIR が見つかりません: {channels_dir}")
+        print(f"ERROR: CHANNELS_DIR not found: {channels_dir}")
         sys.exit(1)
 
     tilt_invalid_chs = set()  # channels whose tilt wide-crop goes OOB; skip from ECC.
     if USE_SLOPE_CORRECTION:
-        # ===== slope補正モード: output_phase/ のフル位相画像から直接構築 =====
+        # ===== Slope correction mode: build directly from full phase images in output_phase/ =====
         tl_dir = channels_dir.parent
         phase_paths = sorted(tl_dir.glob(f"img_*_ph_{TL_Z_INDEX:03d}_phase.tif"))
         if not phase_paths:
-            print(f"ERROR: 位相画像が見つかりません: {tl_dir}")
+            print(f"ERROR: Phase images not found: {tl_dir}")
             sys.exit(1)
         rois_path_sc = Path(CHANNEL_ROIS_JSON)
         if not rois_path_sc.exists():
-            print(f"ERROR: CHANNEL_ROIS_JSON が見つかりません: {rois_path_sc}")
+            print(f"ERROR: CHANNEL_ROIS_JSON not found: {rois_path_sc}")
             sys.exit(1)
         with open(rois_path_sc, encoding="utf-8") as f:
             rois_sc = json.load(f)
@@ -795,7 +796,7 @@ def main():
         if MAX_FRAMES is not None:
             phase_paths = phase_paths[:MAX_FRAMES]
         n_frames = len(phase_paths)
-        print(f"チャネル数: {n_channels}  フレーム数: {n_frames}  [slope補正モード / TILT_CROP_H={TILT_CROP_H}]")
+        print(f"Channels: {n_channels}  Frames: {n_frames}  [slope correction mode / TILT_CROP_H={TILT_CROP_H}]")
         stacks = [np.zeros((n_frames, roi["crop_w"], ECC_CROP_H), dtype=np.float64) for roi in rois_sc]
         for t, pp in enumerate(tqdm(phase_paths, desc="slope-correct")):
             full_img = tifffile.imread(str(pp)).astype(np.float64)
@@ -806,16 +807,16 @@ def main():
                                      fit_right=TILT_FIT_RIGHT)
                 if crop is None:
                     tilt_invalid_chs.add(ch)
-                    print(f"  [tilt bounds NG] ch{ch:02d} cx={roi['cx']} tilt_crop_h={TILT_CROP_H} → skip from ECC")
+                    print(f"  [tilt bounds NG] ch{ch:02d} cx={roi['cx']} tilt_crop_h={TILT_CROP_H} -> skip from ECC")
                     continue
                 stacks[ch][t] = crop
     else:
-        # ===== 既存モード: channel stacks（bg_corr済み等）から読む =====
+        # ===== Legacy mode: read from channel stacks (bg_corr etc.) =====
         stacks_paths = sorted(channels_dir.glob(CHANNEL_PATTERN))
         if not stacks_paths:
-            print(f"ERROR: {CHANNEL_PATTERN} に合うファイルが見つかりません: {channels_dir}")
+            print(f"ERROR: No files matching {CHANNEL_PATTERN} found: {channels_dir}")
             sys.exit(1)
-        print(f"チャネル数: {len(stacks_paths)}")
+        print(f"Channels: {len(stacks_paths)}")
         for p in stacks_paths:
             print(f"  {p.name}")
         stacks = []
@@ -830,19 +831,19 @@ def main():
         if MAX_FRAMES is not None and MAX_FRAMES < n_frames:
             stacks = [s[:MAX_FRAMES] for s in stacks]
             n_frames = MAX_FRAMES
-            print(f"[TEST] フレームを {n_frames} に制限")
-    print(f"\nフレーム数: {n_frames}")
-    print(f"アライメント手法: {ALIGNMENT_METHOD}")
-    print(f"外れ値MAD閾値: {OUTLIER_MAD_THRESH}")
+            print(f"[TEST] Limiting frames to {n_frames}")
+    print(f"\nFrames: {n_frames}")
+    print(f"Alignment method: {ALIGNMENT_METHOD}")
+    print(f"Outlier MAD threshold: {OUTLIER_MAD_THRESH}")
     if OUTLIER_TIMESERIES_THRESH > 0:
-        print(f"時系列外れ値: window={OUTLIER_TIMESERIES_WINDOW}, thresh={OUTLIER_TIMESERIES_THRESH}")
+        print(f"Timeseries outlier: window={OUTLIER_TIMESERIES_WINDOW}, thresh={OUTLIER_TIMESERIES_THRESH}")
     else:
-        print("時系列外れ値検出: 無効")
+        print("Timeseries outlier detection: disabled")
 
-    # 基準画像の構築
+    # Build reference images
     reference_info = {}
     if USE_GRID_REFERENCE or USE_INCREMENTAL_TRACKING:
-        print(f"\n基準: グリッド x+0_y+0  ({GRID_BASE_LABEL})")
+        print(f"\nReference: grid x+0_y+0  ({GRID_BASE_LABEL})")
         try:
             refs, grid_ref_path_str = load_grid_refs(channels_dir, n_channels)
             reference_info = {
@@ -858,9 +859,9 @@ def main():
     else:
         ref_idx = REFERENCE_FRAME - 1
         if ref_idx < 0 or ref_idx >= n_frames:
-            print(f"ERROR: REFERENCE_FRAME={REFERENCE_FRAME} が範囲外 (1~{n_frames})")
+            print(f"ERROR: REFERENCE_FRAME={REFERENCE_FRAME} out of range (1~{n_frames})")
             sys.exit(1)
-        print(f"\n基準: タイムラプス フレーム {REFERENCE_FRAME} (0-indexed: {ref_idx})")
+        print(f"\nReference: timelapse frame {REFERENCE_FRAME} (0-indexed: {ref_idx})")
         refs = [stacks[ch][ref_idx] for ch in range(n_channels)]
         reference_info = {
             "reference_type": "timelapse_frame",
@@ -870,7 +871,7 @@ def main():
     # Channels whose tilt wide-crop went out of bounds: exclude from all ECC averaging.
     invalid_chs = tilt_invalid_chs | {ch for ch, r in enumerate(refs) if r is None}
     if invalid_chs:
-        print(f"[tilt bounds NG] ECC から除外するチャネル: {sorted(invalid_chs)}")
+        print(f"[tilt bounds NG] Channels excluded from ECC: {sorted(invalid_chs)}")
 
     if ALIGNMENT_METHOD == 'ecc':
         refs_u8 = [None if r is None else to_uint8(r) for r in refs]
@@ -880,44 +881,44 @@ def main():
     if USE_INCREMENTAL_TRACKING:
         rois_path = Path(CHANNEL_ROIS_JSON)
         if not rois_path.exists():
-            print(f"ERROR: CHANNEL_ROIS_JSON が見つかりません: {rois_path}")
+            print(f"ERROR: CHANNEL_ROIS_JSON not found: {rois_path}")
             sys.exit(1)
         with open(rois_path, encoding="utf-8") as f:
             rois_for_incremental = json.load(f)
 
-    # フレームごとにアライメント計算
+    # Compute alignment per frame
     frame_results = []
-    corr_records  = []   # corr/shift の全記録（NPZ/CSV 保存用）
+    corr_records  = []   # Full record of corr/shift (for NPZ/CSV saving)
     pixel_scale_um = SENSOR_PIXEL_SIZE / MAGNIFICATION * ORIGINAL_DIM / RECONSTRUCTED_DIM * 1e6
 
     if USE_INCREMENTAL_TRACKING:
         pos_map = scan_grid_positions(GRID_DIR, GRID_BASE_LABEL)
         if not pos_map:
-            print("ERROR: グリッド Pos が見つかりません")
+            print("ERROR: Grid Pos not found")
             sys.exit(1)
-        print(f"[incremental] grid Pos数: {len(pos_map)}")
+        print(f"[incremental] grid positions: {len(pos_map)}")
 
-        # グリッドキャリブレーション読み込み
+        # Load grid calibration
         grid_cal = {}
         if GRID_CALIBRATION_JSON:
             cal_path = Path(GRID_CALIBRATION_JSON)
             if cal_path.exists():
                 grid_cal = load_grid_calibration(str(cal_path))
-                print(f"[calibration] {len(grid_cal)} 点の実計測オフセットを読み込み: {cal_path}")
+                print(f"[calibration] Loaded {len(grid_cal)} measured offsets: {cal_path}")
             else:
-                print(f"[calibration] JSON が見つかりません: {cal_path}  → 名目値を使用")
+                print(f"[calibration] JSON not found: {cal_path}  -> using nominal values")
 
         _n_workers = N_WORKERS or os.cpu_count()
 
-        # pass1用: grid(0,0)の half or full crop（USE_SECOND_PASS_ECC 時は常にgrid(0,0)固定）
+        # For pass1: grid(0,0) half or full crop (always fixed to grid(0,0) when USE_SECOND_PASS_ECC)
         if USE_SECOND_PASS_ECC:
             if FIRST_PASS_HALF:
-                print(f"[pass1] grid(0,0) HALF crop ({SECOND_PASS_HALF}側) を使用")
+                print(f"[pass1] Using grid(0,0) HALF crop ({SECOND_PASS_HALF} side)")
                 p1_refs    = load_grid_ref_mn_half(pos_map, 0, 0, rois_for_incremental, n_channels)
                 p1_refs_u8 = ([None if r is None else to_uint8(r) for r in p1_refs]
                               if ALIGNMENT_METHOD == 'ecc' else None)
             else:
-                print(f"[pass1] grid(0,0) FULL crop を使用（上記の backsub offset が適用済み）")
+                print(f"[pass1] Using grid(0,0) FULL crop (backsub offset already applied)")
                 p1_refs    = refs
                 p1_refs_u8 = refs_u8 if ALIGNMENT_METHOD == 'ecc' else None
 
@@ -947,7 +948,7 @@ def main():
             results_iter = pool.map(_incr_compute_frame, range(n_frames),
                                     chunksize=4)
             all_results = list(tqdm(results_iter, total=n_frames,
-                                    desc="フレーム処理"))
+                                    desc="Processing frames"))
 
         # Collect results (pool.map returns in order)
         for t_idx, pc_list, cr_list in all_results:
@@ -976,7 +977,7 @@ def main():
     else:
         # ---- Non-incremental: 1-pass ECC against grid(0,0), frame-parallel ----
         _n_workers = N_WORKERS or os.cpu_count()
-        print(f"並列ワーカー数: {_n_workers} (non-incremental / フレーム並列, 1-pass)")
+        print(f"Parallel workers: {_n_workers} (non-incremental / frame-parallel, 1-pass)")
 
         def _run_frame(t):
             pc, cr = [], []
@@ -1014,7 +1015,7 @@ def main():
         _frame_results_map = {}
         with concurrent.futures.ThreadPoolExecutor(max_workers=_n_workers) as ex:
             fs = {ex.submit(_run_frame, t): t for t in range(n_frames)}
-            for fut in tqdm(concurrent.futures.as_completed(fs), total=n_frames, desc="フレーム処理"):
+            for fut in tqdm(concurrent.futures.as_completed(fs), total=n_frames, desc="Processing frames"):
                 t = fs[fut]
                 _frame_results_map[t] = fut.result()
 
@@ -1024,14 +1025,14 @@ def main():
             frame_results.append(frame_result)
             corr_records.extend(cr)
 
-        # ---- corr データ保存 ----
+        # ---- Save corr data ----
         if SAVE_CORR_DATA and corr_records:
             _save_corr_npz_csv(corr_records, channels_dir)
 
-    # 時系列外れ値検出
+    # Timeseries outlier detection
     avg_x = [r["shift_x_avg"] for r in frame_results]
     avg_y = [r["shift_y_avg"] for r in frame_results]
-    # None を含む場合は線形補間してから検出
+    # Interpolate linearly if None values are present before detection
     def fill_none(arr):
         arr = np.array([np.nan if v is None else v for v in arr], dtype=np.float64)
         nans = np.isnan(arr)
@@ -1051,16 +1052,16 @@ def main():
         r["is_outlier_timeseries"] = bool(ts_outlier[i])
 
     n_ts_outlier = int(np.sum(ts_outlier))
-    print(f"\n時系列外れ値フレーム数: {n_ts_outlier} / {n_frames}")
+    print(f"\nTimeseries outlier frames: {n_ts_outlier} / {n_frames}")
 
-    # シフト統計
+    # Shift statistics
     valid_avg_x = [r["shift_x_avg"] for r in frame_results if r["shift_x_avg"] is not None]
     valid_avg_y = [r["shift_y_avg"] for r in frame_results if r["shift_y_avg"] is not None]
     if valid_avg_x:
-        print(f"shift_x: 平均={np.mean(valid_avg_x):.3f}, 範囲=[{np.min(valid_avg_x):.3f}, {np.max(valid_avg_x):.3f}]")
-        print(f"shift_y: 平均={np.mean(valid_avg_y):.3f}, 範囲=[{np.min(valid_avg_y):.3f}, {np.max(valid_avg_y):.3f}]")
+        print(f"shift_x: mean={np.mean(valid_avg_x):.3f}, range=[{np.min(valid_avg_x):.3f}, {np.max(valid_avg_x):.3f}]")
+        print(f"shift_y: mean={np.mean(valid_avg_y):.3f}, range=[{np.min(valid_avg_y):.3f}, {np.max(valid_avg_y):.3f}]")
 
-    # JSON保存
+    # Save JSON
     out = {
         "method": ALIGNMENT_METHOD,
         "n_channels": n_channels,
@@ -1071,7 +1072,7 @@ def main():
         "channels_dir": str(channels_dir),
         "channel_pattern": CHANNEL_PATTERN,
         **reference_info,
-        # shift_visualize.py互換フィールド（平均シフト量を alignment_results 形式でも持つ）
+        # shift_visualize.py compatible fields (also hold average shift amounts in alignment_results format)
         "alignment_results": [
             {
                 "filename": f"frame_{r['frame_index']:06d}",
@@ -1090,12 +1091,12 @@ def main():
     out_path = channels_dir / OUTPUT_JSON
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(out, f, indent=2, ensure_ascii=False)
-    print(f"\n保存完了: {out_path}")
+    print(f"\nSaved: {out_path}")
 
-    # 除外サマリー CSV 保存
+    # Save exclusion summary CSV
     _save_exclusion_summary_csv(frame_results, channels_dir)
 
-    # shift_visualize で可視化
+    # Visualize with shift_visualize
     try:
         sys.path.insert(0, str(Path(__file__).parent))
         from shift_visualize import visualize_shifts, visualize_2pass_shifts, visualize_exclusion_summary
@@ -1106,7 +1107,7 @@ def main():
         if excl_csv.exists():
             visualize_exclusion_summary(str(excl_csv), str(out_path))
     except Exception as e:
-        print(f"[shift_visualize] スキップ: {e}")
+        print(f"[shift_visualize] Skipped: {e}")
 
 
 

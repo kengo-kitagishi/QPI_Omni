@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-超シンプルなmean RI計算と図の出力
+Simple mean RI calculation and figure output
 
-ellipse理論体積でtotal phaseを割ってmean RIを求める
+Compute mean RI by dividing total phase by ellipse theoretical volume
 """
 import numpy as np
 import pandas as pd
@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from figure_logger import save_figure
 
 # =============================================================================
-# パラメータ設定
+# Parameter settings
 # =============================================================================
 RESULTS_CSV = r"C:\Users\QPI\Documents\QPI_omni\data\align_demo\from_output\Results.csv"
 IMAGE_DIR = r"C:\Users\QPI\Documents\QPI_omni\data\align_demo\from_outputphase\bg_corr\subtracted"
@@ -27,25 +27,25 @@ N_MEDIUM = 1.333
 ALPHA_RI = 0.00018
 
 # =============================================================================
-# 関数定義
+# Function definitions
 # =============================================================================
 
 def calc_rod_volume(major_px, minor_px, pixel_size_um):
-    """Rod shape体積計算 (カプセル型)"""
+    """Rod shape volume calculation (capsule type)"""
     length_um = major_px * pixel_size_um
     width_um = minor_px * pixel_size_um
     r = width_um / 2.0
     h = length_um - 2 * r
     
     if h < 0:
-        # 球
+        # Sphere
         return (4.0 / 3.0) * np.pi * (r ** 3)
     else:
-        # 球 + 円柱
+        # Sphere + cylinder
         return (4.0 / 3.0) * np.pi * (r ** 3) + np.pi * (r ** 2) * h
 
 def make_ellipse_mask(center_x, center_y, major, minor, angle_deg, image_shape):
-    """楕円マスク作成"""
+    """Create ellipse mask"""
     height, width = image_shape
     y, x = np.ogrid[:height, :width]
     
@@ -62,34 +62,34 @@ def make_ellipse_mask(center_x, center_y, major, minor, angle_deg, image_shape):
     return ((x_rot / a) ** 2 + (y_rot / b) ** 2) <= 1.0
 
 # =============================================================================
-# メイン処理
+# Main processing
 # =============================================================================
 
 print("="*60)
 print("Simple Ellipse RI Analysis")
 print("="*60)
 
-# Results.csv読み込み
+# Read Results.csv
 print(f"\nReading: {os.path.basename(RESULTS_CSV)}")
 df = pd.read_csv(RESULTS_CSV)
 print(f"  {len(df)} ROIs found")
 
-# 画像リスト取得
+# Get image list
 image_files = sorted(glob.glob(os.path.join(IMAGE_DIR, '*.tif')))
 print(f"  {len(image_files)} images found")
 
-# 最初の画像でサイズ取得
+# Get size from first image
 first_img = Image.open(image_files[0])
 image_shape = (first_img.height, first_img.width)
 print(f"  Image size: {image_shape}")
 
-# 結果格納
+# Store results
 results = []
 
-# 各ROIを処理
+# Process each ROI
 print("\nProcessing...")
 for idx, row in df.iterrows():
-    # フレーム番号
+    # Frame number
     if 'Label' in row:
         import re
         match = re.search(r'(\d{4})', row['Label'])
@@ -102,10 +102,10 @@ for idx, row in df.iterrows():
     if frame_num > len(image_files):
         continue
     
-    # 位相画像読み込み
+    # Load phase image
     phase_img = np.array(Image.open(image_files[frame_num - 1])).astype(np.float64)
     
-    # ROIパラメータ
+    # ROI parameters
     major = row.get('Major', row.get('Feret', 0))
     minor = row.get('Minor', row.get('MinFeret', 0))
     center_x = row['X']
@@ -115,21 +115,21 @@ for idx, row in df.iterrows():
     if major == 0 or minor == 0:
         continue
     
-    # 体積計算
+    # Volume calculation
     volume_um3 = calc_rod_volume(major, minor, PIXEL_SIZE_UM)
     
-    # マスク作成
+    # Create mask
     mask = make_ellipse_mask(center_x, center_y, major, minor, angle, image_shape)
     
     # total phase
     total_phase = np.sum(phase_img[mask])
     
-    # mean RI計算
+    # Mean RI calculation
     wavelength_um = WAVELENGTH_NM * 1e-3
     pixel_area_um2 = PIXEL_SIZE_UM ** 2
     mean_ri = N_MEDIUM + (total_phase * wavelength_um * pixel_area_um2) / (2 * np.pi * volume_um3)
     
-    # 質量計算
+    # Mass calculation
     mean_conc = (mean_ri - N_MEDIUM) / ALPHA_RI
     total_mass = mean_conc * volume_um3
     
@@ -143,7 +143,7 @@ for idx, row in df.iterrows():
     if (idx + 1) % 20 == 0:
         print(f"  {idx + 1}/{len(df)}")
 
-# DataFrame化
+# Convert to DataFrame
 results_df = pd.DataFrame(results).sort_values('frame')
 
 print(f"\nProcessed {len(results_df)} ROIs")
@@ -152,7 +152,7 @@ print(f"  Mean RI range: {results_df['mean_ri'].min():.4f} - {results_df['mean_r
 print(f"  Mass range: {results_df['mass'].min():.1f} - {results_df['mass'].max():.1f} pg")
 
 # =============================================================================
-# プロット作成
+# Create plot
 # =============================================================================
 
 print(f"\nCreating plot...")
@@ -185,7 +185,7 @@ save_figure(
         "alpha_ri": ALPHA_RI,
         "n_roi": len(results_df),
     },
-    description="mean RI計算: ellipse体積でtotal phaseを割った結果（Volume / Mean RI / Total Mass の時系列）",
+    description="Mean RI calculation: total phase divided by ellipse volume (Volume / Mean RI / Total Mass time-series)",
 )
 
 plt.show()

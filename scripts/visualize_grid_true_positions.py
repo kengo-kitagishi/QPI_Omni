@@ -2,25 +2,25 @@
 """
 visualize_grid_true_positions.py
 ---------------------------------
-グリッドスキャン各点の「本当のピクセル位置」を ECC で実測し可視化する。
-直接ECC と BFS チェーン の 2 方式を実行して比較する。
+Measure and visualize the "true pixel positions" of each grid scan point using ECC.
+Compare two methods: Direct ECC and BFS chain.
 
-【ECC 手順】compute_pos_shifts.py と完全に揃えた:
-  - 前処理: _tilt_correct (TILT_CROP_H=270 → ECC_CROP_H=80)
-  - 正規化: to_uint8 固定 VMIN/VMAX (-5/2)
-  - チャネル平均: MAD 外れ値除去 (OUTLIER_MAD_THRESH=5.0) → 残チャネル平均
+[ECC procedure] Fully aligned with compute_pos_shifts.py:
+  - Preprocessing: _tilt_correct (TILT_CROP_H=270 -> ECC_CROP_H=80)
+  - Normalization: to_uint8 with fixed VMIN/VMAX (-5/2)
+  - Channel averaging: MAD outlier removal (OUTLIER_MAD_THRESH=5.0) -> average of remaining channels
   - ECC: MOTION_TRANSLATION, 100000 iter, 1e-8
 
-【方式 1: 直接ECC】
-  center (0,0) を基準に各点を直接 ECC。最大シフト ±1.45 px。
+[Method 1: Direct ECC]
+  Direct ECC of each point using center (0,0) as reference. Max shift +/-1.45 px.
 
-【方式 2: BFS チェーン】
-  calibrate_grid_positions.py と同じ BFS 方式。同じ前処理で実行。
+[Method 2: BFS chain]
+  Same BFS method as calibrate_grid_positions.py. Same preprocessing.
 
-【出力】
-  Figure 1: 直接ECC — Nominal vs Measured + Residual map
-  Figure 2: BFS    — Nominal vs Measured + Residual map
-  単位: um
+[Output]
+  Figure 1: Direct ECC -- Nominal vs Measured + Residual map
+  Figure 2: BFS        -- Nominal vs Measured + Residual map
+  Units: um
 """
 import sys
 import re
@@ -39,36 +39,36 @@ sys.path.insert(0, str(Path(__file__).parent))
 from figure_logger import save_figure
 
 # ============================================================
-# 設定パラメータ
+# Configuration parameters
 # ============================================================
 GRID_DIR   = Path(r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1")
 POS_PREFIX = "Pos1"
 Z_IDX      = 9
 
-# ECC パラメータ (compute_pos_shifts.py と同値)
+# ECC parameters (same values as compute_pos_shifts.py)
 VMIN, VMAX       = -5.0, 2.0
 # ECC convergence params now in ecc_utils
 
-# Tilt 補正パラメータ (compute_pos_shifts.py と同値)
-TILT_CROP_H = 270   # X 方向の big crop 幅 [px]
-ECC_CROP_H  = 80    # ECC に使う中央 crop 幅 [px]
+# Tilt correction parameters (same values as compute_pos_shifts.py)
+TILT_CROP_H = 270   # Big crop width in X direction [px]
+ECC_CROP_H  = 80    # Center crop width used for ECC [px]
 
-# チャネル外れ値除去 (compute_pos_shifts.py と同値)
+# Channel outlier removal (same values as compute_pos_shifts.py)
 OUTLIER_MAD_THRESH = 5.0
 
-# 光学パラメータ
+# Optical parameters
 SENSOR_PIXEL_SIZE = 3.45e-6   # [m]
 MAGNIFICATION     = 40
 ORIGINAL_DIM      = 2048
 RECONSTRUCTED_DIM = 511
 
-# グリッドステップ
+# Grid step
 X_STEP       = 0.1   # [um]
 Y_STEP       = 0.1   # [um]
 SHIFT_SIGN_X = -1
 SHIFT_SIGN_Y = -1
 
-# channel_rois.json パス (None → Pos1_x+0_y+0/output_phase/channels/ から自動)
+# channel_rois.json path (None -> auto-detect from Pos1_x+0_y+0/output_phase/channels/)
 CHANNEL_ROIS_JSON = None
 # ============================================================
 
@@ -77,7 +77,7 @@ STEP_PX = X_STEP / pixel_scale_um  # ~0.289 px/step
 PX2UM   = pixel_scale_um
 
 
-# ---- ユーティリティ関数 ----
+# ---- Utility functions ----
 
 from ecc_utils import (
     tilt_fit_crop, extract_rect_roi, to_uint8, ecc_align,
@@ -87,9 +87,9 @@ from ecc_utils import (
 
 def _channel_average(tx_list, ty_list, corr_list):
     """
-    チャネルリストから MAD 外れ値除去後の平均を計算。
-    compute_pos_shifts.py の _frame_result_from_per_channel と同じロジック。
-    戻り値: (actual_dx, actual_dy, mean_corr)
+    Compute the mean after MAD outlier removal from channel lists.
+    Same logic as _frame_result_from_per_channel in compute_pos_shifts.py.
+    Returns: (actual_dx, actual_dy, mean_corr)
     """
     if not tx_list:
         return None
@@ -110,7 +110,7 @@ def _channel_average(tx_list, ty_list, corr_list):
 
 
 def scan_grid_positions(grid_dir, base_label):
-    """(xi, yi) → folder_path のマップを返す。"""
+    """Return a map of (xi, yi) -> folder_path."""
     pattern = re.compile(rf"^{re.escape(base_label)}_x([+-]?\d+)_y([+-]?\d+)$")
     pos_map = {}
     for d in Path(grid_dir).iterdir():
@@ -123,7 +123,7 @@ def scan_grid_positions(grid_dir, base_label):
 
 
 def load_phase_image(pos_dir, z_idx):
-    """output_phase/img_000000000_ph_{z_idx:03d}_phase.tif を float64 で返す。"""
+    """Load output_phase/img_000000000_ph_{z_idx:03d}_phase.tif as float64."""
     path = Path(pos_dir) / "output_phase" / f"img_000000000_ph_{z_idx:03d}_phase.tif"
     if not path.exists():
         raise FileNotFoundError(f"Phase image not found: {path}")
@@ -141,10 +141,10 @@ def make_crops_u8(img_f64, rois, fit_right: bool = False):
     return crops
 
 
-# ---- 直接ECC 方式 ----
+# ---- Direct ECC method ----
 
 def run_direct_ecc(crops_cache, pos_map, rois, pixel_scale_um):
-    """center (0,0) を基準に各グリッド位置を直接 ECC する。"""
+    """Direct ECC of each grid position using center (0,0) as reference."""
     n_channels = len(rois)
     results = {(0, 0): {
         "actual_dx": 0.0, "actual_dy": 0.0,
@@ -153,12 +153,12 @@ def run_direct_ecc(crops_cache, pos_map, rois, pixel_scale_um):
     }}
 
     if (0, 0) not in crops_cache:
-        raise RuntimeError("center (0,0) のcropsがキャッシュにありません")
+        raise RuntimeError("center (0,0) crops not found in cache")
     ref_crops = crops_cache[(0, 0)]
 
     sorted_keys = sorted(pos_map.keys(), key=lambda k: abs(k[0]) + abs(k[1]))
     pbar = tqdm(total=len(pos_map), desc="Direct ECC")
-    pbar.update(1)  # (0,0) はスキップ
+    pbar.update(1)  # skip (0,0)
 
     for (xi, yi) in sorted_keys:
         if (xi, yi) == (0, 0):
@@ -201,12 +201,12 @@ def run_direct_ecc(crops_cache, pos_map, rois, pixel_scale_um):
     return results
 
 
-# ---- BFS チェーン方式 ----
+# ---- BFS chain method ----
 
 def run_bfs(crops_cache, pos_map, rois, pixel_scale_um):
     """
-    BFS チェーン方式: calibrate_grid_positions.py と同じロジック。
-    前処理・チャネル平均は compute_pos_shifts.py に揃える。
+    BFS chain method: same logic as calibrate_grid_positions.py.
+    Preprocessing and channel averaging aligned with compute_pos_shifts.py.
     """
     n_channels = len(rois)
     calibrated = {(0, 0): (0.0, 0.0)}
@@ -301,10 +301,10 @@ def run_bfs(crops_cache, pos_map, rois, pixel_scale_um):
     return results
 
 
-# ---- 図の生成・保存 ----
+# ---- Figure generation and saving ----
 
 def make_figure(results, method_label, pixel_scale_um):
-    """2-panel 図を生成して (fig, arrays_dict) を返す。単位 um。"""
+    """Generate a 2-panel figure and return (fig, arrays_dict). Units: um."""
     sorted_keys = sorted(results.keys())
     xi_list  = np.array([k[0] for k in sorted_keys])
     yi_list  = np.array([k[1] for k in sorted_keys])
@@ -323,14 +323,14 @@ def make_figure(results, method_label, pixel_scale_um):
         res_px_vals = np.array([np.sqrt((r["actual_dx"]-r["nominal_dx"])**2 +
                                         (r["actual_dy"]-r["nominal_dy"])**2)
                                 for r in success])
-        print(f"  [{method_label}] 成功: {len(results)-n_failed}/{len(results)}")
-        print(f"  残差 [px]: mean={res_px_vals.mean():.4f}  std={res_px_vals.std():.4f}  "
+        print(f"  [{method_label}] Success: {len(results)-n_failed}/{len(results)}")
+        print(f"  Residual [px]: mean={res_px_vals.mean():.4f}  std={res_px_vals.std():.4f}  "
               f"max={res_px_vals.max():.4f}")
-        print(f"  残差 [um]: mean={res_px_vals.mean()*pixel_scale_um:.4f}  "
+        print(f"  Residual [um]: mean={res_px_vals.mean()*pixel_scale_um:.4f}  "
               f"max={res_px_vals.max()*pixel_scale_um:.4f}")
         corrs = [r["corr"] for r in success if r["corr"] is not None]
         if corrs:
-            print(f"  ECC相関係数: mean={np.mean(corrs):.4f}  min={np.min(corrs):.4f}")
+            print(f"  ECC correlation: mean={np.mean(corrs):.4f}  min={np.min(corrs):.4f}")
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 5))
     fig.suptitle(
@@ -338,7 +338,7 @@ def make_figure(results, method_label, pixel_scale_um):
         fontsize=11,
     )
 
-    # Panel 1: 名目格子点 vs 実測位置
+    # Panel 1: Nominal lattice vs measured positions
     ax = axes[0]
     ax.scatter(nom_dx, nom_dy, s=80, facecolors="none", edgecolors="gray",
                linewidths=1.2, zorder=2, label="Nominal")
@@ -352,7 +352,7 @@ def make_figure(results, method_label, pixel_scale_um):
     ax.legend(fontsize=8)
     ax.grid(True, linewidth=0.3, alpha=0.5)
 
-    # Panel 2: 残差エラーマップ
+    # Panel 2: Residual error map
     ax2 = axes[1]
     sc2 = ax2.scatter(xi_list, yi_list, c=res_um, s=100,
                       cmap="hot_r", vmin=0, vmax=max(float(res_um.max()), 0.05))
@@ -381,43 +381,43 @@ def make_figure(results, method_label, pixel_scale_um):
     return fig, arrays, res_um
 
 
-# ---- メイン ----
+# ---- Main ----
 
 def main():
     print(f"Pixel scale: {pixel_scale_um:.4f} um/px")
     print(f"Step: {X_STEP} um = {STEP_PX:.4f} px/step  "
           f"(+-5 steps = +-{5*STEP_PX:.3f} px max)")
 
-    # ROI 読み込み
+    # Load ROIs
     if CHANNEL_ROIS_JSON is not None:
         rois_path = Path(CHANNEL_ROIS_JSON)
     else:
         rois_path = (GRID_DIR / f"{POS_PREFIX}_x+0_y+0"
                      / "output_phase" / "channels" / "channel_rois.json")
     if not rois_path.exists():
-        print(f"ERROR: channel_rois.json が見つかりません: {rois_path}")
+        print(f"ERROR: channel_rois.json not found: {rois_path}")
         sys.exit(1)
     with open(rois_path, encoding="utf-8") as f:
         rois = json.load(f)
     n_channels = len(rois)
-    print(f"チャネル数: {n_channels}")
+    print(f"Number of channels: {n_channels}")
 
-    # グリッド Pos スキャン
+    # Scan grid positions
     pos_map = scan_grid_positions(GRID_DIR, POS_PREFIX)
     if not pos_map:
-        print(f"ERROR: グリッドPosが見つかりません: {GRID_DIR}/{POS_PREFIX}_x*_y*")
+        print(f"ERROR: Grid positions not found: {GRID_DIR}/{POS_PREFIX}_x*_y*")
         sys.exit(1)
     xi_all = [k[0] for k in pos_map]
     yi_all = [k[1] for k in pos_map]
-    print(f"グリッドPos数: {len(pos_map)}  "
+    print(f"Grid positions: {len(pos_map)}  "
           f"xi: [{min(xi_all)}, {max(xi_all)}]  yi: [{min(yi_all)}, {max(yi_all)}]")
 
     if (0, 0) not in pos_map:
-        print("ERROR: center (0,0) が見つかりません")
+        print("ERROR: center (0,0) not found")
         sys.exit(1)
 
-    # 全 crops を一括ロード（直接ECC / BFS で共有）
-    print("\n全グリッド画像をロード中...")
+    # Load all crops at once (shared by Direct ECC / BFS)
+    print("\nLoading all grid images...")
     crops_cache = {}
     n_load_failed = 0
     for (xi, yi), pos_dir in tqdm(sorted(pos_map.items()), desc="Loading crops"):
@@ -426,22 +426,22 @@ def main():
             crops_cache[(xi, yi)] = make_crops_u8(img, rois)
         except FileNotFoundError:
             n_load_failed += 1
-    print(f"ロード完了: {len(crops_cache)}/{len(pos_map)}  "
+    print(f"Loading complete: {len(crops_cache)}/{len(pos_map)}  "
           f"(crop shape: {crops_cache[(0,0)][0].shape})")
     if n_load_failed:
-        print(f"  ロード失敗: {n_load_failed} 点 (output_phase なし)")
+        print(f"  Loading failed: {n_load_failed} points (no output_phase)")
 
-    # ---- 方式 1: 直接ECC ----
-    print("\n=== 方式1: 直接ECC (center 基準) ===")
+    # ---- Method 1: Direct ECC ----
+    print("\n=== Method 1: Direct ECC (center reference) ===")
     results_direct = run_direct_ecc(crops_cache, pos_map, rois, pixel_scale_um)
 
-    print("\n=== 方式2: BFS チェーン ===")
+    print("\n=== Method 2: BFS chain ===")
     results_bfs = run_bfs(crops_cache, pos_map, rois, pixel_scale_um)
 
-    # ---- 図の生成・保存 ----
-    print("\n=== 図の保存 ===")
+    # ---- Figure generation and saving ----
+    print("\n=== Saving figures ===")
 
-    print("\n[Figure 1] 直接ECC")
+    print("\n[Figure 1] Direct ECC")
     fig1, arr1, res1 = make_figure(results_direct, "Direct ECC", pixel_scale_um)
     save_figure(
         fig1,
@@ -461,7 +461,7 @@ def main():
     )
     plt.close(fig1)
 
-    print("\n[Figure 2] BFS チェーン")
+    print("\n[Figure 2] BFS chain")
     fig2, arr2, res2 = make_figure(results_bfs, "BFS chain", pixel_scale_um)
     save_figure(
         fig2,
@@ -481,11 +481,11 @@ def main():
     )
     plt.close(fig2)
 
-    print(f"\n比較: Direct ECC mean={res1.mean():.4f} um  |  BFS mean={res2.mean():.4f} um")
+    print(f"\nComparison: Direct ECC mean={res1.mean():.4f} um  |  BFS mean={res2.mean():.4f} um")
     if res2.mean() > res1.mean():
-        print("  → BFS のほうが大きい: BFS 誤差蓄積の可能性")
+        print("  -> BFS is larger: possible BFS error accumulation")
     else:
-        print("  → BFS と直接ECC が同程度: 誤差蓄積の影響は小さい")
+        print("  -> BFS and Direct ECC are comparable: error accumulation effect is small")
 
 
 if __name__ == "__main__":

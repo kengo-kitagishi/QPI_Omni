@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-zstack.tifから境界線を抽出し、密度マップをRefractive Index (RI)に変換して可視化
+Extract boundaries from zstack.tif, convert density map to Refractive Index (RI), and visualize.
 
-機能:
-1. zstack.tifファイルを読み込み（厚みマップ）
-2. 閾値処理してバイナリマスクを作成
-3. 境界線を抽出
-4. 輪郭（contour）を検出
-5. 密度マップを位相差→屈折率（RI）に変換
-6. RIマップに輪郭線を重ねて可視化
-7. マスク適用範囲を確認できる画像を保存
+Features:
+1. Load zstack.tif file (thickness map)
+2. Create binary mask by thresholding
+3. Extract boundary lines
+4. Detect contours
+5. Convert density map from phase to refractive index (RI)
+6. Overlay contour lines on RI map for visualization
+7. Save images showing mask coverage
 
-物理原理:
-位相差 φ = (2π/λ) × (n_sample - n_medium) × thickness
-屈折率 n_sample = n_medium + (φ × λ) / (2π × thickness)
+Physical principle:
+Phase: phi = (2*pi/lambda) x (n_sample - n_medium) x thickness
+Refractive index: n_sample = n_medium + (phi x lambda) / (2*pi x thickness)
 """
 # %% 
 import os
@@ -26,46 +26,46 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.collections import LineCollection
 
-def phase_to_refractive_index(phase_map, thickness_map, wavelength_nm=663, 
+def phase_to_refractive_index(phase_map, thickness_map, wavelength_nm=663,
                                n_medium=1.333, pixel_size_um=0.348):
     """
-    位相差マップから屈折率（RI）マップを計算
-    
+    Calculate refractive index (RI) map from phase map.
+
     Parameters:
     -----------
     phase_map : numpy array
-        位相差マップ（ラジアン単位）
+        Phase map (in radians)
     thickness_map : numpy array
-        厚みマップ（ピクセル単位）
+        Thickness map (in pixel units)
     wavelength_nm : float
-        波長（ナノメートル）。デフォルト: 663nm (赤色レーザー)
+        Wavelength (nanometers). Default: 663nm (red laser)
     n_medium : float
-        培地の屈折率。デフォルト: 1.333 (水性培地)
+        Medium refractive index. Default: 1.333 (aqueous medium)
     pixel_size_um : float
-        ピクセルサイズ（マイクロメートル）。デフォルト: 0.348 µm
-        507×507の再構成画像用
-    
+        Pixel size (micrometers). Default: 0.348 um
+        For 507x507 reconstructed images
+
     Returns:
     --------
     ri_map : numpy array
-        屈折率マップ
-    
+        Refractive index map
+
     Formula:
     --------
-    φ = (2π/λ) × (n_sample - n_medium) × thickness
-    n_sample = n_medium + (φ × λ) / (2π × thickness)
+    phi = (2*pi/lambda) x (n_sample - n_medium) x thickness
+    n_sample = n_medium + (phi x lambda) / (2*pi x thickness)
     """
-    # 単位を揃える: すべてµmに変換
-    wavelength_um = wavelength_nm / 1000.0  # nm → µm
-    thickness_um = thickness_map * pixel_size_um  # ピクセル → µm
-    
-    # マスク: 厚みが0でない領域のみ計算
+    # Unify units: convert everything to um
+    wavelength_um = wavelength_nm / 1000.0  # nm -> um
+    thickness_um = thickness_map * pixel_size_um  # pixel -> um
+
+    # Mask: calculate only where thickness is non-zero
     mask = thickness_um > 0
-    
-    # 屈折率マップを初期化（培地の屈折率で）
+
+    # Initialize RI map (with medium refractive index)
     ri_map = np.full_like(phase_map, n_medium, dtype=np.float64)
-    
-    # 位相差から屈折率を計算
+
+    # Calculate refractive index from phase
     # n_sample = n_medium + (φ × λ) / (2π × thickness)
     if np.any(mask):
         ri_map[mask] = n_medium + (phase_map[mask] * wavelength_um) / (2 * np.pi * thickness_um[mask])
@@ -75,25 +75,25 @@ def phase_to_refractive_index(phase_map, thickness_map, wavelength_nm=663,
 
 def ri_to_concentration(ri_map, n_medium=1.333, alpha_ri=0.0018):
     """
-    屈折率マップから質量濃度マップを計算
-    
+    Calculate mass concentration map from refractive index map.
+
     Parameters:
     -----------
     ri_map : numpy array
-        屈折率マップ
+        Refractive index map
     n_medium : float
-        培地の屈折率。デフォルト: 1.333
+        Medium refractive index. Default: 1.333
     alpha_ri : float
-        比屈折率増分 [ml/mg]。デフォルト: 0.0018
-    
+        Specific refractive index increment [ml/mg]. Default: 0.0018
+
     Returns:
     --------
     concentration_map : numpy array
-        質量濃度マップ [mg/ml]
-    
+        Mass concentration map [mg/ml]
+
     Formula:
     --------
-    C [mg/ml] = (RI - RI_medium) / α
+    C [mg/ml] = (RI - RI_medium) / alpha
     """
     concentration_map = (ri_map - n_medium) / alpha_ri
     return concentration_map
@@ -103,46 +103,46 @@ def visualize_mask_on_density(zstack_path, density_path=None, threshold=0, outpu
                                wavelength_nm=663, n_medium=1.333, pixel_size_um=0.348,
                                alpha_ri=0.0018):
     """
-    zstack.tifから境界線を抽出し、密度マップを屈折率（RI）に変換して可視化
-    
+    Extract boundaries from zstack.tif, convert density map to RI, and visualize.
+
     Parameters:
     -----------
     zstack_path : str
-        zstack.tifファイルのパス（厚みマップ）
+        Path to zstack.tif file (thickness map)
     density_path : str or None
-        密度マップファイルのパス（位相差マップ、Noneなら自動検索）
+        Path to density map file (phase map, None for auto-search)
     threshold : float
-        閾値（この値より大きい値をマスクとして扱う。デフォルト: 0）
+        Threshold (values above this are treated as mask. Default: 0)
     output_dir : str or None
-        出力ディレクトリ（Noneなら入力ファイルと同じ場所）
+        Output directory (None for same location as input file)
     wavelength_nm : float
-        波長（ナノメートル）。デフォルト: 663nm
+        Wavelength (nanometers). Default: 663nm
     n_medium : float
-        培地の屈折率。デフォルト: 1.333
+        Medium refractive index. Default: 1.333
     pixel_size_um : float
-        ピクセルサイズ（マイクロメートル）。デフォルト: 0.348 µm
+        Pixel size (micrometers). Default: 0.348 um
     alpha_ri : float
-        比屈折率増分 [ml/mg]。デフォルト: 0.0018
-    
+        Specific refractive index increment [ml/mg]. Default: 0.0018
+
     Returns:
     --------
     output_path : str
-        保存された可視化画像のパス
-    
+        Path to saved visualization image
+
     Note:
     -----
-    - 輪郭線はマスク領域の境界を示します
-    - 輪郭線の内側がマスク適用領域です
-    - 密度マップを位相差と解釈し、屈折率（RI）と質量濃度（mg/ml）に変換します
+    - Contour lines indicate mask region boundaries
+    - The interior of contour lines is the masked region
+    - The density map is interpreted as phase and converted to RI and mass concentration (mg/ml)
     """
-    # zstackを読み込み（厚みマップ）
+    # Load zstack (thickness map)
     print(f"Loading: {os.path.basename(zstack_path)}")
     zstack = tifffile.imread(zstack_path)
     print(f"  Zstack (thickness) shape: {zstack.shape}")
     print(f"  Thickness range: [{zstack.min():.4f}, {zstack.max():.4f}] pixels")
     print(f"  Thickness range: [{zstack.min()*pixel_size_um:.4f}, {zstack.max()*pixel_size_um:.4f}] µm")
     
-    # バイナリマスクを作成（閾値より大きい値を1、それ以外を0）
+    # Create binary mask (values above threshold = 1, else 0)
     binary_mask = (zstack > threshold).astype(np.uint8)
     print(f"  Threshold: > {threshold}")
     print(f"  Mask pixels: {np.count_nonzero(binary_mask)} / {binary_mask.size} ({100*np.count_nonzero(binary_mask)/binary_mask.size:.1f}%)")
@@ -151,7 +151,7 @@ def visualize_mask_on_density(zstack_path, density_path=None, threshold=0, outpu
         print("  WARNING: No pixels above threshold!")
         return None
     
-    # 輪郭を検出（find_contours）
+    # Detect contours (find_contours)
     contours = measure.find_contours(binary_mask, 0.5)
     print(f"  Found {len(contours)} contour(s)")
     
@@ -159,13 +159,13 @@ def visualize_mask_on_density(zstack_path, density_path=None, threshold=0, outpu
         print("  WARNING: No contours found!")
         return None
     
-    # 密度マップを読み込み（位相差マップ）
+    # Load density map (phase map)
     if density_path is None:
-        # zstack.tifと同じ名前の密度マップを探す
+        # Search for density map with the same name as zstack.tif
         base_name = os.path.basename(zstack_path).replace('_zstack.tif', '')
         dir_name = os.path.dirname(zstack_path)
         
-        # 可能性のあるファイル名パターン
+        # Possible filename patterns
         possible_patterns = [
             f"{base_name}_density.tif",
             f"{base_name}.tif",
@@ -183,13 +183,13 @@ def visualize_mask_on_density(zstack_path, density_path=None, threshold=0, outpu
             print(f"  Searched for: {possible_patterns}")
             return None
     
-    # 密度マップを読み込み（位相差マップとして解釈）
+    # Load density map (interpreted as phase map)
     print(f"  Loading phase map: {os.path.basename(density_path)}")
     phase_map = tifffile.imread(density_path)
     print(f"  Phase map shape: {phase_map.shape}")
     print(f"  Phase range: [{phase_map.min():.4f}, {phase_map.max():.4f}] (arbitrary units)")
     
-    # 位相差を屈折率（RI）に変換
+    # Convert phase to refractive index (RI)
     print(f"  Converting phase to refractive index...")
     print(f"    Wavelength: {wavelength_nm} nm")
     print(f"    Medium RI: {n_medium}")
@@ -207,7 +207,7 @@ def visualize_mask_on_density(zstack_path, density_path=None, threshold=0, outpu
         print(f"  RI range (masked region): [{ri_map[mask].min():.6f}, {ri_map[mask].max():.6f}]")
         print(f"  Mean RI (masked region): {ri_map[mask].mean():.6f}")
     
-    # 質量濃度マップを計算
+    # Calculate mass concentration map
     print(f"  Converting RI to protein concentration...")
     print(f"    Alpha (RI increment): {alpha_ri} ml/mg")
     concentration_map = ri_to_concentration(ri_map, n_medium=n_medium, alpha_ri=alpha_ri)
@@ -216,7 +216,7 @@ def visualize_mask_on_density(zstack_path, density_path=None, threshold=0, outpu
         print(f"  Concentration range (masked region): [{concentration_map[mask].min():.2f}, {concentration_map[mask].max():.2f}] mg/ml")
         print(f"  Mean concentration (masked region): {concentration_map[mask].mean():.2f} mg/ml")
     
-    # 出力パスを決定
+    # Determine output path
     if output_dir is None:
         output_dir = os.path.join(os.path.dirname(zstack_path), "visualized")
     
@@ -226,30 +226,30 @@ def visualize_mask_on_density(zstack_path, density_path=None, threshold=0, outpu
     output_filename = f"{base_name}_RI_Conc_map.png"
     output_path = os.path.join(output_dir, output_filename)
     
-    # 可視化（RIマップと質量濃度マップを横に並べる）
+    # Visualization (RI map and mass concentration map side by side)
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 10), dpi=150)
     
-    # === 左側: RIマップ ===
-    # カラースケールの範囲を設定（生理的に妥当な範囲）
-    # 細胞質: ~1.35-1.37
-    # 核: ~1.38-1.40
-    # タンパク質凝集体: ~1.40-1.45
-    vmin_ri = n_medium  # 培地の屈折率
-    vmax_ri = max(1.45, ri_map[mask].max() if np.any(mask) else 1.45)  # 上限を設定
+    # === Left: RI map ===
+    # Set color scale range (physiologically reasonable range)
+    # Cytoplasm: ~1.35-1.37
+    # Nucleus: ~1.38-1.40
+    # Protein aggregates: ~1.40-1.45
+    vmin_ri = n_medium  # Medium refractive index
+    vmax_ri = max(1.45, ri_map[mask].max() if np.any(mask) else 1.45)  # Set upper limit
     
     im1 = ax1.imshow(ri_map, cmap='jet', interpolation='nearest', 
                      vmin=vmin_ri, vmax=vmax_ri)
     
-    # すべての輪郭を白線で描画（視認性向上のため）
+    # Draw all contours with white lines (for visibility)
     for contour in contours:
         ax1.plot(contour[:, 1], contour[:, 0], 'w-', linewidth=2.5, alpha=0.9)
         ax1.plot(contour[:, 1], contour[:, 0], 'r-', linewidth=1.5, alpha=0.8)
-    
-    # カラーバーを追加
+
+    # Add colorbar
     cbar1 = plt.colorbar(im1, ax=ax1, fraction=0.046, pad=0.04)
     cbar1.set_label('Refractive Index (RI)', rotation=270, labelpad=25, fontsize=12)
     
-    # 参照値を追加
+    # Add reference values
     cbar1.ax.axhline(y=n_medium, color='cyan', linestyle='--', linewidth=1.5, alpha=0.8)
     cbar1.ax.text(1.5, n_medium, f'Medium ({n_medium:.3f})', va='center', fontsize=9, color='cyan')
     
@@ -258,7 +258,7 @@ def visualize_mask_on_density(zstack_path, density_path=None, threshold=0, outpu
         cbar1.ax.axhline(y=mean_ri, color='white', linestyle='--', linewidth=1.5, alpha=0.8)
         cbar1.ax.text(1.5, mean_ri, f'Mean ({mean_ri:.3f})', va='center', fontsize=9, color='white')
     
-    # タイトルに情報を追加
+    # Add info to title
     mask_percentage = 100 * np.count_nonzero(binary_mask) / binary_mask.size
     title1 = f'Refractive Index Map\n{base_name.replace("_zstack", "")}\n'
     title1 += f'λ={wavelength_nm}nm, n_medium={n_medium:.3f}\n'
@@ -266,30 +266,30 @@ def visualize_mask_on_density(zstack_path, density_path=None, threshold=0, outpu
     ax1.set_title(title1, fontsize=11)
     ax1.axis('off')
     
-    # === 右側: 質量濃度マップ ===
-    # カラースケールの範囲を設定
+    # === Right: Mass concentration map ===
+    # Set color scale range
     vmin_conc = 0
     vmax_conc = max(50, concentration_map[mask].max() if np.any(mask) else 50)
     
     im2 = ax2.imshow(concentration_map, cmap='hot', interpolation='nearest',
                      vmin=vmin_conc, vmax=vmax_conc)
     
-    # すべての輪郭を白線で描画（視認性向上のため）
+    # Draw all contours with white lines (for visibility)
     for contour in contours:
         ax2.plot(contour[:, 1], contour[:, 0], 'w-', linewidth=2.5, alpha=0.9)
         ax2.plot(contour[:, 1], contour[:, 0], 'cyan-', linewidth=1.5, alpha=0.8)
-    
-    # カラーバーを追加
+
+    # Add colorbar
     cbar2 = plt.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04)
     cbar2.set_label('Concentration (mg/ml)', rotation=270, labelpad=25, fontsize=12)
     
-    # 平均値を追加
+    # Add mean value
     if np.any(mask):
         mean_conc = concentration_map[mask].mean()
         cbar2.ax.axhline(y=mean_conc, color='cyan', linestyle='--', linewidth=1.5, alpha=0.8)
         cbar2.ax.text(1.5, mean_conc, f'Mean ({mean_conc:.1f})', va='center', fontsize=9, color='cyan')
     
-    # タイトルに情報を追加
+    # Add info to title
     title2 = f'Protein Concentration Map\n{base_name.replace("_zstack", "")}\n'
     title2 += f'α={alpha_ri} ml/mg, pixel={pixel_size_um}µm\n'
     title2 += f'(Cyan line = mask boundary, {mask_percentage:.1f}% masked)'
@@ -309,31 +309,31 @@ def process_all_zstacks(input_dir, output_dir=None, threshold=0,
                         wavelength_nm=663, n_medium=1.333, pixel_size_um=0.348,
                         alpha_ri=0.0018):
     """
-    ディレクトリ内の全zstack.tifファイルを処理して可視化
-    
+    Process and visualize all zstack.tif files in a directory.
+
     Parameters:
     -----------
     input_dir : str
-        zstack.tifファイルが入ったディレクトリ
+        Directory containing zstack.tif files
     output_dir : str or None
-        出力ディレクトリ（Noneなら自動設定）
+        Output directory (None for auto-setting)
     threshold : float
-        閾値（この値より大きい値をマスクとして扱う。デフォルト: 0）
+        Threshold (values above this are treated as mask. Default: 0)
     wavelength_nm : float
-        波長（ナノメートル）。デフォルト: 663nm
+        Wavelength (nanometers). Default: 663nm
     n_medium : float
-        培地の屈折率。デフォルト: 1.333
+        Medium refractive index. Default: 1.333
     pixel_size_um : float
-        ピクセルサイズ（マイクロメートル）。デフォルト: 0.348 µm
+        Pixel size (micrometers). Default: 0.348 um
     alpha_ri : float
-        比屈折率増分 [ml/mg]。デフォルト: 0.0018
-    
+        Specific refractive index increment [ml/mg]. Default: 0.0018
+
     Returns:
     --------
     output_paths : list
-        作成された可視化画像のパスリスト
+        List of paths to created visualization images
     """
-    # zstack.tifファイルを検索
+    # Search for zstack.tif files
     zstack_files = sorted(glob.glob(os.path.join(input_dir, "*_zstack.tif")))
     
     if not zstack_files:
@@ -348,7 +348,7 @@ def process_all_zstacks(input_dir, output_dir=None, threshold=0,
     
     os.makedirs(output_dir, exist_ok=True)
     
-    # 各zstackファイルを処理
+    # Process each zstack file
     output_paths = []
     
     for i, zstack_path in enumerate(zstack_files, 1):
@@ -378,25 +378,25 @@ def process_all_zstacks(input_dir, output_dir=None, threshold=0,
     return output_paths
 
 
-# ===== メイン実行 =====
+# ===== Main execution =====
 if __name__ == "__main__":
-    # パラメータ設定
+    # Parameter settings
     INPUT_DIR = "/mnt/user-data/outputs/timeseries_density_output/density_tiff"
     OUTPUT_DIR = "/mnt/user-data/outputs/timeseries_density_output/visualized"
-    THRESHOLD = 0  # zstack値の閾値（この値より大きい値をマスクとして扱う）
-    
-    # QPI実験パラメータ（01_QPI_analysis.pyと同じ値）
-    WAVELENGTH_NM = 663      # レーザー波長（ナノメートル）
-                             # 実験値: 663nm (赤色レーザー)
-    N_MEDIUM = 1.333         # 培地の屈折率
-                             # 水: 1.333, PBS: 1.334, DMEM: ~1.335
-    PIXEL_SIZE_UM = 0.348    # ピクセルサイズ（マイクロメートル）
-                             # 507×507の再構成画像用
-                             # 計算: 0.08625 µm × (2048/507) ≈ 0.348 µm/pixel
-                             # ※元のホログラム2048×2048では0.08625 µm/pixel
-    ALPHA_RI = 0.0018        # 比屈折率増分 [ml/mg]
-                             # タンパク質の一般的な値: 0.0018 ml/mg
-                             # 参考: C [mg/ml] = (RI - RI_medium) / α
+    THRESHOLD = 0  # Zstack value threshold (values above this are treated as mask)
+
+    # QPI experiment parameters (same values as 01_QPI_analysis.py)
+    WAVELENGTH_NM = 663      # Laser wavelength (nanometers)
+                             # Experimental value: 663nm (red laser)
+    N_MEDIUM = 1.333         # Medium refractive index
+                             # Water: 1.333, PBS: 1.334, DMEM: ~1.335
+    PIXEL_SIZE_UM = 0.348    # Pixel size (micrometers)
+                             # For 507x507 reconstructed images
+                             # Calculation: 0.08625 um x (2048/507) = 0.348 um/pixel
+                             # Note: Original hologram 2048x2048 has 0.08625 um/pixel
+    ALPHA_RI = 0.0018        # Specific refractive index increment [ml/mg]
+                             # Typical value for proteins: 0.0018 ml/mg
+                             # Reference: C [mg/ml] = (RI - RI_medium) / alpha
     
     print(f"\n{'='*70}")
     print(f"QPI Parameters:")
@@ -407,8 +407,8 @@ if __name__ == "__main__":
     print(f"  Note: Concentration (mg/ml) = (RI - {N_MEDIUM}) / {ALPHA_RI}")
     print(f"{'='*70}\n")
     
-    # 全zstackファイルを処理して可視化画像を作成
-    # 注意: 輪郭線の内側がマスク適用領域を示します
+    # Process all zstack files and create visualization images
+    # Note: The interior of contour lines indicates the masked region
     output_paths = process_all_zstacks(
         input_dir=INPUT_DIR,
         output_dir=OUTPUT_DIR,

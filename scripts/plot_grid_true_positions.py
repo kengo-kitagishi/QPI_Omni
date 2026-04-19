@@ -2,12 +2,12 @@
 """
 plot_grid_true_positions.py
 ----------------------------
-visualize_grid_true_positions.py の Direct ECC 結果 (npz) を読み込んで
-グリッド真位置を詳細に可視化する。ECC の再計算なし。
+Load Direct ECC results (npz) from visualize_grid_true_positions.py and
+visualize true grid positions in detail. No ECC recomputation.
 
-【4パネル構成】
+[4 panel layout]
   Panel 1: Nominal lattice vs Actual positions (scatter)
-  Panel 2: Displacement quiver — nominal → actual の変位ベクトル（QUIVER_SCALE 倍）
+  Panel 2: Displacement quiver -- nominal -> actual displacement vectors (x QUIVER_SCALE)
   Panel 3: dx error 2D heatmap (actual_dx - nominal_dx) [um]
   Panel 4: dy error 2D heatmap (actual_dy - nominal_dy) [um]
 """
@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from figure_logger import save_figure
 
 # ============================================================
-# 設定: Direct ECC npz のパス（visualize_grid_true_positions.py の出力）
+# Settings: Path to Direct ECC npz (output of visualize_grid_true_positions.py)
 # ============================================================
 NPZ_PATH = (
     r"G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox"
@@ -32,8 +32,8 @@ NPZ_PATH = (
     r"__20260330T034611Z_1b7af7__f001_data.npz"
 )
 
-# quiver の矢印スケール（変位を何倍に拡大して描くか）
-QUIVER_SCALE = 20   # 20倍: 0.1 um = 2 um 分の矢印長さで表示
+# Quiver arrow scale (how many times to magnify displacement)
+QUIVER_SCALE = 20   # 20x: 0.1 um = 2 um arrow length displayed
 
 POS_PREFIX = "Pos1"
 Z_IDX      = 9
@@ -47,10 +47,10 @@ def load_npz(path):
 
 def reshape_to_grid(xi, yi, values):
     """
-    (xi, yi) → values を 2D grid (xi_axis × yi_axis) に変換。
-    xi_axis: 昇順ソート済みのユニーク xi 値
-    yi_axis: 昇順ソート済みのユニーク yi 値
-    返り値: (grid_2d, xi_axis, yi_axis)
+    Convert (xi, yi) -> values to a 2D grid (xi_axis x yi_axis).
+    xi_axis: sorted unique xi values in ascending order
+    yi_axis: sorted unique yi values in ascending order
+    Returns: (grid_2d, xi_axis, yi_axis)
     """
     xi_u = np.sort(np.unique(xi))
     yi_u = np.sort(np.unique(yi))
@@ -83,13 +83,13 @@ def main():
           f"max_abs={np.abs(err_dy).max():.4f}")
     print(f"residual [um]: mean={residual.mean():.4f}  max={residual.max():.4f}")
 
-    # ---- 2D grid 変換 ----
+    # ---- 2D grid conversion ----
     grid_dx,  xi_u, yi_u = reshape_to_grid(xi, yi, err_dx)
     grid_dy,  _,    _    = reshape_to_grid(xi, yi, err_dy)
     grid_res, _,    _    = reshape_to_grid(xi, yi, residual)
 
-    # quiver 用: nominal 位置 = (nom_dx, nom_dy)
-    # Panel 2 は xi,yi 軸を使うシンプル quiver
+    # For quiver: nominal positions = (nom_dx, nom_dy)
+    # Panel 2 uses a simple quiver on xi,yi axes
     sym_max = max(np.abs(err_dx).max(), np.abs(err_dy).max(), 0.01)
 
     fig, axes = plt.subplots(1, 4, figsize=(18, 5))
@@ -116,7 +116,7 @@ def main():
 
     # ------ Panel 2: Displacement quiver ------
     ax2 = axes[1]
-    # 矢印の根本 = nominal position (nom_dx, nom_dy)
+    # Arrow origin = nominal position (nom_dx, nom_dy)
     quiv = ax2.quiver(
         nom_dx, nom_dy,
         err_dx * QUIVER_SCALE,

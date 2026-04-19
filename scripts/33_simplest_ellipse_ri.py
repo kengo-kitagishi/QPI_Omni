@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-最もシンプルなmean RI計算
+Simplest mean RI calculation
 
-Results.csvだけから計算
+Computed from Results.csv only
 - IntDen = total phase
-- Major/Minor → rod shape体積
-- mean RI = n_medium + (IntDen × λ × pixel_area) / (2π × volume)
+- Major/Minor -> rod shape volume
+- mean RI = n_medium + (IntDen x lambda x pixel_area) / (2pi x volume)
 """
 import numpy as np
 import pandas as pd
@@ -14,7 +14,7 @@ from figure_logger import setup_autosave
 setup_autosave()
 
 # =============================================================================
-# パラメータ設定（ここだけ編集）
+# Parameter settings (edit only this section)
 # =============================================================================
 RESULTS_CSV = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted\inference_out\Results.csv"
 OUTPUT_FILE = "simplest_mean_ri.png"
@@ -25,20 +25,20 @@ N_MEDIUM = 1.333
 ALPHA_RI = 0.00018
 
 # =============================================================================
-# 計算
+# Calculation
 # =============================================================================
 
 print("="*60)
 print("Simplest Ellipse RI Analysis")
 print("="*60)
 
-# CSV読み込み
+# Read CSV
 print(f"\nReading: {RESULTS_CSV}")
 df = pd.read_csv(RESULTS_CSV)
 print(f"  {len(df)} ROIs")
 print(f"  Columns: {', '.join(df.columns[:10])}...")
 
-# IntDenのカラム名を探す
+# Find IntDen column name
 intden_col = None
 for col in ['IntDen', 'RawIntDen', 'Integrated Density', 'IntegratedDensity']:
     if col in df.columns:
@@ -52,7 +52,7 @@ if intden_col is None:
 
 print(f"  Using '{intden_col}' as total phase")
 
-# フレーム番号
+# Frame number
 if 'Slice' in df.columns:
     df['frame'] = df['Slice']
 elif 'Label' in df.columns:
@@ -61,7 +61,7 @@ elif 'Label' in df.columns:
 else:
     df['frame'] = range(1, len(df) + 1)
 
-# Rod shape体積計算
+# Rod shape volume calculation
 def calc_rod_volume(major_px, minor_px, pixel_size_um):
     length = major_px * pixel_size_um
     width = minor_px * pixel_size_um
@@ -73,7 +73,7 @@ def calc_rod_volume(major_px, minor_px, pixel_size_um):
     else:
         return (4.0 / 3.0) * np.pi * (r ** 3) + np.pi * (r ** 2) * h
 
-# 体積計算
+# Volume calculation
 major_col = 'Major' if 'Major' in df.columns else 'Feret'
 minor_col = 'Minor' if 'Minor' in df.columns else 'MinFeret'
 
@@ -85,24 +85,24 @@ df['volume_um3'] = df.apply(
 # total phase
 df['total_phase'] = df[intden_col]
 
-# mean RI計算
+# Mean RI calculation
 wavelength_um = WAVELENGTH_NM * 1e-3
 pixel_area_um2 = PIXEL_SIZE_UM ** 2
 
 df['mean_ri'] = N_MEDIUM + (df['total_phase'] * wavelength_um * pixel_area_um2) / (2 * np.pi * df['volume_um3'])
 
-# 質量計算
+# Mass calculation
 df['mean_conc'] = (df['mean_ri'] - N_MEDIUM) / ALPHA_RI
 df['mass_pg'] = df['mean_conc'] * df['volume_um3']
 
-# 結果表示
+# Display results
 print(f"\nResults:")
 print(f"  Volume: {df['volume_um3'].min():.1f} - {df['volume_um3'].max():.1f} µm³")
 print(f"  Mean RI: {df['mean_ri'].min():.4f} - {df['mean_ri'].max():.4f}")
 print(f"  Mass: {df['mass_pg'].min():.1f} - {df['mass_pg'].max():.1f} pg")
 
 # =============================================================================
-# プロット
+# Plot
 # =============================================================================
 
 print(f"\nCreating plot...")
@@ -134,7 +134,7 @@ plt.tight_layout()
 plt.savefig(OUTPUT_FILE, dpi=150, bbox_inches='tight')
 print(f"  Saved: {OUTPUT_FILE}")
 
-# CSV保存
+# Save CSV
 csv_out = OUTPUT_FILE.replace('.png', '.csv')
 df[['frame', 'volume_um3', 'mean_ri', 'mass_pg', 'total_phase']].to_csv(csv_out, index=False)
 print(f"  Saved: {csv_out}")

@@ -7,14 +7,14 @@ import tifffile
 from PIL import Image
 from skimage.restoration import unwrap_phase
 
-# 既存のqpiモジュールからインポート
+# Import from existing qpi module
 from qpi import QPIParameters, get_field, get_spectrum, make_disk, crop_array
 from figure_logger import setup_autosave
 setup_autosave()
 
 
 # =============================================================================
-# Temporal Noise Analysis用の新規関数
+# New functions for Temporal Noise Analysis
 # =============================================================================
 
 def load_hologram_sequence(
@@ -23,15 +23,15 @@ def load_hologram_sequence(
     crop_region: Tuple[int, int, int, int] = None
 ) -> np.ndarray:
     """
-    連続したホログラムを読み込む
+    Load a sequence of holograms
     """
     folder = Path(folder_path)
     
-    # .tif と .tiff の両方を探す
+    # Search for both .tif and .tiff files
     tif_files = sorted(folder.glob("*.tif")) + sorted(folder.glob("*.tiff"))
-    tif_files = sorted(tif_files)  # 再ソート
+    tif_files = sorted(tif_files)  # Re-sort
     
-    # 隠しファイルを除外
+    # Exclude hidden files
     tif_files = [f for f in tif_files if not f.name.startswith('.')]
     
     print(f"Folder: {folder}")
@@ -52,10 +52,10 @@ def load_hologram_sequence(
             print(f"  Loading {i}/{len(tif_files)} - {file.name}")
         
         try:
-            # tifffile を使って読み込み
+            # Load using tifffile
             img = tifffile.imread(file)
             
-            # 3チャンネルの場合はグレースケール化
+            # Convert to grayscale if 3-channel
             if len(img.shape) == 3:
                 img = img[:, :, 0]
             
@@ -87,37 +87,37 @@ def extract_alpha_beta(
     params: QPIParameters
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    ホログラムからα (DC成分) とβ (干渉縞振幅) を抽出
-    論文のEq. (1)に対応
-    
+    Extract alpha (DC component) and beta (fringe amplitude) from a hologram.
+    Corresponds to Eq. (1) in the paper.
+
     Args:
-        hologram: 入力ホログラム
-        params: QPIパラメータ
-    
+        hologram: Input hologram
+        params: QPI parameters
+
     Returns:
-        alpha: DC強度分布
-        beta: 干渉縞振幅分布
+        alpha: DC intensity distribution
+        beta: Fringe amplitude distribution
     """
     # FFT
     fft_holo = np.fft.fftshift(np.fft.fft2(hologram))
-    
-    # DC成分 (0次光) の抽出
+
+    # Extract DC component (0th-order light)
     dc_mask = make_disk(params.img_center, params.aperturesize // 2, params.img_shape)
     dc_fft = fft_holo * dc_mask
     dc_cropped = crop_array(dc_fft, params.img_center, params.aperturesize)
     dc_field = np.fft.ifft2(np.fft.ifftshift(dc_cropped))
-    
-    # スケーリング係数
+
+    # Scaling factor
     scale_factor = params.aperturesize / params.img_shape[0]
     alpha = np.abs(dc_field) * scale_factor**2
-    
-    # サイドバンド成分 (1次光) の抽出
+
+    # Extract sideband component (1st-order light)
     sb_mask = make_disk(params.offaxis_center, params.aperturesize // 2, params.img_shape)
     sb_fft = fft_holo * sb_mask
     sb_cropped = crop_array(sb_fft, params.offaxis_center, params.aperturesize)
     sb_field = np.fft.ifft2(np.fft.ifftshift(sb_cropped))
     beta = np.abs(sb_field) * scale_factor**2
-    
+
     return alpha, beta
 
 
@@ -128,28 +128,28 @@ def calculate_ALG_sensitivity_shot_noise(
     filter_bandwidth_ratio: float = 0.3
 ) -> np.ndarray:
     """
-    論文のEq. (12)に基づくALG感度計算（ショットノイズモデル）
-    
+    ALG sensitivity calculation based on Eq. (12) in the paper (shot noise model).
+
     Args:
-        hologram: 単一ホログラム
-        params: QPIパラメータ
-        camera_gain: カメラゲイン [e-/ADU]
-        filter_bandwidth_ratio: フィルタ帯域幅の比率
-    
+        hologram: Single hologram
+        params: QPI parameters
+        camera_gain: Camera gain [e-/ADU]
+        filter_bandwidth_ratio: Filter bandwidth ratio
+
     Returns:
-        sigma_phi: 位相感度マップ [rad]
+        sigma_phi: Phase sensitivity map [rad]
     """
-    # α, βの抽出
+    # Extract alpha and beta
     alpha, beta = extract_alpha_beta(hologram, params)
-    
-    # フィルタ開口面積 S の計算
+
+    # Calculate filter aperture area S
     radius = filter_bandwidth_ratio * np.sqrt(
-        (params.offaxis_center[0] - params.img_center[0])**2 + 
+        (params.offaxis_center[0] - params.img_center[0])**2 +
         (params.offaxis_center[1] - params.img_center[1])**2
     )
     S = np.pi * radius**2
-    
-    # センサー全体のピクセル数
+
+    # Total pixel count of the sensor
     M, N = params.img_shape
     
     # Eq. (12): σ_φ = sqrt(S*α / (2*g*M*N*β²))
@@ -166,36 +166,36 @@ def calculate_EXP_sensitivity(
     use_unwrap: bool = True
 ) -> np.ndarray:
     """
-    時系列ホログラムから実験的位相感度 (EXP) を計算
-    
+    Calculate experimental phase sensitivity (EXP) from time-series holograms.
+
     Args:
         holograms: shape (n_frames, height, width)
-        params: QPIパラメータ
-        use_unwrap: 位相アンラップを使用するか
-    
+        params: QPI parameters
+        use_unwrap: Whether to use phase unwrapping
+
     Returns:
-        sigma_exp: 実験的位相感度 [rad]
+        sigma_exp: Experimental phase sensitivity [rad]
     """
     n_frames = holograms.shape[0]
     phases = []
-    
+
     print(f"Processing {n_frames} frames...")
     for i in range(n_frames):
         if i % 100 == 0:
             print(f"  Frame {i}/{n_frames}")
-        
-        # 位相再構成
+
+        # Phase reconstruction
         field = get_field(holograms[i], params)
         phase = np.angle(field)
-        
+
         if use_unwrap:
             phase = unwrap_phase(phase)
-        
+
         phases.append(phase)
-    
+
     phases = np.array(phases)
-    
-    # 時間方向の標準偏差
+
+    # Temporal standard deviation
     sigma_exp = np.std(phases, axis=0)
     
     return sigma_exp
@@ -209,17 +209,17 @@ def calculate_EXP_sensitivity_differential(
     bg_region: Tuple[int, int, int, int] = None
 ) -> np.ndarray:
     """
-    バックグラウンド差分を取った後の実験的位相感度 (EXP) を計算
-    
+    Calculate experimental phase sensitivity (EXP) after background subtraction.
+
     Args:
-        holograms: サンプルホログラム系列 shape (n_frames, height, width)
-        holograms_bg: バックグラウンドホログラム系列
-        params: QPIパラメータ
-        use_unwrap: 位相アンラップを使用するか
-        bg_region: バックグラウンド補正用の領域 (y1, y2, x1, x2)
-    
+        holograms: Sample hologram series, shape (n_frames, height, width)
+        holograms_bg: Background hologram series
+        params: QPI parameters
+        use_unwrap: Whether to use phase unwrapping
+        bg_region: Region for background correction (y1, y2, x1, x2)
+
     Returns:
-        sigma_exp: 実験的位相感度 [rad]
+        sigma_exp: Experimental phase sensitivity [rad]
     """
     assert holograms.shape == holograms_bg.shape
     n_frames = holograms.shape[0]
@@ -230,7 +230,7 @@ def calculate_EXP_sensitivity_differential(
         if i % 100 == 0:
             print(f"  Frame {i}/{n_frames}")
         
-        # サンプルとバックグラウンドの位相再構成
+        # Phase reconstruction for sample and background
         field = get_field(holograms[i], params)
         field_bg = get_field(holograms_bg[i], params)
         
@@ -241,22 +241,22 @@ def calculate_EXP_sensitivity_differential(
             phase = unwrap_phase(phase)
             phase_bg = unwrap_phase(phase_bg)
         
-        # 差分位相
+        # Differential phase
         phase_diff = phase - phase_bg
-        
-        # バックグラウンド領域で補正
+
+        # Correct using background region
         if bg_region is not None:
             y1, y2, x1, x2 = bg_region
             offset = np.mean(phase_diff[y1:y2, x1:x2])
             phase_diff = phase_diff - offset
-        
+
         phases_diff.append(phase_diff)
-    
+
     phases_diff = np.array(phases_diff)
-    
-    # 時間方向の標準偏差
+
+    # Temporal standard deviation
     sigma_exp = np.std(phases_diff, axis=0)
-    
+
     return sigma_exp
 
 
@@ -265,17 +265,17 @@ def estimate_camera_gain(
     n_samples: int = 100
 ) -> float:
     """
-    論文のEq. (9)を使ってカメラゲインを推定
-    mean-variance関係から g = mean / variance
-    
+    Estimate camera gain using Eq. (9) from the paper.
+    g = mean / variance from the mean-variance relationship.
+
     Args:
-        hologram: ホログラム（複数フレームの平均でも可）
-        n_samples: サンプリング数
-    
+        hologram: Hologram (can be the average of multiple frames)
+        n_samples: Number of samples
+
     Returns:
-        camera_gain: 推定されたカメラゲイン [e-/ADU]
+        camera_gain: Estimated camera gain [e-/ADU]
     """
-    # ランダムなパッチを抽出して平均と分散を計算
+    # Extract random patches and compute mean and variance
     H, W = hologram.shape
     patch_size = 20
     
@@ -293,7 +293,7 @@ def estimate_camera_gain(
     means = np.array(means)
     variances = np.array(variances)
     
-    # 線形フィッティング: variance = mean / g
+    # Linear fitting: variance = mean / g
     # g = mean / variance
     gain = np.mean(means / variances)
     
@@ -307,17 +307,17 @@ def plot_sensitivity_comparison(
     save_path: str = None
 ):
     """
-    EXPとALGの比較プロット（論文 Fig. 3に相当）
-    
+    Comparison plot of EXP and ALG (corresponds to Fig. 3 in the paper).
+
     Args:
-        sigma_exp: 実験的感度
-        sigma_alg: アルゴリズム感度
-        wavelength: 波長 [m]
-        save_path: 保存パス（Noneの場合は保存しない）
+        sigma_exp: Experimental sensitivity
+        sigma_alg: Algorithm sensitivity
+        wavelength: Wavelength [m]
+        save_path: Save path (None to skip saving)
     """
     fig, axes = plt.subplots(2, 3, figsize=(15, 10))
     
-    # 位相感度からOPL感度への変換
+    # Convert from phase sensitivity to OPL sensitivity
     k0 = 2 * np.pi / wavelength
     sigma_exp_opl = sigma_exp / k0 * 1e9  # nm
     sigma_alg_opl = sigma_alg / k0 * 1e9  # nm
@@ -382,7 +382,7 @@ def plot_sensitivity_comparison(
     
     plt.show()
     
-    # 統計情報の表示
+    # Display statistics
     print("\n=== Sensitivity Statistics ===")
     print(f"EXP - Mean: {np.mean(sigma_exp):.4e} rad, Std: {np.std(sigma_exp):.4e} rad")
     print(f"ALG - Mean: {np.mean(sigma_alg):.4e} rad, Std: {np.std(sigma_alg):.4e} rad")
@@ -393,7 +393,7 @@ def plot_sensitivity_comparison(
 
 
 # =============================================================================
-# Fig. 3 風のプロット作成
+# Create plot in Fig. 3 style
 # =============================================================================
 
 def plot_fig3_style(
@@ -404,32 +404,32 @@ def plot_fig3_style(
     save_path: str = None
 ):
     """
-    論文 Fig. 3 のスタイルでプロット
-    (a) EXP, (b) ALG, (c) 中央列の比較, (d)-(f) は細胞の例
-    
+    Plot in the style of Fig. 3 from the paper.
+    (a) EXP, (b) ALG, (c) center column comparison, (d)-(f) cell examples.
+
     Args:
-        sigma_exp: 実験的感度
-        sigma_alg: アルゴリズム感度  
-        wavelength: 波長 [m]
-        vmax_factor: カラーバーの最大値の倍率
-        save_path: 保存パス
+        sigma_exp: Experimental sensitivity
+        sigma_alg: Algorithm sensitivity
+        wavelength: Wavelength [m]
+        vmax_factor: Colorbar maximum multiplier
+        save_path: Save path
     """
-    # 統計情報
+    # Statistics
     mean_exp = np.mean(sigma_exp[sigma_exp > 0])
     mean_alg = np.mean(sigma_alg[sigma_alg > 0])
-    
-    # システム効率
+
+    # System efficiency
     with np.errstate(divide='ignore', invalid='ignore'):
         efficiency = sigma_alg / sigma_exp * 100
         efficiency[~np.isfinite(efficiency)] = 0
         efficiency = np.clip(efficiency, 0, 100)
     mean_eff = np.mean(efficiency[efficiency > 0])
     
-    # カラーバーの範囲設定
+    # Colorbar range setting
     vmax = mean_exp * vmax_factor
-    
+
     fig = plt.figure(figsize=(12, 4))
-    
+
     # (a) EXP
     ax1 = plt.subplot(1, 3, 1)
     im1 = ax1.imshow(sigma_exp, cmap='hot', vmin=0, vmax=vmax)
@@ -438,7 +438,7 @@ def plot_fig3_style(
     ax1.set_ylabel('Pixel', fontsize=10)
     cbar1 = plt.colorbar(im1, ax=ax1, fraction=0.046, pad=0.04)
     cbar1.set_label('σ_φ (rad)', fontsize=9)
-    
+
     # (b) ALG
     ax2 = plt.subplot(1, 3, 2)
     im2 = ax2.imshow(sigma_alg, cmap='hot', vmin=0, vmax=vmax)
@@ -447,8 +447,8 @@ def plot_fig3_style(
     ax2.set_ylabel('Pixel', fontsize=10)
     cbar2 = plt.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04)
     cbar2.set_label('σ_φ (rad)', fontsize=9)
-    
-    # (c) 中央列の比較
+
+    # (c) Center column comparison
     ax3 = plt.subplot(1, 3, 3)
     center_col = sigma_exp.shape[1] // 2
     y_pixels = np.arange(sigma_exp.shape[0])
@@ -473,7 +473,7 @@ def plot_fig3_style(
     
     plt.show()
     
-    # 統計情報の出力
+    # Output statistics
     print("\n" + "="*60)
     print("SENSITIVITY ANALYSIS RESULTS (Fig. 3 style)")
     print("="*60)
@@ -493,24 +493,24 @@ def plot_fig3_with_sample(
     save_path: str = None
 ):
     """
-    論文 Fig. 3 完全版（ブランクとサンプルの両方）
-    
+    Full version of Fig. 3 from the paper (both blank and sample).
+
     Args:
-        sigma_exp_blank: ブランクの実験的感度
-        sigma_alg_blank: ブランクのアルゴリズム感度
-        sigma_alg_sample: サンプルのアルゴリズム感度
-        intensity_sample: サンプルの強度画像
-        phase_sample: サンプルの位相画像
-        wavelength: 波長 [m]
-        save_path: 保存パス
+        sigma_exp_blank: Experimental sensitivity of blank
+        sigma_alg_blank: Algorithm sensitivity of blank
+        sigma_alg_sample: Algorithm sensitivity of sample
+        intensity_sample: Sample intensity image
+        phase_sample: Sample phase image
+        wavelength: Wavelength [m]
+        save_path: Save path
     """
     fig = plt.figure(figsize=(12, 8))
     
-    # カラーバーの範囲設定
+    # Colorbar range setting
     mean_exp = np.mean(sigma_exp_blank[sigma_exp_blank > 0])
     vmax_sensitivity = mean_exp * 3
-    
-    # (a) EXP - ブランク
+
+    # (a) EXP - Blank
     ax1 = plt.subplot(2, 3, 1)
     im1 = ax1.imshow(sigma_exp_blank, cmap='hot', vmin=0, vmax=vmax_sensitivity)
     ax1.set_title('(a) EXP', fontsize=11, fontweight='bold')
@@ -518,7 +518,7 @@ def plot_fig3_with_sample(
     ax1.set_ylabel('Pixel', fontsize=9)
     plt.colorbar(im1, ax=ax1, fraction=0.046, pad=0.04, label='σ_φ (rad)')
     
-    # (b) ALG - ブランク
+    # (b) ALG - Blank
     ax2 = plt.subplot(2, 3, 2)
     im2 = ax2.imshow(sigma_alg_blank, cmap='hot', vmin=0, vmax=vmax_sensitivity)
     ax2.set_title('(b) ALG', fontsize=11, fontweight='bold')
@@ -526,7 +526,7 @@ def plot_fig3_with_sample(
     ax2.set_ylabel('Pixel', fontsize=9)
     plt.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04, label='σ_φ (rad)')
     
-    # (c) 中央列の比較
+    # (c) Center column comparison
     ax3 = plt.subplot(2, 3, 3)
     center_col = sigma_exp_blank.shape[1] // 2
     y_pixels = np.arange(sigma_exp_blank.shape[0])
@@ -541,7 +541,7 @@ def plot_fig3_with_sample(
     ax3.legend(fontsize=8)
     ax3.grid(True, alpha=0.3)
     
-    # (d) サンプル強度
+    # (d) Sample intensity
     ax4 = plt.subplot(2, 3, 4)
     im4 = ax4.imshow(intensity_sample, cmap='gray')
     ax4.set_title('(d) Sample intensity', fontsize=11, fontweight='bold')
@@ -549,7 +549,7 @@ def plot_fig3_with_sample(
     ax4.set_ylabel('Pixel', fontsize=9)
     plt.colorbar(im4, ax=ax4, fraction=0.046, pad=0.04)
     
-    # (e) サンプル位相
+    # (e) Sample phase
     ax5 = plt.subplot(2, 3, 5)
     im5 = ax5.imshow(phase_sample, cmap='gray')
     ax5.set_title('(e) Sample phase', fontsize=11, fontweight='bold')
@@ -557,7 +557,7 @@ def plot_fig3_with_sample(
     ax5.set_ylabel('Pixel', fontsize=9)
     plt.colorbar(im5, ax=ax5, fraction=0.046, pad=0.04, label='Phase (rad)')
     
-    # (f) サンプルのALG感度
+    # (f) ALG sensitivity of sample
     ax6 = plt.subplot(2, 3, 6)
     im6 = ax6.imshow(sigma_alg_sample, cmap='hot', vmin=0, vmax=vmax_sensitivity)
     ax6.set_title('(f) ALG from sample', fontsize=11, fontweight='bold')
@@ -575,37 +575,37 @@ def plot_fig3_with_sample(
 
 
 # =============================================================================
-# 実行例: Fig. 3 スタイルの図を作成
+# Example: Create a plot in Fig. 3 style
 # =============================================================================
 
 if __name__ == "__main__":
     """
-    Fig. 3を再現するために必要なもの:
-    
-    1. ブランク（ガラススライドのみ）の時系列ホログラム（800フレーム程度）
-       → sigma_exp と sigma_alg を計算
-    
-    2. （オプション）サンプル（細胞など）の単一ホログラム
-       → sigma_alg_sample を計算
+    Requirements for reproducing Fig. 3:
+
+    1. Time-series holograms of a blank (glass slide only), ~800 frames
+       -> Calculate sigma_exp and sigma_alg
+
+    2. (Optional) Single hologram of a sample (e.g. cells)
+       -> Calculate sigma_alg_sample
     """
-    
-    # ========== パラメータ設定 ==========
+
+    # ========== Parameter settings ==========
     WAVELENGTH = 663e-9  # m
     NA = 0.95
     PIXELSIZE = 3.45e-6 / 40  # m
-    CAMERA_GAIN = 34.4  # e-/ADU（要測定）
+    CAMERA_GAIN = 34.4  # e-/ADU (needs measurement)
     
-    # クロップ領域（あなたのコードと同じ）
+    # Crop region (same as your code)
     CROP_REGION = (8, 2056, 208, 2256)
     
-    # ========== Step 1: ブランクの単一ホログラム読み込み ==========
+    # ========== Step 1: Load a single blank hologram ==========
     path_blank = "/Volumes/QPI_0_.01_r/251211/sequence shot/Basler_acA2440-75um__25176370__20251211_152604439_0000.tiff"
     
     img_blank = np.array(Image.open(path_blank))
     img_blank = img_blank[CROP_REGION[0]:CROP_REGION[1], 
                           CROP_REGION[2]:CROP_REGION[3]]
     
-    # FFT確認（初回のみ）
+    # FFT check (first time only)
     img_fft = np.fft.fftshift(np.fft.fft2(img_blank))
     plt.figure(figsize=(8, 6))
     plt.imshow(np.log(np.abs(img_fft)), cmap='hot')
@@ -613,10 +613,10 @@ if __name__ == "__main__":
     plt.colorbar()
     plt.show()
     
-    # off-axis centerを設定（FFTのピーク位置）
-    offaxis_center = (1642, 466)  # ← 要調整
-    
-    # パラメータ設定
+    # Set off-axis center (FFT peak position)
+    offaxis_center = (1642, 466)  # <- Needs adjustment
+
+    # Parameter settings
     params = QPIParameters(
         wavelength=WAVELENGTH,
         NA=NA,
@@ -630,7 +630,7 @@ if __name__ == "__main__":
     print(f"Aperture size: {params.aperturesize} pixels")
     print(f"Off-axis center: {params.offaxis_center}")
     
-    # ========== Step 2: 時系列ホログラムの読み込み ==========
+    # ========== Step 2: Load time-series holograms ==========
     folder_path_blank = "/Volumes/QPI_0_.01_r/251211/sequence shot"
     N_FRAMES = 500
     
@@ -642,7 +642,7 @@ if __name__ == "__main__":
     )
     print(f"Loaded shape: {holograms_blank.shape}")
     
-    # ========== Step 3: ALG感度の計算 ==========
+    # ========== Step 3: Calculate ALG sensitivity ==========
     print("\n=== Calculating ALG sensitivity ===")
     sigma_alg_blank = calculate_ALG_sensitivity_shot_noise(
         hologram=holograms_blank[0],
@@ -652,7 +652,7 @@ if __name__ == "__main__":
     )
     print(f"ALG calculated, mean: {np.mean(sigma_alg_blank):.6e} rad")
     
-    # ========== Step 4: EXP感度の計算 ==========
+    # ========== Step 4: Calculate EXP sensitivity ==========
     print("\n=== Calculating EXP sensitivity ===")
     sigma_exp_blank = calculate_EXP_sensitivity(
         holograms=holograms_blank,
@@ -661,7 +661,7 @@ if __name__ == "__main__":
     )
     print(f"EXP calculated, mean: {np.mean(sigma_exp_blank):.6e} rad")
     
-    # ========== Step 5: Fig. 3(a-c)のプロット ==========
+    # ========== Step 5: Plot Fig. 3(a-c) ==========
     print("\n=== Plotting Fig. 3 style ===")
     plot_fig3_style(
         sigma_exp=sigma_exp_blank,
@@ -671,26 +671,26 @@ if __name__ == "__main__":
         save_path="fig3_abc.png"
     )
     
-    # ========== Step 6（オプション）: サンプルがある場合 ==========
+    # ========== Step 6 (Optional): If sample is available ==========
     # path_sample = "/Volumes/QPI_0_.01_r/ph_21/Pos0/img_000000000_Default_000.tif"
     # img_sample = np.array(Image.open(path_sample))
-    # img_sample = img_sample[CROP_REGION[0]:CROP_REGION[1], 
+    # img_sample = img_sample[CROP_REGION[0]:CROP_REGION[1],
     #                         CROP_REGION[2]:CROP_REGION[3]]
-    # 
-    # # サンプルの位相再構成
+    #
+    # # Sample phase reconstruction
     # field_sample = get_field(img_sample, params)
     # phase_sample = unwrap_phase(np.angle(field_sample))
     # intensity_sample = np.abs(field_sample)
-    # 
-    # # サンプルのALG感度
+    #
+    # # Sample ALG sensitivity
     # sigma_alg_sample = calculate_ALG_sensitivity_shot_noise(
     #     hologram=img_sample,
     #     params=params,
     #     camera_gain=CAMERA_GAIN,
     #     filter_bandwidth_ratio=0.3
     # )
-    # 
-    # # 完全版のFig. 3をプロット
+    #
+    # # Plot the full version of Fig. 3
     # plot_fig3_with_sample(
     #     sigma_exp_blank=sigma_exp_blank,
     #     sigma_alg_blank=sigma_alg_blank,
@@ -703,28 +703,28 @@ if __name__ == "__main__":
 # %%
 # %%
 # %%
-# ========== 位相の時間変化確認（ドリフト診断）統合版（修正） ==========
+# ========== Check temporal phase variation (drift diagnosis) integrated version (revised) ==========
 
 print("\n=== Analyzing temporal phase drift ===")
 
-# まず位相画像のサイズを確認
+# First check the size of the phase image
 field_test = get_field(holograms_blank[0], params)
 phase_test = np.angle(field_test)
 print(f"Phase image shape: {phase_test.shape}")
 
-# テストするピクセル位置（位相画像のサイズに合わせる）
+# Test pixel positions (matched to phase image size)
 phase_h, phase_w = phase_test.shape
 test_pixels = [
-    (phase_h // 2, phase_w // 2),      # 中心
-    (phase_h // 4, phase_w // 4),      # 左上寄り
-    (3 * phase_h // 4, 3 * phase_w // 4),  # 右下寄り
-    (phase_h // 4, 3 * phase_w // 4),  # 右上寄り
-    (3 * phase_h // 4, phase_w // 4),  # 左下寄り
+    (phase_h // 2, phase_w // 2),      # center
+    (phase_h // 4, phase_w // 4),      # upper-left
+    (3 * phase_h // 4, 3 * phase_w // 4),  # lower-right
+    (phase_h // 4, 3 * phase_w // 4),  # upper-right
+    (3 * phase_h // 4, phase_w // 4),  # lower-left
 ]
 
 print(f"Test pixel positions: {test_pixels}")
 
-# 各ピクセルの位相を時系列で取得（unwrapあり/なし両方）
+# Get time-series phase for each pixel (both with and without unwrap)
 n_test_frames = min(200, holograms_blank.shape[0])
 phases_unwrapped = {pos: [] for pos in test_pixels}
 phases_wrapped = {pos: [] for pos in test_pixels}
@@ -743,15 +743,15 @@ for i in range(n_test_frames):
         phases_wrapped[pos].append(phase_wrapped[y, x])
         phases_unwrapped[pos].append(phase_unwrapped[y, x])
 
-# プロット1: 位相の時間変化（unwrapあり）
+# Plot 1: Temporal phase variation (with unwrap)
 fig, axes = plt.subplots(2, 1, figsize=(14, 8))
 
-# (a) 各ピクセルの生の位相変化
+# (a) Raw phase variation for each pixel
 ax1 = axes[0]
 colors = ['blue', 'red', 'green', 'orange', 'purple']
 for i, (pos, color) in enumerate(zip(test_pixels, colors)):
     data = np.array(phases_unwrapped[pos])
-    # トレンドを除去（最初の値からの相対変化）
+    # Remove trend (relative change from the first value)
     data_relative = data - data[0]
     ax1.plot(data_relative, color=color, linewidth=1, alpha=0.7, 
              label=f'Pixel {pos}')
@@ -762,9 +762,9 @@ ax1.set_title('(a) Phase drift over time (unwrapped)', fontsize=12, fontweight='
 ax1.legend(fontsize=9, loc='best')
 ax1.grid(True, alpha=0.3)
 
-# (b) 中心ピクセルの詳細
+# (b) Detail of center pixel
 ax2 = axes[1]
-center_pos = test_pixels[0]  # 中心
+center_pos = test_pixels[0]  # center
 center_phases = np.array(phases_unwrapped[center_pos])
 center_relative = center_phases - center_phases[0]
 
@@ -779,7 +779,7 @@ plt.tight_layout()
 plt.savefig('phase_drift_analysis.png', dpi=300, bbox_inches='tight')
 plt.show()
 
-# プロット2: wrapped vs unwrapped の比較
+# Plot 2: wrapped vs unwrapped comparison
 fig, axes = plt.subplots(2, 1, figsize=(14, 8))
 
 center_pos = test_pixels[0]
@@ -796,7 +796,7 @@ ax1.set_ylim([-np.pi, np.pi])
 ax1.axhline(y=0, color='r', linestyle='--', alpha=0.3)
 ax1.grid(True, alpha=0.3)
 
-# (b) Unwrapped phase (相対)
+# (b) Unwrapped phase (relative)
 ax2 = axes[1]
 unwrapped_data = np.array(phases_unwrapped[center_pos])
 unwrapped_relative = unwrapped_data - unwrapped_data[0]
@@ -812,7 +812,7 @@ plt.tight_layout()
 plt.savefig('wrapped_vs_unwrapped.png', dpi=300, bbox_inches='tight')
 plt.show()
 
-# プロット3: 空間平均位相の時間変化（全体的なドリフト）
+# Plot 3: Temporal variation of spatial mean phase (overall drift)
 print("\n=== Analyzing spatial mean phase drift ===")
 
 spatial_mean_phases = []
@@ -831,12 +831,12 @@ for i in range(n_test_frames):
 spatial_mean_phases = np.array(spatial_mean_phases)
 spatial_std_phases = np.array(spatial_std_phases)
 
-# 相対変化
+# Relative change
 spatial_mean_relative = spatial_mean_phases - spatial_mean_phases[0]
 
 fig, axes = plt.subplots(2, 1, figsize=(14, 8))
 
-# (a) 空間平均位相の時間変化
+# (a) Temporal variation of spatial mean phase
 ax1 = axes[0]
 ax1.plot(spatial_mean_relative, 'b-', linewidth=1.5)
 ax1.set_xlabel('Frame number', fontsize=11)
@@ -845,7 +845,7 @@ ax1.set_title(f'(a) Spatial mean phase drift - Std: {np.std(spatial_mean_relativ
               fontsize=12, fontweight='bold')
 ax1.grid(True, alpha=0.3)
 
-# (b) 空間標準偏差の時間変化
+# (b) Temporal variation of spatial standard deviation
 ax2 = axes[1]
 ax2.plot(spatial_std_phases, 'r-', linewidth=1.5)
 ax2.set_xlabel('Frame number', fontsize=11)
@@ -858,7 +858,7 @@ plt.tight_layout()
 plt.savefig('spatial_phase_drift.png', dpi=300, bbox_inches='tight')
 plt.show()
 
-# 統計サマリー
+# Statistical summary
 print("\n" + "="*70)
 print("DRIFT ANALYSIS SUMMARY")
 print("="*70)
@@ -893,7 +893,7 @@ print("="*70)
 # %%
 # %%
 # %%
-# ========== バックグラウンド差分（フレーム0をバックグラウンドとして使用） ==========
+# ========== Background subtraction (using frame 0 as background) ==========
 
 def calculate_EXP_sensitivity_with_bg_frame(
     holograms: np.ndarray,
@@ -903,22 +903,22 @@ def calculate_EXP_sensitivity_with_bg_frame(
     bg_region: Tuple[int, int, int, int] = None
 ) -> np.ndarray:
     """
-    単一のバックグラウンドフレームを使った差分測定
-    
+    Differential measurement using a single background frame.
+
     Args:
-        holograms: サンプルホログラム系列 shape (n_frames, height, width)
-        bg_hologram: バックグラウンドホログラム（1枚）
-        params: QPIパラメータ
-        use_unwrap: 位相アンラップを使用するか
-        bg_region: バックグラウンド補正用の領域 (y1, y2, x1, x2)
-    
+        holograms: Sample hologram series, shape (n_frames, height, width)
+        bg_hologram: Background hologram (single frame)
+        params: QPI parameters
+        use_unwrap: Whether to use phase unwrapping
+        bg_region: Region for background correction (y1, y2, x1, x2)
+
     Returns:
-        sigma_exp: 実験的位相感度 [rad]
+        sigma_exp: Experimental phase sensitivity [rad]
     """
     n_frames = holograms.shape[0]
     phases_diff = []
     
-    # バックグラウンドの位相を計算
+    # Calculate background phase
     print("Calculating background phase...")
     field_bg = get_field(bg_hologram, params)
     phase_bg = np.angle(field_bg)
@@ -931,17 +931,17 @@ def calculate_EXP_sensitivity_with_bg_frame(
         if i % 100 == 0:
             print(f"  Frame {i}/{n_frames}")
         
-        # サンプルの位相再構成
+        # Sample phase reconstruction
         field = get_field(holograms[i], params)
         phase = np.angle(field)
         
         if use_unwrap:
             phase = unwrap_phase(phase)
         
-        # 差分位相
+        # Differential phase
         phase_diff = phase - phase_bg
         
-        # バックグラウンド領域で補正（オプション）
+        # Correct using background region (optional)
         if bg_region is not None:
             y1, y2, x1, x2 = bg_region
             offset = np.mean(phase_diff[y1:y2, x1:x2])
@@ -951,25 +951,25 @@ def calculate_EXP_sensitivity_with_bg_frame(
     
     phases_diff = np.array(phases_diff)
     
-    # 時間方向の標準偏差
+    # Temporal standard deviation
     sigma_exp = np.std(phases_diff, axis=0)
     
     return sigma_exp, phases_diff
 
 
-# ========== 実行 ==========
+# ========== Execute ==========
 print("\n" + "="*70)
 print("BACKGROUND SUBTRACTION ANALYSIS (Frame 0 as background)")
 print("="*70)
 
-# フレーム0をバックグラウンドとして使用
+# Use frame 0 as background
 bg_hologram = holograms_blank[0]
 
-# バックグラウンド領域の設定（左上の小領域を使う例）
-# 位相画像のサイズは507x507なので、適切な範囲を指定
-bg_region = (10, 60, 10, 60)  # 50x50ピクセルの領域
+# Background region setting (example using a small region in the upper left)
+# Phase image size is 507x507, so specify an appropriate range
+bg_region = (10, 60, 10, 60)  # 50x50 pixel region
 
-# Case 1: Wrapped phase (unwrap なし) + バックグラウンド差分
+# Case 1: Wrapped phase (no unwrap) + background subtraction
 print("\n[Case 1: Wrapped phase + BG subtraction]")
 sigma_exp_bg_wrapped, phases_diff_wrapped = calculate_EXP_sensitivity_with_bg_frame(
     holograms=holograms_blank,
@@ -981,7 +981,7 @@ sigma_exp_bg_wrapped, phases_diff_wrapped = calculate_EXP_sensitivity_with_bg_fr
 
 print(f"EXP (BG wrapped):  {np.mean(sigma_exp_bg_wrapped):.6e} rad")
 
-# Case 2: Unwrapped phase + バックグラウンド差分
+# Case 2: Unwrapped phase + background subtraction
 print("\n[Case 2: Unwrapped phase + BG subtraction]")
 sigma_exp_bg_unwrapped, phases_diff_unwrapped = calculate_EXP_sensitivity_with_bg_frame(
     holograms=holograms_blank,
@@ -993,17 +993,17 @@ sigma_exp_bg_unwrapped, phases_diff_unwrapped = calculate_EXP_sensitivity_with_b
 
 print(f"EXP (BG unwrapped): {np.mean(sigma_exp_bg_unwrapped):.6e} rad")
 
-# ========== 結果の比較 ==========
+# ========== Compare results ==========
 print("\n" + "="*70)
 print("COMPARISON OF ALL METHODS")
 print("="*70)
 print(f"ALG (theoretical):       {np.mean(sigma_alg_blank):.6e} rad")
-print(f"EXP (unwrapped, no BG):  {np.mean(sigma_exp_blank):.6e} rad  ← ドリフト大")
+print(f"EXP (unwrapped, no BG):  {np.mean(sigma_exp_blank):.6e} rad  <- Large drift")
 print(f"EXP (wrapped, no BG):    {np.mean(sigma_exp_wrapped):.6e} rad")
 print(f"EXP (wrapped + BG):      {np.mean(sigma_exp_bg_wrapped):.6e} rad")
 print(f"EXP (unwrapped + BG):    {np.mean(sigma_exp_bg_unwrapped):.6e} rad")
 
-# システム効率の計算（各手法）
+# System efficiency calculation (for each method)
 methods = {
     'wrapped, no BG': sigma_exp_wrapped,
     'wrapped + BG': sigma_exp_bg_wrapped,
@@ -1025,8 +1025,8 @@ for method_name, sigma_exp in methods.items():
 
 print("="*70)
 
-# ========== プロット ==========
-# 1. バックグラウンド差分後の感度比較（wrapped）
+# ========== Plot ==========
+# 1. Sensitivity comparison after BG subtraction (wrapped)
 print("\n[Plotting Fig. 3 style with BG subtraction (wrapped)]")
 plot_fig3_style(
     sigma_exp=sigma_exp_bg_wrapped,
@@ -1036,7 +1036,7 @@ plot_fig3_style(
     save_path="fig3_abc_bg_wrapped.png"
 )
 
-# 2. バックグラウンド差分後の感度比較（unwrapped）
+# 2. Sensitivity comparison after BG subtraction (unwrapped)
 print("\n[Plotting Fig. 3 style with BG subtraction (unwrapped)]")
 plot_fig3_style(
     sigma_exp=sigma_exp_bg_unwrapped,
@@ -1046,17 +1046,17 @@ plot_fig3_style(
     save_path="fig3_abc_bg_unwrapped.png"
 )
 
-# ========== 差分位相の時間変化を確認 ==========
+# ========== Check temporal variation of differential phase ==========
 print("\n=== Analyzing differential phase drift ===")
 
-# 中心ピクセルの差分位相の時間変化
+# Temporal variation of differential phase at center pixel
 center_y, center_x = phases_diff_wrapped.shape[1] // 2, phases_diff_wrapped.shape[2] // 2
 
 fig, axes = plt.subplots(2, 1, figsize=(14, 8))
 
-# (a) Wrapped差分位相
+# (a) Wrapped differential phase
 ax1 = axes[0]
-wrapped_diff_center = phases_diff_wrapped[:200, center_y, center_x]  # 最初の200フレーム
+wrapped_diff_center = phases_diff_wrapped[:200, center_y, center_x]  # first 200 frames
 ax1.plot(wrapped_diff_center, 'b-', linewidth=1, alpha=0.7)
 ax1.set_xlabel('Frame number', fontsize=11)
 ax1.set_ylabel('Differential phase (rad)', fontsize=11)
@@ -1066,7 +1066,7 @@ ax1.set_ylim([-np.pi, np.pi])
 ax1.axhline(y=0, color='r', linestyle='--', alpha=0.3)
 ax1.grid(True, alpha=0.3)
 
-# (b) Unwrapped差分位相
+# (b) Unwrapped differential phase
 ax2 = axes[1]
 unwrapped_diff_center = phases_diff_unwrapped[:200, center_y, center_x]
 ax2.plot(unwrapped_diff_center, 'r-', linewidth=1, alpha=0.7)
@@ -1094,7 +1094,7 @@ print("  - differential_phase_analysis.png")
 print("="*70)
 # %%
 # %%
-# ========== バックグラウンド差分分析（統合版） ==========
+# ========== Background subtraction analysis (integrated version) ==========
 
 from typing import Tuple
 
@@ -1106,12 +1106,12 @@ def calculate_EXP_sensitivity_with_bg_frame(
     bg_region: Tuple[int, int, int, int] = None
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    単一のバックグラウンドフレームを使った差分測定
+    Differential measurement using a single background frame.
     """
     n_frames = holograms.shape[0]
     phases_diff = []
     
-    # バックグラウンドの位相を計算
+    # Calculate background phase
     print("Calculating background phase...")
     field_bg = get_field(bg_hologram, params)
     phase_bg = np.angle(field_bg)
@@ -1124,17 +1124,17 @@ def calculate_EXP_sensitivity_with_bg_frame(
         if i % 100 == 0:
             print(f"  Frame {i}/{n_frames}")
         
-        # サンプルの位相再構成
+        # Sample phase reconstruction
         field = get_field(holograms[i], params)
         phase = np.angle(field)
         
         if use_unwrap:
             phase = unwrap_phase(phase)
         
-        # 差分位相
+        # Differential phase
         phase_diff = phase - phase_bg
         
-        # バックグラウンド領域で補正（オプション）
+        # Correct using background region (optional)
         if bg_region is not None:
             y1, y2, x1, x2 = bg_region
             offset = np.mean(phase_diff[y1:y2, x1:x2])
@@ -1144,24 +1144,24 @@ def calculate_EXP_sensitivity_with_bg_frame(
     
     phases_diff = np.array(phases_diff)
     
-    # 時間方向の標準偏差
+    # Temporal standard deviation
     sigma_exp = np.std(phases_diff, axis=0)
     
     return sigma_exp, phases_diff
 
 
-# ========== 実行 ==========
+# ========== Execute ==========
 print("\n" + "="*70)
 print("BACKGROUND SUBTRACTION ANALYSIS (Frame 0 as background)")
 print("="*70)
 
-# フレーム0をバックグラウンドとして使用
+# Use frame 0 as background
 bg_hologram = holograms_blank[0]
 
-# バックグラウンド領域の設定
+# Background region setting
 bg_region = (10, 60, 10, 60)
 
-# Case 1: Wrapped phase + バックグラウンド差分
+# Case 1: Wrapped phase + background subtraction
 print("\n[Case 1: Wrapped phase + BG subtraction]")
 sigma_exp_bg_wrapped, phases_diff_wrapped = calculate_EXP_sensitivity_with_bg_frame(
     holograms=holograms_blank,
@@ -1172,7 +1172,7 @@ sigma_exp_bg_wrapped, phases_diff_wrapped = calculate_EXP_sensitivity_with_bg_fr
 )
 print(f"EXP (BG wrapped):  {np.mean(sigma_exp_bg_wrapped):.6e} rad")
 
-# Case 2: Unwrapped phase + バックグラウンド差分
+# Case 2: Unwrapped phase + background subtraction
 print("\n[Case 2: Unwrapped phase + BG subtraction]")
 sigma_exp_bg_unwrapped, phases_diff_unwrapped = calculate_EXP_sensitivity_with_bg_frame(
     holograms=holograms_blank,
@@ -1183,17 +1183,17 @@ sigma_exp_bg_unwrapped, phases_diff_unwrapped = calculate_EXP_sensitivity_with_b
 )
 print(f"EXP (BG unwrapped): {np.mean(sigma_exp_bg_unwrapped):.6e} rad")
 
-# ========== 結果の比較 ==========
+# ========== Compare results ==========
 print("\n" + "="*70)
 print("COMPARISON OF ALL METHODS")
 print("="*70)
 print(f"ALG (theoretical):       {np.mean(sigma_alg_blank):.6e} rad")
-print(f"EXP (unwrapped, no BG):  {np.mean(sigma_exp_blank):.6e} rad  ← ドリフト大")
+print(f"EXP (unwrapped, no BG):  {np.mean(sigma_exp_blank):.6e} rad  <- Large drift")
 print(f"EXP (wrapped, no BG):    {np.mean(sigma_exp_wrapped):.6e} rad")
 print(f"EXP (wrapped + BG):      {np.mean(sigma_exp_bg_wrapped):.6e} rad")
 print(f"EXP (unwrapped + BG):    {np.mean(sigma_exp_bg_unwrapped):.6e} rad")
 
-# システム効率の計算
+# System efficiency calculation
 methods = {
     'wrapped, no BG': sigma_exp_wrapped,
     'wrapped + BG': sigma_exp_bg_wrapped,
@@ -1215,7 +1215,7 @@ for method_name, sigma_exp in methods.items():
 
 print("="*70)
 
-# ========== プロット ==========
+# ========== Plot ==========
 print("\n[Plotting Fig. 3 style with BG subtraction (wrapped)]")
 plot_fig3_style(
     sigma_exp=sigma_exp_bg_wrapped,
@@ -1234,14 +1234,14 @@ plot_fig3_style(
     save_path="fig3_abc_bg_unwrapped.png"
 )
 
-# ========== 差分位相の時間変化を確認 ==========
+# ========== Check temporal variation of differential phase ==========
 print("\n=== Analyzing differential phase drift ===")
 
 center_y, center_x = phases_diff_wrapped.shape[1] // 2, phases_diff_wrapped.shape[2] // 2
 
 fig, axes = plt.subplots(2, 1, figsize=(14, 8))
 
-# (a) Wrapped差分位相
+# (a) Wrapped differential phase
 ax1 = axes[0]
 wrapped_diff_center = phases_diff_wrapped[:200, center_y, center_x]
 ax1.plot(wrapped_diff_center, 'b-', linewidth=1, alpha=0.7)
@@ -1253,7 +1253,7 @@ ax1.set_ylim([-np.pi, np.pi])
 ax1.axhline(y=0, color='r', linestyle='--', alpha=0.3)
 ax1.grid(True, alpha=0.3)
 
-# (b) Unwrapped差分位相
+# (b) Unwrapped differential phase
 ax2 = axes[1]
 unwrapped_diff_center = phases_diff_unwrapped[:200, center_y, center_x]
 ax2.plot(unwrapped_diff_center, 'r-', linewidth=1, alpha=0.7)
@@ -1284,7 +1284,7 @@ print("="*70)
 
 
 # %%# %%
-# ========== バックグラウンド差分分析（簡略版） ==========
+# ========== Background subtraction analysis (simplified version) ==========
 
 from typing import Tuple
 
@@ -1296,12 +1296,12 @@ def calculate_EXP_sensitivity_with_bg_frame(
     bg_region: Tuple[int, int, int, int] = None
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    単一のバックグラウンドフレームを使った差分測定
+    Differential measurement using a single background frame.
     """
     n_frames = holograms.shape[0]
     phases_diff = []
     
-    # バックグラウンドの位相を計算
+    # Calculate background phase
     print("Calculating background phase...")
     field_bg = get_field(bg_hologram, params)
     phase_bg = np.angle(field_bg)
@@ -1335,7 +1335,7 @@ def calculate_EXP_sensitivity_with_bg_frame(
     return sigma_exp, phases_diff
 
 
-# ========== 実行 ==========
+# ========== Execute ==========
 print("\n" + "="*70)
 print("BACKGROUND SUBTRACTION ANALYSIS (Frame 0 as background)")
 print("="*70)
@@ -1365,7 +1365,7 @@ sigma_exp_bg_unwrapped, phases_diff_unwrapped = calculate_EXP_sensitivity_with_b
 )
 print(f"EXP (BG unwrapped): {np.mean(sigma_exp_bg_unwrapped):.6e} rad")
 
-# ========== 結果の比較 ==========
+# ========== Compare results ==========
 print("\n" + "="*70)
 print("COMPARISON OF METHODS")
 print("="*70)
@@ -1374,7 +1374,7 @@ print(f"EXP (unwrapped, no BG):  {np.mean(sigma_exp_blank):.6e} rad  ← Large d
 print(f"EXP (wrapped + BG):      {np.mean(sigma_exp_bg_wrapped):.6e} rad")
 print(f"EXP (unwrapped + BG):    {np.mean(sigma_exp_bg_unwrapped):.6e} rad")
 
-# システム効率
+# System efficiency
 print("\n" + "-"*70)
 print("SYSTEM EFFICIENCY")
 print("-"*70)
@@ -1395,7 +1395,7 @@ for method_name, sigma_exp in methods.items():
 
 print("="*70)
 
-# ========== プロット ==========
+# ========== Plot ==========
 print("\n[Plotting Fig. 3 style with BG subtraction (wrapped)]")
 plot_fig3_style(
     sigma_exp=sigma_exp_bg_wrapped,
@@ -1414,14 +1414,14 @@ plot_fig3_style(
     save_path="fig3_abc_bg_unwrapped.png"
 )
 
-# ========== 差分位相の時間変化 ==========
+# ========== Temporal variation of differential phase ==========
 print("\n=== Analyzing differential phase drift ===")
 
 center_y, center_x = phases_diff_wrapped.shape[1] // 2, phases_diff_wrapped.shape[2] // 2
 
 fig, axes = plt.subplots(2, 1, figsize=(14, 8))
 
-# Wrapped差分位相
+# Wrapped differential phase
 ax1 = axes[0]
 wrapped_diff_center = phases_diff_wrapped[:200, center_y, center_x]
 ax1.plot(wrapped_diff_center, 'b-', linewidth=1, alpha=0.7)
@@ -1433,7 +1433,7 @@ ax1.set_ylim([-np.pi, np.pi])
 ax1.axhline(y=0, color='r', linestyle='--', alpha=0.3)
 ax1.grid(True, alpha=0.3)
 
-# Unwrapped差分位相
+# Unwrapped differential phase
 ax2 = axes[1]
 unwrapped_diff_center = phases_diff_unwrapped[:200, center_y, center_x]
 ax2.plot(unwrapped_diff_center, 'r-', linewidth=1, alpha=0.7)
@@ -1451,7 +1451,7 @@ plt.show()
 print(f"\nWrapped diff std:   {np.std(wrapped_diff_center):.6f} rad")
 print(f"Unwrapped diff std: {np.std(unwrapped_diff_center):.6f} rad")
 
-# ========== 最終サマリー ==========
+# ========== Final summary ==========
 print("\n" + "="*70)
 print("FINAL SUMMARY")
 print("="*70)
@@ -1489,7 +1489,7 @@ print("="*70)
 
 # %%
 # %%
-# ========== カメラゲインの実測 ==========
+# ========== Experimental camera gain measurement ==========
 
 def estimate_camera_gain_from_temporal_variance(
     holograms: np.ndarray,
@@ -1497,15 +1497,15 @@ def estimate_camera_gain_from_temporal_variance(
     region_size: int = 30
 ) -> dict:
     """
-    時間的な平均-分散関係からカメラゲインを推定
-    
+    Estimate camera gain from the temporal mean-variance relationship.
+
     Args:
         holograms: shape (n_frames, height, width)
-        n_regions: サンプリングする領域数
-        region_size: 各領域のサイズ
-    
+        n_regions: Number of regions to sample
+        region_size: Size of each region
+
     Returns:
-        結果の辞書
+        Dictionary of results
     """
     n_frames, H, W = holograms.shape
     
@@ -1515,14 +1515,14 @@ def estimate_camera_gain_from_temporal_variance(
     print(f"Sampling {n_regions} regions for gain estimation...")
     
     for i in range(n_regions):
-        # ランダムな位置を選択
+        # Select a random position
         y = np.random.randint(50, H - region_size - 50)
         x = np.random.randint(50, W - region_size - 50)
         
-        # その領域の時間変化を抽出
+        # Extract temporal variation for the region
         region_sequence = holograms[:, y:y+region_size, x:x+region_size]
         
-        # 時間平均と時間分散
+        # Temporal mean and temporal variance
         temporal_mean = np.mean(region_sequence)
         temporal_var = np.var(region_sequence)
         
@@ -1532,10 +1532,10 @@ def estimate_camera_gain_from_temporal_variance(
     means = np.array(means)
     variances = np.array(variances)
     
-    # g = mean / variance (ショットノイズモデル)
-    # しかし、読み出しノイズがある場合: variance = mean/g + readnoise^2
+    # g = mean / variance (shot noise model)
+    # However, with read noise: variance = mean/g + readnoise^2
     
-    # 線形フィット: variance = mean/g + offset
+    # Linear fit: variance = mean/g + offset
     from scipy.stats import linregress
     slope, intercept, r_value, p_value, std_err = linregress(means, variances)
     
@@ -1551,7 +1551,7 @@ def estimate_camera_gain_from_temporal_variance(
         'r_squared': r_value**2
     }
 
-# ========== 実行 ==========
+# ========== Execute ==========
 print("\n" + "="*70)
 print("CAMERA GAIN CALIBRATION")
 print("="*70)
@@ -1571,18 +1571,18 @@ print(f"  Read noise:            {gain_results['readnoise_ADU']:.2f} ADU")
 print(f"                         {gain_results['readnoise_electrons']:.2f} e-")
 print(f"  R² (fit quality):      {gain_results['r_squared']:.4f}")
 
-# プロット
+# Plot
 fig, ax = plt.subplots(figsize=(10, 6))
 ax.scatter(gain_results['means'], gain_results['variances'], 
            alpha=0.6, s=50, label='Data')
 
-# フィット線
+# Fit line
 mean_range = np.array([gain_results['means'].min(), gain_results['means'].max()])
 fit_line = mean_range / gain_results['gain'] + gain_results['readnoise_ADU']**2
 ax.plot(mean_range, fit_line, 'r-', linewidth=2, 
         label=f"Fit: g={gain_results['gain']:.2f} e-/ADU")
 
-# ショットノイズ限界（読み出しノイズなし）
+# Shot noise limit (no read noise)
 shot_noise_line = mean_range / gain_results['gain']
 ax.plot(mean_range, shot_noise_line, 'g--', linewidth=2, alpha=0.5,
         label='Shot noise limit')
@@ -1597,7 +1597,7 @@ plt.tight_layout()
 plt.savefig('camera_gain_calibration.png', dpi=300)
 plt.show()
 
-# ========== 推定ゲインでALGを再計算 ==========
+# ========== Recalculate ALG with estimated gain ==========
 print("\n" + "="*70)
 print("RECALCULATING ALG WITH ESTIMATED GAIN")
 print("="*70)
@@ -1605,7 +1605,7 @@ print("="*70)
 sigma_alg_corrected = calculate_ALG_sensitivity_shot_noise(
     hologram=holograms_blank[0],
     params=params,
-    camera_gain=gain_results['gain'],  # ← 推定ゲインを使用
+    camera_gain=gain_results['gain'],  # <- Use estimated gain
     filter_bandwidth_ratio=0.3
 )
 
@@ -1622,7 +1622,7 @@ with np.errstate(divide='ignore', invalid='ignore'):
 mean_eff_corrected = np.mean(eff_corrected[eff_corrected > 0])
 print(f"  Efficiency: {mean_eff_corrected:.2f}%")
 
-# プロット
+# Plot
 plot_fig3_style(
     sigma_exp=sigma_exp_bg_unwrapped,
     sigma_alg=sigma_alg_corrected,
@@ -1648,13 +1648,13 @@ else:
 print("="*70)
 # %%
 # %%
-# ========== カメラ設定の確認 ==========
+# ========== Check camera settings ==========
 
 print("\n" + "="*70)
 print("CAMERA SETTINGS INVESTIGATION")
 print("="*70)
 
-# ホログラムの統計情報
+# Hologram statistics
 sample_holo = holograms_blank[0]
 
 print(f"\n[Image Statistics]")
@@ -1664,7 +1664,7 @@ print(f"  Max value:      {sample_holo.max()}")
 print(f"  Mean value:     {sample_holo.mean():.1f} ADU")
 print(f"  Dynamic range:  {sample_holo.max() - sample_holo.min()} ADU")
 
-# ビット深度の推測
+# Estimate bit depth
 if sample_holo.max() <= 255:
     bit_depth = 8
 elif sample_holo.max() <= 4095:
@@ -1703,7 +1703,7 @@ print(f"  3. Use measured gain ({gain_results['gain']:.4f} e-/ADU) for analysis"
 print("="*70)
 
 # %%
-# ========== 最終的なFig. 3を保存 ==========
+# ========== Save final Fig. 3 ==========
 
 print("\n" + "="*70)
 print("FINAL FIGURE GENERATION")
@@ -1719,7 +1719,7 @@ plot_fig3_style(
     save_path="fig3_final.png"
 )
 
-# OPL感度に変換
+# Convert to OPL sensitivity
 k0 = 2 * np.pi / WAVELENGTH
 sigma_exp_opl = sigma_exp_bg_unwrapped / k0 * 1e9  # nm
 sigma_alg_opl = sigma_alg_corrected / k0 * 1e9      # nm
@@ -1755,7 +1755,7 @@ print("="*70)
 # %%
 """
 Temporal Noise Analysis for QPI Systems
-論文のFig. 3を再現するためのコード
+Code for reproducing Fig. 3 from the paper
 """
 
 import numpy as np
@@ -1767,12 +1767,12 @@ from PIL import Image
 from skimage.restoration import unwrap_phase
 from scipy.stats import linregress
 
-# 既存のqpiモジュールからインポート
+# Import from existing qpi module
 from qpi import QPIParameters, get_field, make_disk, crop_array
 
 
 # =============================================================================
-# データ読み込み関数
+# Data loading functions
 # =============================================================================
 
 def load_hologram_sequence(
@@ -1781,23 +1781,23 @@ def load_hologram_sequence(
     crop_region: Tuple[int, int, int, int] = None
 ) -> np.ndarray:
     """
-    連続したホログラムを読み込む
-    
+    Load consecutive holograms.
+
     Args:
-        folder_path: ホログラムが保存されているフォルダパス
-        n_frames: 読み込むフレーム数（Noneの場合は全フレーム）
-        crop_region: (y_start, y_end, x_start, x_end) のクロップ領域
+        folder_path: Folder path where holograms are stored
+        n_frames: Number of frames to load (None for all frames)
+        crop_region: Crop region as (y_start, y_end, x_start, x_end)
     
     Returns:
         holograms: shape (n_frames, height, width)
     """
     folder = Path(folder_path)
     
-    # .tif と .tiff の両方を探す
+    # Search for both .tif and .tiff files
     tif_files = sorted(folder.glob("*.tif")) + sorted(folder.glob("*.tiff"))
     tif_files = sorted(tif_files)
     
-    # 隠しファイルを除外
+    # Exclude hidden files
     tif_files = [f for f in tif_files if not f.name.startswith('.')]
     
     print(f"Folder: {folder}")
@@ -1836,7 +1836,7 @@ def load_hologram_sequence(
 
 
 # =============================================================================
-# 感度計算関数
+# Sensitivity calculation functions
 # =============================================================================
 
 def extract_alpha_beta(
@@ -1844,12 +1844,12 @@ def extract_alpha_beta(
     params: QPIParameters
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    ホログラムからα (DC成分) とβ (干渉縞振幅) を抽出
-    論文のEq. (1)に対応
+    Extract alpha (DC component) and beta (fringe amplitude) from a hologram.
+    Corresponds to Eq. (1) in the paper.
     """
     fft_holo = np.fft.fftshift(np.fft.fft2(hologram))
     
-    # DC成分 (0次光) の抽出
+    # Extract DC component (0th-order light)
     dc_mask = make_disk(params.img_center, params.aperturesize // 2, params.img_shape)
     dc_fft = fft_holo * dc_mask
     dc_cropped = crop_array(dc_fft, params.img_center, params.aperturesize)
@@ -1858,7 +1858,7 @@ def extract_alpha_beta(
     scale_factor = params.aperturesize / params.img_shape[0]
     alpha = np.abs(dc_field) * scale_factor**2
     
-    # サイドバンド成分 (1次光) の抽出
+    # Extract sideband component (1st-order light)
     sb_mask = make_disk(params.offaxis_center, params.aperturesize // 2, params.img_shape)
     sb_fft = fft_holo * sb_mask
     sb_cropped = crop_array(sb_fft, params.offaxis_center, params.aperturesize)
@@ -1875,22 +1875,22 @@ def calculate_ALG_sensitivity_shot_noise(
     filter_bandwidth_ratio: float = 0.3
 ) -> np.ndarray:
     """
-    論文のEq. (12)に基づくALG感度計算（ショットノイズモデル）
-    
+    ALG sensitivity calculation based on Eq. (12) in the paper (shot noise model).
+
     Args:
-        hologram: 単一ホログラム
-        params: QPIパラメータ
-        camera_gain: カメラゲイン [e-/ADU]
-        filter_bandwidth_ratio: フィルタ帯域幅の比率
-    
+        hologram: Single hologram
+        params: QPI parameters
+        camera_gain: Camera gain [e-/ADU]
+        filter_bandwidth_ratio: Filter bandwidth ratio
+
     Returns:
-        sigma_phi: 位相感度マップ [rad]
+        sigma_phi: Phase sensitivity map [rad]
     """
     alpha, beta = extract_alpha_beta(hologram, params)
     
-    # フィルタ開口面積 S の計算
+    # Calculate filter aperture area S
     radius = filter_bandwidth_ratio * np.sqrt(
-        (params.offaxis_center[0] - params.img_center[0])**2 + 
+        (params.offaxis_center[0] - params.img_center[0])**2 +
         (params.offaxis_center[1] - params.img_center[1])**2
     )
     S = np.pi * radius**2
@@ -1913,18 +1913,18 @@ def calculate_EXP_sensitivity_with_bg_frame(
     bg_region: Tuple[int, int, int, int] = None
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    単一のバックグラウンドフレームを使った差分測定
-    
+    Differential measurement using a single background frame.
+
     Args:
-        holograms: サンプルホログラム系列 shape (n_frames, height, width)
-        bg_hologram: バックグラウンドホログラム（1枚）
-        params: QPIパラメータ
-        use_unwrap: 位相アンラップを使用するか
-        bg_region: バックグラウンド補正用の領域 (y1, y2, x1, x2)
-    
+        holograms: Sample hologram series, shape (n_frames, height, width)
+        bg_hologram: Background hologram (single frame)
+        params: QPI parameters
+        use_unwrap: Whether to use phase unwrapping
+        bg_region: Region for background correction (y1, y2, x1, x2)
+
     Returns:
-        sigma_exp: 実験的位相感度 [rad]
-        phases_diff: 差分位相の時系列
+        sigma_exp: Experimental phase sensitivity [rad]
+        phases_diff: Time series of differential phase
     """
     n_frames = holograms.shape[0]
     phases_diff = []
@@ -1968,15 +1968,15 @@ def estimate_camera_gain_from_temporal_variance(
     region_size: int = 30
 ) -> dict:
     """
-    時間的な平均-分散関係からカメラゲインを推定
-    
+    Estimate camera gain from the temporal mean-variance relationship.
+
     Args:
         holograms: shape (n_frames, height, width)
-        n_regions: サンプリングする領域数
-        region_size: 各領域のサイズ
-    
+        n_regions: Number of regions to sample
+        region_size: Size of each region
+
     Returns:
-        結果の辞書
+        Dictionary of results
     """
     n_frames, H, W = holograms.shape
     
@@ -2000,7 +2000,7 @@ def estimate_camera_gain_from_temporal_variance(
     means = np.array(means)
     variances = np.array(variances)
     
-    # 線形フィット: variance = mean/g + offset
+    # Linear fit: variance = mean/g + offset
     slope, intercept, r_value, p_value, std_err = linregress(means, variances)
     
     gain_estimate = 1 / slope
@@ -2017,7 +2017,7 @@ def estimate_camera_gain_from_temporal_variance(
 
 
 # =============================================================================
-# プロット関数
+# Plot functions
 # =============================================================================
 
 def plot_fig3_style(
@@ -2028,8 +2028,8 @@ def plot_fig3_style(
     save_path: str = None
 ):
     """
-    論文 Fig. 3 のスタイルでプロット
-    (a) EXP, (b) ALG, (c) 中央列の比較
+    Plot in the style of Fig. 3 from the paper.
+    (a) EXP, (b) ALG, (c) center column comparison
     """
     mean_exp = np.mean(sigma_exp[sigma_exp > 0])
     mean_alg = np.mean(sigma_alg[sigma_alg > 0])
@@ -2060,31 +2060,31 @@ def plot_fig3_style(
     ax2.set_ylabel('Pixel', fontsize=10)
     plt.colorbar(im2, ax=ax2, fraction=0.046, pad=0.04, label='σ_φ (rad)')
     
-    # (c) 中央列の比較
+    # (c) Center column comparison
     ax3 = plt.subplot(1, 3, 3)
     center_col = sigma_exp.shape[1] // 2
     y_pixels = np.arange(sigma_exp.shape[0])
-    
-    ax3.plot(y_pixels, sigma_exp[:, center_col], 'b-', 
+
+    ax3.plot(y_pixels, sigma_exp[:, center_col], 'b-',
              label='EXP', linewidth=2, alpha=0.8)
-    ax3.plot(y_pixels, sigma_alg[:, center_col], 'r--', 
+    ax3.plot(y_pixels, sigma_alg[:, center_col], 'r--',
              label='ALG', linewidth=2, alpha=0.8)
-    
+
     ax3.set_xlabel('Pixel', fontsize=10)
     ax3.set_ylabel('σ_φ (rad)', fontsize=10)
     ax3.set_title('(c) Center column', fontsize=12, fontweight='bold')
     ax3.legend(fontsize=9, loc='upper right')
     ax3.grid(True, alpha=0.3, linestyle='--')
     ax3.set_xlim([0, sigma_exp.shape[0]])
-    
+
     plt.tight_layout()
-    
+
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"Figure saved to {save_path}")
-    
+
     plt.show()
-    
+
     print("\n" + "="*60)
     print("SENSITIVITY ANALYSIS RESULTS")
     print("="*60)
@@ -2095,7 +2095,7 @@ def plot_fig3_style(
 
 
 def plot_gain_calibration(gain_results: dict, save_path: str = None):
-    """カメラゲイン校正結果をプロット"""
+    """Plot camera gain calibration results."""
     fig, ax = plt.subplots(figsize=(10, 6))
     
     ax.scatter(gain_results['means'], gain_results['variances'], 
@@ -2125,18 +2125,18 @@ def plot_gain_calibration(gain_results: dict, save_path: str = None):
 
 
 # =============================================================================
-# メイン実行スクリプト
+# Main execution script
 # =============================================================================
 
 if __name__ == "__main__":
     
-    # ========== パラメータ設定 ==========
+    # ========== Parameter settings ==========
     WAVELENGTH = 663e-9  # m
     NA = 0.95
     PIXELSIZE = 3.45e-6 / 40  # m
     CROP_REGION = (8, 2056, 208, 2256)
     
-    # ========== Step 1: 単一ホログラム読み込みとFFT確認 ==========
+    # ========== Step 1: Load single hologram and check FFT ==========
     print("\n" + "="*70)
     print("STEP 1: LOAD SINGLE HOLOGRAM AND CHECK FFT")
     print("="*70)
@@ -2147,7 +2147,7 @@ if __name__ == "__main__":
     img_blank = img_blank[CROP_REGION[0]:CROP_REGION[1], 
                           CROP_REGION[2]:CROP_REGION[3]]
     
-    # FFT確認
+    # FFT check
     img_fft = np.fft.fftshift(np.fft.fft2(img_blank))
     plt.figure(figsize=(8, 6))
     plt.imshow(np.log(np.abs(img_fft)), cmap='hot')
@@ -2169,7 +2169,7 @@ if __name__ == "__main__":
     print(f"Aperture size: {params.aperturesize} pixels")
     print(f"Off-axis center: {params.offaxis_center}")
     
-    # ========== Step 2: 時系列ホログラムの読み込み ==========
+    # ========== Step 2: Load time-series holograms ==========
     print("\n" + "="*70)
     print("STEP 2: LOAD HOLOGRAM SEQUENCE")
     print("="*70)
@@ -2184,7 +2184,7 @@ if __name__ == "__main__":
     )
     print(f"Loaded shape: {holograms_blank.shape}")
     
-    # ========== Step 3: カメラゲインの測定 ==========
+    # ========== Step 3: Camera gain measurement ==========
     print("\n" + "="*70)
     print("STEP 3: CAMERA GAIN CALIBRATION")
     print("="*70)
@@ -2201,7 +2201,7 @@ if __name__ == "__main__":
     
     plot_gain_calibration(gain_results, save_path='camera_gain_calibration.png')
     
-    # ========== Step 4: ALG感度の計算 ==========
+    # ========== Step 4: Calculate ALG sensitivity ==========
     print("\n" + "="*70)
     print("STEP 4: CALCULATE ALG SENSITIVITY")
     print("="*70)
@@ -2214,7 +2214,7 @@ if __name__ == "__main__":
     )
     print(f"ALG sensitivity: {np.mean(sigma_alg):.6e} rad")
     
-    # ========== Step 5: EXP感度の計算（バックグラウンド差分） ==========
+    # ========== Step 5: Calculate EXP sensitivity (with BG subtraction) ==========
     print("\n" + "="*70)
     print("STEP 5: CALCULATE EXP SENSITIVITY (WITH BG SUBTRACTION)")
     print("="*70)
@@ -2231,7 +2231,7 @@ if __name__ == "__main__":
     )
     print(f"EXP sensitivity: {np.mean(sigma_exp):.6e} rad")
     
-    # ========== Step 6: 最終結果とプロット ==========
+    # ========== Step 6: Final results and plot ==========
     print("\n" + "="*70)
     print("STEP 6: FINAL RESULTS")
     print("="*70)
@@ -2244,7 +2244,7 @@ if __name__ == "__main__":
         save_path="fig3_final.png"
     )
     
-    # OPL感度に変換
+    # Convert to OPL sensitivity
     k0 = 2 * np.pi / WAVELENGTH
     sigma_exp_opl = sigma_exp / k0 * 1e9  # nm
     sigma_alg_opl = sigma_alg / k0 * 1e9  # nm

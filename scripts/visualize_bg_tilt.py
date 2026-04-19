@@ -1,16 +1,16 @@
 """
 visualize_bg_tilt.py
 ---------------------
-grid_subtracted TIFFスタックの列平均プロファイルに
-pybaselines + scipy UnivariateSpline を適用し、
-どれが背景をよく捉えているか目視確認するための比較図を出力する。
+Apply pybaselines + scipy UnivariateSpline to column-mean profiles
+of grid_subtracted TIFF stacks and output comparison figures for
+visual inspection of which method best captures the background.
 
-使い方:
+Usage:
   python visualize_bg_tilt.py
 
-設定:
-  STACK_PATH  : 対象の grid_sub TIF スタック
-  N_FRAMES    : 均等サンプリングするフレーム数
+Settings:
+  STACK_PATH  : Target grid_sub TIF stack
+  N_FRAMES    : Number of frames to sample evenly
 """
 import sys
 from pathlib import Path
@@ -29,17 +29,17 @@ sys.path.insert(0, str(_script_dir))
 from figure_logger import save_figure
 
 # ─────────────────────────────────────────
-# 設定
+# Settings
 # ─────────────────────────────────────────
 STACK_PATH = r"C:\ph_1\Pos1\output_phase\channels\grid_subtracted\channel_00_grid_sub.tif"
-N_FRAMES        = 12    # 表示フレーム数
-FRAME_START     = 0     # 開始フレーム（連続サンプリングの起点）
-FRAME_STEP      = 5     # 連続フレームのステップ（1=毎フレーム、5=5枚おき）
-ROWS_PER_FIG    = 4     # 1枚の図に入れる行数
-CLIP_FRACTION   = 0.10  # 両端 10% ずつカット → 中央 80% を使用
+N_FRAMES        = 12    # Number of frames to display
+FRAME_START     = 0     # Start frame (starting point for sequential sampling)
+FRAME_STEP      = 5     # Sequential frame step (1=every frame, 5=every 5th)
+ROWS_PER_FIG    = 4     # Number of rows per figure
+CLIP_FRACTION   = 0.10  # Clip 10% from each end -> use central 80%
 IMG_VMIN        = -0.5
 IMG_VMAX        = 2.0
-# 比較するアルゴリズム: (ラベル, メソッド名, kwargs)
+# Algorithms to compare: (label, method_name, kwargs)
 ALGORITHMS = [
     ("pspline_iarpls",    "pspline_iarpls",    dict(lam=1e5, num_knots=20)),
     ("derpsalsa",         "derpsalsa",         dict(lam=1e5)),
@@ -53,7 +53,7 @@ _ALL_COLORS = list(mcolors.TABLEAU_COLORS.values()) + list(mcolors.CSS4_COLORS.v
 COLORS = _ALL_COLORS[:len(ALGORITHMS)]
 
 # ─────────────────────────────────────────
-# ユーティリティ
+# Utilities
 # ─────────────────────────────────────────
 def load_tiff_stack(path: str) -> np.ndarray:
     img = Image.open(path)
@@ -74,7 +74,7 @@ def pick_frame_indices(n_total: int, n_pick: int) -> np.ndarray:
 
 
 def compute_baselines(profile: np.ndarray) -> dict:
-    """1D プロファイルに各アルゴリズムを適用してベースラインを返す"""
+    """Apply each algorithm to a 1D profile and return baselines"""
     x = np.arange(len(profile))
     bl_fitter = Baseline(x_data=x)
     results = {}
@@ -97,7 +97,7 @@ def compute_baselines(profile: np.ndarray) -> dict:
 
 
 # ─────────────────────────────────────────
-# メイン
+# Main
 # ─────────────────────────────────────────
 def main():
     stack_path = Path(STACK_PATH)
@@ -110,11 +110,11 @@ def main():
     n_frames, h, w = stack.shape
     print(f"  Shape: {stack.shape}")
 
-    # 連続フレームサンプリング
+    # Sequential frame sampling
     indices = np.arange(FRAME_START, FRAME_START + N_FRAMES * FRAME_STEP, FRAME_STEP)
     indices = indices[indices < n_frames]
 
-    # 端アーティファクト除去: 中央 (1 - 2*CLIP_FRACTION) の範囲だけ使う
+    # Edge artifact removal: use only the central (1 - 2*CLIP_FRACTION) range
     clip_px  = int(w * CLIP_FRACTION)
     x_start  = clip_px
     x_end    = w - clip_px  # exclusive
@@ -123,7 +123,7 @@ def main():
     print(f"  Column mean (all {h} rows), frames={indices.tolist()}")
     print(f"  x range: [{x_start}, {x_end}) ({x_end - x_start} px, clipped {clip_px}px each side)")
 
-    # ─── 全フレームのプロファイル・ベースラインを先に計算（並列）───
+    # ─── Pre-compute profiles and baselines for all frames (parallel) ───
     def _compute_profile_bl(frame_idx):
         profile = stack[frame_idx, :, x_start:x_end].mean(axis=0)
         return profile, compute_baselines(profile)
@@ -136,7 +136,7 @@ def main():
     global_left_ylim  = (-0.5, 1.0)
     global_right_ylim = (-0.25, 0.5)
 
-    # ─── 図1系: ROWS_PER_FIG 行ごとに分割 ───────────────────
+    # ─── Figure 1 series: split into groups of ROWS_PER_FIG rows ───────────────────
     figs1 = []
     chunks = [list(range(i, min(i + ROWS_PER_FIG, len(indices)))) for i in range(0, len(indices), ROWS_PER_FIG)]
     for chunk_idx, chunk_rows in enumerate(chunks):
@@ -160,7 +160,7 @@ def main():
             ax_right = axes1[row, 1]
             ax_img   = axes1[row, 2]
 
-            # ─ 左列: プロファイル + ベースライン ─
+            # ─ Left column: profile + baselines ─
             ax_left.plot(x, profile, color="black", lw=1.0, alpha=0.6, label="profile")
             for (label, *_), color in zip(ALGORITHMS, COLORS):
                 bl = bls[label]
@@ -174,7 +174,7 @@ def main():
             if row == 0:
                 ax_left.legend(fontsize=7, loc="upper right", framealpha=0.8, ncol=2)
 
-            # ─ 中列: 残差 (profile - baseline) ─
+            # ─ Middle column: residual (profile - baseline) ─
             for (label, *_), color in zip(ALGORITHMS, COLORS):
                 bl = bls[label]
                 ax_right.plot(x, profile - bl, color=color, lw=1.2, label=label)
@@ -188,7 +188,7 @@ def main():
             if row == 0:
                 ax_right.legend(fontsize=7, loc="upper right", framealpha=0.8, ncol=2)
 
-            # ─ 右列: TIF画像（全幅）─
+            # ─ Right column: TIF image (full width) ─
             im = ax_img.imshow(
                 stack[frame_idx],
                 cmap="RdBu_r", vmin=IMG_VMIN, vmax=IMG_VMAX,
@@ -205,7 +205,7 @@ def main():
         fig1.tight_layout(rect=[0, 0, 1, 0.97])
         figs1.append(fig1)
 
-    # ─── 安定性図: 引いた後の residual を全フレーム重ね書き ───────
+    # ─── Stability figure: overlay subtracted residuals across all frames ───────
     print(f"  Computing subtracted residuals over all {n_frames} frames...")
     def _compute_residual(fi):
         prof = stack[fi, :, x_start:x_end].mean(axis=0)
@@ -229,7 +229,7 @@ def main():
     ax2.grid(True, alpha=0.3)
     fig2.tight_layout(rect=[0, 0, 1, 0.95])
 
-    # ─── 保存 ───────────────────────────────────
+    # ─── Save ───────────────────────────────────
     params = {
         "stack": str(stack_path),
         "profile_method": f"column_mean_all_{h}_rows",

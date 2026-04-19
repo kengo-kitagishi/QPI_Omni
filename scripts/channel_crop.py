@@ -1,31 +1,31 @@
 #!/usr/bin/env python3
 """
-channel_crop.py - マイクロ流体チャネルをタイムラプス画像からチャネルごとに矩形cropする
+channel_crop.py - Rectangular crop of microfluidic channels from timelapse images
 
-使い方:
-  # Step 1: チャネル検出・プレビュー → ROI設定を JSON に保存
+Usage:
+  # Step 1: Channel detection & preview -> Save ROI settings to JSON
   python channel_crop.py --dir "e:/Acuisition/kitagishi/260301/movetest_8/Pos4" --detect
 
-  # JSON を手動編集して不要なチャネルを削除したり cy/cx を微調整する
+  # Manually edit JSON to remove unwanted channels or adjust cy/cx
 
-  # Step 2: 全フレームに適用してチャネルごとの TIFF スタックを出力
+  # Step 2: Apply to all frames and output per-channel TIFF stacks
   python channel_crop.py --dir "e:/Acuisition/kitagishi/260301/movetest_8/Pos4" --apply
 
-  # 一括実行 (detect → apply)
+  # Run all at once (detect -> apply)
   python channel_crop.py --dir "e:/Acuisition/kitagishi/260301/movetest_8/Pos4"
 
-ROI JSON フォーマット (channels/channel_rois.json):
+ROI JSON format (channels/channel_rois.json):
   [
     {"cy": 112, "cx": 1224, "crop_w": 30, "crop_h": 120},
     ...
   ]
-  - cy     : チャネル中心 Y 座標 [px]
-  - cx     : チャネル中心 X 座標 [px]  (crop の水平方向の中心)
-  - crop_w : チャネル幅方向 (Y) のサイズ [px]
-  - crop_h : チャネル長手方向 (X) のサイズ [px]
+  - cy     : Channel center Y coordinate [px]
+  - cx     : Channel center X coordinate [px]  (horizontal center of crop)
+  - crop_w : Channel width direction (Y) size [px]
+  - crop_h : Channel longitudinal direction (X) size [px]
 
-出力: <dir>/channels/channel_00.tif, channel_01.tif, ...
-      各ファイルは shape (T, crop_w, crop_h) の uint16 TIFF スタック
+Output: <dir>/channels/channel_00.tif, channel_01.tif, ...
+        Each file is a uint16 TIFF stack with shape (T, crop_w, crop_h)
 """
 
 import argparse
@@ -62,12 +62,12 @@ def normalize_for_display(img: np.ndarray) -> np.ndarray:
 
 
 # ────────────────────────────────────────────────────────────────
-#  チャネル検出
+#  Channel detection
 # ────────────────────────────────────────────────────────────────
 
 def detect_channels(img: np.ndarray, min_distance: int = 35,
                     prominence_sigma: float = 0.3):
-    """行平均プロファイルの極小値からチャネル中心 Y 座標を検出。"""
+    """Detect channel center Y coordinates from minima of the row-mean profile."""
     profile = np.mean(img.astype(np.float32), axis=1)  # shape: (H,)
     inv = profile.max() - profile
     peaks, _ = find_peaks(inv, distance=min_distance,
@@ -78,7 +78,7 @@ def detect_channels(img: np.ndarray, min_distance: int = 35,
 def detect_channel_edge_x(img: np.ndarray, cy: int, crop_w: int,
                            side: str = "left",
                            dark_threshold: float = 0.4) -> int:
-    """チャネルのX方向エッジ位置を検出する（raw 輝度画像向け・旧実装）。"""
+    """Detect channel edge position in X direction (for raw intensity images, legacy implementation)."""
     y1 = max(0, cy - crop_w // 2)
     y2 = min(img.shape[0], cy + crop_w // 2)
     strip = img[y1:y2, :].astype(np.float32)
@@ -101,10 +101,10 @@ def detect_channel_edge_x(img: np.ndarray, cy: int, crop_w: int,
 def detect_channel_edge_x_gradient(img: np.ndarray, cy: int, crop_w: int,
                                     x_min: int = 100, x_max: int = 400,
                                     smooth_sigma: float = 2.0) -> int:
-    """列平均プロファイルの最急降下点（最小勾配）を cx として返す。
+    """Return cx as the steepest descent point (minimum gradient) of the column-mean profile.
 
-    [x_min, x_max] の範囲で検索。位相画像（float32）に対応。
-    チャネル壁が 0 付近からマイナスへ急変する点を検出する。
+    Searches within [x_min, x_max]. Compatible with phase images (float32).
+    Detects the point where the channel wall transitions sharply from near 0 to negative.
     """
     h, w = img.shape
     x_min = max(0, x_min)
@@ -121,7 +121,7 @@ def detect_channel_edge_x_gradient(img: np.ndarray, cy: int, crop_w: int,
 
 
 def _filter_cx_mad(rois: list, mad_thresh: float = 10.0) -> list:
-    """cx の MAD 外れ値チャネルを除外する。"""
+    """Exclude channels with cx MAD outliers."""
     if len(rois) < 3:
         return rois
     cxs = np.array([r["cx"] for r in rois], dtype=np.float64)
@@ -140,19 +140,19 @@ def _filter_cx_mad(rois: list, mad_thresh: float = 10.0) -> list:
 
 
 # ────────────────────────────────────────────────────────────────
-#  矩形 crop（補間なし）
+#  Rectangular crop (no interpolation)
 # ────────────────────────────────────────────────────────────────
 
 def extract_rect_roi(img: np.ndarray, cy: int, cx: int,
                      crop_w: int, crop_h: int) -> np.ndarray:
-    """(cx, cy) を中心とした crop_w × crop_h の矩形をそのまま切り出す。"""
+    """Extract a crop_w x crop_h rectangle centered at (cx, cy)."""
     h, w = img.shape
     y1 = cy - crop_w // 2
     y2 = y1 + crop_w
     x1 = cx - crop_h // 2
     x2 = x1 + crop_h
 
-    # 境界クリップ（不足分はゼロパディング）
+    # Boundary clip (zero-pad if out of bounds)
     pad_y0 = max(0, -y1);  y1 = max(0, y1)
     pad_y1 = max(0, y2 - h); y2 = min(h, y2)
     pad_x0 = max(0, -x1);  x1 = max(0, x1)
@@ -165,7 +165,7 @@ def extract_rect_roi(img: np.ndarray, cy: int, cx: int,
 
 
 # ────────────────────────────────────────────────────────────────
-#  Step 1: 検出 & プレビュー
+#  Step 1: Detection & Preview
 # ────────────────────────────────────────────────────────────────
 
 def run_detect(img_path: Path, crop_w: int, crop_h: int, out_dir: Path,
@@ -191,29 +191,29 @@ def run_detect(img_path: Path, crop_w: int, crop_h: int, out_dir: Path,
             ch = crop_h
         rois_raw.append({"cy": int(cy), "cx": cx, "crop_w": crop_w, "crop_h": ch})
 
-    # ── cx MAD 外れ値除外 ──
+    # ── cx MAD outlier exclusion ──
     rois_raw = _filter_cx_mad(rois_raw, mad_thresh=cx_mad_thresh)
 
-    # ── フィルタ: cx 範囲チェックのみ ──
+    # ── Filter: cx range check only ──
     rois = []
     for roi in rois_raw:
         cy_, cx_, cw_, ch_ = roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"]
-        # cx 範囲チェック
+        # cx range check
         if not (cx_min <= cx_ <= cx_max):
             print(f"  skip cy={cy_}: cx={cx_} outside [{cx_min}, {cx_max}]")
             continue
         rois.append(roi)
 
-    print(f"検出チャネル数: {len(rois_raw)} → フィルタ後: {len(rois)}")
+    print(f"Detected channels: {len(rois_raw)} -> after filtering: {len(rois)}")
     for i, r in enumerate(rois):
         print(f"  ch{i:02d}: y={r['cy']}, x={r['cx']}")
 
-    # ─── プレビュー ───
+    # ─── Preview ───
     fig, (ax_img, ax_prof) = plt.subplots(1, 2, figsize=(14, 7))
     disp = normalize_for_display(img)
 
     ax_img.imshow(disp, cmap="gray", aspect="equal")
-    ax_img.set_title(f"検出チャネル ({len(rois)}本)", fontsize=12)
+    ax_img.set_title(f"Detected channels ({len(rois)})", fontsize=12)
     colors = plt.cm.tab10(np.linspace(0, 1, max(len(rois), 1)))
     for i, roi in enumerate(rois):
         actual_ch = roi["crop_h"]
@@ -231,11 +231,11 @@ def run_detect(img_path: Path, crop_w: int, crop_h: int, out_dir: Path,
 
     ax_prof.plot(profile, np.arange(len(profile)), color="steelblue", lw=0.8)
     ax_prof.scatter(profile[centers], centers, color="red", s=20, zorder=5,
-                    label="検出位置")
+                    label="Detected")
     ax_prof.invert_xaxis()
-    ax_prof.set_title("行平均プロファイル (Y 方向)", fontsize=12)
-    ax_prof.set_xlabel("平均強度")
-    ax_prof.set_ylabel("Y 座標 [px]")
+    ax_prof.set_title("Row-mean profile (Y direction)", fontsize=12)
+    ax_prof.set_xlabel("Mean intensity")
+    ax_prof.set_ylabel("Y coordinate [px]")
     ax_prof.set_ylim(h, 0)
     ax_prof.legend(fontsize=8)
 
@@ -261,53 +261,53 @@ def run_detect(img_path: Path, crop_w: int, crop_h: int, out_dir: Path,
     )
     preview_path = out_dir / "channel_detection_preview.png"
     shutil.copy2(logged_path, preview_path)
-    print(f"プレビュー保存: {preview_path}")
-    print(f"figure_logger 保存: {logged_path}")
+    print(f"Preview saved: {preview_path}")
+    print(f"figure_logger saved: {logged_path}")
     plt.close(fig)
 
     roi_path = out_dir / ROI_FILENAME
     with open(roi_path, "w", encoding="utf-8") as f:
         json.dump(rois, f, indent=2, ensure_ascii=False)
-    print(f"ROI 設定保存: {roi_path}")
+    print(f"ROI settings saved: {roi_path}")
     print()
-    print("不要なチャネルを JSON から削除したり cy/cx を調整してから --apply を実行してください。")
+    print("Remove unwanted channels from the JSON or adjust cy/cx, then run --apply.")
 
     return rois
 
 
 # ────────────────────────────────────────────────────────────────
-#  Step 2: 全フレームに適用
+#  Step 2: Apply to all frames
 # ────────────────────────────────────────────────────────────────
 
 def run_apply(img_dir: Path, pattern: str, rois: list, out_dir: Path):
     files = sorted(img_dir.glob(pattern))
     if not files:
-        print(f"画像が見つかりません: {img_dir / pattern}")
+        print(f"No images found: {img_dir / pattern}")
         sys.exit(1)
 
     n_frames   = len(files)
     n_channels = len(rois)
-    print(f"フレーム数: {n_frames}, チャネル数: {n_channels}")
+    print(f"Frames: {n_frames}, Channels: {n_channels}")
 
     stacks = [[] for _ in range(n_channels)]
 
     for i, f in enumerate(files):
         if i % 50 == 0:
-            print(f"  処理中: {i+1}/{n_frames}  ({f.name})")
+            print(f"  Processing: {i+1}/{n_frames}  ({f.name})")
         img = load_image(f)
         for ch_idx, roi in enumerate(rois):
             crop = extract_rect_roi(img, roi["cy"], roi["cx"],
                                     roi["crop_w"], roi["crop_h"])
             stacks[ch_idx].append(crop)
 
-    print("保存中...")
+    print("Saving...")
     for ch_idx, stack in enumerate(stacks):
         arr = np.array(stack, dtype=np.float32)  # (T, crop_w, crop_h)
         out_path = out_dir / f"channel_{ch_idx:02d}.tif"
         tifffile.imwrite(str(out_path), arr)
         print(f"  ch{ch_idx:02d}: {out_path}  shape={arr.shape}")
 
-    print("完了")
+    print("Done")
 
 
 # ────────────────────────────────────────────────────────────────
@@ -316,31 +316,31 @@ def run_apply(img_dir: Path, pattern: str, rois: list, out_dir: Path):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="マイクロ流体チャネルをタイムラプス画像から矩形 crop",
+        description="Rectangular crop of microfluidic channels from timelapse images",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--dir",     required=True, help="画像ディレクトリ")
-    parser.add_argument("--pattern", default=DEFAULT_PATTERN, help="ファイル名パターン")
-    parser.add_argument("--detect",  action="store_true", help="検出のみ（--apply なし）")
-    parser.add_argument("--apply",   action="store_true", help="適用のみ（JSON が必要）")
+    parser.add_argument("--dir",     required=True, help="Image directory")
+    parser.add_argument("--pattern", default=DEFAULT_PATTERN, help="Filename pattern")
+    parser.add_argument("--detect",  action="store_true", help="Detection only (no --apply)")
+    parser.add_argument("--apply",   action="store_true", help="Apply only (requires JSON)")
     parser.add_argument("--crop-w",  type=int, default=DEFAULT_CROP_W,
-                        help=f"チャネル幅方向 crop サイズ [px] (default={DEFAULT_CROP_W})")
+                        help=f"Channel width direction crop size [px] (default={DEFAULT_CROP_W})")
     parser.add_argument("--crop-h",  type=int, default=DEFAULT_CROP_H,
-                        help=f"チャネル長手方向 crop サイズ [px] (default={DEFAULT_CROP_H})")
+                        help=f"Channel longitudinal direction crop size [px] (default={DEFAULT_CROP_H})")
     parser.add_argument("--min-dist",    type=int,   default=35,
-                        help="チャネル検出の最小間隔 [px] (default=35)")
+                        help="Minimum channel detection spacing [px] (default=35)")
     parser.add_argument("--prominence",  type=float, default=0.3,
-                        help="prominence 閾値 (std の倍数, default=0.3)")
+                        help="Prominence threshold (multiple of std, default=0.3)")
     parser.add_argument("--side",        choices=["left", "right"], default="left",
-                        help="チャネルのどちらの端を cx にするか (default=left)")
+                        help="Which edge of the channel to use as cx (default=left)")
     parser.add_argument("--dark-threshold", type=float, default=0.4,
-                        help="暗い領域とみなす正規化輝度の閾値 0-1 (default=0.4)")
+                        help="Normalized intensity threshold for dark regions 0-1 (default=0.4)")
     parser.add_argument("--cx-min", type=int, default=100,
-                        help="cx 検索範囲の下限 [px] (default=100)")
+                        help="Lower bound of cx search range [px] (default=100)")
     parser.add_argument("--cx-max", type=int, default=400,
-                        help="cx 検索範囲の上限 [px] (default=400)")
+                        help="Upper bound of cx search range [px] (default=400)")
     parser.add_argument("--cx-mad-thresh", type=float, default=10.0,
-                        help="cx MAD 外れ値閾値 (default=10.0)")
+                        help="cx MAD outlier threshold (default=10.0)")
     args = parser.parse_args()
 
     img_dir = Path(args.dir)
@@ -349,7 +349,7 @@ def main():
 
     files = sorted(img_dir.glob(args.pattern))
     if not files:
-        print(f"画像が見つかりません: {img_dir / args.pattern}")
+        print(f"No images found: {img_dir / args.pattern}")
         sys.exit(1)
 
     do_detect = not args.apply
@@ -368,8 +368,8 @@ def main():
         if rois is None:
             roi_path = out_dir / ROI_FILENAME
             if not roi_path.exists():
-                print(f"ROI ファイルが見つかりません: {roi_path}")
-                print("先に --detect を実行してください。")
+                print(f"ROI file not found: {roi_path}")
+                print("Run --detect first.")
                 sys.exit(1)
             with open(roi_path, encoding="utf-8") as f:
                 rois = json.load(f)

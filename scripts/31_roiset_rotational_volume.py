@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-ROIセットに回転対称体積推定を適用
-eLife 2021 (Odermatt et al.) のアルゴリズム
+Apply rotational symmetry volume estimation to ROI sets
+Algorithm from eLife 2021 (Odermatt et al.)
 
-RoiSet.zip → 回転対称を仮定した体積計算 → 時系列データ
+RoiSet.zip -> volume calculation assuming rotational symmetry -> time-series data
 """
 # %%
 import numpy as np
@@ -23,11 +23,11 @@ import re
 from collections import defaultdict
 import cv2
 
-# 日本語フォント設定
+# Font settings
 rcParams['font.sans-serif'] = ['Arial']
 
 class RotationalSymmetryROIAnalyzer:
-    """ROIセットに回転対称体積推定を適用"""
+    """Apply rotational symmetry volume estimation to ROI sets"""
     
     def __init__(self, roi_zip_path, pixel_size_um=0.08625, 
                  section_interval_um=0.25, image_width=512, image_height=512,
@@ -36,19 +36,19 @@ class RotationalSymmetryROIAnalyzer:
         Parameters
         ----------
         roi_zip_path : str
-            ImageJ ROIセット（.zip）のパス
+            Path to ImageJ ROI set (.zip)
         pixel_size_um : float
-            ピクセルサイズ (um)
+            Pixel size (um)
         section_interval_um : float
-            断面線の間隔 (um)、論文では250nm = 0.25 um
+            Interval between cross-section lines (um), 250nm = 0.25 um in the paper
         image_width : int
-            画像の幅（pixels）
+            Image width (pixels)
         image_height : int
-            画像の高さ（pixels）
+            Image height (pixels)
         max_iterations : int
-            中心線更新の最大反復回数
+            Maximum number of iterations for centerline update
         convergence_tolerance : float
-            収束判定の閾値（pixels）
+            Convergence threshold (pixels)
         """
         self.roi_zip_path = roi_zip_path
         self.pixel_size_um = pixel_size_um
@@ -65,11 +65,11 @@ class RotationalSymmetryROIAnalyzer:
         print(f"Section interval: {section_interval_um} um ({self.section_interval_px:.2f} pixels)")
         print(f"Image Size: {image_width} x {image_height}")
         
-        # ROIセットを読み込み
+        # Load ROI set
         self.load_roi_set()
     
     def load_roi_set(self):
-        """ROIセットを読み込んで整理"""
+        """Load and organize ROI set"""
         print(f"\n=== Loading ROI Set ===")
         
         with zipfile.ZipFile(self.roi_zip_path, 'r') as zf:
@@ -99,14 +99,14 @@ class RotationalSymmetryROIAnalyzer:
             print(f"  Time points: {len(self.rois_by_time)}")
     
     def extract_frame_number(self, roi_name):
-        """ROI名からフレーム番号を抽出"""
+        """Extract frame number from ROI name"""
         match = re.match(r'(\d+)-', roi_name)
         if match:
             return int(match.group(1))
         return 0
     
     def parse_roi_basic(self, roi_bytes, roi_name):
-        """ImageJ ROIの基本情報を解析"""
+        """Parse basic information of ImageJ ROI"""
         if len(roi_bytes) < 64:
             return None
         
@@ -142,7 +142,7 @@ class RotationalSymmetryROIAnalyzer:
         return roi_info
     
     def roi_to_mask(self, roi_info):
-        """ROIをバイナリマスクに変換"""
+        """Convert ROI to binary mask"""
         roi_bytes = roi_info['bytes']
         roi_type = roi_info['type']
         
@@ -192,26 +192,26 @@ class RotationalSymmetryROIAnalyzer:
     
     def compute_volume_rotational(self, mask, return_visualization_data=False, return_thickness_map=True):
         """
-        回転対称を仮定して体積を計算（反復更新版）
-        Odermatt et al. (2021) eLife のアルゴリズム + 厚みマップ計算
+        Compute volume assuming rotational symmetry (iterative update version)
+        Algorithm from Odermatt et al. (2021) eLife + thickness map calculation
         """
-        # 輪郭を抽出
+        # Extract contours
         contours = measure.find_contours(mask, 0.5)
         
         if len(contours) == 0:
             return None
         
-        # 最大の輪郭
+        # Largest contour
         contour = max(contours, key=lambda x: len(x))
-        contour = contour[:, ::-1]  # Y,X → X,Y
+        contour = contour[:, ::-1]  # Y,X -> X,Y
         
-        # 最小外接矩形で長軸を決定
+        # Determine long axis using minimum bounding rectangle
         try:
             rect = cv2.minAreaRect(contour.astype(np.float32))
             center, size, angle_deg = rect
             angle_rad = np.deg2rad(angle_deg)
             
-            # 長軸
+            # Long axis
             width, height = size
             if width > height:
                 length = width
@@ -229,15 +229,15 @@ class RotationalSymmetryROIAnalyzer:
         except Exception as e:
             return None
         
-        # 断面数を計算
+        # Calculate number of cross-sections
         axis_length = np.linalg.norm(axis_end - axis_start)
         n_sections = int(axis_length / self.section_interval_px)
         
         if n_sections < 2:
             return None
         
-        # === 反復的に中心線と断面線を更新 ===
-        # 初期化
+        # === Iteratively update centerline and cross-section lines ===
+        # Initialization
         t = np.linspace(0, 1, n_sections)
         centerline_points = axis_start[np.newaxis, :] + t[:, np.newaxis] * (axis_end - axis_start)[np.newaxis, :]
         section_angles = np.ones(n_sections) * (axis_angle + np.pi/2)
@@ -252,11 +252,11 @@ class RotationalSymmetryROIAnalyzer:
             new_radii = []
             new_section_lines = []
             
-            # 現在の断面数（削除により変わる可能性がある）
+            # Current number of sections (may change due to removal)
             current_n_sections = len(centerline_points)
             
             for i in range(current_n_sections):
-                # 現在の断面線の角度と位置
+                # Current cross-section line angle and position
                 if isinstance(centerline_points, np.ndarray):
                     current_center = centerline_points[i]
                 else:
@@ -267,7 +267,7 @@ class RotationalSymmetryROIAnalyzer:
                 else:
                     current_angle = section_angles[i]
                 
-                # 断面線
+                # Cross-section line
                 line_length = 500
                 dx_line = line_length * np.cos(current_angle)
                 dy_line = line_length * np.sin(current_angle)
@@ -275,14 +275,14 @@ class RotationalSymmetryROIAnalyzer:
                 line_start = current_center - np.array([dx_line, dy_line])
                 line_end = current_center + np.array([dx_line, dy_line])
                 
-                # 輪郭との交点を探す
+                # Find intersection points with contour
                 intersections = []
                 
                 for j in range(len(contour)):
                     p1 = contour[j]
                     p2 = contour[(j+1) % len(contour)]
                     
-                    # 線分交差判定
+                    # Line segment intersection test
                     intersection = self.line_segment_intersection(
                         line_start, line_end, p1, p2
                     )
@@ -298,7 +298,7 @@ class RotationalSymmetryROIAnalyzer:
                     p1 = intersections[sorted_idx[-1]]
                     p2 = intersections[sorted_idx[-2]]
                     
-                    # 中点（更新された中心線の点）
+                    # Midpoint (updated centerline point)
                     midpoint = (p1 + p2) / 2
                     
                     radius = np.linalg.norm(p1 - p2) / 2
@@ -306,7 +306,7 @@ class RotationalSymmetryROIAnalyzer:
                     new_radii.append(radius)
                     new_section_lines.append((p1, p2))
                     
-                    # 次の反復用に角度を計算（中心線の局所的な傾きに垂直）
+                    # Calculate angle for next iteration (perpendicular to local centerline slope)
                     if i > 0 and i < n_sections - 1 and len(new_centerline) > 1:
                         tangent = new_centerline[-1] - new_centerline[-2]
                         local_angle = np.arctan2(tangent[1], tangent[0])
@@ -315,14 +315,14 @@ class RotationalSymmetryROIAnalyzer:
                     else:
                         new_angles.append(current_angle)
                 else:
-                    # 交点が見つからない場合は前の値を維持
+                    # Keep previous values if no intersection found
                     new_centerline.append(current_center)
                     new_radii.append(0)
                     new_angles.append(current_angle)
             
-            # 収束判定
+            # Convergence check
             if iteration > 0 and len(new_centerline) > 0 and len(centerline_points) > 0:
-                # サイズが変わった場合は収束判定をスキップ（交差判定で削除された場合）
+                # Skip convergence check if size changed (sections removed by intersection check)
                 if len(new_centerline) == len(centerline_points):
                     shifts = [np.linalg.norm(new_centerline[i] - centerline_points[i]) 
                              for i in range(len(new_centerline))]
@@ -335,39 +335,39 @@ class RotationalSymmetryROIAnalyzer:
                         section_lines = new_section_lines
                         break
             
-            # 交差する断面線を削除
+            # Remove crossing section lines
             # "Sectioning lines that crossed a neighboring line were removed."
             valid_indices = []
             for i in range(len(new_section_lines)):
                 is_valid = True
                 
-                # 隣接する断面線との交差をチェック
+                # Check intersection with neighboring section lines
                 if i > 0:
-                    # 前の断面線と交差しているか
+                    # Check if crossing with previous section line
                     if self._check_line_intersection(new_section_lines[i-1], new_section_lines[i]):
                         is_valid = False
                 
                 if i < len(new_section_lines) - 1 and is_valid:
-                    # 次の断面線と交差しているか
+                    # Check if crossing with next section line
                     if self._check_line_intersection(new_section_lines[i], new_section_lines[i+1]):
                         is_valid = False
                 
                 if is_valid:
                     valid_indices.append(i)
             
-            # 削除数を記録
+            # Record removal count
             n_removed_this_iter = len(new_section_lines) - len(valid_indices)
             if n_removed_this_iter > 0:
                 n_sections_removed_total += n_removed_this_iter
             
-            # 有効な断面線のみ保持
+            # Keep only valid section lines
             if len(valid_indices) > 0:
                 new_centerline = [new_centerline[i] for i in valid_indices]
                 new_radii = [new_radii[i] for i in valid_indices]
                 new_section_lines = [new_section_lines[i] for i in valid_indices]
                 new_angles = [new_angles[i] for i in valid_indices]
             
-            # 更新
+            # Update
             centerline_points = new_centerline
             section_angles = new_angles
             radii = new_radii
@@ -378,7 +378,7 @@ class RotationalSymmetryROIAnalyzer:
         
         radii = np.array(radii)
         
-        # 体積計算（円柱の和）
+        # Volume calculation (sum of cylinders)
         total_volume_px3 = 0
         
         for r in radii:
@@ -386,39 +386,39 @@ class RotationalSymmetryROIAnalyzer:
             volume = np.pi * r**2 * h
             total_volume_px3 += volume
         
-        # ピクセル → um
+        # Pixels -> um
         volume_um3 = total_volume_px3 * (self.pixel_size_um ** 3)
         
-        # 表面積
+        # Surface area
         surface_area_px2 = 0
         for r in radii:
             h = self.section_interval_px
             area = 2 * np.pi * r * h
             surface_area_px2 += area
         
-        # 両端のキャップ
+        # End caps
         if len(radii) > 0:
             surface_area_px2 += np.pi * radii[0]**2
             surface_area_px2 += np.pi * radii[-1]**2
         
         surface_area_um2 = surface_area_px2 * (self.pixel_size_um ** 2)
         
-        # === 厚みマップを計算（各XYピクセルでのZ占有スライス数） ===
+        # === Calculate thickness map (number of Z-occupied slices at each XY pixel) ===
         thickness_map = np.zeros((self.image_height, self.image_width), dtype=np.float32)
         
         if return_thickness_map and len(centerline_points) > 0 and len(radii) > 0:
             centerline_array = np.array(centerline_points)
             
-            # 各中心線ポイントで処理
+            # Process at each centerline point
             for i, (center, radius) in enumerate(zip(centerline_array, radii)):
                 if radius > 0:
-                    # この位置での最大半径から厚みを計算
-                    # 回転対称を仮定: 半径Rの球体のZ方向の高さ = 2R
-                    # ただし、section_interval で離散化
+                    # Calculate thickness from maximum radius at this position
+                    # Assuming rotational symmetry: Z-height of sphere with radius R = 2R
+                    # Discretized by section_interval
                     z_height_um = 2 * radius * self.pixel_size_um
-                    z_slices = z_height_um / self.pixel_size_um  # スライス数（ピクセル単位で計算）
+                    z_slices = z_height_um / self.pixel_size_um  # Number of slices (calculated in pixel units)
                     
-                    # この半径の円内のピクセルに厚みを割り当て
+                    # Assign thickness to pixels within this radius
                     y, x = int(center[1]), int(center[0])
                     r_int = int(radius) + 1
                     
@@ -428,9 +428,9 @@ class RotationalSymmetryROIAnalyzer:
                             if 0 <= ny < self.image_height and 0 <= nx < self.image_width:
                                 dist_from_center = np.sqrt(dx**2 + dy**2)
                                 if dist_from_center <= radius:
-                                    # 球体の断面: z方向の高さ = 2*sqrt(R^2 - r^2)
+                                    # Sphere cross-section: Z-height = 2*sqrt(R^2 - r^2)
                                     z_at_r = 2 * np.sqrt(max(0, radius**2 - dist_from_center**2))
-                                    # 最大値を保持（複数のセクションで重なる場合）
+                                    # Keep maximum value (when multiple sections overlap)
                                     thickness_map[ny, nx] = max(thickness_map[ny, nx], z_at_r)
         
         result = {
@@ -447,7 +447,7 @@ class RotationalSymmetryROIAnalyzer:
             'thickness_map': thickness_map
         }
         
-        # 可視化データを追加
+        # Add visualization data
         if return_visualization_data:
             result['centerline_points'] = np.array(centerline_points) if len(centerline_points) > 0 else None
             result['section_lines'] = section_lines
@@ -462,7 +462,7 @@ class RotationalSymmetryROIAnalyzer:
         return result
     
     def line_segment_intersection(self, p1, p2, p3, p4):
-        """2つの線分の交点を計算"""
+        """Calculate intersection point of two line segments"""
         x1, y1 = p1
         x2, y2 = p2
         x3, y3 = p3
@@ -485,25 +485,25 @@ class RotationalSymmetryROIAnalyzer:
     
     def _check_line_intersection(self, line1, line2):
         """
-        2つの断面線が交差しているかチェック
-        論文: "Sectioning lines that crossed a neighboring line were removed."
-        
+        Check if two section lines intersect
+        Paper: "Sectioning lines that crossed a neighboring line were removed."
+
         Parameters
         ----------
         line1 : tuple of (p1, p2)
-            1つ目の断面線の両端点
+            Endpoints of the first section line
         line2 : tuple of (p1, p2)
-            2つ目の断面線の両端点
-        
+            Endpoints of the second section line
+
         Returns
         -------
         bool
-            交差している場合True
+            True if the lines intersect
         """
         p1_line1, p2_line1 = line1
         p1_line2, p2_line2 = line2
         
-        # 線分交差判定
+        # Line segment intersection test
         intersection = self.line_segment_intersection(
             p1_line1, p2_line1, p1_line2, p2_line2
         )
@@ -511,7 +511,7 @@ class RotationalSymmetryROIAnalyzer:
         return intersection is not None
     
     def analyze_timeseries(self, max_frames=None, save_visualizations=False, save_thickness_maps=True):
-        """時系列で体積を解析"""
+        """Analyze volume over time-series"""
         print(f"\n=== Analyzing Time-series with Rotational Symmetry ===")
         
         time_points = sorted(self.rois_by_time.keys())
@@ -523,8 +523,8 @@ class RotationalSymmetryROIAnalyzer:
         print(f"  Time points to process: {len(time_points)}")
         
         results = []
-        self.visualization_data = []  # 可視化データを保存
-        self.thickness_maps = []  # 厚みマップを保存
+        self.visualization_data = []  # Store visualization data
+        self.thickness_maps = []  # Store thickness maps
         
         for t_idx, t in enumerate(time_points):
             print(f"\n  Frame {t_idx+1}/{len(time_points)} (t={t})")
@@ -549,7 +549,7 @@ class RotationalSymmetryROIAnalyzer:
                     vol_result['cell_index'] = cell_idx
                     vol_result['roi_name'] = roi_info['name']
                     
-                    # 可視化データを別途保存
+                    # Store visualization data separately
                     if save_visualizations and 'centerline_points' in vol_result:
                         vis_data = {
                             'time_index': t_idx,
@@ -568,7 +568,7 @@ class RotationalSymmetryROIAnalyzer:
                         }
                         self.visualization_data.append(vis_data)
                     
-                    # 厚みマップを別途保存
+                    # Store thickness map separately
                     if save_thickness_maps and 'thickness_map' in vol_result:
                         thickness_info = {
                             'time_index': t_idx,
@@ -579,13 +579,13 @@ class RotationalSymmetryROIAnalyzer:
                         }
                         self.thickness_maps.append(thickness_info)
                     
-                    # CSVに保存するデータから可視化データと厚みマップを除外
+                    # Exclude visualization data and thickness maps from CSV data
                     result_for_csv = {k: v for k, v in vol_result.items() 
                                      if k not in ['centerline_points', 'section_lines', 'contour', 
                                                  'axis_start', 'axis_end', 'radii', 'thickness_map']}
                     results.append(result_for_csv)
                     
-                    if cell_idx < 3:  # 最初の数個だけ表示
+                    if cell_idx < 3:  # Display only first few
                         max_thickness = np.max(vol_result['thickness_map'])
                         print(f"        [OK] {roi_info['name']}: Volume={vol_result['volume_um3']:.2f} um^3, "
                               f"Max thickness={max_thickness:.1f}px, "
@@ -603,7 +603,7 @@ class RotationalSymmetryROIAnalyzer:
         return self.results_df
     
     def save_results(self, output_dir='rotational_volume_output'):
-        """結果を保存"""
+        """Save results"""
         os.makedirs(output_dir, exist_ok=True)
         
         print(f"\n=== Saving Results to {output_dir} ===")
@@ -613,7 +613,7 @@ class RotationalSymmetryROIAnalyzer:
         self.results_df.to_csv(csv_path, index=False)
         print(f"  Saved: {csv_path}")
         
-        # サマリー
+        # Summary
         summary_path = os.path.join(output_dir, 'rotational_volume_summary.txt')
         with open(summary_path, 'w') as f:
             f.write("=== Rotational Symmetry Volume Analysis ===\n\n")
@@ -638,7 +638,7 @@ class RotationalSymmetryROIAnalyzer:
         
         print(f"  Saved: {summary_path}")
         
-        # 厚みマップを保存
+        # Save thickness maps
         if hasattr(self, 'thickness_maps') and len(self.thickness_maps) > 0:
             thickness_dir = os.path.join(output_dir, 'thickness_maps')
             os.makedirs(thickness_dir, exist_ok=True)
@@ -656,7 +656,7 @@ class RotationalSymmetryROIAnalyzer:
             
             print(f"  Saved: {len(self.thickness_maps)} thickness maps to {thickness_dir}/")
             
-            # 統合スタック
+            # Integrated stack
             if len(self.thickness_maps) > 0:
                 stack_list = [tm['thickness_map'] for tm in self.thickness_maps]
                 stack_array = np.stack(stack_list, axis=0)
@@ -668,22 +668,22 @@ class RotationalSymmetryROIAnalyzer:
     
     def compute_ri_from_phase_images(self, phase_image_dir, wavelength_nm=663, n_medium=1.333):
         """
-        位相差画像と厚みマップからRI (Refractive Index) を計算
-        24_ellipse_volume.pyと同様の処理
-        
+        Compute RI (Refractive Index) from phase images and thickness maps
+        Same processing as 24_ellipse_volume.py
+
         Parameters
         ----------
         phase_image_dir : str
-            位相差画像が入ったディレクトリ
+            Directory containing phase images
         wavelength_nm : float
-            波長（ナノメートル）
+            Wavelength (nanometers)
         n_medium : float
-            培地の屈折率
-        
+            Medium refractive index
+
         Returns
         -------
         ri_results : list of dict
-            各フレームのRI計算結果
+            RI calculation results for each frame
         """
         if not hasattr(self, 'thickness_maps') or len(self.thickness_maps) == 0:
             print("Error: No thickness maps available. Run analyze_timeseries() first.")
@@ -696,7 +696,7 @@ class RotationalSymmetryROIAnalyzer:
         
         wavelength_um = wavelength_nm / 1000.0
         
-        # 位相差画像を検索してファイル名から番号を抽出
+        # Search for phase images and extract numbers from filenames
         import glob
         phase_files_all = sorted(glob.glob(os.path.join(phase_image_dir, "*.tif")))
         
@@ -704,12 +704,12 @@ class RotationalSymmetryROIAnalyzer:
             print(f"Error: No .tif files found in {phase_image_dir}")
             return None
         
-        # ファイル名から番号を抽出して辞書を作成
-        # 例: "subtracted_by_maskmean_float320085_bg_corr_aligned.tif" -> 85
+        # Create dictionary by extracting numbers from filenames
+        # e.g.: "subtracted_by_maskmean_float320085_bg_corr_aligned.tif" -> 85
         phase_file_dict = {}
         for phase_file in phase_files_all:
             basename = os.path.basename(phase_file)
-            # 数字を抽出（最後の数字部分）
+            # Extract number (last numeric part)
             match = re.search(r'(\d+)(?:_bg_corr_aligned)?\.tif$', basename)
             if match:
                 frame_num = int(match.group(1))
@@ -721,12 +721,12 @@ class RotationalSymmetryROIAnalyzer:
         not_found_count = 0
         
         for thick_info in self.thickness_maps:
-            time_point = thick_info.get('time_point', thick_info['time_index'])  # ROI名から抽出したフレーム番号
+            time_point = thick_info.get('time_point', thick_info['time_index'])  # Frame number extracted from ROI name
             roi_name = thick_info['roi_name']
             thickness_map = thick_info['thickness_map']
             
-            # ROI名からフレーム番号を抽出
-            # 例: "0085-0024-0136.roi" -> 85
+            # Extract frame number from ROI name
+            # e.g.: "0085-0024-0136.roi" -> 85
             match = re.match(r'(\d+)-', roi_name)
             if match:
                 frame_num = int(match.group(1))
@@ -736,21 +736,21 @@ class RotationalSymmetryROIAnalyzer:
             if frame_num in phase_file_dict:
                 phase_img = tifffile.imread(phase_file_dict[frame_num])
                 
-                # 厚みマップ（ピクセル数）を実際の厚み（um）に変換
+                # Convert thickness map (pixel count) to actual thickness (um)
                 thickness_um = thickness_map * self.pixel_size_um
                 
-                # サイズチェック
+                # Size check
                 if phase_img.shape != thickness_map.shape:
                     print(f"  Warning: Size mismatch for {roi_name}")
                     continue
                 
-                # ゼロ除算を避ける
+                # Avoid division by zero
                 thickness_um_safe = np.where(thickness_um > 0, thickness_um, np.nan)
                 
-                # RI計算: n_sample = n_medium + (φ × λ) / (2π × thickness)
+                # RI calculation: n_sample = n_medium + (phi * lambda) / (2*pi * thickness)
                 n_sample = n_medium + (phase_img * wavelength_um) / (2 * np.pi * thickness_um_safe)
                 
-                # マスク内のみ
+                # Within mask only
                 mask = thickness_map > 0
                 
                 if np.sum(mask) > 0:
@@ -790,7 +790,7 @@ class RotationalSymmetryROIAnalyzer:
         return ri_results
     
     def save_ri_results(self, output_dir='rotational_volume_output'):
-        """RI計算結果を保存"""
+        """Save RI calculation results"""
         if not hasattr(self, 'ri_results') or len(self.ri_results) == 0:
             print("No RI results to save")
             return
@@ -800,7 +800,7 @@ class RotationalSymmetryROIAnalyzer:
         
         print(f"\n=== Saving RI Results to {ri_dir} ===")
         
-        # RI統計をCSVに保存
+        # Save RI statistics to CSV
         ri_stats = []
         for ri_res in self.ri_results:
             stats = {k: v for k, v in ri_res.items() if k != 'ri_map'}
@@ -811,7 +811,7 @@ class RotationalSymmetryROIAnalyzer:
         ri_df.to_csv(csv_path, index=False)
         print(f"  Saved: {csv_path}")
         
-        # RIマップを個別に保存
+        # Save individual RI maps
         print(f"  Saving {len(self.ri_results)} RI maps...")
         for idx, ri_res in enumerate(self.ri_results):
             if idx % 100 == 0:
@@ -824,7 +824,7 @@ class RotationalSymmetryROIAnalyzer:
         
         print(f"  Saved: {len(self.ri_results)} RI maps")
         
-        # サマリー
+        # Summary
         summary_path = os.path.join(output_dir, 'ri_summary.txt')
         with open(summary_path, 'w') as f:
             f.write("=== RI Time-series Summary ===\n\n")
@@ -848,7 +848,7 @@ class RotationalSymmetryROIAnalyzer:
         print(f"  Saved: {summary_path}")
     
     def save_visualizations(self, output_dir='rotational_volume_output', format='png'):
-        """断面線と中心線の可視化を保存"""
+        """Save visualizations of section lines and centerline"""
         if not hasattr(self, 'visualization_data') or len(self.visualization_data) == 0:
             print("No visualization data available")
             return
@@ -865,35 +865,35 @@ class RotationalSymmetryROIAnalyzer:
             
             roi_name = vis_data['roi_name'].replace('.roi', '')
             
-            # 画像を作成
+            # Create image
             fig, ax = plt.subplots(1, 1, figsize=(10, 10))
             
-            # マスクを背景に
+            # Mask as background
             ax.imshow(vis_data['mask'], cmap='gray', alpha=0.3)
             
-            # 輪郭
+            # Contour
             contour = vis_data['contour']
             ax.plot(contour[:, 0], contour[:, 1], 'b-', linewidth=2, label='Contour', alpha=0.7)
             
-            # 長軸
+            # Long axis
             axis_start = vis_data['axis_start']
             axis_end = vis_data['axis_end']
             ax.plot([axis_start[0], axis_end[0]], [axis_start[1], axis_end[1]], 
                    'r-', linewidth=3, label='Long axis', alpha=0.8)
             
-            # 中心線
+            # Centerline
             if vis_data['centerline_points'] is not None and len(vis_data['centerline_points']) > 0:
                 centerline = vis_data['centerline_points']
                 ax.plot(centerline[:, 0], centerline[:, 1], 'g-', 
                        linewidth=3, label='Centerline', marker='o', markersize=4)
             
-            # 断面線
+            # Section lines
             section_lines = vis_data['section_lines']
             for i, (p1, p2) in enumerate(section_lines):
                 ax.plot([p1[0], p2[0]], [p1[1], p2[1]], 
                        'c-', linewidth=1, alpha=0.5)
-                
-                # 半径を円で表示
+
+                # Display radius as circle
                 if vis_data['radii'] is not None and i < len(vis_data['radii']):
                     midpoint = (p1 + p2) / 2
                     radius = vis_data['radii'][i]
@@ -901,18 +901,18 @@ class RotationalSymmetryROIAnalyzer:
                                        fill=False, color='yellow', linewidth=1, alpha=0.3)
                     ax.add_patch(circle)
             
-            # タイトルに詳細情報を追加
+            # Add detailed information to title
             title_text = f"{roi_name}\n"
             title_text += f"Sections: {len(section_lines)}"
             
-            # 削除情報があれば追加
+            # Add removal information if available
             if 'n_sections_initial' in vis_data and 'n_sections_removed' in vis_data:
                 n_init = vis_data['n_sections_initial']
                 n_removed = vis_data['n_sections_removed']
                 if n_removed > 0:
                     title_text += f" (initial: {n_init}, removed: {n_removed})"
             
-            # 収束情報があれば追加
+            # Add convergence information if available
             if 'converged_iteration' in vis_data and vis_data['converged_iteration'] > 0:
                 title_text += f"\nConverged at iteration {vis_data['converged_iteration']}"
             
@@ -920,12 +920,12 @@ class RotationalSymmetryROIAnalyzer:
             ax.legend(loc='upper right', fontsize=8)
             ax.axis('equal')
             
-            # 範囲を適切に設定
+            # Set appropriate range
             margin = 20
             ax.set_xlim(np.min(contour[:, 0]) - margin, np.max(contour[:, 0]) + margin)
             ax.set_ylim(np.min(contour[:, 1]) - margin, np.max(contour[:, 1]) + margin)
             
-            # 保存
+            # Save
             if format == 'png':
                 save_path = os.path.join(vis_dir, f"{roi_name}_visualization.png")
                 plt.savefig(save_path, dpi=150, bbox_inches='tight')
@@ -937,15 +937,15 @@ class RotationalSymmetryROIAnalyzer:
         
         print(f"  Saved: {len(self.visualization_data)} visualizations to {vis_dir}/")
         
-        # 統合TIFFスタック作成（オプション）
+        # Create integrated TIFF stack (optional)
         if format in ['tif', 'tiff']:
             print(f"\n  Creating integrated TIFF stack...")
             self._create_visualization_stack(vis_dir)
     
     def _create_visualization_stack(self, vis_dir):
-        """可視化画像を統合したTIFFスタックを作成"""
+        """Create a TIFF stack combining all visualization images"""
         try:
-            # すべての可視化画像を読み込み
+            # Load all visualization images
             images = []
             
             for vis_data in self.visualization_data:
@@ -954,16 +954,16 @@ class RotationalSymmetryROIAnalyzer:
                 
                 if os.path.exists(img_path):
                     img = tifffile.imread(img_path)
-                    # RGBの場合は最初の3チャンネルのみ
+                    # For RGB, keep only first 3 channels
                     if img.ndim == 3 and img.shape[2] >= 3:
                         img = img[:, :, :3]
                     images.append(img)
             
             if len(images) > 0:
-                # スタックに変換
+                # Convert to stack
                 stack = np.stack(images, axis=0)
                 
-                # 保存
+                # Save
                 stack_path = os.path.join(vis_dir, 'visualization_stack_all_frames.tif')
                 tifffile.imwrite(stack_path, stack, metadata={'axes': 'TYXC'})
                 print(f"  Saved: {stack_path} (shape: {stack.shape})")
@@ -971,16 +971,16 @@ class RotationalSymmetryROIAnalyzer:
             print(f"  Warning: Failed to create stack: {e}")
     
     def plot_results(self, save_path='rotational_volume_plot.png'):
-        """結果をプロット"""
+        """Plot results"""
         if not hasattr(self, 'results_df') or len(self.results_df) == 0:
             print("No results to plot")
             return
         
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
         
-        # 1. 体積の時系列
+        # 1. Volume time-series
         ax = axes[0, 0]
-        for cell_idx in self.results_df['cell_index'].unique()[:10]:  # 最初の10個
+        for cell_idx in self.results_df['cell_index'].unique()[:10]:  # First 10
             cell_data = self.results_df[self.results_df['cell_index'] == cell_idx]
             ax.plot(cell_data['time_index'], cell_data['volume_um3'], 
                    alpha=0.7, linewidth=2, marker='o')
@@ -991,7 +991,7 @@ class RotationalSymmetryROIAnalyzer:
                     fontsize=14, fontweight='bold')
         ax.grid(True, alpha=0.3)
         
-        # 2. 平均体積
+        # 2. Mean volume
         ax = axes[0, 1]
         mean_vol = self.results_df.groupby('time_index')['volume_um3'].mean()
         std_vol = self.results_df.groupby('time_index')['volume_um3'].std()
@@ -1006,7 +1006,7 @@ class RotationalSymmetryROIAnalyzer:
         ax.legend()
         ax.grid(True, alpha=0.3)
         
-        # 3. 表面積 vs 体積
+        # 3. Surface area vs volume
         ax = axes[1, 0]
         ax.scatter(self.results_df['volume_um3'], self.results_df['surface_area_um2'],
                   alpha=0.3, s=20)
@@ -1016,7 +1016,7 @@ class RotationalSymmetryROIAnalyzer:
         ax.set_title('Surface Area vs Volume', fontsize=14, fontweight='bold')
         ax.grid(True, alpha=0.3)
         
-        # 4. 長さと半径の分布
+        # 4. Length and radius distribution
         ax = axes[1, 1]
         ax.scatter(self.results_df['length_um'], self.results_df['mean_radius_um'],
                   alpha=0.3, s=20, c=self.results_df['volume_um3'], cmap='viridis')
@@ -1036,7 +1036,7 @@ class RotationalSymmetryROIAnalyzer:
 
 
 def main():
-    """メイン実行"""
+    """Main execution"""
     roi_zip_path = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted\inference_out\Roiset_enlarge.zip"
     if not os.path.exists(roi_zip_path):
         print(f"Error: ROI set not found at {roi_zip_path}")
@@ -1044,18 +1044,18 @@ def main():
     
     print(f"Found ROI set: {roi_zip_path}")
     
-    # Analyzerを作成（反復更新あり）
+    # Create analyzer (with iterative update)
     analyzer = RotationalSymmetryROIAnalyzer(
         roi_zip_path=roi_zip_path,
         pixel_size_um=0.348,
         section_interval_um=0.25,  # 250 nm
         image_width=512,
         image_height=512,
-        max_iterations=2,  # 最大3回の反復更新
-        convergence_tolerance=0.5  # 0.5ピクセル以下で収束
+        max_iterations=2,  # Maximum 3 iterative updates
+        convergence_tolerance=0.5  # Converge when below 0.5 pixels
     )
     
-    # 解析実行（可視化データと厚みマップも保存）
+    # Run analysis (also save visualization data and thickness maps)
     print(f"\n{'='*60}")
     print(f"SETTINGS:")
     print(f"  Max iterations: {analyzer.max_iterations}")
@@ -1069,17 +1069,17 @@ def main():
         save_thickness_maps=True
     )
     
-    # 結果を保存
+    # Save results
     analyzer.save_results('rotational_volume_output')
     
-    # 可視化を保存（PNG形式）
+    # Save visualizations (PNG format)
     analyzer.save_visualizations('rotational_volume_output', format='png')
     
-    # プロット
+    # Plot
     analyzer.plot_results('rotational_volume_plot.png')
     
-    # RI計算（位相差画像を使用）
-    # scriptsディレクトリから相対パス
+    # RI calculation (using phase images)
+    # Relative path from scripts directory
     phase_dir = os.path.join(os.path.dirname(__file__), "..", "data", "align_demo", "bg_corr_aligned", "aligned")
     phase_dir = os.path.abspath(phase_dir)
     

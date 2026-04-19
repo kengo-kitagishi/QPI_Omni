@@ -1,21 +1,21 @@
 """
 qpi_fig_03_lineage_analysis.py — Cell lineage / cell cycle analysis for QPI data
 
-ImageJ ROI Results.csv から細胞サイズ恒常性・分裂間隔・RI恒常性を解析する。
-250416_kaiseki.pdf + Oldewurtel et al. (eLife 2021) のワークフローを
-QPI (RI / dry mass) データに適用。
+Analyze cell size homeostasis, division interval, and RI homeostasis from ImageJ ROI Results.csv.
+Applies the workflow from 250416_kaiseki.pdf + Oldewurtel et al. (eLife 2021)
+to QPI (RI / dry mass) data.
 
-解析内容:
-  1. 個別細胞の面積・RI 時系列（分裂イベント検出付き）
-  2. 集団平均 ± SEM（面積・RI）
-  3. Birth size vs Added size（サイズ恒常性: sizer / adder / timer 判定）
-  4. Birth RI vs Added RI（乾燥質量恒常性）
-  5. 分裂間隔ヒストグラム
-  6. 世代ごとの分裂間隔推移
-  7. Cell cycle aligned trajectories（Area / RI / Dry mass）
-  8. Density (RI) 分布ヒストグラム（ガウスフィット）
-  9. Density homeostasis（birth RI vs ΔRI）
-  10. Growth rate 解析（dArea/dt, dMass/dt の cell cycle 内変動）
+Analysis contents:
+  1. Individual cell area and RI time series (with division event detection)
+  2. Population mean +/- SEM (area, RI)
+  3. Birth size vs Added size (size homeostasis: sizer / adder / timer classification)
+  4. Birth RI vs Added RI (dry mass homeostasis)
+  5. Division interval histogram
+  6. Division interval per generation
+  7. Cell cycle aligned trajectories (Area / RI / Dry mass)
+  8. Density (RI) distribution histogram (Gaussian fit)
+  9. Density homeostasis (birth RI vs delta RI)
+  10. Growth rate analysis (dArea/dt, dMass/dt variation within cell cycle)
 
 References:
   - Oldewurtel et al. (2021) eLife 10:e64901
@@ -40,64 +40,64 @@ from scipy.stats import pearsonr
 from figure_logger import save_figure
 
 # =============================================================================
-# === 設定 ===
+# === Settings ===
 # =============================================================================
 
-# --- データディレクトリ（CSVファイルを含むフォルダ） ---
+# --- Data directory (folder containing CSV files) ---
 BASE_DIR = "/Users/kitak/Desktop/251105_QPI_results/0.0055_Results"
 
-# --- 使用するCSVファイル（空リストなら BASE_DIR 内の *.csv を全て使う）---
+# --- CSV files to use (if empty list, use all *.csv in BASE_DIR) ---
 FILEPATHS = []
 
-# --- ハイライトする細胞（ファイル名の部分文字列） ---
+# --- Cells to highlight (filename substring) ---
 HIGHLIGHT_SERIES = []
 
-# --- 物理定数 ---
-PIXEL_AREA_TO_UM2 = (140 / 648) ** 2   # pixel² → µm²（ImageJ ROI 解析時の倍率）
-FRAMES_PER_HOUR = 12                    # 5分間隔 = 12フレーム/時
-N_MEDIUM = 1.333                        # 培地の屈折率
+# --- Physical constants ---
+PIXEL_AREA_TO_UM2 = (140 / 648) ** 2   # pixel^2 -> um^2 (magnification from ImageJ ROI analysis)
+FRAMES_PER_HOUR = 12                    # 5 min interval = 12 frames/hour
+N_MEDIUM = 1.333                        # Refractive index of medium
 ALPHA_RI = 0.00018                      # [mL/mg] specific refractive increment
-TIME_INTERVAL_H = 1 / FRAMES_PER_HOUR  # フレーム間隔 [h]
-N_INTERP = 100                          # cell cycle aligned trajectory の補間点数
+TIME_INTERVAL_H = 1 / FRAMES_PER_HOUR  # Frame interval [h]
+N_INTERP = 100                          # Number of interpolation points for cell cycle aligned trajectory
 
-# --- 培地切り替えタイミング（フレーム番号） ---
+# --- Media switch timing (frame number) ---
 MEDIA_SWITCHES = [
     (0,    "wo_2"),     # 2% glucose
-    (1145, "wo_0"),     # 0% glucose（飢餓）
-    (1435, "wo_0"),     # 0% glucose（継続）
-    (2014, "wo_2"),     # 2% glucose（回復）
+    (1145, "wo_0"),     # 0% glucose (starvation)
+    (1435, "wo_0"),     # 0% glucose (continued)
+    (2014, "wo_2"),     # 2% glucose (recovery)
 ]
 MEDIA_SWITCH_FRAMES = [s[0] for s in MEDIA_SWITCHES if s[0] > 0]
 
-# --- 分裂検出パラメータ ---
-DIV_AREA_DROP = 0.6     # 面積がこの割合以下に低下 → 分裂と判定
-DIV_TIME_MAX_H = 100    # この時刻以前の分裂のみ使用（飢餓前の正常増殖期）
+# --- Division detection parameters ---
+DIV_AREA_DROP = 0.6     # Area drops below this ratio -> detected as division
+DIV_TIME_MAX_H = 100    # Only use divisions before this time (normal growth period before starvation)
 
-# --- 出力 ---
+# --- Output ---
 OUTPUT_DIR = "results/figures"
 
 
 # =============================================================================
-# === ユーティリティ ===
+# === Utilities ===
 # =============================================================================
 
 def load_filepaths(base_dir: str, filepaths: list[str]) -> list[str]:
-    """CSVファイルパスのリストを返す。"""
+    """Return a list of CSV file paths."""
     if filepaths:
         return filepaths
     return sorted(glob.glob(os.path.join(base_dir, "*.csv")))
 
 
 def load_cell_data(filepath: str) -> pd.DataFrame:
-    """Results.csv を読み込み、物理単位に変換する。"""
+    """Load Results.csv and convert to physical units."""
     df = pd.read_csv(filepath)
     df = df.sort_values(by="Slice").reset_index(drop=True)
     df["Time"] = df["Slice"] / FRAMES_PER_HOUR          # [h]
     df["Area_um2"] = df["Area"] * PIXEL_AREA_TO_UM2      # [µm²]
-    df["RI"] = df["Mean"]                                 # RI（補正は別途）
-    # Dry mass proxy: concentration × area
+    df["RI"] = df["Mean"]                                 # RI (correction done separately)
+    # Dry mass proxy: concentration x area
     # C [mg/mL] = (RI - n_medium) / alpha_ri
-    # dry_mass [pg] ∝ C × Area (2D proxy; 厳密には3D積分が必要)
+    # dry_mass [pg] proportional to C x Area (2D proxy; strictly requires 3D integration)
     df["Density"] = (df["RI"] - N_MEDIUM) / ALPHA_RI     # [mg/mL]
     df["DryMass"] = df["Density"] * df["Area_um2"]        # [pg·µm² / mL] proxy
     df["_source"] = filepath
@@ -105,10 +105,10 @@ def load_cell_data(filepath: str) -> pd.DataFrame:
 
 
 def detect_divisions(df: pd.DataFrame, drop_ratio: float = DIV_AREA_DROP) -> pd.DataFrame:
-    """面積の急激な低下から分裂イベントを検出する。
+    """Detect division events from sudden drops in area.
 
     Returns:
-        分裂が起きたフレームの行（分裂後の最初のフレーム）。
+        Rows of frames where division occurred (first frame after division).
     """
     prev_area = df["Area_um2"].shift(1)
     mask = df["Area_um2"] < drop_ratio * prev_area
@@ -118,7 +118,7 @@ def detect_divisions(df: pd.DataFrame, drop_ratio: float = DIV_AREA_DROP) -> pd.
 def extract_cell_cycles(df: pd.DataFrame,
                         drop_ratio: float = DIV_AREA_DROP,
                         max_time_h: float | None = None) -> list[dict]:
-    """1細胞の時系列からセルサイクルごとの情報を抽出する。
+    """Extract cell cycle information from a single cell time series.
 
     Returns:
         list of dict with keys:
@@ -136,9 +136,9 @@ def extract_cell_cycles(df: pd.DataFrame,
 
     cycles = []
     for i in range(len(div_indices) - 1):
-        # birth = 分裂直後, div = 次の分裂直前
+        # birth = immediately after division, div = just before next division
         birth_idx = div_indices[i]
-        div_idx = div_indices[i + 1] - 1  # 分裂が起きる1フレーム前
+        div_idx = div_indices[i + 1] - 1  # One frame before division occurs
         if div_idx <= birth_idx:
             continue
 
@@ -164,13 +164,13 @@ def extract_cycle_traces(df: pd.DataFrame,
                          drop_ratio: float = DIV_AREA_DROP,
                          max_time_h: float | None = None,
                          n_interp: int = N_INTERP) -> list[dict]:
-    """各セルサイクルの時系列を相対進行度 (0→1) で補間して返す。
+    """Interpolate each cell cycle time series by relative progression (0->1).
 
-    Oldewurtel et al. (2021) Fig 2B-D に対応。
+    Corresponds to Oldewurtel et al. (2021) Fig 2B-D.
 
     Returns:
         list of dict with keys:
-            rel_progress (0→1), area_interp, ri_interp, mass_interp,
+            rel_progress (0->1), area_interp, ri_interp, mass_interp,
             birth_time, interval
     """
     div_events = detect_divisions(df, drop_ratio)
@@ -187,15 +187,15 @@ def extract_cycle_traces(df: pd.DataFrame,
     for i in range(len(div_indices) - 1):
         start = div_indices[i]
         end = div_indices[i + 1]
-        cycle = df.loc[start:end - 1]  # 次の分裂フレームは含めない
+        cycle = df.loc[start:end - 1]  # Exclude the next division frame
         if len(cycle) < 4:
             continue
 
-        # 相対進行度
+        # Relative progression
         t = cycle["Time"].values
         t_rel = (t - t[0]) / (t[-1] - t[0] + TIME_INTERVAL_H)
 
-        # 補間
+        # Interpolation
         area_i = np.interp(rel, t_rel, cycle["Area_um2"].values)
         ri_i = np.interp(rel, t_rel, cycle["RI"].values)
         mass_i = np.interp(rel, t_rel, cycle["DryMass"].values)
@@ -217,7 +217,7 @@ def label_from_path(filepath: str) -> str:
 
 
 # =============================================================================
-# === カラーパレット（Okabe-Ito） ===
+# === Color palette (Okabe-Ito) ===
 # =============================================================================
 
 OI = {
@@ -232,11 +232,11 @@ OI = {
 }
 
 # =============================================================================
-# === Figure 1: 個別細胞の面積・RI 時系列 ===
+# === Figure 1: Individual cell area and RI time series ===
 # =============================================================================
 
 def fig1_individual_traces(all_data: list[tuple[pd.DataFrame, str]]):
-    """個別細胞の面積とRI時系列。分裂イベントを赤点でマーク。"""
+    """Individual cell area and RI time series. Division events marked with red dots."""
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(183/25.4, 120/25.4),
                                     sharex=True)
 
@@ -281,11 +281,11 @@ def fig1_individual_traces(all_data: list[tuple[pd.DataFrame, str]]):
 
 
 # =============================================================================
-# === Figure 2: 集団平均 ± SEM ===
+# === Figure 2: Population mean +/- SEM ===
 # =============================================================================
 
 def fig2_population_mean(all_data: list[tuple[pd.DataFrame, str]]):
-    """全細胞の面積・RIを時間でグルーピングし、平均±SEMをプロット。"""
+    """Group all cell area/RI by time and plot mean +/- SEM."""
     frames = [df[["Time", "Area_um2", "RI"]] for df, _ in all_data]
     df_all = pd.concat(frames, ignore_index=True)
     grouped = df_all.groupby("Time")
@@ -330,14 +330,14 @@ def fig2_population_mean(all_data: list[tuple[pd.DataFrame, str]]):
 
 
 # =============================================================================
-# === Figure 3: サイズ恒常性（Birth size vs Added size / Birth RI vs Added RI）===
+# === Figure 3: Size homeostasis (Birth size vs Added size / Birth RI vs Added RI) ===
 # =============================================================================
 
 def fig3_size_homeostasis(all_cycles: list[dict]):
-    """Birth size vs Added size の散布図。Pearson r を算出。"""
+    """Scatter plot of Birth size vs Added size. Calculate Pearson r."""
     df = pd.DataFrame(all_cycles)
     if len(df) < 5:
-        print("  [fig3] 分裂イベントが少なすぎます（<5）。スキップ。")
+        print("  [fig3] Too few division events (<5). Skipping.")
         return None
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(183/25.4, 80/25.4))
@@ -346,7 +346,7 @@ def fig3_size_homeostasis(all_cycles: list[dict]):
     r_a, p_a = pearsonr(df["birth_area"], df["added_area"])
     ax1.scatter(df["birth_area"], df["added_area"],
                 color=OI["blue"], alpha=0.6, s=15, edgecolors="none")
-    # 平均の十字線
+    # Mean crosshairs
     ax1.axvline(df["birth_area"].mean(), color="0.6", ls="--", lw=0.5)
     ax1.axhline(df["added_area"].mean(), color="0.6", ls="--", lw=0.5)
     ax1.set_xlabel(r"Birth size [$\mu$m$^2$]", fontsize=8)
@@ -376,14 +376,14 @@ def fig3_size_homeostasis(all_cycles: list[dict]):
 
 
 # =============================================================================
-# === Figure 4: 分裂間隔ヒストグラム ===
+# === Figure 4: Division interval histogram ===
 # =============================================================================
 
 def fig4_division_interval_histogram(all_cycles: list[dict]):
-    """分裂間隔（cell cycle time）のヒストグラム。"""
+    """Histogram of division intervals (cell cycle time)."""
     intervals = [c["interval"] for c in all_cycles]
     if len(intervals) < 3:
-        print("  [fig4] 分裂イベントが少なすぎます。スキップ。")
+        print("  [fig4] Too few division events. Skipping.")
         return None
 
     intervals = np.array(intervals)
@@ -413,11 +413,11 @@ def fig4_division_interval_histogram(all_cycles: list[dict]):
 
 
 # =============================================================================
-# === Figure 5: 世代ごとの分裂間隔推移 ===
+# === Figure 5: Division interval per generation ===
 # =============================================================================
 
 def fig5_interval_per_generation(all_data: list[tuple[pd.DataFrame, str]]):
-    """各細胞の世代ごとの分裂間隔をボックスプロットで可視化。"""
+    """Visualize division interval per generation using box plots."""
     max_gen = 12
     gen_intervals = {g: [] for g in range(max_gen)}
 
@@ -433,10 +433,10 @@ def fig5_interval_per_generation(all_data: list[tuple[pd.DataFrame, str]]):
             if g < max_gen:
                 gen_intervals[g].append(iv)
 
-    # 空の世代を除外
+    # Exclude empty generations
     gen_data = {g: v for g, v in gen_intervals.items() if len(v) >= 2}
     if len(gen_data) < 2:
-        print("  [fig5] データ不足。スキップ。")
+        print("  [fig5] Insufficient data. Skipping.")
         return None
 
     labels = [f"G{g}" for g in sorted(gen_data)]
@@ -466,14 +466,14 @@ def fig5_interval_per_generation(all_data: list[tuple[pd.DataFrame, str]]):
 
 
 # =============================================================================
-# === Figure 6: 分裂時サイズ vs RI（サイズと密度の関係） ===
+# === Figure 6: Division size vs RI (relationship between size and density) ===
 # =============================================================================
 
 def fig6_divsize_vs_ri(all_cycles: list[dict]):
-    """分裂時の面積 vs RI の散布図。"""
+    """Scatter plot of area vs RI at division."""
     df = pd.DataFrame(all_cycles)
     if len(df) < 5:
-        print("  [fig6] データ不足。スキップ。")
+        print("  [fig6] Insufficient data. Skipping.")
         return None
 
     r, p = pearsonr(df["div_area"], df["div_ri"])
@@ -495,13 +495,13 @@ def fig6_divsize_vs_ri(all_cycles: list[dict]):
 
 
 # =============================================================================
-# === Figure 7: Cell cycle aligned trajectories（Oldewurtel Fig 2B-D）===
+# === Figure 7: Cell cycle aligned trajectories (Oldewurtel Fig 2B-D) ===
 # =============================================================================
 
 def fig7_aligned_trajectories(all_traces: list[dict]):
-    """全セルサイクルを相対進行度で重ね合わせ、Area / RI / Dry mass を表示。"""
+    """Overlay all cell cycles by relative progression and display Area / RI / Dry mass."""
     if len(all_traces) < 3:
-        print("  [fig7] トレース不足（<3）。スキップ。")
+        print("  [fig7] Insufficient traces (<3). Skipping.")
         return None
 
     rel = all_traces[0]["rel_progress"]
@@ -519,11 +519,11 @@ def fig7_aligned_trajectories(all_traces: list[dict]):
         mean = np.mean(data, axis=0)
         std = np.std(data, axis=0)
 
-        # 個別トレース（薄く）
+        # Individual traces (faint)
         for row in data:
             ax.plot(rel, row, color=color, alpha=0.08, lw=0.3)
 
-        # 平均 ± SD
+        # Mean +/- SD
         ax.plot(rel, mean, color=color, lw=1.2, label=f"Mean (n={len(data)})")
         ax.fill_between(rel, mean - std, mean + std,
                         color=color, alpha=0.2, label="±1 SD")
@@ -544,7 +544,7 @@ def fig7_aligned_trajectories(all_traces: list[dict]):
 
 
 # =============================================================================
-# === Figure 8: Density (RI) 分布ヒストグラム（Oldewurtel Fig 1C）===
+# === Figure 8: Density (RI) distribution histogram (Oldewurtel Fig 1C) ===
 # =============================================================================
 
 def _gaussian(x, a, mu, sigma):
@@ -552,10 +552,10 @@ def _gaussian(x, a, mu, sigma):
 
 
 def fig8_density_distribution(all_data: list[tuple[pd.DataFrame, str]]):
-    """全時点のRI分布をヒストグラム＋ガウスフィットで表示。"""
+    """Display the RI distribution across all time points as histogram + Gaussian fit."""
     all_ri = np.concatenate([df["RI"].dropna().values for df, _ in all_data])
     if len(all_ri) < 10:
-        print("  [fig8] データ不足。スキップ。")
+        print("  [fig8] Insufficient data. Skipping.")
         return None
 
     mu = np.mean(all_ri)
@@ -568,7 +568,7 @@ def fig8_density_distribution(all_data: list[tuple[pd.DataFrame, str]]):
                                     color=OI["skyblue"], edgecolor="k",
                                     linewidth=0.3, alpha=0.7)
 
-    # ガウスフィット
+    # Gaussian fit
     bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
     try:
         popt, _ = curve_fit(_gaussian, bin_centers, counts,
@@ -596,14 +596,14 @@ def fig8_density_distribution(all_data: list[tuple[pd.DataFrame, str]]):
 
 
 # =============================================================================
-# === Figure 9: Density homeostasis（Oldewurtel Fig 1D）===
+# === Figure 9: Density homeostasis (Oldewurtel Fig 1D) ===
 # =============================================================================
 
 def fig9_density_homeostasis(all_cycles: list[dict]):
-    """Birth RI（初期密度）vs ΔRI（密度変化）の逆相関を検証。"""
+    """Verify the inverse correlation between birth RI (initial density) and delta RI (density change)."""
     df = pd.DataFrame(all_cycles)
     if len(df) < 5:
-        print("  [fig9] データ不足。スキップ。")
+        print("  [fig9] Insufficient data. Skipping.")
         return None
 
     r, p = pearsonr(df["birth_ri"], df["added_ri"])
@@ -612,7 +612,7 @@ def fig9_density_homeostasis(all_cycles: list[dict]):
     ax.scatter(df["birth_ri"], df["added_ri"],
                color=OI["green"], alpha=0.6, s=15, edgecolors="none")
 
-    # 線形回帰ライン
+    # Linear regression line
     z = np.polyfit(df["birth_ri"], df["added_ri"], 1)
     x_line = np.linspace(df["birth_ri"].min(), df["birth_ri"].max(), 50)
     ax.plot(x_line, np.polyval(z, x_line), color=OI["vermilion"], lw=1,
@@ -636,24 +636,25 @@ def fig9_density_homeostasis(all_cycles: list[dict]):
 
 
 # =============================================================================
-# === Figure 10: Growth rate 解析（cell cycle 内の dArea/dt, dMass/dt）===
+# === Figure 10: Growth rate analysis (dArea/dt, dMass/dt within cell cycle) ===
 # =============================================================================
 
 def fig10_growth_rate(all_traces: list[dict]):
-    """相対 cell cycle 内の成長率を算出しプロット。
+    """Compute and plot growth rates within the relative cell cycle.
 
-    Volume (area) growth rate と mass growth rate を比較することで、
-    密度変動が体積成長速度の変化に起因するか、物質合成速度の変化に
-    起因するかを判別する（Oldewurtel et al. の核心的議論）。
+    By comparing volume (area) growth rate and mass growth rate,
+    determine whether density fluctuations arise from changes in
+    volume growth rate or biosynthesis rate (core argument of
+    Oldewurtel et al.).
     """
     if len(all_traces) < 3:
-        print("  [fig10] トレース不足。スキップ。")
+        print("  [fig10] Insufficient traces. Skipping.")
         return None
 
     rel = all_traces[0]["rel_progress"]
-    dr = rel[1] - rel[0]  # 相対進行度のステップ幅
+    dr = rel[1] - rel[0]  # Step size in relative progression
 
-    # 各サイクルの成長率を計算（birth value で正規化した相対成長率）
+    # Compute growth rate for each cycle (relative growth rate normalized by birth value)
     area_rates = []
     mass_rates = []
 
@@ -661,7 +662,7 @@ def fig10_growth_rate(all_traces: list[dict]):
         a = t["area_interp"]
         m = t["mass_interp"]
 
-        # 相対成長率: (1/X) dX/d(rel_progress)
+        # Specific growth rate: (1/X) dX/d(rel_progress)
         # = d(ln X) / d(rel_progress)
         da = np.gradient(np.log(a + 1e-12), dr)
         dm = np.gradient(np.log(m + 1e-12), dr)
@@ -705,7 +706,7 @@ def fig10_growth_rate(all_traces: list[dict]):
 
 
 # =============================================================================
-# === メイン ===
+# === Main ===
 # =============================================================================
 
 def main():
@@ -718,7 +719,7 @@ def main():
     print(f"  Data: {BASE_DIR}")
     print(f"  Files: {len(filepaths)}")
 
-    # --- データ読み込み ---
+    # --- Load data ---
     all_data = []
     for fp in filepaths:
         df = load_cell_data(fp)
@@ -726,7 +727,7 @@ def main():
         print(f"  {label_from_path(fp)}: {len(df)} frames, "
               f"{df['Time'].max():.1f} h")
 
-    # --- セルサイクル抽出 ---
+    # --- Extract cell cycles ---
     all_cycles = []
     for df, fp in all_data:
         cycles = extract_cell_cycles(df, max_time_h=DIV_TIME_MAX_H)
@@ -736,14 +737,14 @@ def main():
 
     print(f"\n  Total cycles: {len(all_cycles)}")
 
-    # --- Cell cycle aligned traces 抽出 ---
+    # --- Extract cell cycle aligned traces ---
     all_traces = []
     for df, fp in all_data:
         traces = extract_cycle_traces(df, max_time_h=DIV_TIME_MAX_H)
         all_traces.extend(traces)
     print(f"  Aligned traces: {len(all_traces)}")
 
-    # --- 図生成 ---
+    # --- Generate figures ---
     print("\n--- Generating figures ---")
 
     print("  [1/10] Individual traces...")

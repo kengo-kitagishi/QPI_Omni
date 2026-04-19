@@ -1,15 +1,15 @@
 # %%
 # ============================================================
-# 42_phase_drift_from_ref.py — 基準フレームからの位相ドリフト評価
+# 42_phase_drift_from_ref.py — Phase drift evaluation from reference frame
 # ============================================================
-# 目的: frame[0] を基準とし、各フレーム n の差分
-#       diff[n] = phase[n] - phase[0] を計算して
-#       ROI mean（系全体のドリフト）と ROI std（空間的ばらつき）を
-#       フレーム番号の関数としてプロットする。
+# Objective: Using frame[0] as reference, compute the difference
+#            diff[n] = phase[n] - phase[0] for each frame n,
+#            and plot ROI mean (overall system drift) and ROI std
+#            (spatial variability) as a function of frame number.
 #
-# 対比:
-#   41_phase_diff_noise.py → 隣接ペア差分（フレーム間ノイズ）
-#   42_phase_drift_from_ref.py → 基準フレームからの累積ドリフト
+# Comparison:
+#   41_phase_diff_noise.py -> adjacent pair difference (inter-frame noise)
+#   42_phase_drift_from_ref.py -> cumulative drift from reference frame
 # ============================================================
 
 import os
@@ -24,34 +24,34 @@ from qpi import QPIParameters, get_field
 from figure_logger import save_figure
 
 # ============================================================
-# 設定
+# Settings
 # ============================================================
 
 # %%
-# --- 光学パラメータ ---
+# --- Optical parameters ---
 
 WAVELENGTH     = 658e-9          # [m]
 NA             = 0.95
-PIXELSIZE      = 3.45e-6 / 40   # [m/px]  3.45 µm カメラ画素 / 40x 対物
-OFFAXIS_CENTER = (1710, 644)     # (row, col) — FFT空間でのオフアクシス中心
+PIXELSIZE      = 3.45e-6 / 40   # [m/px]  3.45 um camera pixel / 40x objective
+OFFAXIS_CENTER = (1710, 644)     # (row, col) — off-axis center in FFT space
 
-# --- データ設定 ---
+# --- Data settings ---
 
 DATA_DIR          = r"F:\basler\exp200ms_int1000ms_300frame\Pos0"
-FRAME_INTERVAL_S  = 1.0     # [s] フレーム間隔（時間軸変換用）。5分=300, 1s=1.0
+FRAME_INTERVAL_S  = 1.0     # [s] Frame interval (for time axis conversion). 5min=300, 1s=1.0
 CROP_SIDE   = None          # "right" / "left" / None
 CROP_SIZE   = 2048
 CROP_REGION = None          # None or (r0, r1, c0, c1)
-ROI_SIZE    = 80            # ノイズ計測 ROI サイズ [px]
-ROI_CENTER  = None          # None → 再構成画像の中央
+ROI_SIZE    = 80            # Noise measurement ROI size [px]
+ROI_CENTER  = None          # None -> reconstructed image center
 
 # ============================================================
-# 初期化
+# Initialization
 # ============================================================
 
 # %%
 
-print("=== 42_phase_drift_from_ref: 基準フレームからの位相ドリフト評価 ===")
+print("=== 42_phase_drift_from_ref: Phase drift evaluation from reference frame ===")
 
 _exts = {".tif", ".tiff", ".png"}
 _files = sorted(
@@ -59,10 +59,10 @@ _files = sorted(
     if os.path.splitext(f)[1].lower() in _exts
 )
 N_total = len(_files)
-print(f"  全フレーム数: {N_total}")
+print(f"  Total frames: {N_total}")
 
 if N_total < 2:
-    raise FileNotFoundError(f"フレームが不足しています: {DATA_DIR}")
+    raise FileNotFoundError(f"Insufficient frames: {DATA_DIR}")
 
 _probe_raw = tifffile.imread(os.path.join(DATA_DIR, _files[0])).astype(np.float64)
 _H_full, _W_full = _probe_raw.shape[:2]
@@ -75,9 +75,9 @@ elif CROP_SIDE == "left":
 if CROP_REGION is not None:
     r0, r1, c0, c1 = CROP_REGION
     _probe_raw = _probe_raw[r0:r1, c0:c1]
-    print(f"  クロップ: {CROP_SIDE or 'manual'}  rows {r0}:{r1}, cols {c0}:{c1}")
+    print(f"  Crop: {CROP_SIDE or 'manual'}  rows {r0}:{r1}, cols {c0}:{c1}")
 img_shape = _probe_raw.shape[:2]
-print(f"  画像サイズ (after crop): {img_shape}")
+print(f"  Image size (after crop): {img_shape}")
 
 params = QPIParameters(
     wavelength=WAVELENGTH,
@@ -109,19 +109,19 @@ def _load_holo(fname: str) -> np.ndarray:
 
 
 # ============================================================
-# 基準フレームの再構成
+# Reconstruct reference frame
 # ============================================================
 
 # %%
 
-print("\n  基準フレーム (frame[0]) を再構成中...")
+print("\n  Reconstructing reference frame (frame[0])...")
 holo_ref  = _load_holo(_files[0])
 field_ref = get_field(holo_ref, params)
 phase_ref = unwrap_phase(np.angle(field_ref))
-print("  完了")
+print("  Done")
 
 # ============================================================
-# 全フレームのループ（frame[0] を含む frame[0] - frame[0] = 0 から始める）
+# Loop over all frames (including frame[0], starting from frame[0] - frame[0] = 0)
 # ============================================================
 
 # %%
@@ -155,45 +155,45 @@ roi_mean_nm   = roi_mean_rad * WAVELENGTH / (2 * np.pi) * 1e9
 roi_std_nm    = roi_std_rad  * WAVELENGTH / (2 * np.pi) * 1e9
 
 # ============================================================
-# 2π ジャンプ補正
+# 2pi jump correction
 # ============================================================
 _TWO_PI = 2 * np.pi
 _diff_series = np.diff(roi_mean_rad)
-_jump_corr   = np.round(_diff_series / _TWO_PI) * _TWO_PI  # 2π の整数倍のジャンプ量
+_jump_corr   = np.round(_diff_series / _TWO_PI) * _TWO_PI  # Jump amount as integer multiples of 2pi
 roi_mean_rad_corr  = roi_mean_rad.copy()
-roi_mean_rad_corr[1:] -= np.cumsum(_jump_corr)              # 累積補正を引く
+roi_mean_rad_corr[1:] -= np.cumsum(_jump_corr)              # Subtract cumulative correction
 roi_mean_mrad_corr = roi_mean_rad_corr * 1e3
 roi_mean_nm_corr   = roi_mean_rad_corr * WAVELENGTH / (2 * np.pi) * 1e9
 
 n_jumps = int(np.sum(_jump_corr != 0))
-print(f"  2π ジャンプ検出: {n_jumps} 回")
-print(f"  補正後 ROI mean ドリフト幅 [mrad]: "
+print(f"  2pi jumps detected: {n_jumps}")
+print(f"  Corrected ROI mean drift range [mrad]: "
       f"min={roi_mean_mrad_corr.min():.2f}, max={roi_mean_mrad_corr.max():.2f}, "
       f"range={roi_mean_mrad_corr.max()-roi_mean_mrad_corr.min():.2f}")
 
 # ============================================================
-# 集計・stdout
+# Summary and stdout
 # ============================================================
 
 # %%
 
-print(f"\n--- 結果 ---")
-print(f"  ROI mean ドリフト幅 [mrad]: min={roi_mean_mrad.min():.2f}, max={roi_mean_mrad.max():.2f}, "
+print(f"\n--- Results ---")
+print(f"  ROI mean drift range [mrad]: min={roi_mean_mrad.min():.2f}, max={roi_mean_mrad.max():.2f}, "
       f"range={roi_mean_mrad.max() - roi_mean_mrad.min():.2f}")
-print(f"  ROI mean ドリフト幅 [nm]:   min={roi_mean_nm.min():.3f}, max={roi_mean_nm.max():.3f}, "
+print(f"  ROI mean drift range [nm]:   min={roi_mean_nm.min():.3f}, max={roi_mean_nm.max():.3f}, "
       f"range={roi_mean_nm.max() - roi_mean_nm.min():.3f}")
-print(f"  ROI std  最終値   [mrad]: {roi_std_mrad[-1]:.2f}")
-print(f"  ROI std  最終値   [nm]:   {roi_std_nm[-1]:.3f}")
+print(f"  ROI std  final value [mrad]: {roi_std_mrad[-1]:.2f}")
+print(f"  ROI std  final value [nm]:   {roi_std_nm[-1]:.3f}")
 
 # ============================================================
-# プロット
+# Plotting
 # ============================================================
 
 # %%
 
 fig, axes = plt.subplots(2, 2, figsize=(12, 7), sharex=True)
 
-# 上左: ROI mean [mrad]
+# Top-left: ROI mean [mrad]
 axes[0, 0].plot(time_min, roi_mean_mrad,      lw=0.5, color="steelblue",
                 alpha=0.4, label="raw")
 axes[0, 0].plot(time_min, roi_mean_mrad_corr, lw=0.9, color="steelblue",
@@ -204,7 +204,7 @@ axes[0, 0].set_title("Phase drift (ROI mean) [mrad]")
 axes[0, 0].grid(True, alpha=0.4)
 axes[0, 0].legend(fontsize=8)
 
-# 上右: ROI mean [nm]
+# Top-right: ROI mean [nm]
 axes[0, 1].plot(time_min, roi_mean_nm,      lw=0.5, color="darkorange",
                 alpha=0.4, label="raw")
 axes[0, 1].plot(time_min, roi_mean_nm_corr, lw=0.9, color="darkorange",
@@ -215,14 +215,14 @@ axes[0, 1].set_title("Phase drift (ROI mean) [nm OPD]")
 axes[0, 1].grid(True, alpha=0.4)
 axes[0, 1].legend(fontsize=8)
 
-# 下左: ROI std [mrad]
+# Bottom-left: ROI std [mrad]
 axes[1, 0].plot(time_min, roi_std_mrad, lw=0.8, color="steelblue")
 axes[1, 0].set_ylabel("ROI std [mrad]")
 axes[1, 0].set_xlabel(f"Time [min]  (interval={FRAME_INTERVAL_S}s/frame)")
 axes[1, 0].set_title("Spatial spread of drift (ROI std) [mrad]")
 axes[1, 0].grid(True, alpha=0.4)
 
-# 下右: ROI std [nm]
+# Bottom-right: ROI std [nm]
 axes[1, 1].plot(time_min, roi_std_nm, lw=0.8, color="darkorange")
 axes[1, 1].set_ylabel("ROI std [nm OPD]")
 axes[1, 1].set_xlabel(f"Time [min]  (interval={FRAME_INTERVAL_S}s/frame)")
@@ -258,9 +258,9 @@ save_figure(
     fig,
     params=_params_fig,
     description=(
-        f"基準フレームからの位相ドリフト: "
+        f"Phase drift from reference frame: "
         f"ROI mean range={roi_mean_mrad.max()-roi_mean_mrad.min():.2f} mrad (raw), "
-        f"補正後 range={roi_mean_mrad_corr.max()-roi_mean_mrad_corr.min():.2f} mrad "
+        f"corrected range={roi_mean_mrad_corr.max()-roi_mean_mrad_corr.min():.2f} mrad "
         f"({n_jumps} 2π jumps removed), "
         f"ROI std (final)={roi_std_mrad[-1]:.2f} mrad, "
         f"{N_total} frames"
@@ -276,6 +276,6 @@ save_figure(
     },
 )
 
-print(f"\n完了: {N_total} フレーム処理")
+print(f"\nDone: {N_total} frames processed")
 
 # %%

@@ -70,7 +70,7 @@ _DEFAULT_DRIVE_HUB_INBOX = Path(
 )
 _DEFAULT_DESKTOP_HUB_INBOX = Path("/Users/kitak/Desktop/figure-hub/inbox")
 _FALLBACK_LOCAL_INBOX = _REPO_ROOT / "results" / "figure_inbox"
-# Windows: Google Drive for Desktop（共有ドライブ）
+# Windows: Google Drive for Desktop (shared drive)
 _WINDOWS_DRIVE_HUB_INBOXES = [
     Path(f"{letter}:/共有ドライブ/wakamotolab_meeting/kitagishi/figure-hub/inbox")
     for letter in ["G", "H", "F", "I"]
@@ -229,7 +229,7 @@ def _save_history(script_name: str, params: dict) -> None:
 
 
 def _load_timing_history(script_name: str) -> list[float]:
-    """過去の実行時間（秒）リストを返す（最大5件）。"""
+    """Return list of past execution times in seconds (up to 5 entries)."""
     p = _HISTORY_DIR / f"{script_name}_timing.json"
     if p.exists():
         try:
@@ -241,17 +241,17 @@ def _load_timing_history(script_name: str) -> list[float]:
 
 
 def _save_timing_history(script_name: str, elapsed_sec: float) -> None:
-    """実行時間を履歴ファイルに追記する（最大5件保持）。"""
+    """Append execution time to history file (keeps last 5 entries)."""
     _HISTORY_DIR.mkdir(parents=True, exist_ok=True)
     p = _HISTORY_DIR / f"{script_name}_timing.json"
     history = _load_timing_history(script_name)
     history.append(round(elapsed_sec, 1))
-    history = history[-5:]  # 直近5回分だけ保持
+    history = history[-5:]  # Keep only the last 5 entries
     p.write_text(json.dumps({"elapsed_sec_history": history}, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _fmt_elapsed(seconds: float) -> str:
-    """秒数を人間が読みやすい文字列に変換する。"""
+    """Convert seconds to a human-readable string."""
     s = int(seconds)
     if s < 60:
         return f"{s}s"
@@ -493,7 +493,7 @@ def _append_experiment_log(record: dict) -> None:
         if "notes" in data_info:
             parts.append(f"notes=`{data_info['notes']}`")
         if parts:
-            data_info_line = f"\n**データ来歴**: {' / '.join(parts)}\n"
+            data_info_line = f"\n**Data provenance**: {' / '.join(parts)}\n"
 
     inbox_rel = _to_rel_or_abs(Path(record["inbox_file"]))
     published_file = record.get("published_file", "")
@@ -507,11 +507,11 @@ def _append_experiment_log(record: dict) -> None:
 
 ## {record['date_local']} | `{record['script']}` | run `{record['run_id']}`
 
-**説明**: {record.get('description', '')}
+**Description**: {record.get('description', '')}
 {data_info_line}
-**パラメータ**: {params_str}
+**Parameters**: {params_str}
 
-**前回からの変更点**:
+**Changes from last run**:
 {diff_str}
 
 **Inbox**: `{inbox_rel}`
@@ -555,7 +555,7 @@ def _notion_rt(text: str) -> list:
 
 
 def _find_today_note_page(token: str, date_str: str, script: str) -> Optional[str]:
-    """当日 + 同スクリプトのページを探して page_id を返す。なければ None。"""
+    """Find a page for today + same script and return page_id. Returns None if not found."""
     try:
         url = f"https://api.notion.com/v1/databases/{NOTION_DB_ID}/query"
         payload = {"filter": {"property": "Date", "date": {"equals": date_str}}}
@@ -586,7 +586,7 @@ def _find_today_note_page(token: str, date_str: str, script: str) -> Optional[st
 
 
 def _build_figure_blocks(record: dict) -> list:
-    """1図分のNotion blocksを組み立てる。"""
+    """Build Notion blocks for one figure."""
     time_str = datetime.now().strftime("%H:%M")
     description = record.get("description", "")
     params = record.get("params", {})
@@ -619,7 +619,7 @@ def _build_figure_blocks(record: dict) -> list:
         )
         blocks.append({
             "object": "block", "type": "paragraph",
-            "paragraph": {"rich_text": _notion_rt(f"変更:  {diff_lines}")},
+            "paragraph": {"rich_text": _notion_rt(f"changes:  {diff_lines}")},
         })
 
     # data_source / data_info
@@ -679,7 +679,7 @@ def _save_to_notion(record: dict) -> None:
         }
         figure_blocks = _build_figure_blocks(record)
 
-        # 当日同スクリプトのページがあれば追記
+        # Append to existing page if one exists for today + same script
         existing_id = _find_today_note_page(token, date_str, script)
         if existing_id:
             payload = {"children": figure_blocks}
@@ -691,10 +691,10 @@ def _save_to_notion(record: dict) -> None:
             )
             with urllib.request.urlopen(req, timeout=10):
                 pass
-            print(f"[figure_logger] Notion追記: https://www.notion.so/{existing_id.replace('-', '')}")
+            print(f"[figure_logger] Notion appended: https://www.notion.so/{existing_id.replace('-', '')}")
             return
 
-        # なければ新規ページ作成
+        # Create a new page if none exists
         payload = {
             "parent": {"database_id": NOTION_DB_ID},
             "properties": {
@@ -715,9 +715,9 @@ def _save_to_notion(record: dict) -> None:
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
             result = json.loads(resp.read().decode())
-        print(f"[figure_logger] Notion保存: {result.get('url', '')}")
+        print(f"[figure_logger] Notion saved: {result.get('url', '')}")
     except Exception as e:
-        print(f"[figure_logger] Notion保存スキップ ({e})")
+        print(f"[figure_logger] Notion save skipped ({e})")
 
 
 # =============================================================================
@@ -871,18 +871,18 @@ def save_figure(
     is_first_figure = _RUN_CONTEXT["script"] != script or _RUN_CONTEXT["run_id"] is None
     run_id, fig_index = _ensure_run_context(script)
 
-    # 経過時間（スクリプト import 時点 or 初回 save_figure 時点からの時間）
+    # Elapsed time (from script import or first save_figure call)
     elapsed_sec = round(time.monotonic() - (_RUN_CONTEXT["start_mono"] or _SCRIPT_START_TIME), 1)
 
-    # 初回図保存時に前回の実行時間を表示する
+    # Show previous execution time on first figure save
     if is_first_figure or fig_index == 1:
         timing_history = _load_timing_history(script)
         if timing_history:
             avg = sum(timing_history) / len(timing_history)
             last = timing_history[-1]
             print(
-                f"[figure_logger] [elapsed] 前回: {_fmt_elapsed(last)}"
-                + (f"  / 平均({len(timing_history)}回): {_fmt_elapsed(avg)}" if len(timing_history) > 1 else "")
+                f"[figure_logger] [elapsed] last: {_fmt_elapsed(last)}"
+                + (f"  / avg({len(timing_history)} runs): {_fmt_elapsed(avg)}" if len(timing_history) > 1 else "")
             )
 
     now_local = datetime.now()
@@ -945,7 +945,7 @@ def save_figure(
                 print(f"[figure_logger] warn: source_tif not found, skip: {src_path}")
                 continue
             dst = tif_dir / src_path.name
-            # 同名ファイルが複数あるときは _001, _002, ... を付ける
+            # Append _001, _002, ... when duplicate filenames exist
             if dst.exists():
                 stem, suffix = src_path.stem, src_path.suffix
                 counter = 1
@@ -1008,7 +1008,7 @@ def save_figure(
     if published_file:
         print(f"[figure_logger] published copy: {published_file}")
     print(f"[figure_logger] manifest: {manifest_path}")
-    print(f"[figure_logger] [elapsed] 経過時間: {_fmt_elapsed(elapsed_sec)}")
+    print(f"[figure_logger] [elapsed] elapsed: {_fmt_elapsed(elapsed_sec)}")
 
     return Path(published_file) if published_file else inbox_file
 
@@ -1021,12 +1021,12 @@ if __name__ == "__main__":
 
     timing_files = sorted(glob.glob(str(_HISTORY_DIR / "*_timing.json")))
     if not timing_files:
-        print("実行時間の記録がまだありません。")
+        print("No execution time records found yet.")
         sys.exit(0)
 
-    print("\nスクリプト実行時間サマリー")
+    print("\nScript execution time summary")
     print("━" * 55)
-    print(f"{'スクリプト':<35} {'前回':>8}  {'平均':>8}  {'回数':>5}")
+    print(f"{'Script':<35} {'Last':>8}  {'Avg':>8}  {'Count':>5}")
     print("━" * 55)
 
     for p in timing_files:
@@ -1036,6 +1036,6 @@ if __name__ == "__main__":
             continue
         avg = sum(history) / len(history)
         last = history[-1]
-        print(f"{script_name:<35} {_fmt_elapsed(last):>8}  {_fmt_elapsed(avg):>8}  ({len(history)}回)")
+        print(f"{script_name:<35} {_fmt_elapsed(last):>8}  {_fmt_elapsed(avg):>8}  ({len(history)} runs)")
 
     print("━" * 55)

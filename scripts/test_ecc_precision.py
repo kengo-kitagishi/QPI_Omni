@@ -1,11 +1,11 @@
 """test_ecc_precision.py -- ECC measurement noise characterization
 
-Pos1 位相画像から per-channel per-TP raw shift を取り出し、以下を解析する。
+Extract per-channel per-TP raw shifts from Pos1 phase images and analyze:
 
-1. per-channel 残差（shift_ch - SavGol_trend）の分布
-2. 自己相関（ACF） -> ランダムか？
-3. チャネル間クロス相関 -> 独立か？
-4. sigma vs N 曲線 -> 何チャネル/何フレーム平均で 0.01 um を下回るか
+1. Per-channel residual (shift_ch - SavGol_trend) distribution
+2. Autocorrelation (ACF) -> Is it random?
+3. Cross-channel correlation -> Are channels independent?
+4. sigma vs N curve -> How many channels/frames averaged to get below 0.01 um?
 
 Usage:
     python scripts/test_ecc_precision.py
@@ -38,18 +38,18 @@ from compute_drift_online import (
 
 DEFAULT_CONFIG = Path(r"C:\Users\QPI\Documents\QPI_Omni\drift_session\drift_config.json")
 
-# ph_3 精度測定用 override（None にすれば drift_config.json を参照）
+# Override for ph_3 precision measurement (set to None to use drift_config.json)
 PHASE_DIR_OVERRIDE = r"D:\AquisitionData\Kitagishi\basler_image_seq\ph_3\Pos0\output_phase"
 ROIS_JSON_OVERRIDE = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
 
-# grid 参照画像を使う場合に指定（None なら phase_paths[0] を参照）
-# ph_3 は同一ステージ位置なので grid→ph_3 のオフセットは全フレーム・全チャネルで定数
-# → 残差 = 各測定 − grand_mean = ECC ノイズ（SavGol トレンド除去は不要）
+# Specify to use grid reference image (None defaults to phase_paths[0])
+# ph_3 is at the same stage position, so grid->ph_3 offset is constant across all frames/channels
+# -> residual = each measurement - grand_mean = ECC noise (SavGol trend removal not needed)
 GRID_REF_OVERRIDE = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1\Pos1_x+0_y+0\output_phase\img_000000000_ph_000_phase.tif"
 
 SAVGOL_WINDOW = 51
 SAVGOL_ORDER  = 2
-ACF_MAX_LAG   = 30   # 表示する最大ラグ [TP]
+ACF_MAX_LAG   = 30   # Maximum lag to display [TP]
 
 
 def parse_args():
@@ -88,11 +88,11 @@ def load_channels(rois_path):
 
 
 def compute_acf(series, max_lag):
-    """正規化自己相関（lag=0 が 1）を返す。"""
+    """Return normalized autocorrelation (lag=0 equals 1)."""
     x = series - np.mean(series)
     n = len(x)
     full = np.correlate(x, x, mode="full")
-    acf = full[n - 1:] / full[n - 1]  # lag=0 を 1 に正規化
+    acf = full[n - 1:] / full[n - 1]  # Normalize so lag=0 is 1
     return acf[:max_lag + 1]
 
 
@@ -116,11 +116,11 @@ def main():
 
     rois = load_channels(rois_path)
     n_ch = len(rois)
-    n_tp = len(phase_paths) - 1  # ref frame (index 0) を除く
+    n_tp = len(phase_paths) - 1  # Exclude ref frame (index 0)
     print(f"Phase images: {len(phase_paths)} ({n_tp} TPs),  Channels: {n_ch}")
 
-    # ---- per-channel per-TP raw shift 取得 ----
-    # shape: (n_ch, n_tp),  単位 px (image coords)
+    # ---- Get per-channel per-TP raw shifts ----
+    # shape: (n_ch, n_tp),  units: px (image coords)
     tx_raw = np.full((n_ch, n_tp), np.nan)
     ty_raw = np.full((n_ch, n_tp), np.nan)
 
@@ -147,7 +147,7 @@ def main():
         return tx_arr, ty_arr
 
     if args.mode == "fixed":
-        # ------ 固定参照（GRID_REF_OVERRIDE があれば grid 画像、なければ frame 0）------
+        # ------ Fixed reference (grid image if GRID_REF_OVERRIDE set, otherwise frame 0) ------
         ref_path = GRID_REF_OVERRIDE if GRID_REF_OVERRIDE else str(phase_paths[0])
         phase_ref = tifffile.imread(ref_path).astype(np.float32)
         print(f"Reference: {ref_path}")
@@ -166,8 +166,8 @@ def main():
                 print(f"  TP {t_idx+1}/{n_tp}", flush=True)
 
     else:
-        # ------ スライディングペア（frame_i -> frame_{i+1}）------
-        # 各ステップが独立したノイズ測定になる。長期ドリフトトレンドに依存しない。
+        # ------ Sliding pairs (frame_i -> frame_{i+1}) ------
+        # Each step is an independent noise measurement, independent of long-term drift trend.
         prev_img = tifffile.imread(str(phase_paths[0])).astype(np.float32)
         prev_crops_u8 = make_crops_u8(prev_img)
 
@@ -187,17 +187,17 @@ def main():
 
     print(f"ECC done. (mode={args.mode})")
 
-    # ---- um 換算（image X/Y -> stage shift, 単純スケール）----
-    # ここでは軸変換せず image px -> um のみ。
-    # 相対ばらつき（残差）の解析なので軸変換の影響はない。
+    # ---- Convert to um (image X/Y -> stage shift, simple scaling) ----
+    # No axis conversion here, only image px -> um.
+    # Analyzing relative scatter (residuals), so axis conversion has no effect.
     tx_um = tx_raw * pixel_scale
     ty_um = ty_raw * pixel_scale
 
-    # ---- トレンド推定と残差計算 ----
+    # ---- Trend estimation and residual calculation ----
     tp_axis = np.arange(n_tp)
 
     def smooth_mean(arr2d):
-        """nan を除いた mean -> SavGol smooth"""
+        """Compute mean excluding NaN, then apply SavGol smoothing."""
         mean_series = np.nanmean(arr2d, axis=0)
         wl = min(SAVGOL_WINDOW, int(np.sum(~np.isnan(mean_series))) - 1)
         if wl < 3:
@@ -210,14 +210,14 @@ def main():
         return smoothed
 
     if args.residual == "channel-mean":
-        # 各チャネルの時間平均を引く。
-        # mean_ch[c] = mean over all TPs of tx_um[c, :] → チャネルの固定offset推定
-        # res[c, t]  = tx_um[c, t] - mean_ch[c]         → ECC測定値の偏差
+        # Subtract each channel's temporal mean.
+        # mean_ch[c] = mean over all TPs of tx_um[c, :] -> channel fixed offset estimate
+        # res[c, t]  = tx_um[c, t] - mean_ch[c]         -> ECC measurement deviation
         mean_ch_x = np.nanmean(tx_um, axis=1, keepdims=True)  # (n_ch, 1)
         mean_ch_y = np.nanmean(ty_um, axis=1, keepdims=True)
         res_x = tx_um - mean_ch_x
         res_y = ty_um - mean_ch_y
-        # time series plot用にトレンドも定義（各チャネルの定数）
+        # Define trend for time series plot (constant per channel)
         trend_x = np.nanmean(tx_um, axis=0)  # cross-channel mean (for plot only)
         trend_y = np.nanmean(ty_um, axis=0)
         residual_label = "Per-channel temporal mean subtracted"
@@ -243,14 +243,14 @@ def main():
     n_samples = int(np.sum(~np.isnan(res_x)))
     print(f"Residual: {args.residual}  ({n_samples} samples = {n_ch} ch x ~{n_samples//n_ch} TP)")
 
-    # ---- 統計量 ----
-    sigma_x = np.nanstd(res_x)    # 全チャネル全TP をまとめた std
+    # ---- Statistics ----
+    sigma_x = np.nanstd(res_x)    # std over all channels and all TPs combined
     sigma_y = np.nanstd(res_y)
     print(f"\nSigma per channel per TP:")
     print(f"  X: {sigma_x:.4f} um")
     print(f"  Y: {sigma_y:.4f} um")
 
-    # 各チャネルの個別 sigma
+    # Per-channel individual sigma
     sigma_x_ch = np.nanstd(res_x, axis=1)   # shape (n_ch,)
     sigma_y_ch = np.nanstd(res_y, axis=1)
     print(f"\nPer-channel sigma X: mean={np.mean(sigma_x_ch):.4f}  "
@@ -258,7 +258,7 @@ def main():
     print(f"Per-channel sigma Y: mean={np.mean(sigma_y_ch):.4f}  "
           f"min={np.min(sigma_y_ch):.4f}  max={np.max(sigma_y_ch):.4f} um")
 
-    # N チャネル平均した場合の SEM
+    # SEM when averaging N channels
     N_arr = np.arange(1, n_ch + 1)
     sem_x = sigma_x / np.sqrt(N_arr)
     sem_y = sigma_y / np.sqrt(N_arr)
@@ -269,7 +269,7 @@ def main():
     print(f"  Y: {n_need_y}  (current: {n_ch})")
 
     # ---- ACF ----
-    # 各チャネルの残差で ACF を計算し、平均する
+    # Compute ACF for each channel's residuals, then average
     acf_x_all, acf_y_all = [], []
     for c in range(n_ch):
         valid_c = ~np.isnan(res_x[c])
@@ -280,11 +280,11 @@ def main():
     acf_x_mean = np.mean(acf_x_all, axis=0) if acf_x_all else None
     acf_y_mean = np.mean(acf_y_all, axis=0) if acf_y_all else None
 
-    n_eff = np.sum(~np.isnan(res_x[0]))  # 有効 TP 数（代表）
+    n_eff = np.sum(~np.isnan(res_x[0]))  # Number of valid TPs (representative)
     acf_ci = 2.0 / np.sqrt(n_eff)   # 95% CI for white noise
 
-    # ---- クロス相関行列 ----
-    # nan 除外してから pearsonr 行列を計算
+    # ---- Cross-correlation matrix ----
+    # Compute Pearson correlation matrix after excluding NaN
     cross_x = np.full((n_ch, n_ch), np.nan)
     cross_y = np.full((n_ch, n_ch), np.nan)
     for i in range(n_ch):
@@ -308,8 +308,8 @@ def main():
     print(f"  X: {mean_cross_x:.3f}  Y: {mean_cross_y:.3f}")
     print(f"  (0 = fully independent, 1 = fully correlated)")
 
-    # 独立でない場合の「実効チャネル数」補正
-    # rho_avg からの実効 N: N_eff = N / (1 + (N-1)*rho)
+    # "Effective number of channels" correction for non-independence
+    # Effective N from rho_avg: N_eff = N / (1 + (N-1)*rho)
     def effective_n(N, rho):
         return N / (1 + (N - 1) * max(rho, 0))
 
@@ -357,7 +357,7 @@ def main():
     bins = np.linspace(-0.15, 0.15, 50)
     ax02.hist(res_x_flat, bins=bins, alpha=0.6, label=f"X  sigma={sigma_x:.3f}um")
     ax02.hist(res_y_flat, bins=bins, alpha=0.6, label=f"Y  sigma={sigma_y:.3f}um")
-    # ガウスフィット
+    # Gaussian fit
     for sigma, color in [(sigma_x, "C0"), (sigma_y, "C1")]:
         x_fit = np.linspace(-0.15, 0.15, 300)
         ax02.plot(x_fit, sp_norm.pdf(x_fit, 0, sigma) * len(res_x_flat) * (bins[1]-bins[0]),
@@ -410,7 +410,7 @@ def main():
     ax20 = fig.add_subplot(gs[2, :2])
     ax20.plot(N_arr, sem_x, "C0-o", ms=4, label=f"X  sigma={sigma_x:.3f}um")
     ax20.plot(N_arr, sem_y, "C1-o", ms=4, label=f"Y  sigma={sigma_y:.3f}um")
-    # 相関補正版
+    # Correlation-corrected version
     N_cont = np.linspace(1, n_ch + 10, 200)
     sem_x_corr_curve = sigma_x / np.sqrt(N_cont / (1 + (N_cont - 1) * max(mean_cross_x, 0)))
     sem_y_corr_curve = sigma_y / np.sqrt(N_cont / (1 + (N_cont - 1) * max(mean_cross_y, 0)))

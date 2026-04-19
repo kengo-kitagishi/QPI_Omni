@@ -1,14 +1,14 @@
 """compare_subtract_crop.py
 --------------------------
-grid参照に対する ph_3 フレームの ECC アライメント後の引き算を
-crop_h=80（現在値）vs crop_h=160（推奨値）で比較する。
+Compare ECC-aligned subtraction of ph_3 frames against grid reference
+with crop_h=80 (current) vs crop_h=160 (recommended).
 
-warp ロジックは ecc_channel_inspect.py の warp_translate を import して使用
-（新しい warpAffine コードは書かない）。
+Warp logic imports warp_translate from ecc_channel_inspect.py
+(no new warpAffine code is written).
 
-符号規則（feedback_opencv_ecc_sign.md より）:
-  ecc_align(ref, sample) → (tx, ty) = ref→sample 方向
-  sample を ref に揃えるには warp_translate(sample, -tx, -ty)
+Sign convention (from feedback_opencv_ecc_sign.md):
+  ecc_align(ref, sample) -> (tx, ty) = ref->sample direction
+  To align sample to ref: warp_translate(sample, -tx, -ty)
 
 Usage:
     python scripts/compare_subtract_crop.py
@@ -37,7 +37,7 @@ from compute_drift_online import (
     _remove_outliers_mad,
 )
 
-# ---- ecc_channel_inspect.py の warp_translate を import ----
+# ---- Import warp_translate from ecc_channel_inspect.py ----
 def _import_warp_translate():
     spec = importlib.util.spec_from_file_location(
         "ecc_channel_inspect", SCRIPTS_DIR / "ecc_channel_inspect.py"
@@ -48,22 +48,22 @@ def _import_warp_translate():
 
 warp_translate = _import_warp_translate()
 
-# ---- 設定 ----
+# ---- Settings ----
 DEFAULT_CONFIG   = Path(r"C:\Users\QPI\Documents\QPI_Omni\drift_session\drift_config.json")
 PHASE_DIR        = Path(r"D:\AquisitionData\Kitagishi\basler_image_seq\ph_3\Pos0\output_phase")
 ROIS_JSON        = Path(r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json")
 GRID_REF_PATH    = Path(r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1\Pos1_x+0_y+0\output_phase\img_000000000_ph_000_phase.tif")
 
 CROP_W = 40
-CROP_H_LIST = [80, 160]          # 比較する crop_h
-FRAMES_TO_SHOW = [0, 25, 50, 74, 99]  # 表示するフレームインデックス
+CROP_H_LIST = [80, 160]          # crop_h values to compare
+FRAMES_TO_SHOW = [0, 25, 50, 74, 99]  # Frame indices to display
 
-# 大パネル表示用: 単一フレームの diff をフルサイズで並べる
-LARGE_PANEL_FRAME = 50           # 代表フレーム（0-99）
+# For large panel display: arrange single-frame diffs at full size
+LARGE_PANEL_FRAME = 50           # Representative frame (0-99)
 
 
 def get_mean_shift(grid_ref, phase_tp, channels, crop_w, crop_h, cfg):
-    """全チャンネルの ECC シフトを計算してMAD除去後の平均 (tx, ty) を返す。"""
+    """Compute ECC shift for all channels and return MAD-filtered mean (tx, ty)."""
     vmin = cfg.get("ecc_vmin", -5.0)
     vmax = cfg.get("ecc_vmax",  2.0)
 
@@ -99,7 +99,7 @@ def get_mean_shift(grid_ref, phase_tp, channels, crop_w, crop_h, cfg):
 
 
 def channel_bbox(channels, margin=60):
-    """チャンネル群を囲む矩形（y1, y2, x1, x2）を返す。"""
+    """Return the bounding rectangle (y1, y2, x1, x2) enclosing the channel group."""
     cy_list = [cy for cy, cx in channels]
     cx_list = [cx for cy, cx in channels]
     return (max(0, min(cy_list) - margin),
@@ -111,7 +111,7 @@ def channel_bbox(channels, margin=60):
 def main():
     cfg = json.loads(DEFAULT_CONFIG.read_text(encoding="utf-8"))
 
-    # ---- データ読み込み ----
+    # ---- Load data ----
     grid_ref = tifffile.imread(str(GRID_REF_PATH)).astype(np.float64)
     print(f"grid_ref: {GRID_REF_PATH.name}  shape={grid_ref.shape}")
 
@@ -123,16 +123,16 @@ def main():
     phase_paths = sorted(PHASE_DIR.glob("img_*_phase.tif"))
     print(f"ph_3 frames: {len(phase_paths)}")
 
-    # 表示フレームをクランプ
+    # Clamp display frames
     frame_indices = [min(fi, len(phase_paths) - 1) for fi in FRAMES_TO_SHOW]
     n_frames = len(frame_indices)
 
-    # チャンネル領域の bounding box（クロップ表示用）
+    # Channel region bounding box (for cropped display)
     y1_bb, y2_bb, x1_bb, x2_bb = channel_bbox(channels, margin=80)
     y2_bb = min(y2_bb, grid_ref.shape[0])
     x2_bb = min(x2_bb, grid_ref.shape[1])
 
-    # ---- ECC + align + diff の計算 ----
+    # ---- Compute ECC + align + diff ----
     # results[fi][crop_h] = {"shift_x", "shift_y", "diff"}
     results = []
     for fi in frame_indices:
@@ -140,14 +140,14 @@ def main():
         row = {}
         for ch in CROP_H_LIST:
             tx, ty = get_mean_shift(grid_ref, ph, channels, CROP_W, ch, cfg)
-            # sample を ref に揃える: warp_translate(ph, -tx, -ty)
+            # Align sample to ref: warp_translate(ph, -tx, -ty)
             ph_aligned = warp_translate(ph, -tx, -ty).astype(np.float64)
             diff = ph_aligned - grid_ref
             row[ch] = {"tx": tx, "ty": ty, "diff": diff, "aligned": ph_aligned}
             print(f"  frame={fi:3d}  crop_h={ch}  shift=({tx:+.3f}, {ty:+.3f}) px")
         results.append(row)
 
-    # ---- 図 ----
+    # ---- Figures ----
     n_cols = 2 + len(CROP_H_LIST) * 2  # [grid_ref | ph3_raw] + [aligned_80 | diff_80 | aligned_160 | diff_160]
     fig = plt.figure(figsize=(4 * n_cols, 3.5 * n_frames))
     gs = gridspec.GridSpec(n_frames, n_cols, hspace=0.35, wspace=0.25,
@@ -193,7 +193,7 @@ def main():
             ax_diff.set_title(f"diff (crop_h={ch})\nph3_aligned - grid_ref",
                               fontsize=7)
             ax_diff.axis("off")
-            if col_offset == 4:  # rightmost のみ colorbar
+            if col_offset == 4:  # colorbar only for rightmost
                 plt.colorbar(im, ax=ax_diff, fraction=0.05, pad=0.03,
                              label="phase diff (rad)")
 
@@ -204,7 +204,7 @@ def main():
         fontsize=10
     )
 
-    # ---- データ保存 ----
+    # ---- Save data ----
     data = {"grid_ref_crop": crop_bb(grid_ref)}
     for fi, row in zip(frame_indices, results):
         for ch in CROP_H_LIST:
@@ -230,11 +230,11 @@ def main():
     )
     plt.close(fig)
 
-    # ---- 大パネル図: 代表フレームのフルサイズ diff ----
+    # ---- Large panel figure: full-size diff of representative frame ----
     lp_idx = min(LARGE_PANEL_FRAME, len(phase_paths) - 1)
     lp_row_idx = next((i for i, fi in enumerate(frame_indices) if fi == lp_idx), None)
 
-    # LARGE_PANEL_FRAME が FRAMES_TO_SHOW になければ改めて計算
+    # Recompute if LARGE_PANEL_FRAME is not in FRAMES_TO_SHOW
     if lp_row_idx is None:
         ph_lp = tifffile.imread(str(phase_paths[lp_idx])).astype(np.float64)
         lp_result = {}

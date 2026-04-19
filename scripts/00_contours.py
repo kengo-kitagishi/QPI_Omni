@@ -43,7 +43,7 @@ params = {'channels':None, # always define this if using older models, e.g. [0,0
           'affinity_seg': False #feature, stay tuned...
          }
 
-imgs = [img]   # 1枚だけリスト化
+imgs = [img]   # wrap single image into a list
 nimg = len(imgs)
 n = range(nimg)
 
@@ -87,7 +87,7 @@ io.save_masks(
 print(f"Saved results to: {out_dir}")
  
 
-# %% from chapgpt 要検証
+# %% from ChatGPT, needs verification
 import os, glob, time, shutil
 import numpy as np
 import tifffile
@@ -140,17 +140,17 @@ t_start = time.time()
 for i, img_path in enumerate(imgs, 1):
     print(f"[{i}/{len(imgs)}] Processing: {img_path}")
     try:
-        # 読み込みと正規化
+        # Load and normalize
         img_raw = io.imread(img_path)
         img = transforms.move_min_dim(img_raw)
         img = normalize99(img)
 
-        # 推論
+        # Inference
         tic = time.time()
         masks, flows, styles = model.eval([img], **params)
         print(f"  - segmentation: {time.time()-tic:.2f}s")
 
-        # 保存: *_seg.npy 等は元TIFFと同じフォルダ
+        # Save: *_seg.npy etc. in the same folder as the original TIFF
         io.save_masks(
             img, masks, flows,
             file_names=[img_path],
@@ -161,7 +161,7 @@ for i, img_path in enumerate(imgs, 1):
         )
         print("  - npy/masks saved next to the TIFF")
 
-        # アウトラインをTIFF保存 (outlines_only/)
+        # Save outlines as TIFF (outlines_only/)
         maski = masks[0]
         base = os.path.splitext(os.path.basename(img_path))[0]
         outline_name = f"{base}_outlines.tif"
@@ -181,37 +181,37 @@ import os, numpy as np, tifffile as tiff
 train_dir = r"C:\Users\QPI\Desktop\train"
 
 def rot180(a):
-    # 180度回転（補間なし、dtype不問）
+    # 180-degree rotation (no interpolation, dtype-agnostic)
     return a[::-1, ::-1]
 
 for fn in os.listdir(train_dir):
     if fn.lower().endswith(".tif") and not fn.endswith("_rot180.tif"):
         base = os.path.splitext(fn)[0]
         img_p = os.path.join(train_dir, fn)
-        # 対応マスク（_masks.tif / _seg.npy の両対応）
+        # Corresponding mask (supports both _masks.tif and _seg.npy)
         m_tif = os.path.join(train_dir, base + "_masks.tif")
         m_npy = os.path.join(train_dir, base + "_seg.npy")
 
         if not (os.path.exists(m_tif) or os.path.exists(m_npy)):
             print(f"skip (no mask): {fn}"); continue
 
-        # 画像読み込み→回転→保存
-        img = tiff.imread(img_p)  # float32 でもそのままOK
+        # Load image -> rotate -> save
+        img = tiff.imread(img_p)  # works with float32 as-is
         img_r = rot180(img)
         out_img = os.path.join(train_dir, base + "_rot180.tif")
         tiff.imwrite(out_img, img_r.astype(img.dtype))
         print("wrote", os.path.basename(out_img))
 
-        # マスクが _masks.tif の場合
+        # When mask is _masks.tif
         if os.path.exists(m_tif):
             m = tiff.imread(m_tif)
             m_r = rot180(m)
-            # マスクは 0=背景, 1..K の整数。uint16 に寄せると無難
+            # Mask is integer: 0=background, 1..K. Safe to cast to uint16
             out_m = os.path.join(train_dir, base + "_rot180_masks.tif")
             tiff.imwrite(out_m, m_r.astype(np.uint16))
             print("wrote", os.path.basename(out_m))
 
-        # マスクが _seg.npy の場合
+        # When mask is _seg.npy
         if os.path.exists(m_npy):
             d = np.load(m_npy, allow_pickle=True).item()
             m = d.get("masks", None)
@@ -254,7 +254,7 @@ print(f"[ckpt] using: {ckpt}")
 
 # ====== params ======
 params = dict(
-    channels=[0,0],      # グレースケールを両chに割当（nchan=1でも安全）
+    channels=[0,0],      # Assign grayscale to both channels (safe even with nchan=1)
     rescale=None,
     mask_threshold=0,
     flow_threshold=0,
@@ -274,7 +274,7 @@ os.makedirs(outline_dir, exist_ok=True)
 use_GPU = core.use_gpu()
 print(f"GPU available : {use_GPU}")
 
-# 重要：pretrained_model= に ckpt パス、かつ nchan=1, nclasses=2, omni=True を明示
+# Important: specify checkpoint path via pretrained_model=, and explicitly set nchan=1, nclasses=2, omni=True
 model = models.CellposeModel(
     gpu=use_GPU,
     pretrained_model=ckpt,
@@ -283,7 +283,7 @@ model = models.CellposeModel(
     omni=True
 )
 
-# 入力画像（rot系を除外したい場合は下の1行を有効化）
+# Input images (uncomment the line below to exclude rotation-augmented files)
 imgs = sorted(glob.glob(os.path.join(base_dir, "*.tif")))
 # imgs = [p for p in imgs if "rot" not in os.path.basename(p).lower()]
 
@@ -319,7 +319,7 @@ for i, img_path in enumerate(imgs, 1):
         io.save_masks(
             img, maski, flowi,
             file_names=[img_path],
-            savedir=None,            # 元フォルダに _seg.npy / _masks.tif
+            savedir=None,            # save _seg.npy / _masks.tif in the original folder
             save_flows=False,
             save_outlines=False,
             save_plot=False

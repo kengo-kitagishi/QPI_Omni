@@ -19,7 +19,7 @@ from figure_logger import save_figure
 
 torch.backends.cudnn.benchmark = True
 
-# === パラメータ（必要なら調整） ===
+# === Parameters (adjust as needed) ===
 os.chdir(r"C:\Users\QPI\Desktop")
 train_dir    = r"C:\Users\QPI\Desktop\train"
 use_gpu      = True
@@ -35,10 +35,10 @@ save_dir     = r"C:\Users\QPI\Desktop\train\omni_model"
 pretrained_model = r"C:\Users\QPI\Desktop\train\omni_model\models\cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_2026_04_12_19_50_19.802592"
 loss_log_path = r"C:\Users\QPI\Desktop\train\train_loss.log"
 
-# LR配列で渡すことでウォームアップを無効化（常に一定LR）
+# Pass LR as an array to disable warmup (constant LR throughout)
 learning_rate = np.full(n_epochs, lr_value)
 
-# === ログ設定（appendモード・run区切り付き） ===
+# === Log settings (append mode with run separators) ===
 with open(loss_log_path, mode='a', encoding='utf-8') as f:
     f.write(f"\n{'='*60}\n")
     f.write(f"=== Run started: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n")
@@ -51,7 +51,7 @@ _cp_logger = logging.getLogger('cellpose_omni.core')
 _cp_logger.addHandler(_loss_fh)
 _cp_logger.setLevel(logging.DEBUG)
 
-# === ファイル収集 ===
+# === Collect files ===
 image_paths = sorted(glob.glob(os.path.join(train_dir, "*.tif")))
 image_paths = [p for p in image_paths if not p.endswith("_masks.tif")]
 mask_paths  = [p.replace(".tif", "_masks.tif") for p in image_paths]
@@ -63,7 +63,7 @@ print(f"Found {len(image_paths)} image-mask pairs in {train_dir}")
 if len(image_paths) == 0:
     raise RuntimeError("No valid (image, mask) pairs found.")
 
-# === 読み込み ===
+# === Load data ===
 imgs, masks, bad = [], [], []
 for im_path, mask_path in zip(image_paths, mask_paths):
     try:
@@ -94,7 +94,7 @@ print(f"Loaded {len(imgs)} images and {len(masks)} masks.")
 train_links = [None] * len(masks)
 train_files = image_paths[:len(masks)]
 
-# === モデル ===
+# === Model ===
 model = models.CellposeModel(
     gpu=use_gpu,
     pretrained_model=pretrained_model,
@@ -103,7 +103,7 @@ model = models.CellposeModel(
     nclasses=nclasses
 )
 
-# === 学習 ===
+# === Training ===
 try:
     model.train(
         train_data=imgs,
@@ -129,7 +129,7 @@ except Exception as e:
     print("model.train() raised an exception:", repr(e))
     raise
 
-# === 学習曲線をfigure_loggerで保存 ===
+# === Save training curve via figure_logger ===
 _pat = re.compile(r"Train epoch:\s*(\d+).*?<Epoch Loss>:\s*([\d.]+)")
 _epochs, _losses = [], []
 with open(loss_log_path, encoding='utf-8') as f:

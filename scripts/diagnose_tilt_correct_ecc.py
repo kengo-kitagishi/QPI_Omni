@@ -1,19 +1,19 @@
 """
 diagnose_tilt_correct_ecc.py
 -----------------------------
-_tilt_correct の動作を可視化する診断スクリプト。
-X-tilt が強いフレームと弱いフレームについて、
+Diagnostic script to visualize _tilt_correct behavior.
+For frames with strong and weak X-tilt, displays:
   - 270px X crop (raw)
   - 270px X crop (tilt-corrected)
   - 80px ECC crop (test raw / corr)
   - 80px ECC crop (grid ref raw / corr)
   - diff: test - ref (raw & corr)
   - X profile overlay
-を並べて、補正がECCに何をしているか視覚的に確認する。
+side by side to visually verify what the correction does to ECC.
 
-選択フレーム:
-  強いtilt: frame 54 (mean slope ≈ -1.514 mrad/px)
-  弱いtilt: frame 19 (mean slope ≈ -0.729 mrad/px)
+Selected frames:
+  Strong tilt: frame 54 (mean slope ~ -1.514 mrad/px)
+  Weak tilt:   frame 19 (mean slope ~ -0.729 mrad/px)
 """
 
 import json
@@ -49,15 +49,15 @@ TILT_CROP_H = 270
 ECC_CROP_H  = 80
 FIT_RIGHT   = False
 
-# 診断フレームと代表チャネル
-FRAME_STRONG = 54   # mean slope ≈ -1.514 mrad/px
-FRAME_WEAK   = 19   # mean slope ≈ -0.729 mrad/px
-VIS_CHANNELS = [2, 5, 8, 11]   # 4チャネルを代表として表示
+# Diagnostic frames and representative channels
+FRAME_STRONG = 54   # mean slope ~ -1.514 mrad/px
+FRAME_WEAK   = 19   # mean slope ~ -0.729 mrad/px
+VIS_CHANNELS = [2, 5, 8, 11]   # 4 representative channels
 # ============================================================
 
 
 def tilt_correct_full(img_f64, cy, cx, crop_w):
-    """270px cropと補正済みcrop (80px)を両方返す。"""
+    """Return both the 270px crop and tilt-corrected crop (80px)."""
     big = extract_rect_roi(img_f64, cy, cx, crop_w, TILT_CROP_H).astype(np.float64)
     x = np.arange(TILT_CROP_H, dtype=np.float64)
     prof = big.mean(axis=0)
@@ -73,7 +73,7 @@ def tilt_correct_full(img_f64, cy, cx, crop_w):
 
 
 def get_raw_80(img_f64, cy, cx, crop_w, crop_h):
-    """80px rawクロップ + backsub。"""
+    """80px raw crop + backsub."""
     crop = extract_rect_roi(img_f64, cy, cx, crop_w, crop_h).astype(np.float64)
     cfg_dummy = {}
     offset = compute_backsub_offset(crop, cfg_dummy)
@@ -85,7 +85,7 @@ def main():
     n_ch = len(rois)
     phase_paths = sorted(PHASE_DIR.glob("img_*_ph_000_phase.tif"))
 
-    # フレームロード
+    # Load frames
     path_strong = phase_paths[FRAME_STRONG]
     path_weak   = phase_paths[FRAME_WEAK]
     print(f"Strong tilt frame: {path_strong.name}")
@@ -96,10 +96,10 @@ def main():
     ph_ref    = tifffile.imread(str(GRID_REF_PHASE)).astype(np.float64)
 
     # ============================================================
-    # Fig 1: 代表4チャネルのcrop全景
-    #   行: [strong-tilt frame]  [weak-tilt frame]  [grid ref]
-    #   列: per channel (4本)
-    #   各セルに 270px big crop (raw) を imshow
+    # Fig 1: Full crop view for 4 representative channels
+    #   Rows: [strong-tilt frame]  [weak-tilt frame]  [grid ref]
+    #   Cols: per channel (4)
+    #   Each cell: imshow of 270px big crop (raw)
     #   + X profile overlay (raw / corrected / fit line)
     # ============================================================
     fig1, axes1 = plt.subplots(3, len(VIS_CHANNELS), figsize=(4 * len(VIS_CHANNELS), 10))
@@ -160,9 +160,9 @@ def main():
     plt.close(fig1)
 
     # ============================================================
-    # Fig 2: X プロファイル比較（raw vs tilt-corrected vs ref）
-    #   3行: strong / weak / ref  ×  4列: channel
-    #   各パネル: X profile 3本 (raw red, corr blue, ref gray)
+    # Fig 2: X profile comparison (raw vs tilt-corrected vs ref)
+    #   3 rows: strong / weak / ref  x  4 cols: channel
+    #   Each panel: 3 X profiles (raw red, corr blue, ref gray)
     # ============================================================
     fig2, axes2 = plt.subplots(3, len(VIS_CHANNELS), figsize=(4 * len(VIS_CHANNELS), 9))
     fig2.subplots_adjust(hspace=0.50, wspace=0.35,
@@ -243,9 +243,9 @@ def main():
     plt.close(fig2)
 
     # ============================================================
-    # Fig 3: 80px ECC crop の imshow 比較
-    #   2行 × 4列: raw crop u8 / tilt-corr crop u8
-    #   各列ペア: [strong-test | weak-test | ref]
+    # Fig 3: 80px ECC crop imshow comparison
+    #   2 rows x 4 cols: raw crop u8 / tilt-corr crop u8
+    #   Each column triplet: [strong-test | weak-test | ref]
     # ============================================================
     fig3, axes3 = plt.subplots(3, 3 * len(VIS_CHANNELS),
                                figsize=(3.5 * len(VIS_CHANNELS), 9),

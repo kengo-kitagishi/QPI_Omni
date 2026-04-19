@@ -1,8 +1,8 @@
 # %%
 """
-アライメントと差分解析スクリプト
+Alignment and difference analysis script
 
-CSVベースのアライメント、1枚目からの差分画像生成、カラーマップ作成
+CSV-based alignment, difference image generation from the first frame, colormap creation
 """
 
 import os
@@ -17,73 +17,73 @@ from matplotlib import cm
 from matplotlib.colors import Normalize
 
 # %%
-# ==================== パラメータ設定 ====================
+# ==================== Parameter Settings ====================
 
-# パス設定（使用時に変更）
+# Path settings (modify before use)
 csv_path = "/Volumes/QPI/ph_1/Pos3/output_phase/Results.csv"
 image_dir = "/Volumes/QPI/ph_1/Pos3/output_phase"
 
-# アライメント方法選択
-# "left_center": 左辺の中点
-# "right_center": 右辺の中点
-# "center": 矩形の中心
+# Alignment method selection
+# "left_center": midpoint of the left edge
+# "right_center": midpoint of the right edge
+# "center": center of the bounding rectangle
 alignment_point = "left_center"
 
-# カラーマップ設定
+# Colormap settings
 vmin, vmax = -0.5, 3.0
-colormap = "viridis"  # viridis, plasma, JET, RdBu_r など
+colormap = "viridis"  # viridis, plasma, JET, RdBu_r, etc.
 
 print("=" * 80)
-print("アライメントと差分解析")
+print("Alignment and Difference Analysis")
 print("=" * 80)
-print(f"\nCSVパス: {csv_path}")
-print(f"画像ディレクトリ: {image_dir}")
-print(f"アライメント基準: {alignment_point}")
+print(f"\nCSV path: {csv_path}")
+print(f"Image directory: {image_dir}")
+print(f"Alignment reference: {alignment_point}")
 
 # %%
-# ==================== セル1: CSVベースアライメント（左辺中点） ====================
+# ==================== Cell 1: CSV-based Alignment (Left Edge Midpoint) ====================
 
 print("\n" + "=" * 80)
-print("CSVベースアライメント（左辺中点）")
+print("CSV-based Alignment (Left Edge Midpoint)")
 print("=" * 80)
 
-# 出力ディレクトリ
+# Output directory
 output_dir = os.path.join(image_dir, "aligned_left_center")
 os.makedirs(output_dir, exist_ok=True)
 
-# CSV読み込みとSlice順ソート
+# Load CSV and sort by Slice
 df = pd.read_csv(csv_path)
 df = df.sort_values("Slice").reset_index(drop=True)
 
-print(f"\nCSV行数: {len(df)}")
+print(f"\nCSV rows: {len(df)}")
 
-# 左辺の中点の座標を取得
+# Get midpoint coordinates of the left edge
 x = df["BX"]
 y = df["BY"] + df["Height"] / 2
 
-# 参照フレーム（最初のスライス）の座標
+# Reference frame (first slice) coordinates
 x0, y0 = x.iloc[0], y.iloc[0]
 dx = x - x0
 dy = y - y0
 
-print(f"基準位置: ({x0:.2f}, {y0:.2f})")
-print(f"最大シフト量: dx={dx.abs().max():.2f}, dy={dy.abs().max():.2f}")
+print(f"Reference position: ({x0:.2f}, {y0:.2f})")
+print(f"Max shift: dx={dx.abs().max():.2f}, dy={dy.abs().max():.2f}")
 
-# 画像読み込み（自然順ソート）
+# Load images (natural sort)
 image_paths = natsorted(glob(os.path.join(image_dir, "*.tif")))
 
-# 'aligned_'を含むファイルを除外
+# Exclude files containing 'aligned_'
 image_paths = [p for p in image_paths if 'aligned' not in os.path.basename(p)]
 
-print(f"画像数: {len(image_paths)}")
+print(f"Number of images: {len(image_paths)}")
 
 if len(image_paths) != len(dx):
-    print(f"⚠️  警告: 画像数（{len(image_paths)}）とCSV行数（{len(dx)}）が一致しません")
-    print("   CSV行数に合わせて処理します")
+    print(f"WARNING: Number of images ({len(image_paths)}) does not match CSV rows ({len(dx)})")
+    print("   Processing will use the CSV row count")
     image_paths = image_paths[:len(dx)]
 
-# アライメント処理
-print("\nアライメント処理中...")
+# Alignment processing
+print("\nPerforming alignment...")
 for i, path in enumerate(image_paths):
     img = tifffile.imread(path)
     M = np.float32([[1, 0, -dx.iloc[i]], [0, 1, -dy.iloc[i]]])
@@ -92,24 +92,24 @@ for i, path in enumerate(image_paths):
     fname = os.path.basename(path)
     tifffile.imwrite(os.path.join(output_dir, fname), aligned.astype(np.float32))
 
-print(f"✅ アライメント完了: {output_dir}")
+print(f"Alignment complete: {output_dir}")
 
 # %%
-# ==================== セル2: CSVベースアライメント（右辺中点） ====================
+# ==================== Cell 2: CSV-based Alignment (Right Edge Midpoint) ====================
 
 print("\n" + "=" * 80)
-print("CSVベースアライメント（右辺中点）")
+print("CSV-based Alignment (Right Edge Midpoint)")
 print("=" * 80)
 
-# 出力ディレクトリ
+# Output directory
 output_dir = os.path.join(image_dir, "aligned_right_center")
 os.makedirs(output_dir, exist_ok=True)
 
-# CSV読み込み
+# Load CSV
 df = pd.read_csv(csv_path)
 df = df.sort_values("Slice").reset_index(drop=True)
 
-# 右辺の中点座標を計算
+# Compute midpoint coordinates of the right edge
 x = df["BX"] + df["Width"]
 y = df["BY"] + df["Height"] / 2
 
@@ -117,16 +117,16 @@ x0, y0 = x.iloc[0], y.iloc[0]
 dx = x - x0
 dy = y - y0
 
-print(f"基準位置: ({x0:.2f}, {y0:.2f})")
-print(f"最大シフト量: dx={dx.abs().max():.2f}, dy={dy.abs().max():.2f}")
+print(f"Reference position: ({x0:.2f}, {y0:.2f})")
+print(f"Max shift: dx={dx.abs().max():.2f}, dy={dy.abs().max():.2f}")
 
-# 画像読み込み
+# Load images
 image_paths = natsorted(glob(os.path.join(image_dir, "*.tif")))
 image_paths = [p for p in image_paths if 'aligned' not in os.path.basename(p)]
 image_paths = image_paths[:len(dx)]
 
-# アライメント処理
-print("\nアライメント処理中...")
+# Alignment processing
+print("\nPerforming alignment...")
 for i, path in enumerate(image_paths):
     img = tifffile.imread(path)
     M = np.float32([[1, 0, -dx.iloc[i]], [0, 1, -dy.iloc[i]]])
@@ -135,61 +135,61 @@ for i, path in enumerate(image_paths):
     fname = os.path.basename(path)
     tifffile.imwrite(os.path.join(output_dir, fname), aligned.astype(np.float32))
 
-print(f"✅ アライメント完了: {output_dir}")
+print(f"Alignment complete: {output_dir}")
 
 # %%
-# ==================== セル3: 1枚目からの差分画像生成 ====================
+# ==================== Cell 3: Difference Image Generation from First Frame ====================
 
 print("\n" + "=" * 80)
-print("1枚目からの差分画像生成")
+print("Difference Image Generation from First Frame")
 print("=" * 80)
 
-# アライメント済みディレクトリ（使用時に変更）
+# Aligned image directory (modify before use)
 aligned_dir = os.path.join(image_dir, "aligned_left_center")
 output_diff_dir = os.path.join(aligned_dir, "diff_from_first")
 os.makedirs(output_diff_dir, exist_ok=True)
 
-# ファイル読み込みとソート
+# Load and sort files
 image_paths = natsorted(glob(os.path.join(aligned_dir, "*.tif")))
 
 if len(image_paths) < 2:
-    print("❌ 画像が2枚未満です")
+    print("Fewer than 2 images available")
 else:
-    print(f"画像数: {len(image_paths)}")
-    
-    # 1枚目を基準として読み込む
+    print(f"Number of images: {len(image_paths)}")
+
+    # Load first frame as reference
     ref_img = tifffile.imread(image_paths[0]).astype(np.float32)
-    print(f"基準画像: {os.path.basename(image_paths[0])}")
-    
-    # 差分画像を保存
-    print("\n差分計算中...")
+    print(f"Reference image: {os.path.basename(image_paths[0])}")
+
+    # Save difference images
+    print("\nComputing differences...")
     for i, path in enumerate(image_paths[1:], start=1):
         img = tifffile.imread(path).astype(np.float32)
         diff = img - ref_img
         fname = os.path.basename(path)
         tifffile.imwrite(os.path.join(output_diff_dir, fname), diff)
     
-    print(f"✅ 差分画像を保存しました: {output_diff_dir}")
+    print(f"Difference images saved: {output_diff_dir}")
 
 # %%
-# ==================== セル4: カラーマップ付き差分画像生成 ====================
+# ==================== Cell 4: Colormap Difference Image Generation ====================
 
 print("\n" + "=" * 80)
-print("カラーマップ付き差分画像生成")
+print("Colormap Difference Image Generation")
 print("=" * 80)
 
-# 出力ディレクトリ
+# Output directory
 output_colormap_dir = os.path.join(aligned_dir, "diff_colormap")
 os.makedirs(output_colormap_dir, exist_ok=True)
 
-# ファイル読み込み
+# Load files
 image_paths = natsorted(glob(os.path.join(aligned_dir, "*.tif")))
 ref_img = tifffile.imread(image_paths[0]).astype(np.float32)
 
-print(f"差分表示範囲: [{vmin}, {vmax}]")
-print(f"カラーマップ: {colormap}")
+print(f"Difference display range: [{vmin}, {vmax}]")
+print(f"Colormap: {colormap}")
 
-# カラーマップ設定
+# Colormap settings
 if colormap.lower() == "jet":
     cmap_cv = cv2.COLORMAP_JET
 elif colormap.lower() == "viridis":
@@ -199,83 +199,83 @@ elif colormap.lower() == "hot":
 else:
     cmap_cv = cv2.COLORMAP_JET
 
-# 差分 + カラーマップ処理
-print("\nカラーマップ生成中...")
+# Difference + colormap processing
+print("\nGenerating colormap images...")
 for i, path in enumerate(image_paths[1:], start=1):
     img = tifffile.imread(path).astype(np.float32)
     diff = img - ref_img
     
-    # 指定範囲でクリップして正規化（0-255）
+    # Clip to specified range and normalize (0-255)
     diff_clipped = np.clip(diff, vmin, vmax)
     diff_norm = ((diff_clipped - vmin) / (vmax - vmin) * 255).astype(np.uint8)
     
-    # カラーマップ適用
+    # Apply colormap
     color_mapped = cv2.applyColorMap(diff_norm, cmap_cv)
     
-    # 保存
+    # Save
     fname = os.path.splitext(os.path.basename(path))[0] + "_cmap.png"
     cv2.imwrite(os.path.join(output_colormap_dir, fname), color_mapped)
 
-print(f"✅ カラーマップ画像を保存しました: {output_colormap_dir}")
+print(f"Colormap images saved: {output_colormap_dir}")
 
 # %%
-# ==================== セル5: Matplotlib版カラーマップ（高品質） ====================
+# ==================== Cell 5: Matplotlib Colormap (High Quality) ====================
 
 print("\n" + "=" * 80)
-print("Matplotlib版カラーマップ（高品質）")
+print("Matplotlib Colormap (High Quality)")
 print("=" * 80)
 
-# 出力ディレクトリ
+# Output directory
 output_colormap_mpl_dir = os.path.join(aligned_dir, "diff_colormap_matplotlib")
 os.makedirs(output_colormap_mpl_dir, exist_ok=True)
 
-# カラーマップ設定
+# Colormap settings
 cmap_mpl = cm.get_cmap(colormap)
 norm = Normalize(vmin=vmin, vmax=vmax)
 
-# ファイル読み込み
+# Load files
 image_paths = natsorted(glob(os.path.join(aligned_dir, "*.tif")))
 ref_img = tifffile.imread(image_paths[0]).astype(np.float32)
 
-print(f"カラーマップ: {colormap}")
-print(f"差分表示範囲: [{vmin}, {vmax}]")
+print(f"Colormap: {colormap}")
+print(f"Difference display range: [{vmin}, {vmax}]")
 
-# 差分 + カラーマップ処理
-print("\nMatplotlibカラーマップ生成中...")
+# Difference + colormap processing
+print("\nGenerating matplotlib colormap images...")
 for i, path in enumerate(image_paths[1:], start=1):
     img = tifffile.imread(path).astype(np.float32)
     diff = img - ref_img
     
-    # 正規化してカラーマップに変換（RGBA）
+    # Normalize and convert to colormap (RGBA)
     rgba_image = cmap_mpl(norm(diff))  # shape: (H, W, 4)
     rgb_image = (rgba_image[..., :3] * 255).astype(np.uint8)
     
-    # TIF保存
+    # Save TIF
     fname = os.path.splitext(os.path.basename(path))[0] + "_cmap_mpl.tif"
     tifffile.imwrite(os.path.join(output_colormap_mpl_dir, fname), rgb_image)
 
-print(f"✅ Matplotlibカラーマップ画像を保存しました: {output_colormap_mpl_dir}")
+print(f"Matplotlib colormap images saved: {output_colormap_mpl_dir}")
 
 # %%
-# ==================== 完了 ====================
+# ==================== Done ====================
 
 print("\n" + "=" * 80)
-print("アライメント・差分解析スクリプト完了")
+print("Alignment and Difference Analysis Script Complete")
 print("=" * 80)
 
-print("\n【使い方】")
-print("  1. パラメータ設定セルで、CSVパスと画像ディレクトリを設定")
-print("  2. 必要なセルを実行:")
-print("     - セル1: 左辺中点でアライメント")
-print("     - セル2: 右辺中点でアライメント")
-print("     - セル3: 1枚目からの差分計算")
-print("     - セル4: OpenCV版カラーマップ")
-print("     - セル5: Matplotlib版カラーマップ（高品質）")
+print("\n[Usage]")
+print("  1. Set the CSV path and image directory in the parameter settings cell")
+print("  2. Run the required cells:")
+print("     - Cell 1: Alignment by left edge midpoint")
+print("     - Cell 2: Alignment by right edge midpoint")
+print("     - Cell 3: Difference from first frame")
+print("     - Cell 4: OpenCV colormap")
+print("     - Cell 5: Matplotlib colormap (high quality)")
 
-print("\n【次のステップ】")
-print("  - 差分画像の確認")
-print("  - 時系列解析")
-print("  - 統計解析")
+print("\n[Next steps]")
+print("  - Inspect difference images")
+print("  - Time series analysis")
+print("  - Statistical analysis")
 
 # %%
 

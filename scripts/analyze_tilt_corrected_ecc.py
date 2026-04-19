@@ -1,20 +1,20 @@
 """
 analyze_tilt_corrected_ecc.py
 -----------------------------
-BG Y-tilt slope をフレームごとに除去してから ECC を実行し、
-補正前後の ECC Y シフトのチャネル間ばらつきを比較する。
+Remove BG Y-tilt slope per frame before running ECC, and compare
+inter-channel variability of ECC Y shift before and after correction.
 
-補正方法:
-  1. 各フレームの BG Y-tilt slope [rad/px] を polyfit で推定
-  2. 各チャネル crop から slope * y_local を引いてから ECC
-     (ref フレームも同様に slope_0 で補正)
-  3. backsub → to_uint8 → ecc_align の順は変えない
+Correction method:
+  1. Estimate BG Y-tilt slope [rad/px] per frame with polyfit
+  2. Subtract slope * y_local from each channel crop before ECC
+     (ref frame is also corrected with slope_0)
+  3. Processing order remains: backsub -> to_uint8 -> ecc_align
 
-比較指標:
+Comparison metric:
   per-frame inter-channel std of ECC Y shift [um]
-    → 補正後に小さくなれば、チャネル間のずれが揃っている
+    -> if smaller after correction, inter-channel alignment is improved
 
-TODO: 同様の補正を grid パイプライン (compute_pos_shifts.py) にも適用する
+TODO: Apply similar correction to grid pipeline (compute_pos_shifts.py) as well
 """
 
 import json
@@ -39,7 +39,7 @@ from compute_drift_online import (
 from figure_logger import save_figure
 
 # ============================================================
-# 設定
+# Settings
 # ============================================================
 PHASE_DIR = Path(r"D:\AquisitionData\Kitagishi\basler_image_seq\ph_3\Pos0\output_phase")
 ROIS_JSON = Path(
@@ -51,17 +51,17 @@ PIXEL_SCALE_UM = 0.3462
 ECC_VMIN = -5.0
 ECC_VMAX =  2.0
 
-# BG Y-tilt 推定用 ROI（analyze_bg_ytilt_vs_ecc.py と同じ設定）
+# ROI for BG Y-tilt estimation (same settings as analyze_bg_ytilt_vs_ecc.py)
 BG_CX     = 100
 BG_CY     = 255
-BG_CROP_W = 240   # Y 方向
-BG_CROP_H = 30    # X 方向
-N_MAX_TP  = None  # 検証用フレーム上限（None で全フレーム）
+BG_CROP_W = 240   # Y direction
+BG_CROP_H = 30    # X direction
+N_MAX_TP  = None  # max frames for verification (None for all frames)
 # ============================================================
 
 
 def compute_y_slope(phase_img: np.ndarray) -> float:
-    """BG ROI の Y プロファイルを全点 polyfit → slope [rad/px]"""
+    """Polyfit all points of the BG ROI Y profile -> slope [rad/px]"""
     crop = extract_rect_roi(phase_img, BG_CY, BG_CX, BG_CROP_W, BG_CROP_H)
     row_mean = crop.mean(axis=1).astype(np.float64)
     x = np.arange(len(row_mean), dtype=float)
@@ -71,8 +71,8 @@ def compute_y_slope(phase_img: np.ndarray) -> float:
 
 def apply_y_tilt_correction(crop: np.ndarray, slope: float) -> np.ndarray:
     """
-    crop (shape: crop_w × crop_h) の Y 方向チルトを除去する。
-    y_local=0 を基準に slope * y_local を引く。
+    Remove Y-direction tilt from crop (shape: crop_w x crop_h).
+    Subtract slope * y_local with y_local=0 as reference.
     """
     crop_w = crop.shape[0]
     y_local = np.arange(crop_w, dtype=np.float32)
@@ -81,7 +81,7 @@ def apply_y_tilt_correction(crop: np.ndarray, slope: float) -> np.ndarray:
 
 
 def ecc_pair(ref_u8, crop_raw, slope_ref, slope_tp, corrected: bool):
-    """補正あり/なしで ECC を実行。ty [px] を返す（失敗時 nan）。"""
+    """Run ECC with/without correction. Return ty [px] (nan on failure)."""
     if corrected:
         crop_f = apply_y_tilt_correction(crop_raw.astype(np.float32), slope_tp - slope_ref)
     else:
@@ -105,12 +105,12 @@ def main():
     n_tp = len(phase_paths) - 1
     print(f"Phase: {len(phase_paths)} imgs, Channels: {n_ch}, TPs: {n_tp}")
 
-    # ---- ref フレーム ----
+    # ---- ref frame ----
     phase_ref = tifffile.imread(str(phase_paths[0])).astype(np.float32)
     slope_ref = compute_y_slope(phase_ref)
     print(f"slope_ref = {slope_ref:.6f} rad/px")
 
-    # ref crops（補正なし版 — 補正あり版は slope_tp-slope_ref=0 で同一になる）
+    # ref crops (uncorrected version -- corrected version is identical since slope_tp-slope_ref=0)
     cfg_dummy = {}
     ref_crops_u8 = []
     ref_crops_corr_u8 = []
@@ -118,10 +118,10 @@ def main():
         crop = extract_rect_roi(
             phase_ref, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"]
         ).astype(np.float32)
-        # 補正なし
+        # Uncorrected
         off = compute_backsub_offset(crop, cfg_dummy)
         ref_crops_u8.append(to_uint8(crop + off, ECC_VMIN, ECC_VMAX))
-        # 補正あり（ref の slope を引く）
+        # Corrected (subtract ref slope)
         crop_c = apply_y_tilt_correction(crop, slope_ref)
         off_c = compute_backsub_offset(crop_c, cfg_dummy)
         ref_crops_corr_u8.append(to_uint8(crop_c + off_c, ECC_VMIN, ECC_VMAX))
@@ -143,14 +143,14 @@ def main():
                 phase_tp, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"]
             ).astype(np.float32)
 
-            # 補正なし
+            # Uncorrected
             off = compute_backsub_offset(crop, cfg_dummy)
             res_raw = ecc_align(ref_crops_u8[c_idx],
                                 to_uint8(crop + off, ECC_VMIN, ECC_VMAX))
             if res_raw is not None:
                 ty_raw[c_idx, t_idx] = res_raw[1]
 
-            # 補正あり（differential slope = slope_tp - slope_ref を除去）
+            # Corrected (remove differential slope = slope_tp - slope_ref)
             crop_c = apply_y_tilt_correction(crop, slope_tp - slope_ref)
             off_c = compute_backsub_offset(crop_c, cfg_dummy)
             res_corr = ecc_align(ref_crops_corr_u8[c_idx],
@@ -164,7 +164,7 @@ def main():
     ty_raw_um  = ty_raw  * PIXEL_SCALE_UM
     ty_corr_um = ty_corr * PIXEL_SCALE_UM
 
-    # ---- 指標計算 ----
+    # ---- Metric computation ----
     # per-frame inter-channel std
     std_raw  = np.nanstd(ty_raw_um,  axis=0)   # (n_tp,)
     std_corr = np.nanstd(ty_corr_um, axis=0)
@@ -176,13 +176,13 @@ def main():
     print(f"\nInter-channel std [um]  raw: {np.nanmean(std_raw):.4f}  corr: {np.nanmean(std_corr):.4f}")
     print(f"Mean ECC Y shift [um]   raw: {np.nanmean(np.abs(mean_raw)):.4f}  corr: {np.nanmean(np.abs(mean_corr)):.4f}")
 
-    # ---- 図 ----
+    # ---- Figure ----
     tp_axis = np.arange(n_tp)
     fig = plt.figure(figsize=(14, 9))
     gs = gridspec.GridSpec(2, 3, hspace=0.45, wspace=0.38,
                            left=0.08, right=0.97, top=0.91, bottom=0.08)
 
-    # (A) per-frame inter-channel std の時系列
+    # (A) per-frame inter-channel std time series
     ax0 = fig.add_subplot(gs[0, 0])
     ax0.plot(tp_axis, std_raw,  color="#E53935", lw=0.9, label="Raw")
     ax0.plot(tp_axis, std_corr, color="#1E88E5", lw=0.9, label="Tilt-corrected")
@@ -193,7 +193,7 @@ def main():
     ax0.spines["top"].set_visible(False)
     ax0.spines["right"].set_visible(False)
 
-    # (B) std の histogram（raw vs corr）
+    # (B) std histogram (raw vs corr)
     ax1 = fig.add_subplot(gs[0, 1])
     bins = np.linspace(0, max(np.nanmax(std_raw), np.nanmax(std_corr)) * 1.1, 30)
     ax1.hist(std_raw[~np.isnan(std_raw)],   bins=bins, alpha=0.6,
@@ -207,7 +207,7 @@ def main():
     ax1.spines["top"].set_visible(False)
     ax1.spines["right"].set_visible(False)
 
-    # (C) mean ECC Y の時系列（raw vs corr）
+    # (C) mean ECC Y time series (raw vs corr)
     ax2 = fig.add_subplot(gs[0, 2])
     ax2.plot(tp_axis, mean_raw,  color="#E53935", lw=0.9, label="Raw mean")
     ax2.plot(tp_axis, mean_corr, color="#1E88E5", lw=0.9, label="Corr mean")
@@ -218,7 +218,7 @@ def main():
     ax2.spines["top"].set_visible(False)
     ax2.spines["right"].set_visible(False)
 
-    # (D) per-channel 時系列（raw） — チャネルごとの線
+    # (D) per-channel time series (raw) -- one line per channel
     COLORS = plt.cm.tab20(np.linspace(0, 1, n_ch))
     ax3 = fig.add_subplot(gs[1, 0])
     for c_idx in range(n_ch):
@@ -230,7 +230,7 @@ def main():
     ax3.spines["top"].set_visible(False)
     ax3.spines["right"].set_visible(False)
 
-    # (E) per-channel 時系列（corrected）
+    # (E) per-channel time series (corrected)
     ax4 = fig.add_subplot(gs[1, 1])
     for c_idx in range(n_ch):
         ax4.plot(tp_axis, ty_corr_um[c_idx], lw=0.5, alpha=0.7,

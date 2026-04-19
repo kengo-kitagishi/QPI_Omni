@@ -1,17 +1,17 @@
 """
 compute_center_correction.py
 ----------------------------
-BeanShell から呼ばれる:
+Called from BeanShell:
   python compute_center_correction.py Pos1 <snap_tif_path>
 
   argv[1] = base label (e.g. "Pos1")
-  argv[2] = BeanShell が保存した raw snap TIF のパス
+  argv[2] = path to the raw snap TIF saved by BeanShell
 
-出力:
-  <snap_tif_path の grandparent>/center_correction_{label}.json
-  <snap_tif_path の grandparent>/center_correction_{label}.txt  <- BeanShell 用
+Output:
+  <grandparent of snap_tif_path>/center_correction_{label}.json
+  <grandparent of snap_tif_path>/center_correction_{label}.txt  <- for BeanShell
 
-txt フォーマット:
+txt format:
   success          (or "failed")
   +0.1234          (pos_correct_x_um)
   -0.0567          (pos_correct_y_um)
@@ -28,7 +28,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 
 # ============================================================
-# ★ 設定（calibrate_and_acquire_grid.bsh と一致させる）
+# Settings (must match calibrate_and_acquire_grid.bsh)
 # ============================================================
 REF_GRID_DIR      = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
 REF_Z_INDEX       = 10
@@ -113,8 +113,8 @@ def main():
 
     label     = sys.argv[1]
     snap_path = Path(sys.argv[2])
-    # BeanShell は ECC_SNAP_DIR\PosN_x+0_y+0\img_...tif を渡す
-    # txt 出力先は ECC_SNAP_DIR（grandparent of snap_path）
+    # BeanShell passes ECC_SNAP_DIR\PosN_x+0_y+0\img_...tif
+    # txt output goes to ECC_SNAP_DIR (grandparent of snap_path)
     out_dir   = snap_path.parent.parent
     out_dir.mkdir(parents=True, exist_ok=True)
     json_path = out_dir / f"center_correction_{label}.json"
@@ -228,7 +228,7 @@ def main():
         print(f"  tx={tx_avg:+.3f}px  ty={ty_avg:+.3f}px  "
               f"n={n_used}/{n_raw}  corr={corr_avg:.4f}", flush=True)
 
-        # 符号規約: calibrate_grid_pos.py L389-394 と完全同一
+        # Sign convention: identical to calibrate_grid_pos.py L389-394
         drift_x = sx_sign * ty_avg * px_scale
         drift_y = sy_sign * tx_avg * px_scale
         pos_correct_x_um = -drift_x

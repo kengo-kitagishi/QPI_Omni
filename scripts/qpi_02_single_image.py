@@ -1,8 +1,8 @@
 # %%
 """
-単一画像のQPI再構成と確認スクリプト
+Single image QPI reconstruction and verification script
 
-1枚の画像とバックグラウンドからQPI再構成を行い、結果を詳細に確認
+Perform QPI reconstruction from a single image and background, and inspect the results in detail
 """
 
 import numpy as np
@@ -16,32 +16,32 @@ from figure_logger import setup_autosave
 setup_autosave()
 
 # %%
-# ==================== パラメータ設定 ====================
+# ==================== Parameter Settings ====================
 
-# 画像パス（使用時に変更）
+# Image path (modify before use)
 path = r"D:\AquisitionData\Kitagishi\basler_image_seq\Basler_acA2440-75um__25176370__20260228_182040326_1553.tiff"
 path_bg = r"D:\AquisitionData\Kitagishi\basler_image_seq\Basler_acA2440-75um__25176370__20260228_182040326_1553.tiff"
 
-# クロップ領域
+# Crop region
 crop_slice = np.s_[CROP_REGION[0]:CROP_REGION[1], CROP_REGION[2]:CROP_REGION[3]]
 
-# QPIパラメータ
-offaxis_center = OFFAXIS_CENTER  # optical_config.py で管理
+# QPI parameters
+offaxis_center = OFFAXIS_CENTER  # Managed in optical_config.py
 
-# 保存設定
-SAVE_OUTPUT = False  # Trueにすると結果を保存
+# Save settings
+SAVE_OUTPUT = False  # Set to True to save results
 output_path = "/Users/kitak/QPI/output/angle_nobg.tif"
 
 print("=" * 80)
-print("単一画像のQPI再構成")
+print("Single Image QPI Reconstruction")
 print("=" * 80)
-print(f"\nサンプル画像: {path}")
-print(f"BG画像: {path_bg}")
+print(f"\nSample image: {path}")
+print(f"BG image: {path_bg}")
 
 # %%
-# ==================== 画像読み込み ====================
+# ==================== Load Images ====================
 
-print("\n画像を読み込み中...")
+print("\nLoading images...")
 
 img = Image.open(path)
 img = np.array(img)
@@ -51,9 +51,9 @@ img_bg = Image.open(path_bg)
 img_bg = np.array(img_bg)
 img_bg = img_bg[crop_slice]
 
-print(f"画像サイズ: {img.shape}")
+print(f"Image size: {img.shape}")
 
-# 画像表示
+# Display images
 plt.figure(figsize=(12, 5))
 plt.subplot(1, 2, 1)
 plt.imshow(img, cmap='gray')
@@ -68,7 +68,7 @@ plt.tight_layout()
 plt.show()
 
 # %%
-# ==================== QPIパラメータ設定 ====================
+# ==================== QPI Parameter Setup ====================
 
 params = QPIParameters(
     wavelength=WAVELENGTH,
@@ -78,21 +78,21 @@ params = QPIParameters(
     offaxis_center=offaxis_center,
 )
 
-print("\nQPIパラメータ:")
-print(f"  - 波長: {WAVELENGTH*1e9:.1f} nm")
+print("\nQPI parameters:")
+print(f"  - Wavelength: {WAVELENGTH*1e9:.1f} nm")
 print(f"  - NA: {NA}")
-print(f"  - ピクセルサイズ: {PIXELSIZE*1e6:.3f} µm")
-print(f"  - オフ軸中心: {offaxis_center}")
-print(f"  - 開口サイズ: {params.aperturesize} pixels")
+print(f"  - Pixel size: {PIXELSIZE*1e6:.3f} um")
+print(f"  - Off-axis center: {offaxis_center}")
+print(f"  - Aperture size: {params.aperturesize} pixels")
 
 # %%
-# ==================== FFT表示 ====================
+# ==================== FFT Display ====================
 
 img_fft = np.fft.fftshift(np.fft.fft2(img_bg))
 fft_log = np.log(np.abs(img_fft) + 1)
 
 radius = params.aperturesize // 2
-circle_center = (offaxis_center[1], offaxis_center[0])  # matplotlib は (x, y) = (col, row)
+circle_center = (offaxis_center[1], offaxis_center[0])  # matplotlib uses (x, y) = (col, row)
 
 fig, ax = plt.subplots(figsize=(8, 8))
 ax.imshow(fft_log, cmap='gray')
@@ -103,22 +103,22 @@ plt.tight_layout()
 plt.show()
 
 # %%
-# ==================== QPI再構成 ====================
+# ==================== QPI Reconstruction ====================
 
-print("\nQPI再構成を実行中...")
+print("\nPerforming QPI reconstruction...")
 
-# 複素場の取得
+# Get complex field
 field = get_field(img, params)
 field_bg = get_field(img_bg, params)
 
-# 位相アンラッピング
+# Phase unwrapping
 angle = unwrap_phase(np.angle(field))
 angle_bg = unwrap_phase(np.angle(field_bg))
 
-print("再構成完了")
+print("Reconstruction complete")
 
 # %%
-# ==================== 位相画像の表示 ====================
+# ==================== Phase Image Display ====================
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -134,21 +134,21 @@ plt.tight_layout()
 plt.show()
 
 # %%
-# ==================== 背景差分 ====================
+# ==================== Background Subtraction ====================
 
-print("\n背景差分を計算...")
+print("\nComputing background subtraction...")
 
 angle_nobg = angle - angle_bg
 
-# 平均0調整（背景領域を指定）
+# Zero-mean adjustment (specify background region)
 bg_region = np.s_[1:100, 1:254]
 mean_value = np.mean(angle_nobg[bg_region])
 angle_nobg = angle_nobg - mean_value
 
-print(f"背景領域の平均値: {mean_value:.6f} rad")
-print(f"調整後の平均値: {np.mean(angle_nobg):.6e} rad")
+print(f"Background region mean: {mean_value:.6f} rad")
+print(f"Adjusted mean: {np.mean(angle_nobg):.6e} rad")
 
-# 背景差分後の位相画像
+# Phase image after background subtraction
 plt.figure(figsize=(10, 8))
 plt.imshow(angle_nobg, vmin=-0.1, vmax=0.1, cmap='viridis')
 plt.colorbar(label='Phase (rad)')
@@ -157,19 +157,19 @@ plt.tight_layout()
 plt.show()
 
 # %%
-# ==================== 統計情報 ====================
+# ==================== Statistics ====================
 
 print("\n" + "=" * 80)
-print("位相画像の統計情報")
+print("Phase Image Statistics")
 print("=" * 80)
 
-print(f"\n【全体】")
-print(f"  平均: {np.mean(angle_nobg):.6e} rad")
-print(f"  標準偏差: {np.std(angle_nobg):.6f} rad")
-print(f"  最小値: {np.min(angle_nobg):.6f} rad")
-print(f"  最大値: {np.max(angle_nobg):.6f} rad")
+print(f"\n[Overall]")
+print(f"  Mean: {np.mean(angle_nobg):.6e} rad")
+print(f"  Std: {np.std(angle_nobg):.6f} rad")
+print(f"  Min: {np.min(angle_nobg):.6f} rad")
+print(f"  Max: {np.max(angle_nobg):.6f} rad")
 
-# ヒストグラム
+# Histogram
 plt.figure(figsize=(10, 5))
 plt.hist(angle_nobg.flatten(), bins=100, alpha=0.7, edgecolor='black')
 plt.xlabel('Phase (rad)')
@@ -180,28 +180,28 @@ plt.tight_layout()
 plt.show()
 
 # %%
-# ==================== 位相プロファイル ====================
+# ==================== Phase Profile ====================
 
-print("\n位相プロファイルを表示...")
+print("\nDisplaying phase profiles...")
 
-# 水平方向のプロファイル（画像中央）
+# Horizontal profile (image center)
 y_coord = img.shape[0] // 2
 profile_horizontal = angle_nobg[y_coord, :]
 
-# 垂直方向のプロファイル（画像中央）
+# Vertical profile (image center)
 x_coord = img.shape[1] // 2
 profile_vertical = angle_nobg[:, x_coord]
 
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
-# 水平プロファイル
+# Horizontal profile
 axes[0].plot(profile_horizontal, linewidth=2)
 axes[0].set_title(f'Horizontal Profile (y = {y_coord})')
 axes[0].set_xlabel('X coordinate (pixels)')
 axes[0].set_ylabel('Phase (rad)')
 axes[0].grid(True, alpha=0.3)
 
-# 垂直プロファイル
+# Vertical profile
 axes[1].plot(profile_vertical, linewidth=2)
 axes[1].set_title(f'Vertical Profile (x = {x_coord})')
 axes[1].set_xlabel('Y coordinate (pixels)')
@@ -212,9 +212,9 @@ plt.tight_layout()
 plt.show()
 
 # %%
-# ==================== カラーマップ比較 ====================
+# ==================== Colormap Comparison ====================
 
-print("\n様々なカラーマップで表示...")
+print("\nDisplaying with various colormaps...")
 
 fig, axes = plt.subplots(2, 3, figsize=(15, 10))
 cmaps = ['viridis', 'plasma', 'inferno', 'RdBu_r', 'seismic', 'coolwarm']
@@ -230,9 +230,9 @@ plt.tight_layout()
 plt.show()
 
 # %%
-# ==================== 振幅画像（オプション） ====================
+# ==================== Amplitude Image (Optional) ====================
 
-print("\n振幅画像を表示...")
+print("\nDisplaying amplitude images...")
 
 amplitude = np.abs(field)
 amplitude_bg = np.abs(field_bg)
@@ -251,13 +251,13 @@ plt.tight_layout()
 plt.show()
 
 # %%
-# ==================== 保存（オプション） ====================
+# ==================== Save (Optional) ====================
 
 if SAVE_OUTPUT:
-    print(f"\n結果を保存: {output_path}")
+    print(f"\nSaving results: {output_path}")
     tifffile.imwrite(output_path, angle_nobg.astype(np.float32))
     
-    # カラーマップ付きPNGも保存
+    # Also save as PNG with colormap
     png_path = output_path.replace('.tif', '_colormap.png')
     plt.figure(figsize=(10, 8))
     plt.imshow(angle_nobg, cmap='viridis', vmin=-0.1, vmax=0.1)
@@ -271,26 +271,26 @@ if SAVE_OUTPUT:
     print(f"  - TIF: {output_path}")
     print(f"  - PNG: {png_path}")
 else:
-    print("\n※結果を保存する場合は、SAVE_OUTPUT = True に設定してください")
+    print("\nTo save results, set SAVE_OUTPUT = True")
 
 # %%
-# ==================== 完了 ====================
+# ==================== Done ====================
 
 print("\n" + "=" * 80)
-print("QPI再構成完了")
+print("QPI Reconstruction Complete")
 print("=" * 80)
 
-print("\n【確認項目】")
-print("  ✓ 位相画像が適切に再構成されているか")
-print("  ✓ 背景差分が正しく行われているか")
-print("  ✓ プロファイルが滑らかか")
-print("  ✓ 異常値やアーティファクトがないか")
+print("\n[Checklist]")
+print("  - Phase image is properly reconstructed")
+print("  - Background subtraction is correct")
+print("  - Profile is smooth")
+print("  - No outliers or artifacts")
 
-print("\n【次のステップ】")
-print("  - 問題なければ → バッチ処理へ (qpi_03_batch_reconstruction.py)")
-print("  - 結果が不適切 → 焦点調整へ (qpi_01_focus_setup.py)")
+print("\n[Next steps]")
+print("  - If OK -> proceed to batch processing (qpi_03_batch_reconstruction.py)")
+print("  - If results are inadequate -> adjust focus (qpi_01_focus_setup.py)")
 
-print("\n✅ 単一画像処理スクリプト完了")
+print("\nSingle image processing script completed")
 
 # %%
 

@@ -1,27 +1,27 @@
 """
 eval_tilt_correct_ecc_precision.py
 -----------------------------------
-ph_3 (静止サンプル) を用いて、X-tilt 補正が ECC 精度に与える影響を
-**正しく**評価する。
+Evaluate the effect of X-tilt correction on ECC precision
+using ph_3 (static sample) as ground truth.
 
-旧スクリプト (analyze_ch_xtilt_corrected_ecc.py) の問題:
-  1. grid_ref_crops.tif(_tilt_correct 済み, 30×80）を "Raw ref" として使用
-     → テスト画像は 30×120 でサイズ不一致 → findTransformECC が全フレーム失敗
-  2. そもそも grid ref と ph_3 は異なる FOV → ECC が収束しない
-  3. 分析の tilt 補正関数が pipeline の _tilt_correct と異なる
-  4. grid ref の z index とデータセットが pipeline と不一致
+Issues with the old script (analyze_ch_xtilt_corrected_ecc.py):
+  1. Used grid_ref_crops.tif (_tilt_correct applied, 30x80) as "Raw ref"
+     -> test images are 30x120, size mismatch -> findTransformECC fails on all frames
+  2. Grid ref and ph_3 have different FOVs -> ECC does not converge
+  3. Tilt correction function in the analysis differs from pipeline's _tilt_correct
+  4. Grid ref z index and dataset do not match the pipeline
 
-本スクリプトの方針:
-  - **自己参照**: ph_3 frame 0 を ref として使用（同一 FOV なので ECC が確実に収束）
-  - channel_rois = 260331 Pos1（pipeline と同じ ROI 定義）
-  - Raw 条件: ref も test も tilt 補正なし (simple crop + backsub)
-  - Corr 条件: ref も test も _tilt_correct (パイプラインと同一関数)
-  - 静止サンプルなので真のシフト = 0 → ECC の出力 = そのまま測定誤差
+This script's approach:
+  - **Self-reference**: Use ph_3 frame 0 as ref (same FOV ensures ECC convergence)
+  - channel_rois = 260331 Pos1 (same ROI definition as pipeline)
+  - Raw condition: neither ref nor test has tilt correction (simple crop + backsub)
+  - Corr condition: both ref and test use _tilt_correct (same function as pipeline)
+  - Static sample, so true shift = 0 -> ECC output = measurement error directly
 
-指標:
-  A) per-channel mean |shift| [um] — 各チャネルの ECC 精度
-  B) per-frame inter-channel std [um] — チャネル間ばらつき
-  C) per-frame channel-mean shift [um] — 系統誤差
+Metrics:
+  A) per-channel mean |shift| [um] -- ECC precision per channel
+  B) per-frame inter-channel std [um] -- inter-channel variability
+  C) per-frame channel-mean shift [um] -- systematic error
 """
 
 import json
@@ -46,7 +46,7 @@ from compute_drift_online import (
 from figure_logger import save_figure
 
 # ============================================================
-# 設定（パイプラインと完全一致させる）
+# Configuration (must match pipeline exactly)
 # ============================================================
 PHASE_DIR = Path(r"D:\AquisitionData\Kitagishi\basler_image_seq\ph_3\Pos0\output_phase")
 ROIS_JSON = Path(
@@ -58,18 +58,18 @@ PIXEL_SCALE_UM = 0.34567514677103717
 ECC_VMIN       = -5.0
 ECC_VMAX       =  2.0
 
-# tilt 補正パラメータ（drift_config.json と一致）
+# Tilt correction parameters (must match drift_config.json)
 TILT_CROP_H = 270
 ECC_CROP_H  = 80
-FIT_RIGHT   = False   # pos_split > 中央 → 左側が BG
-CROP_W      = 40       # Y方向 crop 幅（ROI の crop_w を上書き）
+FIT_RIGHT   = False   # pos_split > center -> left side is BG
+CROP_W      = 40       # Y-direction crop width (overrides ROI crop_w)
 
-N_MAX_TP = None   # None で全フレーム (99 TP)
+N_MAX_TP = None   # None for all frames (99 TP)
 # ============================================================
 
 
 def main():
-    # ---- データ読み込み ----
+    # ---- Load data ----
     phase_paths = sorted(PHASE_DIR.glob("img_*_phase.tif"))
     if not phase_paths:
         print(f"ERROR: {PHASE_DIR}")
@@ -84,11 +84,11 @@ def main():
     print(f"Self-reference: frame 0 of ph_3")
     print(f"CROP_W={CROP_W}, TILT_CROP_H={TILT_CROP_H}, ECC_CROP_H={ECC_CROP_H}, FIT_RIGHT={FIT_RIGHT}")
 
-    # ---- frame 0 を ref として使用 ----
+    # ---- Use frame 0 as reference ----
     ref_img = tifffile.imread(str(phase_paths[0])).astype(np.float64)
     cfg_dummy = {}
 
-    # Raw ref: simple crop + backsub (tilt 補正なし) → (CROP_W, ECC_CROP_H)
+    # Raw ref: simple crop + backsub (no tilt correction) -> (CROP_W, ECC_CROP_H)
     ref_raw_u8 = []
     for roi in rois:
         crop = extract_rect_roi(
@@ -97,7 +97,7 @@ def main():
         offset = compute_backsub_offset(crop, cfg_dummy)
         ref_raw_u8.append(to_uint8(crop + offset, ECC_VMIN, ECC_VMAX))
 
-    # Corr ref: _tilt_correct (パイプラインと同一) → (CROP_W, ECC_CROP_H)
+    # Corr ref: _tilt_correct (same as pipeline) -> (CROP_W, ECC_CROP_H)
     ref_corr_u8 = []
     for roi in rois:
         crop = _tilt_correct(
@@ -109,7 +109,7 @@ def main():
     print(f"\nRef crops: raw u8 shape={ref_raw_u8[0].shape}, "
           f"corr u8 shape={ref_corr_u8[0].shape}")
 
-    # ---- ECC アライメント ----
+    # ---- ECC alignment ----
     # tx = image-X shift, ty = image-Y shift
     tx_raw  = np.full((n_ch, n_tp), np.nan)
     ty_raw  = np.full((n_ch, n_tp), np.nan)
@@ -123,7 +123,7 @@ def main():
             continue
 
         for c_idx, roi in enumerate(rois):
-            # --- Raw: simple crop + backsub (CROP_W × ECC_CROP_H) ---
+            # --- Raw: simple crop + backsub (CROP_W x ECC_CROP_H) ---
             crop_r = extract_rect_roi(
                 phase_tp, roi["cy"], roi["cx"], CROP_W, ECC_CROP_H
             ).astype(np.float64)
@@ -134,7 +134,7 @@ def main():
                 tx_raw[c_idx, t_idx] = res_r[0]
                 ty_raw[c_idx, t_idx] = res_r[1]
 
-            # --- Corr: _tilt_correct (パイプラインと同一) ---
+            # --- Corr: _tilt_correct (same as pipeline) ---
             crop_c = _tilt_correct(
                 phase_tp, roi["cy"], roi["cx"], CROP_W,
                 TILT_CROP_H, ECC_CROP_H, fit_right=FIT_RIGHT
@@ -148,32 +148,32 @@ def main():
         if (t_idx + 1) % 20 == 0:
             print(f"  TP {t_idx+1}/{n_tp}", flush=True)
 
-    # um 変換
+    # Convert to um
     tx_raw_um  = tx_raw  * PIXEL_SCALE_UM
     ty_raw_um  = ty_raw  * PIXEL_SCALE_UM
     tx_corr_um = tx_corr * PIXEL_SCALE_UM
     ty_corr_um = ty_corr * PIXEL_SCALE_UM
 
-    # ---- 統計量 ----
-    # A) per-channel mean |shift| [um] — ECC 精度の直接指標
+    # ---- Statistics ----
+    # A) per-channel mean |shift| [um] -- direct ECC precision metric
     abs_tx_raw  = np.nanmean(np.abs(tx_raw_um),  axis=1)  # (n_ch,)
     abs_ty_raw  = np.nanmean(np.abs(ty_raw_um),  axis=1)
     abs_tx_corr = np.nanmean(np.abs(tx_corr_um), axis=1)
     abs_ty_corr = np.nanmean(np.abs(ty_corr_um), axis=1)
 
-    # B) per-frame inter-channel std [um]
+    # B) per-frame inter-channel std [um] -- inter-channel variability
     std_tx_raw  = np.nanstd(tx_raw_um,  axis=0)   # (n_tp,)
     std_ty_raw  = np.nanstd(ty_raw_um,  axis=0)
     std_tx_corr = np.nanstd(tx_corr_um, axis=0)
     std_ty_corr = np.nanstd(ty_corr_um, axis=0)
 
-    # C) per-frame channel-mean shift [um]
+    # C) per-frame channel-mean shift [um] -- systematic error
     mean_tx_raw  = np.nanmean(tx_raw_um,  axis=0)
     mean_ty_raw  = np.nanmean(ty_raw_um,  axis=0)
     mean_tx_corr = np.nanmean(tx_corr_um, axis=0)
     mean_ty_corr = np.nanmean(ty_corr_um, axis=0)
 
-    # 全体統計
+    # Overall statistics
     print("\n========== ECC precision (static sample ph_3) ==========")
     print(f"Grid ref: 260331 Pos1 z=10 (pipeline-consistent)")
     print(f"Conditions: Raw=crop+backsub, Corr=_tilt_correct(270→80)")
@@ -328,7 +328,7 @@ def main():
     mid_ch = n_ch // 2
     img_raw  = ref_raw_u8[mid_ch]
     img_corr = ref_corr_u8[mid_ch]
-    # 横に並べる
+    # Stack side by side
     combined = np.hstack([img_raw, np.full((img_raw.shape[0], 3), 128, dtype=np.uint8), img_corr])
     ax32.imshow(combined, cmap="RdBu_r", aspect="auto", interpolation="nearest",
                 vmin=0, vmax=255)

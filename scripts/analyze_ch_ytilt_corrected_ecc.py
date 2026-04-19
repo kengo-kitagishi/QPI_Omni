@@ -1,18 +1,18 @@
 """
 analyze_ch_ytilt_corrected_ecc.py
 ----------------------------------
-チャネルROI を Y 方向に 270px に拡大し、上 1/3（90px）の BG で線形フィット → 引いてから ECC。
-補正前後の ECC Y シフトのチャネル間 std を比較する。
+Expand channel ROI to 270px in Y direction, linear fit on the top 1/3 (90px) BG, subtract, then ECC.
+Compare inter-channel std of ECC Y shift before and after correction.
 
-処理:
-  1. チャネルごとに crop_w を 270px に拡大した Y ROI を取得
-  2. Y プロファイル（列平均）の上 1/3（90pt）で polyfit → slope [rad/px]
-  3. slope * y_local を 270px crop から引く
-  4. 中央 crop_w=40px を切り出して backsub → to_uint8 → ECC
-  5. grid ref 側も同じ補正を適用（grid ph_009 から 270px crop → 補正 → 40px 切り出し）
-  6. 補正前（grid_ref_crops.tif ままで ECC）と比較
+Processing:
+  1. For each channel, obtain a Y ROI with crop_w expanded to 270px
+  2. Polyfit on the top 1/3 (90pt) of Y profile (column mean) -> slope [rad/px]
+  3. Subtract slope * y_local from the 270px crop
+  4. Extract central crop_w=40px, backsub -> to_uint8 -> ECC
+  5. Apply the same correction to the grid ref side (grid ph_009: 270px crop -> correction -> 40px extraction)
+  6. Compare with uncorrected (ECC using grid_ref_crops.tif as-is)
 
-比較指標:
+Comparison metric:
   per-frame inter-channel std of ECC Y shift [um]
 """
 
@@ -38,7 +38,7 @@ from compute_drift_online import (
 from figure_logger import save_figure
 
 # ============================================================
-# 設定
+# Settings
 # ============================================================
 PHASE_DIR = Path(r"D:\AquisitionData\Kitagishi\basler_image_seq\ph_3\Pos0\output_phase")
 ROIS_JSON = Path(
@@ -50,19 +50,19 @@ PIXEL_SCALE_UM   = 0.3462
 ECC_VMIN         = -5.0
 ECC_VMAX         =  2.0
 
-# grid 参照 crops（補正なし版 = 従来の reference）
+# Grid reference crops (uncorrected version = conventional reference)
 GRID_REF_CROPS_TIF = Path(r"C:\Users\QPI\Documents\QPI_Omni\drift_session\grid_ref_crops.tif")
 
-# grid(0,0) フル位相画像（補正あり ref crops 計算用）
+# Grid(0,0) full phase image (for computing corrected ref crops)
 GRID_REF_PHASE = Path(
     r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
     r"\Pos1_x+0_y+0\output_phase\img_000000000_ph_009_phase.tif"
 )
 
-# Y 方向 tilt 補正パラメータ
-CH_CROP_W_TILT = 270   # Y 方向拡大サイズ [px]
-FIT_FRAC       = 1/3   # 上 1/3 (90pt) = BG 領域
-N_MAX_TP       = 20    # 検証用フレーム上限（None で全フレーム）
+# Y-direction tilt correction parameters
+CH_CROP_W_TILT = 270   # expanded size in Y direction [px]
+FIT_FRAC       = 1/3   # top 1/3 (90pt) = BG region
+N_MAX_TP       = 20    # max frames for verification (None for all frames)
 # ============================================================
 
 
@@ -71,8 +71,8 @@ def compute_y_slope_and_correct(phase_img: np.ndarray,
                                 orig_crop_w: int, crop_h: int
                                 ) -> tuple[np.ndarray, float]:
     """
-    270px Y 拡大 crop の上 1/3 で slope を推定し、補正後の orig_crop_w crop を返す。
-    戻り値: (corrected_crop [orig_crop_w × crop_h], slope [rad/px])
+    Estimate slope from the top 1/3 of the 270px Y-expanded crop and return the corrected orig_crop_w crop.
+    Returns: (corrected_crop [orig_crop_w x crop_h], slope [rad/px])
     """
     big_crop = extract_rect_roi(
         phase_img, cy, cx, CH_CROP_W_TILT, crop_h
@@ -82,11 +82,11 @@ def compute_y_slope_and_correct(phase_img: np.ndarray,
     n_fit = max(3, int(len(y_profile) * FIT_FRAC))        # 90
     slope, intercept = np.polyfit(np.arange(n_fit, dtype=float), y_profile[:n_fit], 1)
 
-    # 補正: 全 270px に slope * y を引く
+    # Correction: subtract slope * y from all 270px
     y_local = np.arange(CH_CROP_W_TILT, dtype=np.float32)
     corrected_big = big_crop - (slope * y_local).astype(np.float32)[:, np.newaxis]
 
-    # 中央 orig_crop_w px を切り出す
+    # Extract central orig_crop_w px
     start = (CH_CROP_W_TILT - orig_crop_w) // 2
     corrected_crop = corrected_big[start:start + orig_crop_w, :]
 
@@ -105,12 +105,12 @@ def main():
     n_tp = len(phase_paths) - 1
     print(f"Phase: {len(phase_paths)} imgs, Channels: {n_ch}, TPs: {n_tp}")
 
-    # ---- 補正なし ref（grid_ref_crops.tif そのまま）----
+    # ---- Uncorrected ref (grid_ref_crops.tif as-is) ----
     grid_ref_f = tifffile.imread(str(GRID_REF_CROPS_TIF)).astype(np.float64)
     ref_u8_raw = [to_uint8(grid_ref_f[ch], ECC_VMIN, ECC_VMAX) for ch in range(n_ch)]
     print(f"grid_ref_crops loaded: shape={grid_ref_f.shape}")
 
-    # ---- 補正あり ref（grid ph_009 から 270px → 補正 → 40px 切り出し → backsub → u8）----
+    # ---- Corrected ref (grid ph_009: 270px -> correction -> 40px extraction -> backsub -> u8) ----
     grid_phase = tifffile.imread(str(GRID_REF_PHASE)).astype(np.float32)
     cfg_dummy = {}
     ref_u8_corr = []
@@ -135,7 +135,7 @@ def main():
             continue
 
         for c_idx, roi in enumerate(rois):
-            # --- 補正なし ECC ---
+            # --- Uncorrected ECC ---
             crop = extract_rect_roi(
                 phase_tp, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"]
             ).astype(np.float32)
@@ -145,7 +145,7 @@ def main():
             if res_raw is not None:
                 ty_raw[c_idx, t_idx] = res_raw[1]
 
-            # --- 補正あり ECC（270px→fit→引く→40px切り出し）---
+            # --- Corrected ECC (270px -> fit -> subtract -> 40px extraction) ---
             crop_c, sl = compute_y_slope_and_correct(
                 phase_tp, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"]
             )
@@ -170,14 +170,14 @@ def main():
     print(f"\nInter-channel std  raw={np.nanmean(std_raw):.4f} um  corr={np.nanmean(std_corr):.4f} um")
     print(f"Mean |ECC Y|        raw={np.nanmean(np.abs(mean_raw)):.4f} um  corr={np.nanmean(np.abs(mean_corr)):.4f} um")
 
-    # ---- 図 ----
+    # ---- Figure ----
     tp_axis = np.arange(n_tp)
     COLORS = plt.cm.tab20(np.linspace(0, 1, n_ch))
     fig = plt.figure(figsize=(16, 10))
     gs = gridspec.GridSpec(3, 3, hspace=0.48, wspace=0.38,
                            left=0.07, right=0.97, top=0.92, bottom=0.07)
 
-    # (A) inter-channel std 時系列
+    # (A) inter-channel std time series
     ax0 = fig.add_subplot(gs[0, 0])
     ax0.plot(tp_axis, std_raw,  color="#E53935", lw=0.9, label="Raw")
     ax0.plot(tp_axis, std_corr, color="#1E88E5", lw=0.9, label="Y-tilt corr")
@@ -198,7 +198,7 @@ def main():
     ax1.legend(fontsize=8)
     ax1.spines["top"].set_visible(False); ax1.spines["right"].set_visible(False)
 
-    # (C) mean ECC Y 時系列
+    # (C) mean ECC Y time series
     ax2 = fig.add_subplot(gs[0, 2])
     ax2.plot(tp_axis, mean_raw,  color="#E53935", lw=0.9, label="Raw")
     ax2.plot(tp_axis, mean_corr, color="#1E88E5", lw=0.9, label="Y-tilt corr")
@@ -207,7 +207,7 @@ def main():
     ax2.legend(fontsize=8)
     ax2.spines["top"].set_visible(False); ax2.spines["right"].set_visible(False)
 
-    # (D) per-channel 時系列 raw
+    # (D) per-channel time series raw
     ax3 = fig.add_subplot(gs[1, 0])
     for c in range(n_ch):
         ax3.plot(tp_axis, ty_raw_um[c], lw=0.5, alpha=0.7, color=COLORS[c])
@@ -215,7 +215,7 @@ def main():
     ax3.set_title("Per-channel ECC Y — Raw", fontsize=10)
     ax3.spines["top"].set_visible(False); ax3.spines["right"].set_visible(False)
 
-    # (E) per-channel 時系列 corrected
+    # (E) per-channel time series corrected
     ax4 = fig.add_subplot(gs[1, 1])
     for c in range(n_ch):
         ax4.plot(tp_axis, ty_corr_um[c], lw=0.5, alpha=0.7, color=COLORS[c])
@@ -235,7 +235,7 @@ def main():
     ax5.set_title(f"Raw vs Corrected\nr={r_sc:.3f}", fontsize=10)
     ax5.spines["top"].set_visible(False); ax5.spines["right"].set_visible(False)
 
-    # (G) 代表チャネルの Y プロファイル（補正前後）: ch6, TP5
+    # (G) Representative channel Y profile (before/after correction): ch6, TP5
     ax6 = fig.add_subplot(gs[2, 0])
     _t = min(4, n_tp - 1)
     phase_ex = tifffile.imread(str(phase_paths[_t + 1])).astype(np.float32)
@@ -259,7 +259,7 @@ def main():
     ax6.legend(fontsize=7)
     ax6.spines["top"].set_visible(False); ax6.spines["right"].set_visible(False)
 
-    # (H) 補正後 crop のカラーマップ（raw vs corr）
+    # (H) Corrected crop colormap (raw vs corr)
     for col_i, (label, use_corr) in enumerate([("Raw crop (u8)", False), ("Y-tilt corr crop (u8)", True)]):
         ax_ = fig.add_subplot(gs[2, col_i + 1])
         if use_corr:

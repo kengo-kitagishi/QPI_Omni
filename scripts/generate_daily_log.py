@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
 """generate_daily_log.py
 
-日次索引ファイル（daily_index_YYYY-MM-DD.md）を読み込み、
-Claude を使って日次ログを自動生成する。
+Read daily index files (daily_index_YYYY-MM-DD.md) and
+auto-generate daily logs using Claude.
 
-デフォルトは複数ファイル出力（ハブページ + トピックページ）。
---single-file で旧フォーマット（単一ファイル）に戻せる。
+Default output is multi-file (hub page + topic pages).
+Use --single-file to revert to legacy format (single file).
 
-バックエンドを自動検出して切り替える:
-  1. claude CLI (claude.ai OAuth) が利用可能なら優先
-  2. ANTHROPIC_API_KEY / ~/.anthropic_api_key があれば API キーを使う
+Backend auto-detection:
+  1. Prefer claude CLI (claude.ai OAuth) if available
+  2. Use ANTHROPIC_API_KEY / ~/.anthropic_api_key if present
 
-使い方:
-  python3 scripts/generate_daily_log.py              # 今日の日次ログを生成
-  python3 scripts/generate_daily_log.py --date 2026-03-26  # 指定日
+Usage:
+  python3 scripts/generate_daily_log.py              # Generate today's daily log
+  python3 scripts/generate_daily_log.py --date 2026-03-26  # Specific date
   python3 scripts/generate_daily_log.py --date 2026-03-26 --model claude-opus-4-6
-  python3 scripts/generate_daily_log.py --run-preprocess    # 前処理（索引更新）も実行
-  python3 scripts/generate_daily_log.py --single-file       # 旧フォーマット（単一ファイル）
-  python3 scripts/generate_daily_log.py --backend api       # APIキー強制使用
-  python3 scripts/generate_daily_log.py --backend cli       # claude CLI 強制使用
+  python3 scripts/generate_daily_log.py --run-preprocess    # Also run preprocessing (index update)
+  python3 scripts/generate_daily_log.py --single-file       # Legacy format (single file)
+  python3 scripts/generate_daily_log.py --backend api       # Force API key backend
+  python3 scripts/generate_daily_log.py --backend cli       # Force claude CLI backend
 
-出力先:
-  ~/Documents/Obsidian Vault/01_Daily/YYYY-MM-DD.md          ← ハブページ
-  ~/Documents/Obsidian Vault/01_Daily/YYYY-MM-DD_トピック.md ← 各トピックページ
+Output:
+  ~/Documents/Obsidian Vault/01_Daily/YYYY-MM-DD.md          <- hub page
+  ~/Documents/Obsidian Vault/01_Daily/YYYY-MM-DD_topic.md    <- topic pages
 """
 
 import argparse
@@ -37,7 +37,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 # ────────────────────────────────────────────
-# 設定
+# Configuration
 # ────────────────────────────────────────────
 
 OBSIDIAN_ROOT = Path("/Users/kitak/Documents/Obsidian Vault")
@@ -45,7 +45,7 @@ DAILY_INDEX_DIR = OBSIDIAN_ROOT / "00_Inbox"
 DAILY_LOG_DIR = OBSIDIAN_ROOT / "01_Daily"
 SCRIPTS_DIR = Path(__file__).resolve().parent
 
-# スタイル参照ファイル（WEEKLY_LOG_SPEC は廃止、style.md を使う）
+# Style reference files (WEEKLY_LOG_SPEC deprecated, using style.md)
 STYLE_FILES = [
     Path.home() / ".claude/skills/gm-log-compiler/references/gm_style.md",
     Path.home() / ".claude/skills/daily-log/references/daily_log_style.md",
@@ -55,7 +55,7 @@ DEFAULT_MODEL = "claude-opus-4-6"
 JST = timezone(timedelta(hours=9))
 
 # ────────────────────────────────────────────
-# システムプロンプト（複数ファイル出力モード）
+# System prompt (multi-file output mode)
 # ────────────────────────────────────────────
 
 SYSTEM_PROMPT_MULTI = """\
@@ -112,7 +112,7 @@ SYSTEM_PROMPT_MULTI = """\
 """
 
 # ────────────────────────────────────────────
-# システムプロンプト（単一ファイルモード、後方互換）
+# System prompt (single file mode, backward compatibility)
 # ────────────────────────────────────────────
 
 SYSTEM_PROMPT_SINGLE = """\
@@ -134,7 +134,7 @@ SYSTEM_PROMPT_SINGLE = """\
 
 
 # ────────────────────────────────────────────
-# プロンプト構築
+# Prompt construction
 # ────────────────────────────────────────────
 
 def build_user_prompt(target_date: str, style_text: str, index_text: str) -> str:
@@ -156,48 +156,48 @@ def build_user_prompt(target_date: str, style_text: str, index_text: str) -> str
 
 
 # ────────────────────────────────────────────
-# 複数ファイル出力のパース
+# Multi-file output parsing
 # ────────────────────────────────────────────
 
 def parse_multi_file_output(text: str) -> dict[str, str]:
-    """<<FILE: name.md>> ... <<ENDFILE>> ブロックを解析して {filename: content} を返す。"""
+    """Parse <<FILE: name.md>> ... <<ENDFILE>> blocks and return {filename: content}."""
     pattern = re.compile(r'<<FILE:\s*(.+?)\s*>>\n(.*?)<<ENDFILE>>', re.DOTALL)
     return {m.group(1).strip(): m.group(2).rstrip('\n') for m in pattern.finditer(text)}
 
 
 # ────────────────────────────────────────────
-# メイン処理
+# Main processing
 # ────────────────────────────────────────────
 
 def run_preprocess(target_date: str) -> None:
-    """weekly_report_hub.py を実行して daily_index を更新する。"""
+    """Run weekly_report_hub.py to update daily_index."""
     d = date.fromisoformat(target_date)
     week_label = d.strftime("%Y-W%V")
-    print(f"前処理: weekly_report_hub.py --week {week_label} ...")
+    print(f"Preprocessing: weekly_report_hub.py --week {week_label} ...")
     result = subprocess.run(
         [sys.executable, str(SCRIPTS_DIR / "weekly_report_hub.py"), "--week", week_label],
         capture_output=True, text=True
     )
     if result.returncode != 0:
-        print(f"WARNING: 前処理に失敗しました:\n{result.stderr[-500:]}")
+        print(f"WARNING: Preprocessing failed:\n{result.stderr[-500:]}")
     else:
         print(result.stdout[-300:])
 
 
 def detect_backend(force: str = "auto") -> tuple[str, str]:
-    """使用するバックエンドを検出して (backend, reason) を返す。"""
+    """Detect the backend to use and return (backend, reason)."""
     if force == "cli":
         if shutil.which("claude"):
-            return "cli", "cli 強制指定"
-        return "none", "--backend cli を指定しましたが claude コマンドが見つかりません"
+            return "cli", "cli forced"
+        return "none", "--backend cli specified but claude command not found"
 
     if force == "api":
         api_key, reason = _find_api_key()
         if api_key:
-            return "api", f"api 強制指定 ({reason})"
-        return "none", "--backend api を指定しましたが API キーが見つかりません"
+            return "api", f"api forced ({reason})"
+        return "none", "--backend api specified but API key not found"
 
-    # auto: claude CLI を優先
+    # auto: prefer claude CLI
     if shutil.which("claude"):
         return "cli", "claude CLI (claude.ai OAuth)"
 
@@ -205,14 +205,14 @@ def detect_backend(force: str = "auto") -> tuple[str, str]:
     if api_key:
         return "api", reason
 
-    return "none", "claude CLI も API キーも見つかりません"
+    return "none", "Neither claude CLI nor API key found"
 
 
 def _find_api_key() -> tuple[str, str]:
-    """(api_key, source_description) を返す。見つからなければ ('', '')。"""
+    """Return (api_key, source_description). Returns ('', '') if not found."""
     key = os.environ.get("ANTHROPIC_API_KEY", "")
     if key:
-        return key, "ANTHROPIC_API_KEY 環境変数"
+        return key, "ANTHROPIC_API_KEY environment variable"
     key_file = Path.home() / ".anthropic_api_key"
     if key_file.exists():
         return key_file.read_text().strip(), "~/.anthropic_api_key"
@@ -220,13 +220,13 @@ def _find_api_key() -> tuple[str, str]:
 
 
 def _call_via_cli(model: str, system_prompt: str, user_prompt: str) -> tuple[str, int, str]:
-    """claude -p サブプロセスで生成。(output, returncode, stderr) を返す。
+    """Generate via claude -p subprocess. Returns (output, returncode, stderr).
 
-    改善点:
-    - 環境変数の strip リストを拡張（CLAUDE_* 全般 + ANTHROPIC_PROJECT）
-    - cwd=HOME で親セッションの .claude/projects 継承を断つ
-    - timeout=600 で無限ハングを防止
-    - stdout + stderr の両方を返す（claude CLI はエラーを stdout に出す）
+    Improvements:
+    - Extended env strip list (CLAUDE_* general + ANTHROPIC_PROJECT)
+    - cwd=HOME to avoid inheriting parent session .claude/projects
+    - timeout=600 to prevent infinite hangs
+    - Returns both stdout + stderr (claude CLI may output errors to stdout)
     """
     skip_prefixes = ("CLAUDECODE", "CLAUDE_CODE", "CLAUDE_", "MCP_", "ANTHROPIC_PROJECT")
     env = {k: v for k, v in os.environ.items()
@@ -248,7 +248,7 @@ def _call_via_cli(model: str, system_prompt: str, user_prompt: str) -> tuple[str
     except subprocess.TimeoutExpired as e:
         return "", 124, f"TIMEOUT after 600s: {e}"
 
-    # claude CLI はエラーを stdout に出すことがあるため、失敗時は両方を結合して返す
+    # claude CLI may output errors to stdout, so combine both on failure
     if result.returncode != 0:
         combined_err = result.stderr
         if result.stdout and not result.stdout.strip().startswith("#"):
@@ -259,11 +259,11 @@ def _call_via_cli(model: str, system_prompt: str, user_prompt: str) -> tuple[str
 
 
 def _call_via_api(model: str, system_prompt: str, api_key: str, user_prompt: str) -> tuple[str, int, str]:
-    """anthropic SDK でストリーミング生成。(output, returncode, stderr) を返す。"""
+    """Generate via anthropic SDK streaming. Returns (output, returncode, stderr)."""
     try:
         import anthropic
     except ImportError:
-        return "", 1, "anthropic パッケージが見つかりません。pip3 install anthropic"
+        return "", 1, "anthropic package not found. pip3 install anthropic"
 
     client = anthropic.Anthropic(api_key=api_key)
     output_parts = []
@@ -281,7 +281,7 @@ def _call_via_api(model: str, system_prompt: str, api_key: str, user_prompt: str
 
 
 def _call_model(detected: str, model: str, system_prompt: str, user_prompt: str) -> tuple[str, int, str]:
-    """バックエンドに応じてモデルを呼び出す。"""
+    """Call the model according to the detected backend."""
     if detected == "cli":
         return _call_via_cli(model, system_prompt, user_prompt)
     else:
@@ -289,12 +289,12 @@ def _call_model(detected: str, model: str, system_prompt: str, user_prompt: str)
         return _call_via_api(model, system_prompt, api_key, user_prompt)
 
 
-# モデルフォールバックラダー: rate limit 時に順番にダウングレード
+# Model fallback ladder: downgrade in order on rate limit
 MODEL_LADDER = ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"]
 
 
 def _is_rate_limit(output: str, stderr: str) -> bool:
-    """出力にレート制限エラーが含まれるかチェック。"""
+    """Check if output contains a rate limit error."""
     combined = (output + "\n" + stderr).lower()
     return any(kw in combined for kw in ("rate limit", "429", "overloaded", "too many requests"))
 
@@ -302,8 +302,8 @@ def _is_rate_limit(output: str, stderr: str) -> bool:
 def _call_with_fallback(
     detected: str, system_prompt: str, user_prompt: str, start_model: str
 ) -> tuple[str, int, str]:
-    """モデルフォールバック付きの呼び出し。
-    rate limit → 同モデルで最大2回リトライ（60s, 120s 待ち）→ 次のモデルへ降格。"""
+    """Call with model fallback.
+    rate limit -> retry same model up to 2 times (60s, 120s wait) -> downgrade to next model."""
     start_idx = 0
     for i, m in enumerate(MODEL_LADDER):
         if m == start_model:
@@ -313,7 +313,7 @@ def _call_with_fallback(
 
     for model in ladder:
         for attempt in range(3):
-            print(f"  呼び出し: {model} (attempt {attempt + 1}/3)", file=sys.stderr)
+            print(f"  calling: {model} (attempt {attempt + 1}/3)", file=sys.stderr)
             output, rc, stderr = _call_model(detected, model, system_prompt, user_prompt)
 
             if rc == 0 and output.strip():
@@ -326,7 +326,7 @@ def _call_with_fallback(
                 time.sleep(wait)
                 continue
 
-            # rate limit 以外のエラー → モデル降格
+            # Non-rate-limit error -> downgrade model
             print(f"  {model} failed (rc={rc}): {(stderr or output)[-500:]}", file=sys.stderr)
             break
 
@@ -336,47 +336,47 @@ def _call_with_fallback(
 
 
 
-# exit code 2 = 空索引（リトライしても無意味）
+# exit code 2 = empty index (retrying is pointless)
 EXIT_EMPTY_INDEX = 2
 
 
 def _load_inputs(target_date: str) -> tuple[str, str] | None:
-    """(index_text, style_text) を返す。失敗時は None。
-    空索引の場合は SystemExit(2) を発生させる。"""
+    """Return (index_text, style_text). Returns None on failure.
+    Raises SystemExit(2) if the index is empty."""
     index_path = DAILY_INDEX_DIR / f"daily_index_{target_date}.md"
     if not index_path.exists():
-        print(f"ERROR: 日次索引が見つかりません: {index_path}")
-        print("  先に weekly_report_hub.py を実行してください（または --run-preprocess を使う）。")
+        print(f"ERROR: Daily index not found: {index_path}")
+        print("  Run weekly_report_hub.py first (or use --run-preprocess).")
         return None
     index_text = index_path.read_text(encoding="utf-8")
-    print(f"日次索引: {index_path.name} ({len(index_text.splitlines()):,} 行, {len(index_text):,} 文字)")
+    print(f"Daily index: {index_path.name} ({len(index_text.splitlines()):,} lines, {len(index_text):,} chars)")
 
-    # 空索引の早期検出
+    # Early detection of empty index
     if len(index_text.strip()) < 500:
-        print(f"ERROR: 索引が空または極端に短い ({len(index_text)} chars).")
-        print("  前段の jsonl_to_obsidian / weekly_report_hub が失敗している可能性があります.")
+        print(f"ERROR: Index is empty or extremely short ({len(index_text)} chars).")
+        print("  jsonl_to_obsidian / weekly_report_hub may have failed.")
         raise SystemExit(EXIT_EMPTY_INDEX)
 
-    # スタイルガイドを読み込み（gm_style.md + daily_log_style.md）
+    # Load style guides (gm_style.md + daily_log_style.md)
     style_parts = []
     for sf in STYLE_FILES:
         if sf.exists():
             content = sf.read_text(encoding="utf-8")
             style_parts.append(f"# {sf.name}\n\n{content}")
-            print(f"スタイル: {sf.name} ({len(content):,} 文字)")
+            print(f"Style: {sf.name} ({len(content):,} chars)")
         else:
-            print(f"WARN: スタイルファイルが見つかりません: {sf}")
+            print(f"WARN: Style file not found: {sf}")
     style_text = "\n\n---\n\n".join(style_parts)
     return index_text, style_text
 
 
 def generate_multi_file(target_date: str, model: str, overwrite: bool, backend: str = "auto") -> int:
-    """複数ファイル出力モード（ハブページ + トピックページ）。"""
+    """Multi-file output mode (hub page + topic pages)."""
     detected, reason = detect_backend(backend)
     if detected == "none":
         print(f"ERROR: {reason}")
         return 1
-    print(f"バックエンド: {detected} ({reason})")
+    print(f"Backend: {detected} ({reason})")
 
     result = _load_inputs(target_date)
     if result is None:
@@ -384,22 +384,22 @@ def generate_multi_file(target_date: str, model: str, overwrite: bool, backend: 
     index_text, style_text = result
 
     user_prompt = build_user_prompt(target_date, style_text, index_text)
-    print(f"モデル: {model} | 入力: 約 {len(user_prompt):,} 文字")
-    print("生成中（複数ファイルモード）...")
+    print(f"Model: {model} | Input: ~{len(user_prompt):,} chars")
+    print("Generating (multi-file mode)...")
 
     output, returncode, stderr = _call_with_fallback(detected, SYSTEM_PROMPT_MULTI, user_prompt, model)
     if returncode != 0:
-        print(f"ERROR: モデル呼び出し失敗:\n{stderr[-2000:]}")
+        print(f"ERROR: Model call failed:\n{stderr[-2000:]}")
         return 1
 
     files = parse_multi_file_output(output)
     if not files:
-        # フォールバック: パースに失敗した場合は単一ファイルとして保存
-        print("WARNING: <<FILE:...>><<ENDFILE>> ブロックが見つかりません。単一ファイルとして保存します。")
+        # Fallback: save as single file if parsing failed
+        print("WARNING: No <<FILE:...>><<ENDFILE>> blocks found. Saving as single file.")
         out_path = DAILY_LOG_DIR / f"{target_date}.md"
         DAILY_LOG_DIR.mkdir(parents=True, exist_ok=True)
         out_path.write_text(output, encoding="utf-8")
-        print(f"保存: {out_path} ({len(output.splitlines()):,} 行)")
+        print(f"Saved: {out_path} ({len(output.splitlines()):,} lines)")
         return 0
 
     DAILY_LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -407,27 +407,27 @@ def generate_multi_file(target_date: str, model: str, overwrite: bool, backend: 
     for filename, content in files.items():
         out_path = DAILY_LOG_DIR / filename
         if out_path.exists() and not overwrite:
-            ans = input(f"上書き? {out_path.name} [y/N] ").strip().lower()
+            ans = input(f"Overwrite? {out_path.name} [y/N] ").strip().lower()
             if ans != "y":
-                print(f"  スキップ: {filename}")
+                print(f"  Skipped: {filename}")
                 continue
         out_path.write_text(content, encoding="utf-8")
         saved.append((filename, len(content.splitlines()), len(content)))
-        print(f"  保存: {filename} ({len(content.splitlines()):,} 行 / {len(content):,} 文字)")
+        print(f"  Saved: {filename} ({len(content.splitlines()):,} lines / {len(content):,} chars)")
 
-    print(f"\n完了: {len(saved)} ファイル保存")
+    print(f"\nDone: {len(saved)} files saved")
     for fname, lines, chars in saved:
         print(f"  ~/Documents/Obsidian Vault/01_Daily/{fname}")
     return 0
 
 
 def generate_single_file(target_date: str, model: str, overwrite: bool, backend: str = "auto") -> int:
-    """単一ファイル出力モード（後方互換）。"""
+    """Single file output mode (backward compatible)."""
     detected, reason = detect_backend(backend)
     if detected == "none":
         print(f"ERROR: {reason}")
         return 1
-    print(f"バックエンド: {detected} ({reason})")
+    print(f"Backend: {detected} ({reason})")
 
     result = _load_inputs(target_date)
     if result is None:
@@ -436,14 +436,14 @@ def generate_single_file(target_date: str, model: str, overwrite: bool, backend:
 
     out_path = DAILY_LOG_DIR / f"{target_date}.md"
     if out_path.exists() and not overwrite:
-        ans = input(f"上書きしますか？ {out_path} [y/N] ").strip().lower()
+        ans = input(f"Overwrite? {out_path} [y/N] ").strip().lower()
         if ans != "y":
-            print("中止しました。--overwrite で強制上書きできます。")
+            print("Cancelled. Use --overwrite to force overwrite.")
             return 0
 
     user_prompt = build_user_prompt(target_date, style_text, index_text)
-    print(f"モデル: {model} | 入力: 約 {len(user_prompt):,} 文字")
-    print("生成中（単一ファイルモード）...")
+    print(f"Model: {model} | Input: ~{len(user_prompt):,} chars")
+    print("Generating (single file mode)...")
 
     output, returncode, stderr = _call_with_fallback(detected, SYSTEM_PROMPT_SINGLE, user_prompt, model)
     if returncode != 0:
@@ -452,8 +452,8 @@ def generate_single_file(target_date: str, model: str, overwrite: bool, backend:
 
     DAILY_LOG_DIR.mkdir(parents=True, exist_ok=True)
     out_path.write_text(output, encoding="utf-8")
-    print(f"保存完了: {out_path}")
-    print(f"  {len(output.splitlines()):,} 行 / {len(output):,} 文字")
+    print(f"Saved: {out_path}")
+    print(f"  {len(output.splitlines()):,} lines / {len(output):,} chars")
     return 0
 
 
@@ -465,20 +465,20 @@ def parse_args() -> argparse.Namespace:
     from datetime import datetime
     today = datetime.now(JST).strftime("%Y-%m-%d")
     parser = argparse.ArgumentParser(
-        description="日次索引 → Claude API → 日次ログ自動生成"
+        description="Daily index -> Claude API -> auto-generate daily log"
     )
     parser.add_argument("--date", default=today,
-                        help=f"対象日 YYYY-MM-DD（デフォルト: 今日 {today}）")
+                        help=f"Target date YYYY-MM-DD (default: today {today})")
     parser.add_argument("--model", default=DEFAULT_MODEL,
-                        help=f"使用モデル（デフォルト: {DEFAULT_MODEL}）")
+                        help=f"Model to use (default: {DEFAULT_MODEL})")
     parser.add_argument("--run-preprocess", action="store_true",
-                        help="実行前に weekly_report_hub.py で索引を更新する")
+                        help="Run weekly_report_hub.py to update index before generating")
     parser.add_argument("--overwrite", action="store_true",
-                        help="既存ファイルを確認なしで上書き")
+                        help="Overwrite existing files without confirmation")
     parser.add_argument("--single-file", action="store_true",
-                        help="旧フォーマット（単一ファイル）で出力する")
+                        help="Output in legacy format (single file)")
     parser.add_argument("--backend", default="auto", choices=["auto", "cli", "api"],
-                        help="使用バックエンド (デフォルト: auto = claude CLI 優先)")
+                        help="Backend to use (default: auto = prefer claude CLI)")
     return parser.parse_args()
 
 

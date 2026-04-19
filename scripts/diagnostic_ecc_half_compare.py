@@ -2,17 +2,16 @@
 """
 diagnostic_ecc_half_compare.py
 -------------------------------
-Pos1 の channel_02_bg_corr を例に、
-  RIGHT half（現行・列後半）vs LEFT half（未使用・列前半）
-の ECC を比較し、それぞれのシフトを full crop に適用して
-grid を引いた結果を並べて可視化する。
+Using Pos1 channel_02_bg_corr as an example, compare
+  RIGHT half (current, latter columns) vs LEFT half (unused, former columns)
+ECC, apply each shift to the full crop, subtract grid, and visualize side by side.
 
-列レイアウト（5列 × N_FRAMES 行）:
+Column layout (5 cols x N_FRAMES rows):
   [0] frame (raw)
   [1] grid ref (full)
-  [2] RIGHT half ECC → subtracted
-  [3] LEFT half ECC, 固定スケール → subtracted
-  [4] LEFT half ECC, 自動スケール → subtracted
+  [2] RIGHT half ECC -> subtracted
+  [3] LEFT half ECC, fixed scale -> subtracted
+  [4] LEFT half ECC, auto scale -> subtracted
 """
 import numpy as np
 import tifffile
@@ -39,20 +38,20 @@ GRID_Z     = 2
 ROIS_JSON  = r"D:\AquisitionData\Kitagishi\260310\timelapse_11day_exp200ms_1pos_EMM2\Pos1\output_phase\channels\channel_rois.json"
 CH_INDEX   = 2        # channel_02
 
-# ECC 正規化（固定スケール）
+# ECC normalization (fixed scale)
 VMIN_ECC = -5.0
 VMAX_ECC =  2.0
 
-# backsub パラメータ（grid ref に適用）
+# backsub parameters (applied to grid ref)
 BACKSUB_HIST_MIN    = -1.1
 BACKSUB_HIST_MAX    =  1.5
 BACKSUB_N_BINS      = 512
 BACKSUB_SMOOTH_WIN  = 20
 BACKSUB_MIN_PHASE   = -1.1
 
-# 表示設定
+# Display settings
 N_FRAMES   = 5
-FRAME_STEP = 40       # 0, 40, 80, 120, 160 フレーム
+FRAME_STEP = 40       # frames 0, 40, 80, 120, 160
 DISP_VMIN  = -0.5
 DISP_VMAX  =  1.5
 # ============================================================
@@ -63,7 +62,7 @@ def to_uint8(img, vmin, vmax):
 
 
 def ecc_align(ref_u8, tl_u8):
-    """(tx, ty, corr) を返す。失敗時 None。"""
+    """Return (tx, ty, corr). Returns None on failure."""
     warp = np.eye(2, 3, dtype=np.float32)
     criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-8)
     try:
@@ -75,8 +74,8 @@ def ecc_align(ref_u8, tl_u8):
 
 def apply_shift_and_subtract(frame, grid_full, tx, ty):
     """
-    frame を (-tx, -ty) だけ平行移動してグリッド座標に合わせ、grid_full を引く。
-    warpAffine の変換行列: W = [[1,0,-tx],[0,1,-ty]]
+    Translate frame by (-tx, -ty) to align with grid coordinates, then subtract grid_full.
+    warpAffine transform matrix: W = [[1,0,-tx],[0,1,-ty]]
     """
     h, w = frame.shape
     M = np.float32([[1, 0, -tx], [0, 1, -ty]])
@@ -87,7 +86,7 @@ def apply_shift_and_subtract(frame, grid_full, tx, ty):
 
 
 def compute_backsub_offset(img):
-    """gaussian_backsub と同方式でバックグラウンドピークを推定し -peak を返す。"""
+    """Estimate background peak using the same method as gaussian_backsub, return -peak."""
     bin_edges = np.linspace(BACKSUB_HIST_MIN, BACKSUB_HIST_MAX, BACKSUB_N_BINS + 1)
     hist, _ = np.histogram(img.flatten(), bins=bin_edges)
     centers = (bin_edges[:-1] + bin_edges[1:]) / 2
@@ -112,20 +111,20 @@ def compute_backsub_offset(img):
 
 
 def main():
-    # ROI 読み込み
+    # Load ROI
     with open(ROIS_JSON, encoding='utf-8') as f:
         rois = json.load(f)
     roi = rois[CH_INDEX]
     cy, cx = roi['cy'], roi['cx']
     crop_w, crop_h = roi['crop_w'], roi['crop_h']
     crop_h_half = crop_h // 2          # 220
-    cx_right    = cx + crop_h // 4    # 右半分の中心
-    cx_left     = cx - crop_h // 4    # 左半分の中心
+    cx_right    = cx + crop_h // 4    # center of right half
+    cx_left     = cx - crop_h // 4    # center of left half
     print(f"ROI ch{CH_INDEX}: cy={cy}, cx={cx}, crop_w={crop_w}, crop_h={crop_h}")
     print(f"  RIGHT half: cx={cx_right}, width={crop_h_half}  (cols [{crop_h_half}:{crop_h}])")
     print(f"  LEFT  half: cx={cx_left},  width={crop_h_half}  (cols [0:{crop_h_half}])")
 
-    # グリッド基準画像
+    # Grid reference image
     grid_path = (Path(GRID_DIR) / f"{GRID_LABEL}_x+0_y+0" / "output_phase"
                  / f"img_000000000_ph_{GRID_Z:03d}_phase.tif")
     grid_img  = tifffile.imread(str(grid_path)).astype(np.float64)
@@ -134,30 +133,30 @@ def main():
     grid_right = extract_rect_roi(grid_img, cy, cx_right, crop_w, crop_h_half)
     grid_left  = extract_rect_roi(grid_img, cy, cx_left,  crop_w, crop_h_half)
 
-    # grid ref に backsub 適用
+    # Apply backsub to grid ref
     grid_full  = grid_full  + compute_backsub_offset(grid_full)
     grid_right = grid_right + compute_backsub_offset(grid_right)
     grid_left  = grid_left  + compute_backsub_offset(grid_left)
 
-    # auto scale for left half（grid の left half の実データ分布から決める）
+    # auto scale for left half (determined from actual data distribution of grid left half)
     left_vmin = float(np.percentile(grid_left, 1))
     left_vmax = float(np.percentile(grid_left, 99))
     print(f"  LEFT half auto scale: vmin={left_vmin:.3f}  vmax={left_vmax:.3f}")
     print(f"  Fixed scale:          vmin={VMIN_ECC:.3f}  vmax={VMAX_ECC:.3f}")
 
-    # uint8 変換（grid ref）
+    # uint8 conversion (grid ref)
     g_right_u8       = to_uint8(grid_right, VMIN_ECC, VMAX_ECC)
     g_left_fixed_u8  = to_uint8(grid_left,  -1.0, 1.0)
     g_left_auto_u8   = to_uint8(grid_left,  left_vmin, left_vmax)
 
-    # タイムラプス stack
+    # Timelapse stack
     stack = tifffile.imread(str(TL_CHANNEL)).astype(np.float64)
     if stack.ndim == 2:
         stack = stack[np.newaxis]
     frame_indices = [i * FRAME_STEP for i in range(N_FRAMES) if i * FRAME_STEP < stack.shape[0]]
-    print(f"フレーム数: {stack.shape[0]}, 表示: {frame_indices}")
+    print(f"Total frames: {stack.shape[0]}, display: {frame_indices}")
 
-    # ── 描画 ──────────────────────────────────────────────────
+    # ---- Plotting ----
     n_rows = len(frame_indices)
     n_cols = 5
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_cols * 4, n_rows * 2.2),
@@ -257,7 +256,7 @@ def main():
                 },
                 description="RIGHT vs LEFT half ECC comparison: shift applied to full crop, grid subtracted")
     plt.close(fig)
-    print("完了")
+    print("Done")
 
 
 if __name__ == "__main__":

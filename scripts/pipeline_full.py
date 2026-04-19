@@ -2,19 +2,19 @@
 """
 pipeline_full.py
 ----------------
-グリッド再構成 → タイムラプス再構成 → channel_crop → backsub
-→ compute_pos_shifts → grid_subtract → shift_visualize
-を一括実行する統合パイプライン。
+Integrated pipeline that runs in sequence:
+grid reconstruction -> timelapse reconstruction -> channel_crop -> backsub
+-> compute_pos_shifts -> grid_subtract -> shift_visualize.
 
-実行順序:
-  [Step 0] Grid reconstruction       : GRID_DIR の全 PosX_x*_y* を再構成
-  [Step 1] Timelapse reconstruction  : 各 TIMELAPSE_DIR の全 PosX を再構成
-  各 Pos に対して:
-    [Step 2] channel_crop            : output_phase/ → output_phase/channels/
-    [Step 3] gaussian_backsub        : channel_*.tif → channel_*_bg_corr.tif
-    [Step 4] align_simple            : 確認用（オプション）
+Execution order:
+  [Step 0] Grid reconstruction       : Reconstruct all PosX_x*_y* in GRID_DIR
+  [Step 1] Timelapse reconstruction  : Reconstruct all PosX in each TIMELAPSE_DIR
+  For each Pos:
+    [Step 2] channel_crop            : output_phase/ -> output_phase/channels/
+    [Step 3] gaussian_backsub        : channel_*.tif -> channel_*_bg_corr.tif
+    [Step 4] align_simple            : Verification (optional)
     [Step 5] compute_pos_shifts      : pos_shifts.json + shift_visualize
-    [Step 6] grid_subtract           : grid_subtracted/ スタック生成
+    [Step 6] grid_subtract           : Generate grid_subtracted/ stacks
 """
 
 import re
@@ -32,7 +32,7 @@ _script_dir = Path(__file__).parent
 sys.path.insert(0, str(_script_dir))
 
 # ============================================================
-# ★ データパス
+# Data paths
 # ============================================================
 TIMELAPSE_DIRS = [
     r"C:\ph",
@@ -41,88 +41,88 @@ GRID_DIR = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
 
 
 # ============================================================
-# ★ 実行ステップ（False でスキップ）
+# Execution steps (set False to skip)
 # ============================================================
 STEP_GRID_RECONSTRUCTION     = False
 STEP_TIMELAPSE_RECONSTRUCTION = False
-STEP_CALIBRATE_GRID          = False   # True で各Posのgridキャリブレーションを実行
+STEP_CALIBRATE_GRID          = False   # True to run grid calibration for each Pos
 STEP_CHANNEL_CROP            = False
 STEP_GAUSSIAN_GRADIENT       = False
 STEP_GAUSSIAN_BACKSUB        = False
 STEP_ALIGN_SIMPLE            = False
-STEP_COMPUTE_SHIFTS          = False    # shift_visualize も自動実行
+STEP_COMPUTE_SHIFTS          = False    # Also auto-runs shift_visualize
 STEP_GRID_SUBTRACT           = False
 
-# テストラン: None で全フレーム、整数で先頭 N フレームのみ処理
+# Test run: None for all frames, integer for first N frames only
 TEST_N_FRAMES                = None
 
-# 並列処理ワーカー数（None = cpu_count(), 1 = 逐次実行でデバッグ向き）
-N_WORKERS_GRID = None   # Step 0 grid reconstruction 用
-N_WORKERS_TL   = None   # Step 1 timelapse reconstruction 用
+# Parallel processing worker count (None = cpu_count(), 1 = sequential for debugging)
+N_WORKERS_GRID = None   # For Step 0 grid reconstruction
+N_WORKERS_TL   = None   # For Step 1 timelapse reconstruction
 
 # ============================================================
-# Pos フィルタ（タイムラプス側）
+# Pos filter (timelapse side)
 # ============================================================
-# None で全 Pos。["Pos1", "Pos3"] のように指定も可
+# None for all Pos. Can specify like ["Pos1", "Pos3"]
 POS_FILTER = ["Pos1"]
 
 # ============================================================
-# QPI 光学パラメータ
+# QPI optical parameters
 # ============================================================
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 
 # ============================================================
-# Pos 番号によるクロップ切り替え（grid / timelapse 共通）
+# Crop switching by Pos number (shared for grid / timelapse)
 # ============================================================
 POS_SPLIT   = 33
-CROP_BEFORE = (0, 2048, 400, 2448)   # pos_number < POS_SPLIT → 右側 (400:2448)  センサー幅2448
-CROP_AFTER  = (0, 2048,   0, 2048)   # pos_number >= POS_SPLIT → 左側 (0:2048)
-# ※ BG（Pos0）はターゲットのpos_numberで決まるcropを使う（常に右ではない）
+CROP_BEFORE = (0, 2048, 400, 2448)   # pos_number < POS_SPLIT -> right side (400:2448)  sensor width 2448
+CROP_AFTER  = (0, 2048,   0, 2048)   # pos_number >= POS_SPLIT -> left side (0:2048)
+# Note: BG (Pos0) uses the crop determined by the target's pos_number (not always right)
 
 # ============================================================
-# 再構成パラメータ
+# Reconstruction parameters
 # ============================================================
-# グリッド
-GRID_BG_BASE_LABEL        = "Pos0"   # BG として使うグリッドの base_label
-GRID_TARGET_BASE_LABELS   = None  # None で Pos0 以外を全処理
+# Grid
+GRID_BG_BASE_LABEL        = "Pos0"   # base_label of grid used as BG
+GRID_TARGET_BASE_LABELS   = None  # None to process all except Pos0
 GRID_SKIP_IF_EXISTS       = False
 GRID_MEAN_REGION          = None     # (r1, r2, c1, c2) or None
 
-# タイムラプス
-TL_BG_LABEL               = "Pos0"  # BG フォルダ名
-TL_RAW_PATTERN            = "img_*_ph_000.tif"   # 生画像パターン
+# Timelapse
+TL_BG_LABEL               = "Pos0"  # BG folder name
+TL_RAW_PATTERN            = "img_*_ph_000.tif"   # Raw image pattern
 TL_SKIP_IF_EXISTS         = True
 TL_MEAN_REGION            = None     # (r1, r2, c1, c2) or None
 
 # ============================================================
-# Gaussian gradient removal パラメータ（STEP_GAUSSIAN_GRADIENT=True 時のみ）
+# Gaussian gradient removal parameters (only when STEP_GAUSSIAN_GRADIENT=True)
 # ============================================================
-# sigma はチャネル crop サイズ（CROP_W=40, CROP_H=120）より十分大きくすること。
-# alignment 用: sigma >= 150 推奨。可視化用: 50〜100 でも可。
+# sigma should be much larger than the channel crop size (CROP_W=40, CROP_H=120).
+# For alignment: sigma >= 150 recommended. For visualization: 50-100 is acceptable.
 GRADIENT_SIGMA            = 150      # pixels; large-scale gradient removal
-# False → *_phase_bgsub.tif として保存（元ファイルを保持）
-# True  → *_phase.tif を上書き（元ファイルが消える・Step1から再生成可能）
+# False -> save as *_phase_bgsub.tif (keep original files)
+# True  -> overwrite *_phase.tif (original files are lost; can regenerate from Step1)
 GRADIENT_INPLACE          = False
 
 # ============================================================
-# channel_crop パラメータ
+# channel_crop parameters
 # ============================================================
-CROP_DETECT               = True     # channel_rois.json がなければ自動 detect
-CROP_FORCE_RECOMPUTE      = True    # True にすると channels/ を丸ごと削除して最初から再計算
-CROP_FORCE_DETECT         = True    # True にすると既存 channel_rois.json のみ削除して再検出
+CROP_DETECT               = True     # Auto-detect if channel_rois.json does not exist
+CROP_FORCE_RECOMPUTE      = True    # True to delete channels/ entirely and recompute from scratch
+CROP_FORCE_DETECT         = True    # True to delete only existing channel_rois.json and re-detect
 CROP_APPLY                = True
-# STEP_GAUSSIAN_GRADIENT=True かつ GRADIENT_INPLACE=False のとき自動で *_phase_bgsub.tif に切り替わる
-CROP_IMG_PATTERN          = "*_phase.tif"  # output_phase/ 内の位相画像パターン
+# When STEP_GAUSSIAN_GRADIENT=True and GRADIENT_INPLACE=False, auto-switches to *_phase_bgsub.tif
+CROP_IMG_PATTERN          = "*_phase.tif"  # Phase image pattern in output_phase/
 CROP_W                    = 40
 CROP_H                    = 270
 CROP_MIN_DIST             = 35
 CROP_PROMINENCE           = 0.3
 CROP_X_START              = 40
 CROP_X_END                = 480
-CROP_USE_GRID_ROIS        = True   # True → grid base Pos の channel_rois.json をコピーして使う（再detect しない）
+CROP_USE_GRID_ROIS        = True   # True -> copy and use channel_rois.json from grid base Pos (skip re-detect)
 
 # ============================================================
-# gaussian_backsub パラメータ
+# gaussian_backsub parameters
 # ============================================================
 BACKSUB_MIN_PHASE         = -1.1
 BACKSUB_HIST_MIN          = -1.1
@@ -133,7 +133,7 @@ BACKSUB_SAVE_PNG          = False
 BACKSUB_PNG_DPI           = 150
 
 # ============================================================
-# align_and_subtract_simple パラメータ（STEP_ALIGN_SIMPLE=True 時のみ）
+# align_and_subtract_simple parameters (only when STEP_ALIGN_SIMPLE=True)
 # ============================================================
 ALIGN_REFERENCE_FRAME     = 150
 ALIGN_METHOD              = 'ecc'
@@ -143,51 +143,51 @@ ALIGN_VMIN                = -0.1
 ALIGN_VMAX                =  1.7
 
 # ============================================================
-# compute_pos_shifts パラメータ
+# compute_pos_shifts parameters
 # ============================================================
 SHIFTS_CHANNEL_PATTERN    = "channel_*_bg_corr.tif"
-SHIFTS_USE_GRID_REFERENCE = True     # False → タイムラプスの SHIFTS_REFERENCE_FRAME 基準
-SHIFTS_REFERENCE_FRAME    = 150      # USE_GRID_REFERENCE=False 時のみ使用
-SHIFTS_GRID_Z_INDEX       = 10       # グリッド基準画像の z 番号
+SHIFTS_USE_GRID_REFERENCE = True     # False -> use SHIFTS_REFERENCE_FRAME from timelapse
+SHIFTS_REFERENCE_FRAME    = 150      # Used only when USE_GRID_REFERENCE=False
+SHIFTS_GRID_Z_INDEX       = 10       # z index of grid reference image
 SHIFTS_METHOD             = 'ecc'
 SHIFTS_VMIN               = -5.0
 SHIFTS_VMAX               =  2.0
 SHIFTS_OUTLIER_MAD_THRESH = 5.0
 SHIFTS_TIMESERIES_WINDOW  = 11
 SHIFTS_TIMESERIES_THRESH  = 2.0
-SHIFTS_ECC_MIN_CORR       = 0.9   # ECC スコアがこれ未満のチャネルを除外
-SHIFTS_APPLY_BACKSUB_TO_GRID_REF = True  # グリッド基準画像にも gaussian_backsub を適用
-SHIFTS_USE_INCREMENTAL_TRACKING  = True   # 逐次追跡モード
-SHIFTS_X_STEP                    = 0.1   # グリッドステップ [μm]（GSUB_X_STEP と同値）
+SHIFTS_ECC_MIN_CORR       = 0.9   # Exclude channels with ECC score below this
+SHIFTS_APPLY_BACKSUB_TO_GRID_REF = True  # Also apply gaussian_backsub to grid reference images
+SHIFTS_USE_INCREMENTAL_TRACKING  = True   # Incremental tracking mode
+SHIFTS_X_STEP                    = 0.1   # Grid step [um] (same as GSUB_X_STEP)
 SHIFTS_Y_STEP                    = 0.1   # [μm]
 SHIFTS_SHIFT_SIGN_X              = 1
 SHIFTS_SHIFT_SIGN_Y              = 1
-SHIFTS_JUMP_THRESH_UM            = 1.0   # 前フレームとのシフト差 [μm] を超えたら外れ値
-# calibrate_grid_positions.py の出力 JSON (None で名目値を使用)
-GRID_CALIBRATION_JSON            = None   # 例: r"E:\...\grid_calibration_Pos1.json"
-# True → GRID_DIR/grid_calibration_{Pos}.json が存在すれば自動使用
-# False → GRID_CALIBRATION_JSON の値のみ使用（JSON が存在しても無視）
+SHIFTS_JUMP_THRESH_UM            = 1.0   # Outlier if shift diff from previous frame exceeds this [um]
+# Output JSON from calibrate_grid_positions.py (None to use nominal values)
+GRID_CALIBRATION_JSON            = None   # e.g.: r"E:\...\grid_calibration_Pos1.json"
+# True -> auto-use GRID_DIR/grid_calibration_{Pos}.json if it exists
+# False -> only use GRID_CALIBRATION_JSON value (ignore even if JSON exists)
 SHIFTS_USE_PER_POS_CALIBRATION   = False
 
 # ============================================================
-# 2段階ECC パラメータ（SHIFTS_USE_INCREMENTAL_TRACKING=True 時のみ有効）
+# 2-stage ECC parameters (active only when SHIFTS_USE_INCREMENTAL_TRACKING=True)
 # ============================================================
-SHIFTS_USE_SECOND_PASS_ECC = True    # True で2段階ECC有効化
-SHIFTS_FIRST_PASS_HALF     = True   # True で1回目ECCもhalf cropで実施
-# None → pos_number < POS_SPLIT なら 'right'、>= POS_SPLIT なら 'left'
+SHIFTS_USE_SECOND_PASS_ECC = True    # True to enable 2-stage ECC
+SHIFTS_FIRST_PASS_HALF     = True   # True to also use half crop for 1st ECC pass
+# None -> 'right' if pos_number < POS_SPLIT, 'left' if >= POS_SPLIT
 SHIFTS_SECOND_PASS_HALF    = None
-SHIFTS_USE_THIRD_PASS_ECC  = True   # True で3段階ECC有効化（pass2結果から最近傍grid再選択）
-SHIFTS_APPLY_SHIFT_AND_CROP      = False   # True で crop_subtracted を出力（通常不要）
-# True にすると STEP_GAUSSIAN_BACKSUB 不要。output_phase/ のフル位相画像から
-# 270px wide crop → slope+intercept 補正 → 中央 80px → ECC を行う。
+SHIFTS_USE_THIRD_PASS_ECC  = True   # True to enable 3-stage ECC (re-select nearest grid from pass2 result)
+SHIFTS_APPLY_SHIFT_AND_CROP      = False   # True to output crop_subtracted (normally unnecessary)
+# When True, STEP_GAUSSIAN_BACKSUB is unnecessary. From full phase images in output_phase/:
+# 270px wide crop -> slope+intercept correction -> center 80px -> ECC.
 SHIFTS_USE_SLOPE_CORRECTION      = False
 SHIFTS_TILT_CROP_H               = 270
-SHIFTS_ECC_CROP_H                = 80      # ECC に使う crop の X 幅
+SHIFTS_ECC_CROP_H                = 80      # X width of crop used for ECC
 
 # ============================================================
-# grid_subtract パラメータ
+# grid_subtract parameters
 # ============================================================
-GSUB_Z_INDEX              = 10       # グリッド画像のz番号（SHIFTS_GRID_Z_INDEX と同じでよい）
+GSUB_Z_INDEX              = 10       # z index of grid image (can be same as SHIFTS_GRID_Z_INDEX)
 GSUB_X_STEP               = 0.1     # μm
 GSUB_Y_STEP               = 0.1     # μm
 GSUB_SENSOR_PIXEL_SIZE    = 3.45e-6
@@ -197,20 +197,20 @@ GSUB_RECONSTRUCTED_DIM    = 511
 GSUB_SHIFT_SIGN_X              = 1
 GSUB_SHIFT_SIGN_Y              = 1
 GSUB_APPLY_INVERSE_SHIFT       = False
-GSUB_APPLY_BACKSUB_TO_GRID     = True   # グリッド画像に backsub を適用
-GSUB_APPLY_SUBPIXEL_CORRECTION = True   # サブピクセル残差 warp をフレームに適用
-GSUB_OUTPUT_CROP_H             = 240    # 出力クロップ長（None → channel_rois.json の crop_h をそのまま使用）
-GSUB_OUTPUT_DIR                = None   # 出力ディレクトリ（None → channels_dir/grid_subtracted/）
-GSUB_OUTPUT_SAVE_FULL_FRAME    = True   # True → crop前のフルフレームも full_frame_grid_sub.tif として保存
+GSUB_APPLY_BACKSUB_TO_GRID     = True   # Apply backsub to grid images
+GSUB_APPLY_SUBPIXEL_CORRECTION = True   # Apply subpixel residual warp to frames
+GSUB_OUTPUT_CROP_H             = 240    # Output crop length (None -> use crop_h from channel_rois.json as is)
+GSUB_OUTPUT_DIR                = None   # Output directory (None -> channels_dir/grid_subtracted/)
+GSUB_OUTPUT_SAVE_FULL_FRAME    = True   # True -> also save full frame before crop as full_frame_grid_sub.tif
 # ============================================================
 
 # ============================================================
-# ★ 外部 analysis_config.json による上書き（--config 引数）
+# Override from external analysis_config.json (--config argument)
 # ============================================================
 def _apply_config(config_path: str):
-    """analysis_config.json を読んで global パラメータを上書きする。
-    JSON キー（小文字）→ PYTHON 変数名（大文字）に対応。
-    _note など _ で始まるキーはスキップ。
+    """Read analysis_config.json and override global parameters.
+    JSON keys (lowercase) map to PYTHON variable names (uppercase).
+    Keys starting with _ (e.g., _note) are skipped.
     """
     with open(config_path, encoding="utf-8") as _f:
         _cfg = json.load(_f)
@@ -237,7 +237,7 @@ if _cfg_path:
 
 
 def _save_run_params():
-    """実行時の全パラメータを run_logs/run_params_YYYYMMDD_HHMMSS.json に保存する。"""
+    """Save all runtime parameters to run_logs/run_params_YYYYMMDD_HHMMSS.json."""
     import datetime
     g = globals()
     params = {}
@@ -264,7 +264,7 @@ def _save_run_params():
 
 
 # -----------------------------------------------------------
-# 共通ユーティリティ
+# Common utilities
 # -----------------------------------------------------------
 def _banner(msg):
     print(f"\n{'='*64}\n  {msg}\n{'='*64}")
@@ -319,7 +319,7 @@ def _scan_grid_folders(grid_dir: Path):
 
 
 def _worker_grid_point(args):
-    """step_grid_reconstruction のワーカー: 1グリッドポイントを再構成して保存。
+    """Worker for step_grid_reconstruction: reconstruct and save one grid point.
 
     Saves two outputs per z slice:
       - output_phase/     : BG-subtracted + region mean subtracted (for ECC)
@@ -334,7 +334,7 @@ def _worker_grid_point(args):
     z_tgt = {_get_z_index(p): p for p in sorted(tgt_dir.glob("img_*_ph_*.tif"))}
     z_bg  = {_get_z_index(p): p for p in sorted(bg_dir.glob("img_*_ph_*.tif"))}
     if not z_tgt:
-        return xi, yi, False, "z画像なし"
+        return xi, yi, False, "no z images"
 
     out_dir.mkdir(exist_ok=True)
     raw_out_dir.mkdir(exist_ok=True)
@@ -373,7 +373,7 @@ def _worker_grid_point(args):
 
 
 def _worker_tl_frame(args):
-    """step_timelapse_reconstruction のワーカー: 1フレームを再構成して保存。
+    """Worker for step_timelapse_reconstruction: reconstruct and save one frame.
 
     Saves two outputs:
       - output_phase/     : BG-subtracted + region mean subtracted (for ECC)
@@ -415,12 +415,12 @@ def step_grid_reconstruction():
     _banner("Step 0: Grid reconstruction")
     grid_dir = Path(GRID_DIR)
     if not grid_dir.exists():
-        print(f"  [ERROR] GRID_DIR が見つかりません: {grid_dir}")
+        print(f"  [ERROR] GRID_DIR not found: {grid_dir}")
         return False
 
     folders = _scan_grid_folders(grid_dir)
     if GRID_BG_BASE_LABEL not in folders:
-        print(f"  [ERROR] BG フォルダ '{GRID_BG_BASE_LABEL}_x*_y*' が見つかりません")
+        print(f"  [ERROR] BG folder '{GRID_BG_BASE_LABEL}_x*_y*' not found")
         return False
 
     bg_map = folders[GRID_BG_BASE_LABEL]
@@ -429,19 +429,19 @@ def step_grid_reconstruction():
     else:
         target_labels = [k for k in sorted(folders) if k != GRID_BG_BASE_LABEL]
 
-    print(f"  BG: {GRID_BG_BASE_LABEL}  対象: {target_labels}")
+    print(f"  BG: {GRID_BG_BASE_LABEL}  Targets: {target_labels}")
     ok = skip = err = 0
 
     for base_label in target_labels:
         if base_label not in folders:
-            print(f"  [WARN] {base_label}_x*_y* なし、スキップ")
+            print(f"  [WARN] {base_label}_x*_y* not found, skipping")
             continue
         target_map = folders[base_label]
         pos_num = pos_number_from_label(base_label)
         crop = get_crop(pos_num)
         print(f"\n  {base_label}  crop={crop}")
 
-        # タスクリスト構築
+        # Build task list
         tasks = []
         for (xi, yi) in sorted(target_map):
             tgt_dir = target_map[(xi, yi)]
@@ -450,7 +450,7 @@ def step_grid_reconstruction():
                 skip += 1
                 continue
             if (xi, yi) not in bg_map:
-                print(f"  [WARN] BG {GRID_BG_BASE_LABEL}_x{xi:+d}_y{yi:+d} なし")
+                print(f"  [WARN] BG {GRID_BG_BASE_LABEL}_x{xi:+d}_y{yi:+d} not found")
                 err += 1
                 continue
             bg_d = bg_map[(xi, yi)]
@@ -462,7 +462,7 @@ def step_grid_reconstruction():
 
         if tasks:
             n_workers_display = N_WORKERS_GRID if N_WORKERS_GRID is not None else os.cpu_count()
-            print(f"  並列処理: {len(tasks)} ポイント / {n_workers_display} ワーカー")
+            print(f"  Parallel: {len(tasks)} points / {n_workers_display} workers")
             if N_WORKERS_GRID == 1:
                 results = [_worker_grid_point(a) for a in tqdm(tasks, desc=base_label)]
             else:
@@ -479,7 +479,7 @@ def step_grid_reconstruction():
                     if err_msg:
                         print(f"  [ERR] ({xi:+d},{yi:+d}): {err_msg}")
 
-    print(f"\n  Grid reconstruction 完了: 成功={ok}, スキップ={skip}, エラー={err}")
+    print(f"\n  Grid reconstruction done: OK={ok}, skipped={skip}, errors={err}")
     return True
 
 
@@ -491,18 +491,18 @@ def step_timelapse_reconstruction(tl_dir: Path):
 
     bg_dir = tl_dir / TL_BG_LABEL
     if not bg_dir.exists():
-        print(f"  [ERROR] BG フォルダが見つかりません: {bg_dir}")
+        print(f"  [ERROR] BG folder not found: {bg_dir}")
         return []
 
-    # BG ファイル辞書（filename → path）
+    # BG file dictionary (filename -> path)
     bg_files = {p.name: p for p in sorted(bg_dir.glob("*.tif"))
                 if not p.name.startswith("._")}
     if not bg_files:
-        print(f"  [ERROR] BG 画像が見つかりません: {bg_dir}")
+        print(f"  [ERROR] BG images not found: {bg_dir}")
         return []
-    bg_fallback = next(iter(bg_files.values()))  # マッチしない場合の fallback
+    bg_fallback = next(iter(bg_files.values()))  # fallback when no match
 
-    # 処理対象 PosX（Pos0 除く）
+    # Target PosX (excluding Pos0)
     pos_dirs = sorted([d for d in tl_dir.iterdir()
                        if d.is_dir() and re.match(r"^Pos\d+$", d.name)
                        and d.name != TL_BG_LABEL])
@@ -518,10 +518,10 @@ def step_timelapse_reconstruction(tl_dir: Path):
         tif_files = sorted([p for p in pos_dir.glob("*.tif")
                             if not p.name.startswith("._")])
         if not tif_files:
-            print(f"  [SKIP] {pos_dir.name}: tif なし")
+            print(f"  [SKIP] {pos_dir.name}: no tif files")
             continue
 
-        # スキップ判定（全フレーム再構成済みか — output_phase + output_phase_raw 両方）
+        # Skip check (all frames already reconstructed -- both output_phase + output_phase_raw)
         raw_out_dir_check = pos_dir / "output_phase_raw"
         if TL_SKIP_IF_EXISTS and out_dir.exists() and raw_out_dir_check.exists():
             done_phase = set(p.name for p in out_dir.glob("*.tif"))
@@ -535,9 +535,9 @@ def step_timelapse_reconstruction(tl_dir: Path):
         out_dir.mkdir(exist_ok=True)
         raw_out_dir = pos_dir / "output_phase_raw"
         raw_out_dir.mkdir(exist_ok=True)
-        print(f"\n  {pos_dir.name}  crop={crop}  ({len(tif_files)} フレーム)")
+        print(f"\n  {pos_dir.name}  crop={crop}  ({len(tif_files)} frames)")
 
-        # QPIParams（最初のフレームから作成）
+        # QPIParams (created from first frame)
         try:
             qpi = _make_qpi_params(tif_files[0], crop)
         except Exception as e:
@@ -546,7 +546,7 @@ def step_timelapse_reconstruction(tl_dir: Path):
 
         bg_is_timelapse = len(bg_files) > 1
 
-        # タスクリスト構築（BG path を各フレームに対応させる）
+        # Build task list (map BG path to each frame)
         tasks = []
         for tif_path in tif_files:
             out_path = out_dir / (tif_path.stem + "_phase.tif")
@@ -574,7 +574,7 @@ def step_timelapse_reconstruction(tl_dir: Path):
                 if err_msg:
                     print(f"\n  [ERR] {err_msg}")
 
-        print(f"  {pos_dir.name}: 完了={n_ok}, スキップ={n_skip}, エラー={n_err}")
+        print(f"  {pos_dir.name}: done={n_ok}, skipped={n_skip}, errors={n_err}")
         processed.append(pos_dir)
 
     return processed
@@ -585,12 +585,12 @@ def step_timelapse_reconstruction(tl_dir: Path):
 # ===========================================================
 def step_gaussian_gradient(phase_dir: Path) -> str:
     """
-    output_phase/*_phase.tif に大きな sigma のガウスブラーを引いて
-    空間的バックグラウンドグラジェントを除去する。
+    Subtract a large-sigma Gaussian blur from output_phase/*_phase.tif
+    to remove spatial background gradient.
 
-    GRADIENT_INPLACE=False のとき *_phase_bgsub.tif として保存し、
-    channel_crop が使うべきパターン文字列を返す。
-    GRADIENT_INPLACE=True のとき *_phase.tif を上書きし、元パターンを返す。
+    When GRADIENT_INPLACE=False, save as *_phase_bgsub.tif and return
+    the pattern string for channel_crop to use.
+    When GRADIENT_INPLACE=True, overwrite *_phase.tif and return the original pattern.
     """
     from scipy.ndimage import gaussian_filter
 
@@ -598,7 +598,7 @@ def step_gaussian_gradient(phase_dir: Path) -> str:
     img_pattern = "*_phase.tif"
     tif_files = sorted(phase_dir.glob(img_pattern))
     if not tif_files:
-        print(f"  [SKIP] *_phase.tif が見つかりません: {phase_dir}")
+        print(f"  [SKIP] *_phase.tif not found: {phase_dir}")
         return CROP_IMG_PATTERN
 
     already = 0
@@ -616,7 +616,7 @@ def step_gaussian_gradient(phase_dir: Path) -> str:
         tifffile.imwrite(str(out_path), (img - bg).astype(np.float32))
         processed += 1
 
-    print(f"  gaussian gradient removal: {processed} 処理, {already} スキップ  "
+    print(f"  gaussian gradient removal: {processed} processed, {already} skipped  "
           f"(sigma={GRADIENT_SIGMA}px, inplace={GRADIENT_INPLACE})")
 
     return "*_phase_bgsub.tif" if not GRADIENT_INPLACE else "*_phase.tif"
@@ -631,14 +631,14 @@ def step_channel_crop(phase_dir: Path, base_label: str = "Pos1", img_pattern: st
     img_pattern = img_pattern or CROP_IMG_PATTERN
     img_files = sorted(phase_dir.glob(img_pattern))
     if not img_files:
-        print(f"  [SKIP] {CROP_IMG_PATTERN} が見つかりません: {phase_dir}")
+        print(f"  [SKIP] {CROP_IMG_PATTERN} not found: {phase_dir}")
         return False
 
     out_dir = phase_dir / "channels"
     if CROP_FORCE_RECOMPUTE and out_dir.exists():
         import shutil
         shutil.rmtree(out_dir)
-        print(f"  [force] channels/ を削除して再計算")
+        print(f"  [force] Deleted channels/ for recomputation")
     out_dir.mkdir(exist_ok=True)
     roi_path = out_dir / "channel_rois.json"
 
@@ -651,7 +651,7 @@ def step_channel_crop(phase_dir: Path, base_label: str = "Pos1", img_pattern: st
             import shutil as _shutil
             grid_rois_path = Path(GRID_DIR) / f"{base_label}_x+0_y+0" / "output_phase" / "channels" / "channel_rois.json"
             if not grid_rois_path.exists():
-                # grid base Pos でまだ detect していない → grid 画像から detect して保存
+                # grid base Pos not yet detected -> detect from grid image and save
                 grid_img = Path(GRID_DIR) / f"{base_label}_x+0_y+0" / "output_phase" / f"img_000000000_ph_{SHIFTS_GRID_Z_INDEX:03d}_phase.tif"
                 if grid_img.exists():
                     grid_rois_path.parent.mkdir(exist_ok=True)
@@ -662,10 +662,10 @@ def step_channel_crop(phase_dir: Path, base_label: str = "Pos1", img_pattern: st
                         x_start=CROP_X_START, x_end=CROP_X_END,
                     )
                 else:
-                    print(f"  [WARN] grid 基準画像なし: {grid_img} → timelapse から detect")
+                    print(f"  [WARN] grid reference image not found: {grid_img} -> detect from timelapse")
             if grid_rois_path.exists():
                 _shutil.copy2(grid_rois_path, roi_path)
-                print(f"  [grid rois] コピー: {grid_rois_path.name} → {roi_path}")
+                print(f"  [grid rois] Copied: {grid_rois_path.name} -> {roi_path}")
         if not roi_path.exists():
             if CROP_DETECT:
                 print(f"  [detect] {img_files[0].name}")
@@ -675,14 +675,14 @@ def step_channel_crop(phase_dir: Path, base_label: str = "Pos1", img_pattern: st
                     x_start=CROP_X_START, x_end=CROP_X_END,
                 )
             else:
-                print(f"  [ERROR] channel_rois.json なし・detect もスキップ")
+                print(f"  [ERROR] channel_rois.json not found and detect also skipped")
                 return False
 
     if CROP_APPLY:
         if rois is None:
             with open(roi_path, encoding="utf-8") as f:
                 rois = json.load(f)
-        print(f"  [apply] {len(img_files)} フレーム × {len(rois)} チャネル")
+        print(f"  [apply] {len(img_files)} frames x {len(rois)} channels")
         run_apply(phase_dir, img_pattern, rois, out_dir)
 
     return True
@@ -696,7 +696,7 @@ def step_gaussian_backsub(channels_dir: Path):
     stack_files = [p for p in sorted(channels_dir.glob("channel_*.tif"))
                    if "_bg_corr" not in p.name]
     if not stack_files:
-        print(f"  [SKIP] channel_*.tif が見つかりません: {channels_dir}")
+        print(f"  [SKIP] channel_*.tif not found: {channels_dir}")
         return
 
     for tif_path in stack_files:
@@ -704,14 +704,14 @@ def step_gaussian_backsub(channels_dir: Path):
         if out_path.exists():
             print(f"  [SKIP already] {tif_path.name}")
             continue
-        print(f"  処理: {tif_path.name}")
+        print(f"  Processing: {tif_path.name}")
         result = backsub.process_image(tif_path, channels_dir, save_png_data=BACKSUB_SAVE_PNG)
         if BACKSUB_SAVE_PNG and isinstance(result, dict):
             backsub.save_png_plots(result, channels_dir, BACKSUB_PNG_DPI)
 
 
 # ===========================================================
-# Step 4: align_and_subtract_simple（確認用）
+# Step 4: align_and_subtract_simple (for verification)
 # ===========================================================
 def step_align_simple(channels_dir: Path):
     from align_and_subtract_simple import process_timelapse
@@ -719,7 +719,7 @@ def step_align_simple(channels_dir: Path):
 
     stack_files = sorted(channels_dir.glob(SHIFTS_CHANNEL_PATTERN))
     if not stack_files:
-        print(f"  [SKIP] {SHIFTS_CHANNEL_PATTERN} が見つかりません")
+        print(f"  [SKIP] {SHIFTS_CHANNEL_PATTERN} not found")
         return
 
     for stack_path in stack_files:
@@ -745,19 +745,19 @@ def step_align_simple(channels_dir: Path):
 
 
 # ===========================================================
-# Step -1: calibrate_grid_positions（各Pos用グリッドキャリブレーション）
+# Step -1: calibrate_grid_positions (grid calibration for each Pos)
 # ===========================================================
 def step_calibrate_grid():
     _banner("Step -1: calibrate_grid_positions")
 
-    # calibrate_grid_positions モジュールを importlib でロード
+    # Load calibrate_grid_positions module via importlib
     cgp_path = _script_dir / "calibrate_grid_positions.py"
     spec = importlib.util.spec_from_file_location("calibrate_grid_positions", cgp_path)
     cgp = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cgp)
 
-    # 各 TIMELAPSE_DIR から Pos ラベルと channel_rois.json パスを収集
-    pos_rois_map = {}   # label → channel_rois.json path（最初に見つかったものを使用）
+    # Collect Pos labels and channel_rois.json paths from each TIMELAPSE_DIR
+    pos_rois_map = {}   # label -> channel_rois.json path (use first one found)
     for tl_dir_str in TIMELAPSE_DIRS:
         tl_dir = Path(tl_dir_str)
         if not tl_dir.exists():
@@ -774,7 +774,7 @@ def step_calibrate_grid():
                 pos_rois_map[label] = rois_json
 
     if not pos_rois_map:
-        print("  [ERROR] channel_rois.json が見つかりません（先に channel_crop を実行してください）")
+        print("  [ERROR] channel_rois.json not found (run channel_crop first)")
         return
 
     for label in sorted(pos_rois_map):
@@ -782,7 +782,7 @@ def step_calibrate_grid():
         if out_path.exists():
             print(f"  [SKIP already] {label}: {out_path.name}")
             continue
-        _section(f"キャリブレーション: {label}")
+        _section(f"Calibration: {label}")
         cgp.GRID_DIR          = GRID_DIR
         cgp.BASE_LABEL        = label
         cgp.GRID_Z_INDEX      = SHIFTS_GRID_Z_INDEX
@@ -798,7 +798,7 @@ def step_calibrate_grid():
 
 
 # ===========================================================
-# Step 5: compute_pos_shifts（shift_visualize 含む）
+# Step 5: compute_pos_shifts (including shift_visualize)
 # ===========================================================
 def step_compute_shifts(channels_dir: Path, base_label: str):
     import compute_pos_shifts as cps
@@ -824,16 +824,16 @@ def step_compute_shifts(channels_dir: Path, base_label: str):
     cps.SHIFT_SIGN_X                   = SHIFTS_SHIFT_SIGN_X
     cps.SHIFT_SIGN_Y                   = SHIFTS_SHIFT_SIGN_Y
     cps.JUMP_THRESH_UM                 = SHIFTS_JUMP_THRESH_UM
-    # per-Pos キャリブレーション JSON の使用判断
+    # Determine whether to use per-Pos calibration JSON
     per_pos_cal = Path(GRID_DIR) / f"grid_calibration_{base_label}.json"
     if SHIFTS_USE_PER_POS_CALIBRATION and per_pos_cal.exists():
         cps.GRID_CALIBRATION_JSON = str(per_pos_cal)
-        print(f"  [calibration] per-Pos キャリブレーション使用: {per_pos_cal.name}")
+        print(f"  [calibration] Using per-Pos calibration: {per_pos_cal.name}")
     else:
         cps.GRID_CALIBRATION_JSON = GRID_CALIBRATION_JSON
         if not SHIFTS_USE_PER_POS_CALIBRATION:
-            print(f"  [calibration] 名目値を使用 (SHIFTS_USE_PER_POS_CALIBRATION=False)")
-    # 2段階ECC
+            print(f"  [calibration] Using nominal values (SHIFTS_USE_PER_POS_CALIBRATION=False)")
+    # 2-stage ECC
     cps.USE_SECOND_PASS_ECC            = SHIFTS_USE_SECOND_PASS_ECC
     cps.FIRST_PASS_HALF                = SHIFTS_FIRST_PASS_HALF
     cps.SECOND_PASS_HALF               = (
@@ -862,13 +862,13 @@ def step_grid_subtract(channels_dir: Path, base_label: str):
     shifts_json = channels_dir / "pos_shifts.json"
     rois_json   = channels_dir / "channel_rois.json"
     if not shifts_json.exists():
-        print(f"  [SKIP] pos_shifts.json なし: {shifts_json}")
+        print(f"  [SKIP] pos_shifts.json not found: {shifts_json}")
         return
     if not rois_json.exists():
-        print(f"  [SKIP] channel_rois.json なし: {rois_json}")
+        print(f"  [SKIP] channel_rois.json not found: {rois_json}")
         return
 
-    # channels_dir = .../PosX/output_phase/channels → PosX dir = parent.parent
+    # channels_dir = .../PosX/output_phase/channels -> PosX dir = parent.parent
     gs.TIMELAPSE_DIR       = str(channels_dir.parent.parent)
     gs.SHIFTS_JSON         = str(shifts_json)
     gs.CHANNEL_ROIS_JSON   = str(rois_json)
@@ -895,13 +895,13 @@ def step_grid_subtract(channels_dir: Path, base_label: str):
 
 
 # ===========================================================
-# メイン
+# Main
 # ===========================================================
 def main():
     _save_run_params()
     errors = []
 
-    # ── Step -1: calibrate_grid_positions ────────────────────
+    # -- Step -1: calibrate_grid_positions --
     if STEP_CALIBRATE_GRID:
         try:
             step_calibrate_grid()
@@ -909,7 +909,7 @@ def main():
             import traceback; traceback.print_exc()
             errors.append(f"calibrate_grid: {e}")
 
-    # ── Step 0: Grid reconstruction ──────────────────────────
+    # -- Step 0: Grid reconstruction --
     if STEP_GRID_RECONSTRUCTION:
         try:
             step_grid_reconstruction()
@@ -917,16 +917,16 @@ def main():
             import traceback; traceback.print_exc()
             errors.append(f"grid_reconstruction: {e}")
 
-    # ── 各タイムラプスディレクトリを処理 ─────────────────────
+    # -- Process each timelapse directory --
     for tl_dir_str in TIMELAPSE_DIRS:
         tl_dir = Path(tl_dir_str)
         if not tl_dir.exists():
-            errors.append(f"TIMELAPSE_DIR が見つかりません: {tl_dir}")
+            errors.append(f"TIMELAPSE_DIR not found: {tl_dir}")
             continue
 
-        _banner(f"タイムラプス: {tl_dir.name}")
+        _banner(f"Timelapse: {tl_dir.name}")
 
-        # ── Step 1: Timelapse reconstruction ─────────────────
+        # -- Step 1: Timelapse reconstruction --
         if STEP_TIMELAPSE_RECONSTRUCTION:
             try:
                 pos_dirs = step_timelapse_reconstruction(tl_dir)
@@ -935,26 +935,26 @@ def main():
                 errors.append(f"{tl_dir.name} timelapse_reconstruction: {e}")
                 continue
         else:
-            # reconstruction スキップ時は既存 Pos フォルダを列挙
+            # When skipping reconstruction, enumerate existing Pos folders
             pos_dirs = sorted([d for d in tl_dir.iterdir()
                                if d.is_dir() and re.match(r"^Pos\d+$", d.name)
                                and d.name != TL_BG_LABEL])
             if POS_FILTER:
                 pos_dirs = [d for d in pos_dirs if d.name in POS_FILTER]
 
-        # ── Steps 2-6: 各 Pos を処理 ─────────────────────────
+        # -- Steps 2-6: Process each Pos --
         for pos_dir in pos_dirs:
             phase_dir    = pos_dir / "output_phase"
             channels_dir = phase_dir / "channels"
             base_label   = pos_dir.name  # e.g. "Pos4"
 
             if not phase_dir.exists():
-                print(f"  [SKIP] output_phase/ なし: {pos_dir}")
+                print(f"  [SKIP] output_phase/ not found: {pos_dir}")
                 continue
 
             _section(f"{tl_dir.name} / {pos_dir.name}")
 
-            # Step 1.5: Gaussian gradient removal（channel_crop の前）
+            # Step 1.5: Gaussian gradient removal (before channel_crop)
             crop_pattern = CROP_IMG_PATTERN
             if STEP_GAUSSIAN_GRADIENT:
                 try:
@@ -962,7 +962,7 @@ def main():
                 except Exception as e:
                     import traceback; traceback.print_exc()
                     errors.append(f"{pos_dir.name}: gaussian_gradient: {e}")
-                    # 失敗してもそのまま元パターンで続行
+                    # Continue with original pattern even on failure
 
             # Step 2: channel_crop
             if STEP_CHANNEL_CROP:
@@ -985,7 +985,7 @@ def main():
                     errors.append(f"{pos_dir.name}: gaussian_backsub: {e}")
                     continue
 
-            # Step 4: align_simple（確認用）
+            # Step 4: align_simple (for verification)
             if STEP_ALIGN_SIMPLE:
                 try:
                     step_align_simple(channels_dir)
@@ -1010,14 +1010,14 @@ def main():
                     import traceback; traceback.print_exc()
                     errors.append(f"{pos_dir.name}: grid_subtract: {e}")
 
-    # ── サマリー ─────────────────────────────────────────────
-    _banner("完了")
+    # -- Summary --
+    _banner("Done")
     if errors:
-        print(f"エラー ({len(errors)}件):")
+        print(f"Errors ({len(errors)}):")
         for e in errors:
-            print(f"  ✗ {e}")
+            print(f"  x {e}")
     else:
-        print("全ステップ正常終了")
+        print("All steps completed successfully")
 
 
 if __name__ == "__main__":

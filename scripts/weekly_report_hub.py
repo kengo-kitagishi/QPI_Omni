@@ -1,32 +1,32 @@
 #!/usr/bin/env python3
 """weekly_report_hub.py
 
-週次レポート用の統一タイムライン索引を生成する。
+Generate a unified timeline index for weekly reports.
 
-1. jsonl_to_obsidian.py と figure_inbox_to_obsidian.py を実行（前処理）
-2. SQLite DB から対象週のセッション・図イベントを取得
-3. notion_sync ディレクトリから Notion メモを読む
-4. figure-hub library をスキャン
-5. 全ソースを統合した索引ファイルを Obsidian に出力
+1. Run jsonl_to_obsidian.py and figure_inbox_to_obsidian.py (preprocessing)
+2. Retrieve session and figure events for the target week from SQLite DB
+3. Read Notion memos from the notion_sync directory
+4. Scan the figure-hub library
+5. Output a unified index file to Obsidian
 
-出力先:
+Output:
   ~/Documents/Obsidian Vault/00_Inbox/weekly_index_YYYY-Www.md
 
-週次索引の内容:
-  - 週サマリ（sessions, ファイル, bash, エラー, thinking, 図）
-  - ⚠️ エラーサマリ（エラーのあったセッション）
-  - 📅 日別・セッション別サマリ
-      - セッションごとの依頼内容・変更ファイル・再現コマンド
-      - 図ごとの生成コード・説明
-      - Notion メモの内容抜粋（背景・目的・主要手順）
-  - 変更ファイル統計（全セッション統合）
-  - 読むべきファイル一覧（Read tool 用）
+Weekly index contents:
+  - Week summary (sessions, files, bash, errors, thinking, figures)
+  - Error summary (sessions with errors)
+  - Daily / per-session summary
+      - Request content, changed files, reproduction commands per session
+      - Generation code and description per figure
+      - Notion memo excerpts (background, purpose, key steps)
+  - Changed file statistics (aggregated across all sessions)
+  - File list for reading (for Read tool)
 
-使い方:
-  python3 scripts/weekly_report_hub.py              # 今週の索引を生成
-  python3 scripts/weekly_report_hub.py --week 2026-W10  # 指定週
-  python3 scripts/weekly_report_hub.py --no-preprocess  # 前処理スキップ
-  python3 scripts/weekly_report_hub.py --dry-run        # 確認のみ
+Usage:
+  python3 scripts/weekly_report_hub.py              # generate index for this week
+  python3 scripts/weekly_report_hub.py --week 2026-W10  # specified week
+  python3 scripts/weekly_report_hub.py --no-preprocess  # skip preprocessing
+  python3 scripts/weekly_report_hub.py --dry-run        # preview only
 """
 
 import argparse
@@ -41,7 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import session_db
 
 # ────────────────────────────────────────────
-# 設定
+# Configuration
 # ────────────────────────────────────────────
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -57,18 +57,18 @@ FIGURE_HUB_LIBRARY = Path.home() / "Desktop/figure-hub/library"
 
 JST = timezone(timedelta(hours=9))
 
-WEEKDAY_JP = ["月", "火", "水", "木", "金", "土", "日"]
+WEEKDAY_JP = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
 # ────────────────────────────────────────────
-# 週の計算
+# Week calculation
 # ────────────────────────────────────────────
 
 def get_week_range(week_label: str | None = None) -> tuple[date, date, str]:
     if week_label:
         m = re.match(r"(\d{4})-W(\d{2})", week_label)
         if not m:
-            raise ValueError(f"week_label の形式が不正です: {week_label} (例: 2026-W10)")
+            raise ValueError(f"Invalid week_label format: {week_label} (e.g. 2026-W10)")
         year, week = int(m.group(1)), int(m.group(2))
         monday = date.fromisocalendar(year, week, 1)
     else:
@@ -81,7 +81,7 @@ def get_week_range(week_label: str | None = None) -> tuple[date, date, str]:
 
 
 # ────────────────────────────────────────────
-# フロントマター読み取り（フォールバック用）
+# Frontmatter reading (fallback)
 # ────────────────────────────────────────────
 
 def read_frontmatter(md_path: Path) -> dict:
@@ -104,41 +104,41 @@ def read_frontmatter(md_path: Path) -> dict:
 
 
 # ────────────────────────────────────────────
-# Notion メモのパース
+# Notion memo parsing
 # ────────────────────────────────────────────
 
 def extract_notion_summary(md_path: Path) -> dict:
-    """notion_sync .md から要約情報を抽出する（WORKLOG_SPEC / 思考メモ 対応）。
+    """Extract summary information from notion_sync .md (supports WORKLOG_SPEC / thought memos).
 
-    返却:
-        title       : ページタイトル
+    Returns:
+        title       : page title
         notion_url  : Notion URL
-        purpose     : 目的（## 目的 or **目的** or 冒頭）
-        background  : 背景（## 背景 or ## 何が起きたか）
-        steps       : 実施手順のステップ名リスト（最大5件）
-        key_code    : コードブロック内の主要行（最大5行）
-        equations   : LaTeX/数式が含まれる行
-        sections    : 全セクション見出しリスト
-        raw_text    : 本文全体（検索用）
+        purpose     : purpose (## purpose or **purpose** or opening)
+        background  : background (## background or ## what happened)
+        steps       : list of step names from implementation steps (max 5)
+        key_code    : key lines from code blocks (max 5 lines)
+        equations   : lines containing LaTeX/equations
+        sections    : list of all section headings
+        raw_text    : full body text (for search)
     """
     try:
         text = md_path.read_text(encoding="utf-8")
     except Exception:
         return {}
 
-    # フロントマター除去と取得
+    # Extract and remove frontmatter
     fm = read_frontmatter(md_path)
     title = fm.get("notion_title", md_path.stem[:80])
     notion_url = fm.get("notion_url", "")
 
-    # フロントマターを除いた本文
+    # Body text with frontmatter removed
     body = text
     if text.startswith("---"):
         end = text.find("\n---", 3)
         if end != -1:
             body = text[end + 4:].strip()
 
-    # 目的（抜粋用・短い場合のみ）
+    # Purpose (for excerpts, short cases only)
     purpose = ""
     m = re.search(r"(?:^|\n)#{1,3}\s*目的\s*\n+(.*?)(?=\n#|\Z)", body, re.DOTALL)
     if m:
@@ -148,7 +148,7 @@ def extract_notion_summary(md_path: Path) -> dict:
         if m:
             purpose = m.group(1).strip()
 
-    # 背景（抜粋用）
+    # Background (for excerpts)
     background = ""
     for heading in ("背景", "何が起きたか", "経緯", "概要"):
         m = re.search(
@@ -159,19 +159,19 @@ def extract_notion_summary(md_path: Path) -> dict:
             background = m.group(1).strip()
             break
 
-    # ステップ名一覧（WORKLOG_SPEC: "#### Step N: ..." or "## Step N: ...")
+    # Step name list (WORKLOG_SPEC: "#### Step N: ..." or "## Step N: ...")
     steps = re.findall(r"#{2,4}\s*Step\s*\d+[:\s]+(.+)", body)
     if not steps:
-        # 箇条書き形式: "- 1. XXX"
+        # Bullet list format: "- 1. XXX"
         steps = re.findall(r"[-\d]+\.\s+(.+)", body)[:5]
 
-    # コードブロック内の主要行
+    # Key lines from code blocks
     code_blocks = re.findall(r"```(?:\w+)?\n(.*?)```", body, re.DOTALL)
     key_code_lines = []
     for cb in code_blocks[:3]:
         for line in cb.strip().splitlines():
             line = line.strip()
-            # コメント以外で意味のある行
+            # Meaningful lines excluding comments
             if line and not line.startswith("#") and len(line) > 10:
                 key_code_lines.append(line[:120])
                 if len(key_code_lines) >= 5:
@@ -179,13 +179,13 @@ def extract_notion_summary(md_path: Path) -> dict:
         if len(key_code_lines) >= 5:
             break
 
-    # 数式・LaTeX を含む行
+    # Lines containing equations/LaTeX
     equations = []
     for line in body.splitlines():
         if re.search(r"\\frac|\\sum|\\int|\\partial|\\lambda|\$[^$]+\$|≈|∑|∫|∂", line):
             equations.append(line.strip()[:120])
 
-    # セクション見出し
+    # Section headings
     sections = re.findall(r"^#{1,4}\s+(.+)", body, re.MULTILINE)
 
     return {
@@ -203,11 +203,11 @@ def extract_notion_summary(md_path: Path) -> dict:
 
 
 # ────────────────────────────────────────────
-# ソーススキャン（DB + ファイル）
+# Source scanning (DB + files)
 # ────────────────────────────────────────────
 
 def scan_notion_sync(monday: date, sunday: date) -> list[dict]:
-    """notion_sync ディレクトリから対象週の .md ファイルをスキャンし、内容を抽出する。"""
+    """Scan .md files for the target week from the notion_sync directory and extract content."""
     results = []
     if not OBSIDIAN_NOTION_SYNC_DIR.exists():
         return results
@@ -239,7 +239,7 @@ def scan_notion_sync(monday: date, sunday: date) -> list[dict]:
 
 
 def scan_figure_hub_library(monday: date, sunday: date) -> list[dict]:
-    """figure-hub library から対象週に登録されたバージョンをスキャン。"""
+    """Scan versions registered during the target week from the figure-hub library."""
     results = []
     if not FIGURE_HUB_LIBRARY.exists():
         return results
@@ -274,7 +274,7 @@ def scan_figure_hub_library(monday: date, sunday: date) -> list[dict]:
 
 
 # ────────────────────────────────────────────
-# 前処理スクリプト実行
+# Preprocessing script execution
 # ────────────────────────────────────────────
 
 def run_preprocess(dry_run: bool) -> None:
@@ -286,11 +286,11 @@ def run_preprocess(dry_run: bool) -> None:
         cmd = [sys.executable, str(script)]
         if dry_run:
             cmd.append("--dry-run")
-        print(f"\n--- 実行: {script.name} ---")
+        print(f"\n--- Running: {script.name} ---")
         try:
             subprocess.run(cmd, check=True, capture_output=False)
         except subprocess.CalledProcessError as e:
-            print(f"ERROR: {script.name} が失敗しました (exit code {e.returncode})")
+            print(f"ERROR: {script.name} failed (exit code {e.returncode})")
 
 
 # ────────────────────────────────────────────
@@ -298,8 +298,8 @@ def run_preprocess(dry_run: bool) -> None:
 # ────────────────────────────────────────────
 
 def enrich_figure_mds(conn, sessions: list[dict], figures: list[dict]) -> int:
-    """figure .md に「生成後の文脈」を追記する（DB で enrichment 状態を管理）。"""
-    # 日付ごとに claude-session をグルーピング
+    """Append "post-generation context" to figure .md files (enrichment state managed in DB)."""
+    # Group claude-sessions by date
     sessions_by_date: dict[str, list[dict]] = {}
     for s in sessions:
         d = s.get("date", "")
@@ -314,7 +314,7 @@ def enrich_figure_mds(conn, sessions: list[dict], figures: list[dict]) -> int:
         if not fig_md or not fig_date:
             continue
 
-        # DB で enrichment 済みかチェック（ファイル読み込み不要）
+        # Check if already enriched in DB (no file read needed)
         if session_db.is_figure_enriched(conn, unique_key):
             continue
 
@@ -324,7 +324,7 @@ def enrich_figure_mds(conn, sessions: list[dict], figures: list[dict]) -> int:
 
         existing = fig_path.read_text(encoding="utf-8")
 
-        # 候補セッション（当日 + 翌2日）
+        # Candidate sessions (same day + next 2 days)
         candidate_sessions = []
         for offset in range(3):
             try:
@@ -336,7 +336,7 @@ def enrich_figure_mds(conn, sessions: list[dict], figures: list[dict]) -> int:
         if not candidate_sessions:
             continue
 
-        # セッションの詳細情報を DB から取得
+        # Retrieve detailed session information from DB
         context_entries = []
         for session in candidate_sessions[:4]:
             sid = session.get("session_id", "")
@@ -365,30 +365,30 @@ def enrich_figure_mds(conn, sessions: list[dict], figures: list[dict]) -> int:
         if not context_entries:
             continue
 
-        # "生成後の文脈" セクションを構築
+        # Build "post-generation context" section
         ctx_lines = [
             "",
             "---",
             "",
-            "## 生成後の文脈（この図を見た後に何が起きたか）",
+            "## Post-generation context (what happened after viewing this figure)",
             "",
-            f"> この図（{fig_date}生成）の後に実行された Claude Code セッション:",
+            f"> Claude Code sessions executed after this figure (generated {fig_date}):",
             "",
         ]
 
         for entry in context_entries:
             sid8 = entry["session_id"][:8]
-            ctx_lines.append(f"### セッション: `{sid8}`")
+            ctx_lines.append(f"### Session: `{sid8}`")
             ctx_lines.append(f"*full path*: `{entry['md_path']}`")
             ctx_lines.append("")
 
             if entry["first_user_message"]:
-                ctx_lines.append("**依頼内容（最初の発言）:**")
+                ctx_lines.append("**Request (first message):**")
                 ctx_lines.append(f"> {entry['first_user_message'][:200]}")
                 ctx_lines.append("")
 
             if entry["bash_cmds"]:
-                ctx_lines.append("**実行コマンド（再現用）:**")
+                ctx_lines.append("**Commands (for reproduction):**")
                 ctx_lines.append("```bash")
                 for bc in entry["bash_cmds"]:
                     ctx_lines.append(bc["command"])
@@ -396,7 +396,7 @@ def enrich_figure_mds(conn, sessions: list[dict], figures: list[dict]) -> int:
                 ctx_lines.append("")
 
             if entry["edited_files"]:
-                ctx_lines.append("**変更されたコードファイル:**")
+                ctx_lines.append("**Changed code files:**")
                 for ef in entry["edited_files"]:
                     short = ef.replace("/Users/kitak/QPI_Omni/", "")
                     ctx_lines.append(f"- `{short}`")
@@ -404,7 +404,7 @@ def enrich_figure_mds(conn, sessions: list[dict], figures: list[dict]) -> int:
 
             metrics = (f"thinking={entry['thinking_blocks']}"
                        f" errors={entry['error_count']}")
-            ctx_lines.append(f"*指標: {metrics}*")
+            ctx_lines.append(f"*Metrics: {metrics}*")
             ctx_lines.append("")
 
         context_text = "\n".join(ctx_lines)
@@ -419,12 +419,12 @@ def enrich_figure_mds(conn, sessions: list[dict], figures: list[dict]) -> int:
         conn.commit()
         enriched += 1
 
-    print(f"  figure enrichment: {enriched} 件に「生成後の文脈」を追記")
+    print(f"  figure enrichment: appended post-generation context to {enriched} entries")
     return enriched
 
 
 # ────────────────────────────────────────────
-# Markdown レンダリング
+# Markdown rendering
 # ────────────────────────────────────────────
 
 def _fmt_ts(ts: str) -> str:
@@ -442,7 +442,7 @@ def _short_path(path: str) -> str:
 
 
 def render_session_block(conn, session: dict) -> list[str]:
-    """1セッション分のサマリブロックを生成する。全情報を含む（制限なし）。"""
+    """Generate a summary block for one session. Contains all information (no limits)."""
     sid = session["session_id"]
     sid8 = sid[:8]
     md_path = session.get("md_path", "")
@@ -454,42 +454,42 @@ def render_session_block(conn, session: dict) -> list[str]:
     design_notes_json = session.get("design_notes") or "[]"
     session_summary = session.get("session_summary") or ""
 
-    # 編集ファイル
+    # Edited files
     edited_raw = session.get("edited_files_raw") or ""
     edited_files = [f for f in edited_raw.split("|||") if f]
 
-    # DB から全データ取得
+    # Retrieve all data from DB
     bash_cmds = session_db.query_session_bash_commands(conn, sid)
     error_cmds = [bc for bc in bash_cmds if bc["is_error"]]
     code_changes = session_db.query_session_code_changes(conn, sid)
     error_details = session_db.query_session_errors(conn, sid)
 
     lines = [
-        f"#### 🤖 セッション `{sid8}` [→ フルログ]",
+        f"#### Session `{sid8}` [-> full log]",
         "",
     ]
 
     if md_path:
-        lines.append(f"**ファイル:** `{md_path}`")
+        lines.append(f"**File:** `{md_path}`")
         lines.append("")
 
-    # 依頼内容（全文）
+    # Request content (full text)
     if first_msg:
-        lines.append("**依頼内容（最初のユーザー発言）:**")
+        lines.append("**Request (first user message):**")
         for msg_line in first_msg.splitlines():
             lines.append(f"> {msg_line}")
         lines.append("")
 
-    # セッションサマリ
+    # Session summary
     if session_summary:
-        lines.append("**セッションサマリ:**")
+        lines.append("**Session summary:**")
         for sl in session_summary.splitlines():
             lines.append(f"> {sl}")
         lines.append("")
 
-    # 変更ファイル（全件）
+    # Changed files (all)
     if edited_files:
-        lines.append(f"**変更ファイル（{len(edited_files)} 件）:**")
+        lines.append(f"**Changed files ({len(edited_files)}):**")
         for ef in edited_files:
             lines.append(f"- `{_short_path(ef)}`")
         lines.append("")

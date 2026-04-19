@@ -251,9 +251,9 @@ def infer_constraints(text: str) -> List[str]:
     constraints: List[str] = []
 
     rules = [
-        ("権限/TCC制約の可能性がある（Operation not permitted / Permission denied など）。", ["operation not permitted", "permission denied", "full disk access", "tcc"]),
-        ("依存パッケージ不足の可能性がある（Module not found など）。", ["module not found", "not installed", "importerror"]),
-        ("APIレート制限または接続制約の可能性がある。", ["rate limit", "429", "network error", "api error"]),
+        ("Possible permission/TCC constraint (Operation not permitted / Permission denied).", ["operation not permitted", "permission denied", "full disk access", "tcc"]),
+        ("Possible missing dependency (Module not found).", ["module not found", "not installed", "importerror"]),
+        ("Possible API rate limit or connection constraint.", ["rate limit", "429", "network error", "api error"]),
     ]
 
     for message, keys in rules:
@@ -261,7 +261,7 @@ def infer_constraints(text: str) -> List[str]:
             constraints.append(message)
 
     if not constraints:
-        constraints.append("会話ログからの自動抽出のため、要約内容は必要に応じて手動確認が必要。")
+        constraints.append("Auto-extracted from conversation log; summary may need manual verification.")
 
     return constraints
 
@@ -393,43 +393,43 @@ def render_transcript_block(item: Dict[str, Any], runtime: Dict[str, Any]) -> st
     files = item.get("files", [])
     constraints = item.get("constraints", ["none"])
     scope_files = [to_absolute_candidate(fp, Path(runtime["repo_root"])) for fp in files[:6]]
-    main_goal = requirements[0] if requirements and requirements[0] != "none" else "会話ログからの要件抽出（手動確認前提）"
+    main_goal = requirements[0] if requirements and requirements[0] != "none" else "Requirements extracted from conversation log (manual verification assumed)"
     unresolved = "none"
     if not item["first_user"].strip():
-        unresolved = "ユーザー初回要件が空に近いため、後続文脈から補完している。"
+        unresolved = "Initial user requirement is nearly empty; supplemented from subsequent context."
     elif len(requirements) < 2:
-        unresolved = "要件粒度が粗い可能性があるため、保存後に手動で具体化すると精度が上がる。"
+        unresolved = "Requirement granularity may be coarse; manual refinement after saving improves accuracy."
 
     lines = [
-        f"## {t} | 作業ログ ({item['source']})",
+        f"## {t} | Work log ({item['source']})",
         "",
-        "### 前提",
-        f"- 対象OS: {runtime['os']}",
-        f"- 作業ユーザー: {runtime['user']}",
-        f"- トークン/設定の取得元: transcript JSONL（`{item['path']}`）を参照。秘密情報は本処理では未使用。",
-        "- バックアップ方針: 自動ジョブでは追記前バックアップは省略。必要時のみ Step 0 を手動実行。",
+        "### Prerequisites",
+        f"- Target OS: {runtime['os']}",
+        f"- User: {runtime['user']}",
+        f"- Token/config source: see transcript JSONL (`{item['path']}`). No secrets used in this process.",
+        "- Backup policy: pre-append backup is skipped for automated jobs. Run Step 0 manually if needed.",
         "",
-        "### 背景",
-        f"- セッションタイトル: {item['title']}",
+        "### Background",
+        f"- Session title: {item['title']}",
         f"- Transcript: `{item['path']}`",
-        f"- 会話ターン: user={item['user_turns']}, assistant={item['assistant_turns']}, total={item['message_count']}",
-        f"- 仕様参照: `{runtime['worklog_spec']}`",
+        f"- Conversation turns: user={item['user_turns']}, assistant={item['assistant_turns']}, total={item['message_count']}",
+        f"- Spec reference: `{runtime['worklog_spec']}`",
         "",
-        "### 要件定義（ユーザー要件）",
-        f"- 目的: {main_goal}",
+        "### Requirements (user requirements)",
+        f"- Objective: {main_goal}",
         (
-            "- スコープ: "
+            "- Scope: "
             + ", ".join([f"`{item['path']}`", f"`{daily_file}`"] + [f"`{p}`" for p in scope_files])
         ),
-        "- 期待成果物: WORKLOG_SPEC準拠の作業ログブロックが生成され、日次ノートに追記可能な状態になる。",
+        "- Expected deliverable: A WORKLOG_SPEC-compliant work log block is generated, ready to be appended to daily notes.",
         (
-            "- 受け入れ条件: "
-            "実装手順に `目的/コマンド/期待結果/実結果` が入り、"
-            "検証手順に `判定(pass/fail)` と `根拠` が記載される。"
+            "- Acceptance criteria: "
+            "Implementation steps contain `objective/command/expected result/actual result`, "
+            "and verification steps contain `verdict (pass/fail)` and `evidence`."
         ),
-        "- 制約/前提: " + " / ".join(constraints[:4]),
-        f"- 未確定事項: {unresolved}",
-        "- ユーザー要求（抽出）:",
+        "- Constraints/assumptions: " + " / ".join(constraints[:4]),
+        f"- Unresolved items: {unresolved}",
+        "- User requests (extracted):",
     ]
 
     for r in requirements[:8]:
@@ -437,111 +437,111 @@ def render_transcript_block(item: Dict[str, Any], runtime: Dict[str, Any]) -> st
 
     lines.extend([
         "",
-        "### 実装方針",
-        "- 採用方針: transcriptから要件・コマンド・制約を抽出し、定型テンプレートへ構造化して保存する。",
-        "- 採用理由: 自動化時でも再現性を担保し、あとから第三者が追跡可能な記録を残せるため。",
-        "- 実行順序: 候補収集 -> 要点抽出 -> テンプレート成形 -> 日次追記 -> 検証コマンド提示。",
+        "### Implementation policy",
+        "- Adopted policy: Extract requirements, commands, and constraints from transcript and structure into a standard template.",
+        "- Rationale: Ensures reproducibility even in automation, leaving records traceable by third parties.",
+        "- Execution order: Candidate collection -> key point extraction -> template formatting -> daily note append -> verification command display.",
         (
-            "- 代替案と不採用理由: "
-            "自由文のみの要約は書きやすいが再現性が落ちるため不採用。"
+            "- Alternative and rejection reason: "
+            "Free-text-only summary is easier to write but loses reproducibility, so rejected."
         ),
         (
-            "- リスクと緩和策: "
-            "抽出漏れのリスクに対して `not executed` 明記・絶対パス記録・dry-run確認で緩和。"
+            "- Risks and mitigations: "
+            "Risk of extraction omission mitigated by explicit `not executed` marking, absolute path recording, and dry-run verification."
         ),
-        "- 方針メモ（会話抽出）:",
+        "- Policy notes (extracted from conversation):",
     ])
     for p in policies[:6]:
         lines.append(f"- {p}")
 
     lines.extend([
         "",
-        "### 実装手順（Step 0, 1, 2... コマンド付き）",
-        "#### Step 0: バックアップ（任意）",
-        "- 目的: 日次ノート追記前のロールバックポイントを作成する。",
+        "### Implementation steps (Step 0, 1, 2... with commands)",
+        "#### Step 0: Backup (optional)",
+        "- Objective: Create a rollback point before appending to daily notes.",
         "```bash",
         f"cp \"{daily_file}\" \"{daily_file}.bak\"",
         "```",
-        "- 期待結果: `.bak` が作成される。",
-        "- 実結果: not executed（自動収集ジョブのため省略）。",
+        "- Expected result: `.bak` file is created.",
+        "- Actual result: not executed (skipped for automated collection job).",
         "",
-        "#### Step 1: transcript候補の収集と完了判定",
-        "- 目的: 完了済みセッションのみを記録対象にする。",
+        "#### Step 1: Collect transcript candidates and determine completion",
+        "- Objective: Only record completed sessions.",
         "```bash",
         runtime["run_command"],
         "```",
-        f"- 期待結果: 最終更新から {runtime['inactivity_minutes']} 分以上経過した transcript が候補化される。",
+        f"- Expected result: Transcripts idle for {runtime['inactivity_minutes']}+ minutes become candidates.",
         (
-            "- 実結果: "
+            "- Actual result: "
             f"source={item['source']}, mtime={item['mtime'].isoformat()}, "
             f"user_turns={item['user_turns']}, assistant_turns={item['assistant_turns']}, "
             f"messages={item['message_count']}"
         ),
         "",
-        "#### Step 2: 要件/方針/コマンド候補の抽出",
-        "- 目的: 会話内容から再現可能な要点を抽出する。",
+        "#### Step 2: Extract requirements/policies/command candidates",
+        "- Objective: Extract reproducible key points from conversation content.",
         "```bash",
         runtime["run_command"],
         "```",
-        "- 期待結果: 要件・方針・コマンド候補・制約・対象ファイルが抽出される。",
-        f"- 実結果: command_hints={len(commands)}, files={len(files)}, constraints={len(constraints)}",
+        "- Expected result: Requirements, policies, command candidates, constraints, and target files are extracted.",
+        f"- Actual result: command_hints={len(commands)}, files={len(files)}, constraints={len(constraints)}",
         "",
-        "#### Step 3: 日次ノートへの追記",
-        "- 目的: WORKLOG_SPEC準拠ブロックを日次ノートに追記する。",
+        "#### Step 3: Append to daily notes",
+        "- Objective: Append a WORKLOG_SPEC-compliant block to daily notes.",
         "```bash",
         runtime["run_command"],
         "```",
-        f"- 期待結果: `{daily_file}` に本ブロックが追加される。",
-        "- 実結果: "
-        + ("not executed（dry-runモード）" if runtime["dry_run"] else "executed（追記処理を実行）"),
+        f"- Expected result: This block is added to `{daily_file}`.",
+        "- Actual result: "
+        + ("not executed (dry-run mode)" if runtime["dry_run"] else "executed (append processing completed)"),
         "",
-        "#### Step 4: 最終検証チェックリスト",
-        "- 目的: 追記結果を確認し、再現可能性を担保する。",
+        "#### Step 4: Final verification checklist",
+        "- Objective: Verify the appended result and ensure reproducibility.",
         "```bash",
-        f"rg -n \"## {t} | 作業ログ\" \"{daily_file}\"",
+        f"rg -n \"## {t} | Work log\" \"{daily_file}\"",
         f"tail -n 120 \"{daily_file}\"",
         "```",
-        "- 期待結果: 該当時刻のブロックが検出され、末尾に追記内容が存在する。",
-        "- 実結果: not executed（検証コマンドは手動確認用に提示）。",
+        "- Expected result: The block at the corresponding time is detected and the appended content exists at the end.",
+        "- Actual result: not executed (verification commands provided for manual confirmation).",
         "",
-        "### 検証手順と結果",
-        "1. transcript完了条件の確認",
+        "### Verification steps and results",
+        "1. Verify transcript completion condition",
         "```bash",
         runtime["run_command"],
         "```",
-        f"- 実結果: inactivity閾値={runtime['inactivity_minutes']}分, transcript={item['path']}",
-        "2. 抽出結果の確認",
+        f"- Actual result: inactivity_threshold={runtime['inactivity_minutes']}min, transcript={item['path']}",
+        "2. Verify extraction results",
         "```bash",
         runtime["run_command"],
         "```",
-        f"- 実結果: final_assistant_summary={_truncate(item['last_assistant'] or 'none', 320)}",
-        "- 判定: pass（ログブロック生成条件を満たす）",
-        f"- 根拠: transcript=`{item['path']}` / daily_note=`{daily_file}` / state=`{runtime['state_file']}`",
+        f"- Actual result: final_assistant_summary={_truncate(item['last_assistant'] or 'none', 320)}",
+        "- Verdict: pass (log block generation conditions met)",
+        f"- Evidence: transcript=`{item['path']}` / daily_note=`{daily_file}` / state=`{runtime['state_file']}`",
         "",
-        "### 変更ファイル一覧",
+        "### Changed files",
     ])
 
     if files:
         for fp in files:
             abs_fp = to_absolute_candidate(fp, Path(runtime["repo_root"]))
-            lines.append(f"- `{abs_fp}`: 会話中で参照/変更候補として言及。関連作業の対象を明示するため記録。")
+            lines.append(f"- `{abs_fp}`: Mentioned in conversation as reference/change candidate. Recorded to make related work targets explicit.")
     else:
         lines.append("- none")
 
     lines.extend([
         "",
-        "### 既知の制約・注意点",
+        "### Known constraints and notes",
     ])
     for c in constraints:
         lines.append(f"- {c}")
 
     lines.extend([
         "",
-        "### 他PCでの再現手順",
-        "1. `--obsidian-daily-dir` と `--repo-root` を対象PCの実パスへ置換する。",
-        "2. launchd利用時は対象PCのユーザーでジョブ再登録する。",
-        "3. `python3 scripts/session_activity_logger.py --dry-run` で出力確認後、本実行する。",
-        "4. 実装手順の Step 1〜4 を上から順に実行して結果を照合する。",
+        "### Reproduction steps on another PC",
+        "1. Replace `--obsidian-daily-dir` and `--repo-root` with actual paths on the target PC.",
+        "2. If using launchd, re-register the job under the target PC user.",
+        "3. Verify output with `python3 scripts/session_activity_logger.py --dry-run`, then run for real.",
+        "4. Execute Steps 1-4 of the implementation steps in order and verify results.",
     ])
 
     return "\n".join(lines)

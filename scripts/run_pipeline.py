@@ -2,12 +2,12 @@
 """
 run_pipeline.py
 ---------------
-ROOT_DIR 内の全 Pos* ディレクトリに対して以下を一括実行する：
-  1. channel_crop     : チャネルcrop → channels/channel_XX.tif
-  2. gaussian_backsub : 背景補正     → channels/channel_XX_bg_corr.tif
-  3. align_simple     : 確認用アライメント（オプション）
-  4. compute_shifts   : チャネル間平均シフト計算 → channels/pos_shifts.json
-  5. grid_subtract    : グリッド画像を使ったsubtract → channels/grid_subtracted/
+Batch-execute the following steps for all Pos* directories in ROOT_DIR:
+  1. channel_crop     : Channel crop -> channels/channel_XX.tif
+  2. gaussian_backsub : Background correction -> channels/channel_XX_bg_corr.tif
+  3. align_simple     : Verification alignment (optional)
+  4. compute_shifts   : Inter-channel mean shift calculation -> channels/pos_shifts.json
+  5. grid_subtract    : Grid image subtraction -> channels/grid_subtracted/
 """
 import sys
 import json
@@ -17,34 +17,34 @@ from pathlib import Path
 from tqdm import tqdm
 
 # ============================================================
-# 実行対象
+# Target
 # ============================================================
 ROOT_DIR = r"E:\Acuisition\kitagishi\260301\movetest_8"
 
-# Posフィルタ: Noneで全Pos、["Pos4", "Pos5"] のように指定も可
+# Pos filter: None for all Pos, or specify e.g. ["Pos4", "Pos5"]
 POS_FILTER = ["Pos1"]
 
-# 実行するステップ（Falseでスキップ）
-STEP_CHANNEL_CROP_DETECT = True   # channel_rois.json がなければ自動でdetect
+# Steps to execute (set False to skip)
+STEP_CHANNEL_CROP_DETECT = True   # auto-detect if channel_rois.json is missing
 STEP_CHANNEL_CROP_APPLY  = True
 STEP_GAUSSIAN_BACKSUB    = True
-STEP_ALIGN_SIMPLE        = False  # 確認用（時間がかかる）
+STEP_ALIGN_SIMPLE        = False  # for verification (time-consuming)
 STEP_COMPUTE_SHIFTS      = True
 STEP_GRID_SUBTRACT       = True
 
 # ============================================================
-# channel_crop パラメータ
+# channel_crop parameters
 # ============================================================
 CROP_PATTERN   = "img_*_ph_000.tif"
 CROP_W         = 40
 CROP_H         = 270
 MIN_DIST       = 35
 PROMINENCE     = 0.3
-X_START        = None   # int を入れると自動エッジ検出しない
+X_START        = None   # set to int to skip automatic edge detection
 X_END          = None
 
 # ============================================================
-# gaussian_backsub パラメータ
+# gaussian_backsub parameters
 # ============================================================
 BACKSUB_MIN_PHASE    = -1.1
 BACKSUB_HIST_MIN     = -1.1
@@ -55,7 +55,7 @@ BACKSUB_SAVE_PNG     = False
 BACKSUB_PNG_DPI      = 150
 
 # ============================================================
-# align_and_subtract_simple パラメータ（STEP_ALIGN_SIMPLE=True の時のみ）
+# align_and_subtract_simple parameters (used only when STEP_ALIGN_SIMPLE=True)
 # ============================================================
 ALIGN_REFERENCE_FRAME  = 150     # 1始まり
 ALIGN_METHOD           = 'ecc'
@@ -65,14 +65,14 @@ ALIGN_VMIN             = -0.1
 ALIGN_VMAX             = 1.7
 
 # ============================================================
-# compute_pos_shifts パラメータ
+# compute_pos_shifts parameters
 # ============================================================
-SHIFTS_CHANNEL_PATTERN      = "channel_*_bg_corr.tif"  # backsub後のパターン
+SHIFTS_CHANNEL_PATTERN      = "channel_*_bg_corr.tif"  # pattern after backsub
 
-# USE_GRID_REFERENCE=True: グリッドのx+0_y+0を基準にする（推奨）
-# USE_GRID_REFERENCE=False: タイムラプスの SHIFTS_REFERENCE_FRAME 番目を基準にする
+# USE_GRID_REFERENCE=True: use grid x+0_y+0 as reference (recommended)
+# USE_GRID_REFERENCE=False: use timelapse frame at SHIFTS_REFERENCE_FRAME as reference
 SHIFTS_USE_GRID_REFERENCE   = True
-SHIFTS_REFERENCE_FRAME      = 150    # USE_GRID_REFERENCE=False の場合のみ使用
+SHIFTS_REFERENCE_FRAME      = 150    # used only when USE_GRID_REFERENCE=False
 
 SHIFTS_METHOD               = 'ecc'
 SHIFTS_VMIN                 = -5.0
@@ -82,7 +82,7 @@ SHIFTS_TIMESERIES_WINDOW    = 11
 SHIFTS_TIMESERIES_THRESH    = 3.0
 
 # ============================================================
-# grid_subtract パラメータ
+# grid_subtract parameters
 # ============================================================
 GRID_DIR             = r"E:\Acuisition\kitagishi\260301\multipos_test_1"
 Z_INDEX              = 2
@@ -98,7 +98,7 @@ APPLY_INVERSE_SHIFT  = False
 # ============================================================
 
 
-# ---- 各モジュールの関数をインポート ----
+# ---- Import functions from each module ----
 _script_dir = Path(__file__).parent
 sys.path.insert(0, str(_script_dir))
 
@@ -117,7 +117,7 @@ def run_channel_crop(pos_dir: Path):
 
     img_files = sorted(pos_dir.glob(CROP_PATTERN))
     if not img_files:
-        print(f"  [SKIP] 画像が見つかりません: {CROP_PATTERN}")
+        print(f"  [SKIP] No images found: {CROP_PATTERN}")
         return False
 
     out_dir = pos_dir / "channels"
@@ -126,7 +126,7 @@ def run_channel_crop(pos_dir: Path):
 
     rois = None
     if STEP_CHANNEL_CROP_DETECT and not roi_path.exists():
-        print(f"  [detect] {img_files[0].name} でチャネル検出")
+        print(f"  [detect] Detecting channels from {img_files[0].name}")
         rois = run_detect(
             img_files[0], CROP_W, CROP_H, out_dir,
             min_dist=MIN_DIST,
@@ -135,14 +135,14 @@ def run_channel_crop(pos_dir: Path):
             x_end=X_END,
         )
     elif not roi_path.exists():
-        print(f"  [ERROR] channel_rois.json がなく detect もスキップ設定です")
+        print(f"  [ERROR] channel_rois.json not found and detect is disabled")
         return False
 
     if STEP_CHANNEL_CROP_APPLY:
         if rois is None:
             with open(roi_path, encoding="utf-8") as f:
                 rois = json.load(f)
-        print(f"  [apply] {len(img_files)} フレーム × {len(rois)} チャネル")
+        print(f"  [apply] {len(img_files)} frames x {len(rois)} channels")
         run_apply(pos_dir, CROP_PATTERN, rois, out_dir)
 
     return True
@@ -152,18 +152,18 @@ def run_channel_crop(pos_dir: Path):
 # Step 2: gaussian_backsub
 # ===========================================================
 def run_gaussian_backsub(pos_dir: Path):
-    """channels/ 内の channel_XX.tif (スタック) を1ファイルずつ処理する。"""
+    """Process each channel_XX.tif (stack) in channels/ one file at a time."""
     import importlib
     import sys as _sys
 
-    # 19_gaussian_backsub.py を動的にインポート（数字始まりのため）
+    # Dynamically import 19_gaussian_backsub.py (starts with a digit)
     import importlib.util
     backsub_path = _script_dir / "19_gaussian_backsub.py"
     spec = importlib.util.spec_from_file_location("gaussian_backsub", backsub_path)
     backsub = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(backsub)
 
-    # パラメータを差し替え
+    # Override parameters
     backsub.minPhase      = BACKSUB_MIN_PHASE
     backsub.hist_min      = BACKSUB_HIST_MIN
     backsub.hist_max      = BACKSUB_HIST_MAX
@@ -172,11 +172,11 @@ def run_gaussian_backsub(pos_dir: Path):
 
     channels_dir = pos_dir / "channels"
     stack_files = sorted(channels_dir.glob("channel_*.tif"))
-    # _bg_corr.tif はスキップ
+    # Skip _bg_corr.tif files
     stack_files = [p for p in stack_files if "_bg_corr" not in p.name]
 
     if not stack_files:
-        print(f"  [SKIP] channel_*.tif が見つかりません: {channels_dir}")
+        print(f"  [SKIP] No channel_*.tif found: {channels_dir}")
         return
 
     for tif_path in stack_files:
@@ -184,7 +184,7 @@ def run_gaussian_backsub(pos_dir: Path):
         if out_path.exists():
             print(f"  [SKIP already] {tif_path.name}")
             continue
-        print(f"  処理: {tif_path.name}")
+        print(f"  Processing: {tif_path.name}")
         backsub.process_image(tif_path, channels_dir, save_png_data=False)
         if BACKSUB_SAVE_PNG:
             result = backsub.process_image(tif_path, channels_dir, save_png_data=True)
@@ -193,7 +193,7 @@ def run_gaussian_backsub(pos_dir: Path):
 
 
 # ===========================================================
-# Step 3: align_and_subtract_simple（確認用）
+# Step 3: align_and_subtract_simple (for verification)
 # ===========================================================
 def run_align_simple(pos_dir: Path):
     from align_and_subtract_simple import (
@@ -202,12 +202,12 @@ def run_align_simple(pos_dir: Path):
     channels_dir = pos_dir / "channels"
     stack_files = sorted(channels_dir.glob(SHIFTS_CHANNEL_PATTERN))
     if not stack_files:
-        print(f"  [SKIP] {SHIFTS_CHANNEL_PATTERN} が見つかりません")
+        print(f"  [SKIP] {SHIFTS_CHANNEL_PATTERN} not found")
         return
 
     for stack_path in stack_files:
         print(f"  align_simple: {stack_path.name}")
-        # スタックを個別フレームとして扱う
+        # Treat stack as individual frames
         arr = tifffile.imread(str(stack_path))
         if arr.ndim == 2:
             arr = arr[np.newaxis, ...]
@@ -215,8 +215,8 @@ def run_align_simple(pos_dir: Path):
         ref_idx = min(ALIGN_REFERENCE_FRAME - 1, arr.shape[0] - 1)
         reference_img = arr[ref_idx].astype(np.float64)
 
-        # 一時ディレクトリに個別フレームとして書き出してから process_timelapse を呼ぶ
-        # → シンプルに process_timelapse の signature に合わせた仮tifリストを作る
+        # Write individual frames to a temp directory, then call process_timelapse
+        # -> create a temporary tif list matching the process_timelapse signature
         import tempfile, os
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
@@ -247,7 +247,7 @@ def run_compute_shifts(pos_dir: Path):
 
     base_label = pos_dir.name  # e.g. "Pos4"
 
-    # パラメータをモジュール変数に差し込む
+    # Inject parameters into module-level variables
     cps.CHANNELS_DIR              = str(channels_dir)
     cps.CHANNEL_PATTERN           = SHIFTS_CHANNEL_PATTERN
     cps.USE_GRID_REFERENCE        = SHIFTS_USE_GRID_REFERENCE
@@ -277,10 +277,10 @@ def run_grid_subtract(pos_dir: Path, base_label: str):
     rois_json    = channels_dir / "channel_rois.json"
 
     if not shifts_json.exists():
-        print(f"  [SKIP] pos_shifts.json が見つかりません: {shifts_json}")
+        print(f"  [SKIP] pos_shifts.json not found: {shifts_json}")
         return
     if not rois_json.exists():
-        print(f"  [SKIP] channel_rois.json が見つかりません: {rois_json}")
+        print(f"  [SKIP] channel_rois.json not found: {rois_json}")
         return
 
     gs.CHANNELS_DIR       = str(channels_dir)
@@ -304,24 +304,24 @@ def run_grid_subtract(pos_dir: Path, base_label: str):
 
 
 # ===========================================================
-# メイン
+# Main
 # ===========================================================
 def main():
     root = Path(ROOT_DIR)
     if not root.exists():
-        print(f"ERROR: ROOT_DIR が見つかりません: {root}")
+        print(f"ERROR: ROOT_DIR not found: {root}")
         sys.exit(1)
 
-    # Posディレクトリ一覧
+    # List Pos directories
     pos_dirs = sorted([d for d in root.iterdir() if d.is_dir() and d.name.startswith("Pos")])
     if POS_FILTER:
         pos_dirs = [d for d in pos_dirs if d.name in POS_FILTER]
 
     if not pos_dirs:
-        print(f"ERROR: Pos* ディレクトリが見つかりません: {root}")
+        print(f"ERROR: No Pos* directories found: {root}")
         sys.exit(1)
 
-    print(f"対象Pos: {[d.name for d in pos_dirs]}")
+    print(f"Target Pos: {[d.name for d in pos_dirs]}")
 
     errors = []
 
@@ -359,7 +359,7 @@ def main():
                 errors.append(f"{pos_dir.name}: gaussian_backsub ERROR: {e}")
                 continue
 
-        # Step 3: align_simple (確認用)
+        # Step 3: align_simple (for verification)
         if STEP_ALIGN_SIMPLE:
             _print_step(f"[3] align_and_subtract_simple  ({pos_dir.name})")
             try:
@@ -393,15 +393,15 @@ def main():
                 traceback.print_exc()
                 errors.append(f"{pos_dir.name}: grid_subtract ERROR: {e}")
 
-    # サマリー
+    # Summary
     print(f"\n{'='*60}")
-    print(f"完了: {len(pos_dirs)} Pos 処理")
+    print(f"Done: {len(pos_dirs)} Pos processed")
     if errors:
-        print(f"\nエラー ({len(errors)}件):")
+        print(f"\nErrors ({len(errors)}):")
         for e in errors:
             print(f"  - {e}")
     else:
-        print("全Pos 正常終了")
+        print("All Pos completed successfully")
 
 
 if __name__ == "__main__":

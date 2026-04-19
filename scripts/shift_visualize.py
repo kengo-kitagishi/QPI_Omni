@@ -7,27 +7,27 @@ import tifffile
 from matplotlib.colors import TwoSlopeNorm
 from figure_logger import save_figure
 
-# === 表示モード選択 ===
-# "pixel"   : ピクセル単位で表示（従来通り）
-# "physical" : 実際の距離 [μm] に変換して表示
+# === Display mode selection ===
+# "pixel"   : Display in pixel units (conventional)
+# "physical" : Convert to physical distance [um] for display
 DISPLAY_MODE = "physical"  # "pixel" or "physical"
 
-# === 光学パラメータ（物理距離変換用） ===
-SENSOR_PIXEL_SIZE = 3.45e-6  # センサーピクセルサイズ [m]
-MAGNIFICATION = 40           # 対物レンズ倍率
-ORIGINAL_DIM = 2048          # 元画像サイズ [px]
-RECONSTRUCTED_DIM = 511      # reconstruct後のサイズ [px]（aperture size）
+# === Optical parameters (for physical distance conversion) ===
+SENSOR_PIXEL_SIZE = 3.45e-6  # Sensor pixel size [m]
+MAGNIFICATION = 40           # Objective lens magnification
+ORIGINAL_DIM = 2048          # Original image size [px]
+RECONSTRUCTED_DIM = 511      # Reconstructed image size [px] (aperture size)
 
-# === 時間軸設定 ===
-# None にすると横軸はフレーム番号のまま。数値を入れると横軸が時間 [min] になる
-TIME_INTERVAL_MIN = 5        # 5分間隔。None にすると横軸はフレーム番号
+# === Time axis settings ===
+# None keeps the x-axis as frame number. A numeric value converts x-axis to time [min]
+TIME_INTERVAL_MIN = 5        # 5 min interval. None keeps x-axis as frame number
 
-# JSON読み込み（単体実行時）
+# JSON loading (standalone execution)
 JSON_PATH = r"E:\Acuisition\kitagishi\260301\movetest_8\Pos4\cropped\alignment_transforms.json"
 
 
 def _representative_shift_indices(shift_x, shift_y):
-    """shift量が小・中・大の代表フレーム index を返す。"""
+    """Return representative frame indices with small, medium, and large shift magnitudes."""
     n = len(shift_x)
     if n == 0:
         return []
@@ -48,7 +48,7 @@ def _representative_shift_indices(shift_x, shift_y):
 
 
 def _target_shift_vector_indices(shift_x, shift_y, target_vectors_px, used_indices=None):
-    """指定シフトベクトル(target_x, target_y)に最も近い frame index を返す。"""
+    """Return the frame index closest to the specified shift vector (target_x, target_y)."""
     n = len(shift_x)
     if n == 0:
         return []
@@ -70,7 +70,7 @@ def _target_shift_vector_indices(shift_x, shift_y, target_vectors_px, used_indic
             if idx_i not in used:
                 chosen = idx_i
                 break
-        if chosen is None:  # 全て使用済みなら最短距離を許容
+        if chosen is None:  # If all used, allow the closest distance
             chosen = int(order[0])
         used.add(chosen)
 
@@ -102,14 +102,14 @@ def visualize_shifts(
     ),
 ):
     """
-    alignment_transforms.json を読み込んでシフト時系列・軌跡をプロットし save_figure() で保存する。
+    Load alignment_transforms.json and plot shift time series and trajectory, saving via save_figure().
 
     Parameters
     ----------
     json_path : str or Path
-        alignment_transforms.json のパス
+        Path to alignment_transforms.json
     display_mode : str or None
-        "pixel" or "physical"。None のとき DISPLAY_MODE を使用。
+        "pixel" or "physical". Uses DISPLAY_MODE when None.
     """
     mode = display_mode or DISPLAY_MODE
     pixel_scale_um = sensor_pixel_size / magnification * original_dim / reconstructed_dim * 1e6
@@ -149,7 +149,7 @@ def visualize_shifts(
         "time_interval_min": time_interval_min,
     }
 
-    # XY方向のシフトを時間的にプロット
+    # Plot shifts in XY directions over time
     fig, ax = plt.subplots(figsize=(10, 5))
 #    ax.set_xlim(-1, 1)
     ax.plot(x_values, shift_x_plot, label="Shift X", marker="o")
@@ -170,7 +170,7 @@ def visualize_shifts(
                 data=_shift_data)
     plt.close(fig)
 
-    # 2Dトラジェクトリ（動きの軌跡）
+    # 2D trajectory (motion path)
     fig2, ax2 = plt.subplots(figsize=(6, 6))
     ax2.plot(shift_x_plot, shift_y_plot, marker="o")
     ax2.set_xlabel(f"Shift X ({unit_label})")
@@ -183,7 +183,7 @@ def visualize_shifts(
                 data=_shift_data)
     plt.close(fig2)
 
-    # 引き算後(subtracted)画像の代表例を shift量に応じて個別保存（同一 run_id フォルダ）
+    # Save representative examples of subtracted images according to shift magnitude (same run_id folder)
     subtracted_dir = os.path.join(os.path.dirname(json_path), "subtracted")
     representatives = _representative_shift_indices(shift_x, shift_y)
     target_examples = _target_shift_vector_indices(
@@ -300,14 +300,14 @@ def visualize_2pass_shifts(
     shift_sign_y=1,
 ):
     """
-    USE_SECOND_PASS_ECC=True で生成した pos_shifts.json から
-    pass1 / pass2 / 比較 / fine の4種類の時系列図を save_figure で保存する。
+    Save 4 types of time series figures from pos_shifts.json generated with USE_SECOND_PASS_ECC=True:
+    pass1 / pass2 / comparison / fine via save_figure.
 
-    出力図 (description でファイル名識別):
-      shift_timeseries_pass1 {pos}  — 1回目ECC (full crop) のシフト [grid offset込み]
-      shift_timeseries_pass2 {pos}  — 2回目ECC (half crop) のシフト [=最終値, grid offset込み]
-      shift_timeseries_pass1_vs_pass2 {pos}  — 両者のオーバーレイ比較
-      shift_timeseries_fine_ecc {pos}  — gridからのfine ECC残差シフト
+    Output figures (identified by description):
+      shift_timeseries_pass1 {pos}  -- 1st ECC (full crop) shift [including grid offset]
+      shift_timeseries_pass2 {pos}  -- 2nd ECC (half crop) shift [= final value, including grid offset]
+      shift_timeseries_pass1_vs_pass2 {pos}  -- Overlay comparison of both
+      shift_timeseries_fine_ecc {pos}  -- Fine ECC residual shift from grid
     """
     pixel_scale_um = sensor_pixel_size / magnification * original_dim / reconstructed_dim * 1e6
 
@@ -318,13 +318,13 @@ def visualize_2pass_shifts(
     frame_results = data.get("frame_results", [])
     n_frames = len(frame_results)
 
-    # pass2 (final) はそのまま frame_results から取得
+    # pass2 (final) is taken directly from frame_results
     pass2_x = np.array([r["shift_x_avg"] if r["shift_x_avg"] is not None else np.nan
                         for r in frame_results])
     pass2_y = np.array([r["shift_y_avg"] if r["shift_y_avg"] is not None else np.nan
                         for r in frame_results])
 
-    # pass1/pass2 の total・fine・grid_offset を per_channel から平均
+    # Average total/fine/grid_offset of pass1/pass2 from per_channel
     def _avg_ch_field(field):
         out = []
         for r in frame_results:
@@ -344,8 +344,8 @@ def visualize_2pass_shifts(
     goff2_x  = _avg_ch_field("pass2_grid_offset_x")
     goff2_y  = _avg_ch_field("pass2_grid_offset_y")
 
-    # fine フィールドが未保存（旧JSON）の場合: grid_xi/yi から名目オフセットを計算してfine を推定
-    # _get_grid_offset の式: (SHIFT_SIGN_Y * yi * Y_STEP / pscale, SHIFT_SIGN_X * xi * X_STEP / pscale)
+    # If fine fields are not saved (old JSON): estimate fine from grid_xi/yi nominal offset
+    # _get_grid_offset formula: (SHIFT_SIGN_Y * yi * Y_STEP / pscale, SHIFT_SIGN_X * xi * X_STEP / pscale)
     def _avg_fine_fallback(shift_arr, xi_field, yi_field):
         out = []
         for r in frame_results:
@@ -379,7 +379,7 @@ def visualize_2pass_shifts(
         goff2_x = pass2_x - fine2_x
         goff2_y = pass2_y - fine2_y
 
-    # pass2 で選択された grid xi/yi (per frame の平均値を整数化)
+    # Grid xi/yi selected by pass2 (per-frame mean rounded to integer)
     def _avg_ch_int(field):
         out = []
         for r in frame_results:
@@ -412,9 +412,9 @@ def visualize_2pass_shifts(
         "time_interval_min": time_interval_min,
     }
 
-    YLIM = (-0.3, 0.3)  # 全図共通Y軸範囲 [μm]
+    YLIM = (-0.3, 0.3)  # Common Y-axis range for all figures [um]
 
-    # ── Figure 1: pass1 のみ ──────────────────────────────────
+    # ── Figure 1: pass1 only ──────────────────────────────────
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.plot(x_values, p1x, label="Shift X  [pass1]", marker="o", markersize=3)
     ax.plot(x_values, p1y, label="Shift Y  [pass1]", marker="o", markersize=3)
@@ -426,7 +426,7 @@ def visualize_2pass_shifts(
                 data={"x_values": x_values, "shift_x": p1x, "shift_y": p1y})
     plt.close(fig)
 
-    # ── Figure 2: pass2 のみ ──────────────────────────────────
+    # ── Figure 2: pass2 only ──────────────────────────────────
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.plot(x_values, p2x, label="Shift X  [pass2]", marker="o", markersize=3, color="tab:blue")
     ax.plot(x_values, p2y, label="Shift Y  [pass2]", marker="o", markersize=3, color="tab:orange")
@@ -438,7 +438,7 @@ def visualize_2pass_shifts(
                 data={"x_values": x_values, "shift_x": p2x, "shift_y": p2y})
     plt.close(fig)
 
-    # ── Figure 3: pass1 vs pass2 オーバーレイ ────────────────
+    # ── Figure 3: pass1 vs pass2 overlay ────────────────
     fig, axes = plt.subplots(2, 1, figsize=(12, 7), sharex=True)
     for ax, p1, p2, label in zip(axes, [p1x, p1y], [p2x, p2y], ["X", "Y"]):
         ax.plot(x_values, p1, label="pass1 (grid(0,0), half crop)", alpha=0.7,
@@ -458,15 +458,15 @@ def visualize_2pass_shifts(
                       "pass2_shift_x": p2x, "pass2_shift_y": p2y})
     plt.close(fig)
 
-    # ── Figure 4: pass2 選択grid情報 + fine2 + 距離比較 ──────
-    f2x = fine2_x * pixel_scale_um   # 選択gridからの距離 X
-    f2y = fine2_y * pixel_scale_um   # 選択gridからの距離 Y
-    # pass2_x/y = fine2 + grid_offset2 = grid(0,0)からの距離
-    euclid2 = np.sqrt(f2x**2 + f2y**2)  # 選択gridからのユークリッド距離
+    # ── Figure 4: pass2 selected grid info + fine2 + distance comparison ──────
+    f2x = fine2_x * pixel_scale_um   # Distance from selected grid X
+    f2y = fine2_y * pixel_scale_um   # Distance from selected grid Y
+    # pass2_x/y = fine2 + grid_offset2 = distance from grid(0,0)
+    euclid2 = np.sqrt(f2x**2 + f2y**2)  # Euclidean distance from selected grid
 
     fig, axes = plt.subplots(3, 1, figsize=(13, 9), sharex=True)
 
-    # Row 0: X方向
+    # Row 0: X direction
     ax = axes[0]
     ax.step(x_values, p2_grid_xi * x_step_um, color="gray", alpha=0.4, linewidth=1, where="mid",
             label=f"grid xi × {x_step_um} μm (selected)")
@@ -476,7 +476,7 @@ def visualize_2pass_shifts(
             linewidth=1, linestyle="--", marker="o", markersize=2)
     ax.set_ylabel(f"X ({unit})"); ax.set_ylim(YLIM); ax.legend(fontsize=7); ax.grid(True)
 
-    # Row 1: Y方向
+    # Row 1: Y direction
     ax = axes[1]
     ax.step(x_values, p2_grid_yi * y_step_um, color="gray", alpha=0.4, linewidth=1, where="mid",
             label=f"grid yi × {y_step_um} μm (selected)")
@@ -486,7 +486,7 @@ def visualize_2pass_shifts(
             linewidth=1, linestyle="--", marker="o", markersize=2)
     ax.set_ylabel(f"Y ({unit})"); ax.set_ylim(YLIM); ax.legend(fontsize=7); ax.grid(True)
 
-    # Row 2: ユークリッド距離
+    # Row 2: Euclidean distance
     ax = axes[2]
     ax.plot(x_values, euclid2, label="Euclidean dist fine2 (from selected grid)",
             color="tab:purple", linewidth=1, marker="o", markersize=2)
@@ -513,11 +513,11 @@ def visualize_exclusion_summary(
     time_interval_min=TIME_INTERVAL_MIN,
 ):
     """
-    pos_shifts_exclusion_summary.csv を読み込んで除外チャネルの内訳を可視化する。
+    Load pos_shifts_exclusion_summary.csv and visualize the breakdown of excluded channels.
 
-    上パネル: per-frame の n_used (有効チャネル数) 時系列
-    下パネル: 除外チャネル数を理由別に積み上げ棒グラフ（low_ecc / mad / failed）
-    出力ファイル: pos_shifts_exclusion_summary.png（save_figure 経由）
+    Top panel: per-frame n_used (number of valid channels) time series
+    Bottom panel: Stacked bar chart of excluded channels by reason (low_ecc / mad / failed)
+    Output file: pos_shifts_exclusion_summary.png (via save_figure)
     """
     import csv as _csv
 
@@ -528,7 +528,7 @@ def visualize_exclusion_summary(
             rows.append({k: int(v) for k, v in row.items()})
 
     if not rows:
-        print(f"[shift_visualize] exclusion_summary: データなし ({csv_path})")
+        print(f"[shift_visualize] exclusion_summary: no data ({csv_path})")
         return
 
     frames = np.array([r["frame_index"] for r in rows])
@@ -555,7 +555,7 @@ def visualize_exclusion_summary(
 
     fig, axes = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
 
-    # 上パネル: n_used 時系列
+    # Top panel: n_used time series
     ax0 = axes[0]
     ax0.fill_between(x_values, n_used, alpha=0.4, color="tab:green", label="n_used")
     ax0.plot(x_values, n_used, color="tab:green", linewidth=1)
@@ -566,7 +566,7 @@ def visualize_exclusion_summary(
     ax0.grid(True, alpha=0.4)
     ax0.set_title(f"Channel exclusion summary  {pos_name}")
 
-    # 下パネル: 除外内訳積み上げ棒グラフ
+    # Bottom panel: Exclusion breakdown stacked bar chart
     ax1 = axes[1]
     width = x_values[1] - x_values[0] if len(x_values) > 1 else 1.0
     ax1.bar(x_values, n_failed,  width=width * 0.8, label="alignment_failed",  color="tab:red",    alpha=0.8)
@@ -592,7 +592,7 @@ def visualize_exclusion_summary(
     print(f"[shift_visualize] exclusion_summary saved: {pos_name}")
 
 
-# スタンドアロン実行時
+# Standalone execution
 if __name__ == "__main__":
     visualize_shifts(JSON_PATH)
 

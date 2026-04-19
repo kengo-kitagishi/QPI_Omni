@@ -2,28 +2,28 @@
 """
 batch_reconstruction_grid.py
 ----------------------------
-generate_grid_pos.py で取得したグリッドデータ（multipos_test_1 等）の
-一括 QPI 再構成スクリプト。
+Batch QPI reconstruction script for grid data (e.g., multipos_test_1)
+acquired by generate_grid_pos.py.
 
-ディレクトリ構造:
+Directory structure:
     GRID_DIR/
-        Pos0_x+0_y+0/   ← BG (reconstruction 用)
+        Pos0_x+0_y+0/   <- BG (for reconstruction)
             img_000000000_ph_000.tif
             img_000000000_ph_001.tif
             ...
             img_000000000_ph_010.tif
-        Pos0_x-1_y+0/   ← BG
+        Pos0_x-1_y+0/   <- BG
             ...
-        Pos1_x+0_y+0/   ← 再構成対象
+        Pos1_x+0_y+0/   <- Reconstruction target
             img_000000000_ph_000.tif
             ...
-        Pos2_x+0_y+0/   ← 再構成対象
+        Pos2_x+0_y+0/   <- Reconstruction target
             ...
 
-対応関係:
-    PosX_x{xi}_y{yi}  →  BGは Pos0_x{xi}_y{yi} の同じ z を使う
+Correspondence:
+    PosX_x{xi}_y{yi}  ->  BG uses the same z from Pos0_x{xi}_y{yi}
 
-出力:
+Output:
     GRID_DIR/PosX_x{xi}_y{yi}/output_phase/img_000000000_ph_{z:03d}.tif
 """
 import argparse
@@ -51,53 +51,53 @@ if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
 # ============================================================
-# 設定パラメータ
+# Configuration parameters
 # ============================================================
-# pipeline_full.py の GRID_DIR と揃えること
+# Must match GRID_DIR in pipeline_full.py
 GRID_DIR = r"C:\260416\2per_gridgluc_2"
 
-# BG として使うベースラベル（pipeline_full: GRID_BG_BASE_LABEL）
+# Base label used as BG (pipeline_full: GRID_BG_BASE_LABEL)
 BG_BASE_LABEL = "Pos0"
 
-# 再構成対象のベースラベル（None で Pos0 以外の全 PosX_x*_y* を処理）
-# pipeline_full: GRID_TARGET_BASE_LABELS と同じ意味
+# Target base labels for reconstruction (None to process all PosX_x*_y* except Pos0)
+# Same meaning as pipeline_full: GRID_TARGET_BASE_LABELS
 TARGET_BASE_LABELS = None
 
-# 再構成対象の (xi, yi) 座標を絞る（None = すべて処理）
-# 例: TARGET_COORDS = [(0, 0)]  → 中心点のみ
+# Filter target (xi, yi) coordinates (None = process all)
+# e.g.: TARGET_COORDS = [(0, 0)]  -> center point only
 TARGET_COORDS = None
 
-# QPI 光学パラメータ
+# QPI optical parameters
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 
-# ---- Pos番号によるクロップ切り替え（pipeline_full.py と同一）----
-# pos_number < POS_SPLIT → 右側 (400:2448)  センサー幅2448
-# pos_number >= POS_SPLIT → 左側 (0:2048)
-# ※ BG（Pos0）はターゲットの pos_number で決まる crop を使う（常に右ではない）
+# ---- Crop switching by Pos number (same as pipeline_full.py) ----
+# pos_number < POS_SPLIT -> right side (400:2448)  sensor width 2448
+# pos_number >= POS_SPLIT -> left side (0:2048)
+# Note: BG (Pos0) uses the crop determined by the target's pos_number (not always right)
 POS_SPLIT    = 31
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 
-# 平均0調整の領域（pipeline GRID_MEAN_REGION と同じ。None で無効）
+# Region for mean-zero adjustment (same as pipeline GRID_MEAN_REGION. None to disable)
 MEAN_REGION = None
 
-# 再構成済み（output_phase に *_phase.tif が既存）の場合スキップするか（pipeline: GRID_SKIP_IF_EXISTS）
+# Skip if already reconstructed (existing *_phase.tif in output_phase) (pipeline: GRID_SKIP_IF_EXISTS)
 SKIP_IF_EXISTS = True
 
-# PNG カラーマップも保存するか
+# Whether to also save PNG color maps
 SAVE_PNG = False
 PNG_DPI  = 150
 PNG_VMIN = -2.0
 PNG_VMAX =  2.0
-# 並列処理ワーカー数（pipeline_full: N_WORKERS_GRID と同じ）
+# Parallel processing worker count (same as pipeline_full: N_WORKERS_GRID)
 N_WORKERS = 4
 # ============================================================
 
-# QPIインポート
+# QPI import
 try:
     from qpi import QPIParameters, get_field, set_backend, _HAS_CUPY
 except ImportError:
-    print("ERROR: qpi モジュールが見つかりません。QPI_Omni/scripts が PYTHONPATH にあるか確認してください。")
+    print("ERROR: qpi module not found. Please verify that QPI_Omni/scripts is in PYTHONPATH.")
     sys.exit(1)
 
 # GPU acceleration (get_field uses CuPy FFT, unwrap_phase is CPU-only)
@@ -120,8 +120,8 @@ if _USE_GPU:
 
 def scan_grid_folders(grid_dir: Path):
     """
-    grid_dir 内の {label}_x{xi:+d}_y{yi:+d} フォルダを全列挙し、
-    {base_label: {(xi, yi): folder_path}} の dict を返す。
+    Enumerate all {label}_x{xi:+d}_y{yi:+d} folders in grid_dir
+    and return a dict of {base_label: {(xi, yi): folder_path}}.
     """
     pattern = re.compile(r"^(.+)_x([+-]?\d+)_y([+-]?\d+)$")
     result = {}
@@ -138,7 +138,7 @@ def scan_grid_folders(grid_dir: Path):
 
 
 def get_z_files(pos_dir: Path):
-    """img_000000000_ph_XXX.tif を z 番号順で返す。"""
+    """Return img_000000000_ph_XXX.tif files sorted by z index."""
     files = sorted(pos_dir.glob("img_*_ph_*.tif"))
     return files
 
@@ -150,12 +150,12 @@ def get_z_index(path: Path):
 
 
 def get_crop(pos_number: int):
-    """Pos番号からクロップ領域を返す。"""
+    """Return crop region based on Pos number."""
     return CROP_BEFORE if pos_number < POS_SPLIT else CROP_AFTER
 
 
 def reconstruct_image(img_path: Path, qpi_params, crop):
-    """1枚の生画像を読み込んでクロップ→位相再構成し ndarray (float64) で返す。"""
+    """Read a single raw image, crop, phase-reconstruct, and return as ndarray (float64)."""
     img = np.array(Image.open(str(img_path)))
     rs, re_, cs, ce = crop
     img = img[rs:re_, cs:ce]
@@ -169,7 +169,7 @@ def reconstruct_image(img_path: Path, qpi_params, crop):
 
 
 def make_qpi_params(sample_img_path: Path, crop):
-    """1枚の画像からクロップサイズを取得して QPIParameters を作成。"""
+    """Get crop size from a single image and create QPIParameters."""
     img = np.array(Image.open(str(sample_img_path)))
     rs, re_, cs, ce = crop
     cropped = img[rs:re_, cs:ce]
@@ -192,7 +192,7 @@ def reconstruct_from_holo(holo_path, crop):
 
 
 def _reconstruct_grid_point(args):
-    """ProcessPoolExecutor ワーカー: 1グリッドポイントの全 z スライスを再構成して保存。
+    """ProcessPoolExecutor worker: reconstruct and save all z slices for one grid point.
 
     Saves two outputs per z slice:
       - output_phase/     : BG-subtracted + region mean subtracted (for ECC)
@@ -214,7 +214,7 @@ def _reconstruct_grid_point(args):
     z_files_bg     = {get_z_index(p): p for p in get_z_files(bg_dir)}
 
     if not z_files_target:
-        return xi, yi, False, "z画像なし"
+        return xi, yi, False, "no z images"
 
     out_dir.mkdir(exist_ok=True)
     raw_out_dir.mkdir(exist_ok=True)
@@ -305,26 +305,26 @@ def _reconstruct_bg_raw(args):
 
 def _parse_cli():
     p = argparse.ArgumentParser(
-        description="グリッド各点の生ホロを BG 引き算付きで output_phase に再構成する。",
+        description="Reconstruct raw holograms for each grid point with BG subtraction into output_phase.",
     )
     p.add_argument(
         "--grid-dir",
         type=str,
         default=None,
-        help=f"GRID_DIR（既定: {GRID_DIR}）",
+        help=f"GRID_DIR (default: {GRID_DIR})",
     )
     p.add_argument(
         "--bg-label",
         type=str,
         default=None,
-        help=f"BG ベースラベル（既定: {BG_BASE_LABEL}）",
+        help=f"BG base label (default: {BG_BASE_LABEL})",
     )
     p.add_argument(
         "--targets",
         nargs="*",
         default=None,
         metavar="LABEL",
-        help='再構成するベースラベル（例: Pos6）。未指定なら定数 TARGET_BASE_LABELS / 全 Pos（BG 以外）',
+        help='Base labels to reconstruct (e.g., Pos6). If omitted, uses TARGET_BASE_LABELS / all Pos (except BG)',
     )
     return p.parse_args()
 
@@ -339,27 +339,27 @@ def main():
         target_labels_override = TARGET_BASE_LABELS
 
     if not grid_dir.exists():
-        print(f"ERROR: GRID_DIR が見つかりません: {grid_dir}")
+        print(f"ERROR: GRID_DIR not found: {grid_dir}")
         sys.exit(1)
 
     t_start = time.perf_counter()
 
-    # フォルダスキャン
+    # Folder scan
     folders = scan_grid_folders(grid_dir)
     if bg_label not in folders:
-        print(f"ERROR: BG フォルダ '{bg_label}_x*_y*' が見つかりません: {grid_dir}")
+        print(f"ERROR: BG folder '{bg_label}_x*_y*' not found: {grid_dir}")
         sys.exit(1)
 
     bg_map = folders[bg_label]  # {(xi, yi): Path}
 
-    # 対象ベースラベルを決定
+    # Determine target base labels
     if target_labels_override is not None:
         target_labels = target_labels_override
     else:
         target_labels = [k for k in sorted(folders.keys()) if k != bg_label]
 
-    print(f"BG ベースラベル: {bg_label}  ({len(bg_map)} 座標点)")
-    print(f"対象ベースラベル: {target_labels}  (計 {sum(len(folders[l]) for l in target_labels if l in folders)} フォルダ)")
+    print(f"BG base label: {bg_label}  ({len(bg_map)} coordinate points)")
+    print(f"Target base labels: {target_labels}  (total {sum(len(folders[l]) for l in target_labels if l in folders)} folders)")
 
     # --- BG (Pos0) raw phase with both crops ---
     print(f"\n{'='*60}")
@@ -383,27 +383,27 @@ def main():
 
     for base_label in target_labels:
         if base_label not in folders:
-            print(f"  [WARN] '{base_label}_x*_y*' フォルダが見つかりません。スキップ。")
+            print(f"  [WARN] '{base_label}_x*_y*' folders not found. Skipping.")
             continue
 
         target_map = folders[base_label]
-        # Pos番号を base_label から取得（例: "Pos3" → 3）
+        # Get Pos number from base_label (e.g., "Pos3" -> 3)
         m = re.match(r"Pos(\d+)$", base_label)
         pos_number = int(m.group(1)) if m else 0
         crop = get_crop(pos_number)
         print(f"\n{'='*60}")
-        print(f"  {base_label}  ({len(target_map)} フォルダ)  crop={crop}")
+        print(f"  {base_label}  ({len(target_map)} folders)  crop={crop}")
         print(f"{'='*60}")
 
-        # タスクリスト構築（スキップ・BG欠損チェック）
+        # Build task list (skip and BG missing checks)
         tasks = []
         for (xi, yi) in sorted(target_map.keys()):
             if TARGET_COORDS is not None and (xi, yi) not in TARGET_COORDS:
                 continue
             tgt_dir = target_map[(xi, yi)]
-            # スキップは _reconstruct_grid_point 内で z ごとに行う（途中まで終わったフォルダを再開できる）
+            # Skip is done per z inside _reconstruct_grid_point (allows resuming partially completed folders)
             if (xi, yi) not in bg_map:
-                print(f"  [WARN] BG が見つかりません: {bg_label}_x{xi:+d}_y{yi:+d}  → スキップ")
+                print(f"  [WARN] BG not found: {bg_label}_x{xi:+d}_y{yi:+d}  -> skipping")
                 total_err += 1
                 continue
             bg_d = bg_map[(xi, yi)]

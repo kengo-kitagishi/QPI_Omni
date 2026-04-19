@@ -1,10 +1,10 @@
 """
 analyze_drift_control.py
 ------------------------
-drift_log.json を読み込んでオフラインシミュレーション。
-EMA(α=0.3) vs EMA(α=0.10) vs Kalman の比較。
+Load drift_log.json and run offline simulation.
+Compare EMA(alpha=0.3) vs EMA(alpha=0.10) vs Kalman.
 
-計測中のファイル(compute_drift_online.py, drift_log.json等)は変更しない。
+Does not modify files used during measurement (compute_drift_online.py, drift_log.json, etc.).
 """
 
 import json
@@ -22,15 +22,15 @@ sys.path.insert(0, str(Path(__file__).parent))
 from figure_logger import save_figure
 
 
-# ======= 設定 =======
+# ======= Settings =======
 DRIFT_LOG      = Path(r"C:\Users\QPI\Documents\QPI_Omni\drift_session\drift_log.json")
 PIXEL_SCALE_UM = 0.34567514677103717
-INTERVAL_SEC   = 300      # 1フレーム = 5分
-SX_SIGN        = 1        # shift_sign_x (config より)
-SY_SIGN        = 1        # shift_sign_y (config より)
+INTERVAL_SEC   = 300      # 1 frame = 5 min
+SX_SIGN        = 1        # shift_sign_x (from config)
+SY_SIGN        = 1        # shift_sign_y (from config)
 
-# Kalman ハイパーパラメータ
-#   真ドリフト ~20nm/frame, ECC測定ノイズ ~110nm から推定
+# Kalman hyperparameters
+#   estimated from true drift ~20nm/frame, ECC measurement noise ~110nm
 KF_Q_POS = 400.0   # process noise (position) [nm²]  = (20nm)²
 KF_Q_VEL = 4.0     # process noise (velocity) [nm²/frame²] = (2nm/frame)²
 KF_R     = 12100.0  # measurement noise [nm²] = (110nm)²
@@ -42,10 +42,10 @@ KALMAN_COLOR   = "#F44336"
 KF_VEL_COLOR   = "#4CAF50"
 
 
-# ======= ヘルパー関数 =======
+# ======= Helper functions =======
 
 def ema_filter(z: np.ndarray, alpha: float) -> np.ndarray:
-    """指数移動平均 (causal)"""
+    """Exponential moving average (causal)"""
     out = np.empty_like(z)
     out[0] = z[0]
     for t in range(1, len(z)):
@@ -56,7 +56,7 @@ def ema_filter(z: np.ndarray, alpha: float) -> np.ndarray:
 def kf_pos_only(z_nm: np.ndarray, Q_pos: float, R: float):
     """
     Kalman filter (position-only, constant-position model)
-    z_nm: 測定値 [nm]
+    z_nm: measurement values [nm]
     Returns: (filtered_pos [nm], Kalman_gain)
     """
     N  = len(z_nm)
@@ -64,7 +64,7 @@ def kf_pos_only(z_nm: np.ndarray, Q_pos: float, R: float):
     K_h = np.zeros(N)
 
     x = z_nm[0]
-    P = R  # 初期不確かさ = 測定ノイズ
+    P = R  # initial uncertainty = measurement noise
     out[0] = x
     K_h[0] = 1.0
 
@@ -82,7 +82,7 @@ def kf_pos_only(z_nm: np.ndarray, Q_pos: float, R: float):
 def kf_pos_vel(z_nm: np.ndarray, Q_pos: float, Q_vel: float, R: float):
     """
     Kalman filter ([position, velocity] model)
-    z_nm: 測定値 [nm]
+    z_nm: measurement values [nm]
     Returns: (pos [nm], vel [nm/frame], Kalman_gain[N,2])
     """
     N   = len(z_nm)
@@ -91,7 +91,7 @@ def kf_pos_vel(z_nm: np.ndarray, Q_pos: float, Q_vel: float, R: float):
     K_h = np.zeros((N, 2))
 
     x = np.array([z_nm[0], 0.0])
-    P = np.diag([R, Q_vel])  # 初期状態の不確かさ
+    P = np.diag([R, Q_vel])  # initial state uncertainty
 
     F = np.array([[1.0, 1.0], [0.0, 1.0]])
     Q = np.diag([Q_pos, Q_vel])
@@ -118,12 +118,12 @@ def kf_pos_vel(z_nm: np.ndarray, Q_pos: float, Q_vel: float, R: float):
 
 def compute_metrics(z_nm: np.ndarray, correction: np.ndarray) -> dict:
     """
-    フィルタ品質の評価指標を返す。
-    correction[t] = t フレーム目に出す補正コマンド [nm]
-    → t+1 フレームの残差 = z[t+1] - correction[t]
+    Return quality metrics for the filter.
+    correction[t] = correction command issued at frame t [nm]
+    -> residual at frame t+1 = z[t+1] - correction[t]
     """
     cmd_diff  = np.diff(correction)
-    residual  = z_nm[1:] - correction[:-1]   # 次フレームの残差
+    residual  = z_nm[1:] - correction[:-1]   # residual at next frame
 
     r1_cmd = pearsonr(correction[:-1], correction[1:])[0] if len(correction) > 2 else 0.0
     r1_res = pearsonr(residual[:-1],   residual[1:]  )[0] if len(residual)   > 2 else 0.0
@@ -136,58 +136,58 @@ def compute_metrics(z_nm: np.ndarray, correction: np.ndarray) -> dict:
     }
 
 
-# ======= データ読み込み =======
+# ======= Data loading =======
 records = json.loads(DRIFT_LOG.read_text(encoding="utf-8"))
 N       = len(records)
 
 tp      = np.array([r["timepoint"]              for r in records])
 time_h  = tp * INTERVAL_SEC / 3600.0
 
-tx_raw  = np.array([r["tx_avg_px"]               for r in records])  # 画像X → ステージY
-ty_raw  = np.array([r["ty_avg_px"]               for r in records])  # 画像Y → ステージX
-corr_sx = np.array([r["correction_stage_x_um"]   for r in records])  # 実際に適用したステージX補正
-corr_sy = np.array([r["correction_stage_y_um"]   for r in records])  # 実際に適用したステージY補正
+tx_raw  = np.array([r["tx_avg_px"]               for r in records])  # image X -> stage Y
+ty_raw  = np.array([r["ty_avg_px"]               for r in records])  # image Y -> stage X
+corr_sx = np.array([r["correction_stage_x_um"]   for r in records])  # actually applied stage X correction
+corr_sy = np.array([r["correction_stage_y_um"]   for r in records])  # actually applied stage Y correction
 
-# 閉ループ残差 [nm] (ECC 生値 = 各フレームでの位置誤差)
-z_sy_nm = tx_raw * PIXEL_SCALE_UM * SY_SIGN * 1000.0   # ステージY方向
-z_sx_nm = ty_raw * PIXEL_SCALE_UM * SX_SIGN * 1000.0   # ステージX方向
+# Closed-loop residual [nm] (ECC raw value = position error at each frame)
+z_sy_nm = tx_raw * PIXEL_SCALE_UM * SY_SIGN * 1000.0   # stage Y direction
+z_sx_nm = ty_raw * PIXEL_SCALE_UM * SX_SIGN * 1000.0   # stage X direction
 
 print(f"Loaded {N} frames  (TP {int(tp[0])} - {int(tp[-1])})")
 print(f"z_sy  mean={np.mean(z_sy_nm):.1f} nm  std={np.std(z_sy_nm):.1f} nm")
 print(f"z_sx  mean={np.mean(z_sx_nm):.1f} nm  std={np.std(z_sx_nm):.1f} nm")
 
 
-# ======= Open-loop 再構成 =======
-# open_loop[t] = (tフレーム目以前に適用した補正の累積) + (tフレーム目のECC残差)
-#              = sample の真の絶対位置 [nm]
+# ======= Open-loop reconstruction =======
+# open_loop[t] = (cumulative corrections applied before frame t) + (ECC residual at frame t)
+#              = true absolute position of sample [nm]
 cum_sx_before = np.concatenate([[0.0], np.cumsum(corr_sx[:-1])]) * 1000.0
 cum_sy_before = np.concatenate([[0.0], np.cumsum(corr_sy[:-1])]) * 1000.0
 
-ol_sy_nm = cum_sy_before + z_sy_nm   # ステージY open-loop [nm]
-ol_sx_nm = cum_sx_before + z_sx_nm   # ステージX open-loop [nm]
+ol_sy_nm = cum_sy_before + z_sy_nm   # stage Y open-loop [nm]
+ol_sx_nm = cum_sx_before + z_sx_nm   # stage X open-loop [nm]
 
-# 線形トレンド
+# Linear trend
 t_arr      = np.arange(N, dtype=float)
 slope_y, intercept_y = np.polyfit(t_arr, ol_sy_nm, 1)
 slope_x, intercept_x = np.polyfit(t_arr, ol_sx_nm, 1)
 print(f"\nOpen-loop trend  Y={slope_y:.2f} nm/frame  X={slope_x:.2f} nm/frame")
 
 
-# ======= フィルタ計算 =======
-# -- EMA (閉ループ残差に適用) --
+# ======= Filter computation =======
+# -- EMA (applied to closed-loop residual) --
 ema_sy = {a: ema_filter(z_sy_nm, a) for a in EMA_ALPHAS}
 
-# -- Kalman (閉ループ残差、position-only) --
+# -- Kalman (closed-loop residual, position-only) --
 kf_cl_sy, kf_cl_K = kf_pos_only(z_sy_nm, KF_Q_POS, KF_R)
 
-# -- Kalman (open-loop、position+velocity) --
+# -- Kalman (open-loop, position+velocity) --
 kf_ol_sy_pos, kf_ol_sy_vel, _ = kf_pos_vel(ol_sy_nm, KF_Q_POS, KF_Q_VEL, KF_R)
 kf_ol_sx_pos, kf_ol_sx_vel, _ = kf_pos_vel(ol_sx_nm, KF_Q_POS, KF_Q_VEL, KF_R)
 
 
-# ======= 評価指標 =======
-print("\n=== 手法比較 (Stage Y = image X, 主ドリフト軸) ===")
-print(f"{'手法':22s} | {'cmd diff std [nm]':17s} | {'残差 std [nm]':13s} | {'cmd lag-1':9s} | {'残差 lag-1':9s}")
+# ======= Evaluation metrics =======
+print("\n=== Method comparison (Stage Y = image X, primary drift axis) ===")
+print(f"{'Method':22s} | {'cmd diff std [nm]':17s} | {'resid std [nm]':13s} | {'cmd lag-1':9s} | {'resid lag-1':9s}")
 print("-" * 80)
 
 methods_order = []
@@ -207,7 +207,7 @@ methods_metrics[lbl] = m_kf
 print(f"{lbl:22s} | {m_kf['cmd_diff_std_nm']:17.1f} | {m_kf['residual_std_nm']:13.1f} | {m_kf['cmd_lag1']:9.3f} | {m_kf['residual_lag1']:9.3f}")
 
 # Kalman with feedforward (open-loop: correction = pos + vel)
-kf_ff_cmd = kf_ol_sy_pos + kf_ol_sy_vel   # 次フレーム予測位置
+kf_ff_cmd = kf_ol_sy_pos + kf_ol_sy_vel   # predicted position for next frame
 m_kf_ff   = compute_metrics(ol_sy_nm, kf_ff_cmd)
 lbl_ff    = "Kalman (pos+vel FF)"
 methods_order.append(lbl_ff)
@@ -215,8 +215,8 @@ methods_metrics[lbl_ff] = m_kf_ff
 print(f"{lbl_ff:22s} | {m_kf_ff['cmd_diff_std_nm']:17.1f} | {m_kf_ff['residual_std_nm']:13.1f} | {m_kf_ff['cmd_lag1']:9.3f} | {m_kf_ff['residual_lag1']:9.3f}")
 
 kf_ol_converge_vel = float(np.mean(kf_ol_sy_vel[max(1, N // 2):]))
-print(f"\nKF open-loop velocity (後半平均): {kf_ol_converge_vel:.2f} nm/frame")
-print(f"線形フィット slope:                {slope_y:.2f} nm/frame")
+print(f"\nKF open-loop velocity (second-half mean): {kf_ol_converge_vel:.2f} nm/frame")
+print(f"Linear fit slope:                        {slope_y:.2f} nm/frame")
 
 
 # ======= FIGURE =======
@@ -303,7 +303,7 @@ for ax_b, vals, ylabel, title in [
                   format(val, y_fmt), ha="center", va="bottom", fontsize=7)
 
 
-# ======= 保存 =======
+# ======= Save =======
 save_figure(
     fig,
     params={
@@ -317,9 +317,9 @@ save_figure(
         "kf_ol_vel_converged": float(kf_ol_converge_vel),
     },
     description=(
-        "drift制御手法比較（オフラインシミュレーション）: "
-        "EMA(α=0.3/0.1) vs Kalman。open-loop再構成・速度推定・"
-        "残差std・コマンドジッター・lag-1自己相関を比較。"
+        "Drift control method comparison (offline simulation): "
+        "EMA(alpha=0.3/0.1) vs Kalman. Open-loop reconstruction, velocity estimation, "
+        "residual std, command jitter, and lag-1 autocorrelation comparison."
     ),
     data={
         "time_h":         time_h,

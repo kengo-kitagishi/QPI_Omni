@@ -1,10 +1,11 @@
 """
 plot_shift_invariant_profiles.py
 --------------------------------
-シフト量が大きく異なる2枚のフレームを選び、その中心横線プロファイルを重ねて表示する。
-「プロットの形がシフト量に依存せず一定である」ことを示す。
+Select two frames with significantly different shift magnitudes and overlay
+their center horizontal line profiles. Demonstrates that the profile shape
+remains constant regardless of shift magnitude.
 
-使い方:
+Usage:
   python plot_shift_invariant_profiles.py
 """
 import json
@@ -23,12 +24,12 @@ from figure_logger import save_figure, _resolve_inbox_root
 
 
 def _find_latest_data_npz(desc_pattern: str) -> Path | None:
-    """figure_logger inbox から desc_pattern を含む最新の _data.npz を返す。"""
+    """Return the latest _data.npz containing desc_pattern from figure_logger inbox."""
     inbox_root = _resolve_inbox_root()
     if inbox_root is None:
         return None
     script = "plot_shift_invariant_profiles"
-    # glob: inbox_root/<date>/script/<run_id>/*_data.npz  (date降順で最新を優先)
+    # glob: inbox_root/<date>/script/<run_id>/*_data.npz  (latest first by date descending)
     script_dirs = sorted(inbox_root.glob(f"*/{script}"), reverse=True)
     for sd in script_dirs:
         for npz in sorted(sd.glob("**/*_data.npz"), key=lambda p: p.stat().st_mtime, reverse=True):
@@ -37,41 +38,41 @@ def _find_latest_data_npz(desc_pattern: str) -> Path | None:
     return None
 
 
-# ベースパスと対象 Pos
+# Base path and target Pos
 BASE_DIR = Path(r"C:\ph_260327")
 POS_LABELS = ["Pos1"]
 
-# Pos0 に output_phase/channels がない場合、この Pos のメタデータをフォールバックに使う
+# If Pos0 has no output_phase/channels, use this Pos metadata as fallback
 FALLBACK_POS = "Pos1"
 
-CHANNEL_INDEX = 1  # 2つめのchannel（0-indexed: 0=1番目, 1=2番目）
+CHANNEL_INDEX = 1  # 2nd channel (0-indexed: 0=1st, 1=2nd)
 TL_Z_INDEX = 0  # img_*_ph_000_phase.tif
-FINAL_CROP_W = 40  # crop_subtracted の行数（中心行 = FINAL_CROP_W // 2）
+FINAL_CROP_W = 40  # Number of rows in crop_subtracted (center row = FINAL_CROP_W // 2)
 
-Y_SCALE = None  # None で自動
+Y_SCALE = None  # None for auto
 N_FRAMES = 2
-# "diverse": y が似て x が遠い2枚  /  "similar": シフト量が似た2枚
-SHIFT_MODE = "diverse"   # x シフトが最も異なる2フレームを選ぶ（強いテスト）
-# similar モードで、フレーム番号の差がこれ以上離れたペアのみ候補にする
+# "diverse": 2 frames with similar y and distant x  /  "similar": 2 frames with similar shifts
+SHIFT_MODE = "diverse"   # Select 2 frames with the most different x-shifts (stronger test)
+# In similar mode, only consider pairs with frame number gap >= this value
 MIN_FRAME_GAP = 20
 
-# ---- X-tilt 補正版 timelapse プロファイル設定 ----
+# ---- X-tilt corrected timelapse profile settings ----
 TL_PHASE_DIR_XTILT = Path(r"D:\AquisitionData\Kitagishi\basler_image_seq\ph_3\Pos0\output_phase")
 TL_ROIS_JSON_XTILT = Path(
     r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
     r"\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
 )
-TL_CH_INDICES_XTILT = [0, 3, 6, 9]   # 可視化する代表チャネル（4ch）
-TL_PICK_TPS         = [0, 9, 19]      # 先頭・中間・末尾の TP
-TL_CROP_H_TILT      = 270             # X 方向拡大サイズ [px]
-TL_FIT_FRAC_XTILT   = 1 / 3          # 左 1/3 (90pt) = BG 領域
+TL_CH_INDICES_XTILT = [0, 3, 6, 9]   # Representative channels to visualize (4ch)
+TL_PICK_TPS         = [0, 9, 19]      # First / middle / last TPs
+TL_CROP_H_TILT      = 270             # Enlarged size in X direction [px]
+TL_FIT_FRAC_XTILT   = 1 / 3          # Left 1/3 (90pt) = BG region
 
-# NPZ差分プロット: 以下の desc_pattern で最新の _data.npz を自動検索して差し引く
+# NPZ diff plot: auto-search for the latest _data.npz matching desc_pattern and subtract
 # (desc_pattern1, label1, desc_pattern2, label2)
 NPZ_DIFF_PAIRS = [
     ("Pos1_grid_subtr", "Pos1 grid_sub", "Pos0_raw_raw", "Pos0 raw_raw"),
     ("Pos1_grid_subtr", "Pos1 grid_sub", "Pos1_raw_raw", "Pos1 raw_raw"),
-    # aligned_raw 比較 (plot 1, 2) — ファイル名省略に合わせ "aligned_ra" で検索
+    # aligned_raw comparison (plot 1, 2) -- search with "aligned_ra" matching filename abbreviation
     ("Pos1_raw_raw", "Pos1 raw_raw", "Pos1_aligned_ra", "Pos1 aligned_raw"),
     ("Pos0_raw_raw", "Pos0 raw_raw", "Pos0_aligned_ra", "Pos0 aligned_raw"),
 ]
@@ -79,7 +80,7 @@ NPZ_DIFF_PAIRS = [
 # 4-way diff: (pat1 - pat2) - (pat3 - pat4)
 # → (Pos1 raw_raw - Pos0 raw_raw) - (Pos1 aligned_raw - Pos0 aligned_raw)
 NPZ_QUAD_DIFF_PAIRS = [
-    # profiles_ プレフィックスで diff NPZ と区別する
+    # Use profiles_ prefix to distinguish from diff NPZ
     ("profiles_Pos1_raw_raw", "Pos1 raw", "profiles_Pos0_raw_raw", "Pos0 raw",
      "profiles_Pos1_aligned_ra", "Pos1 aligned", "profiles_Pos0_aligned_ra", "Pos0 aligned"),
 ]
@@ -93,8 +94,8 @@ def _xtilt_correct_big_crop(
     fit_frac: float = 1 / 3,
 ) -> tuple[np.ndarray, float]:
     """
-    横長 270px crop の左 1/3 で線形フィット → slope * x を引いて返す。
-    戻り値: (corrected_big_crop [crop_w × crop_h_tilt], slope)
+    Linear fit on the left 1/3 of a 270px wide crop -> subtract slope * x.
+    Returns: (corrected_big_crop [crop_w x crop_h_tilt], slope)
     """
     big = extract_rect_roi(phase_img, cy, cx, crop_w, crop_h_tilt).astype(np.float64)
     x_prof = big.mean(axis=0)
@@ -118,7 +119,7 @@ def load_tiff_stack(path: str) -> np.ndarray:
 
 def extract_rect_roi(img: np.ndarray, cy: int, cx: int,
                      crop_w: int, crop_h: int) -> np.ndarray:
-    """(cx, cy) を中心とした crop_w × crop_h の矩形を切り出す。"""
+    """Extract a crop_w x crop_h rectangle centered at (cx, cy)."""
     h, w = img.shape
     y1 = max(0, cy - crop_w // 2)
     y2 = min(h, y1 + crop_w)
@@ -133,9 +134,9 @@ def extract_rect_roi(img: np.ndarray, cy: int, cx: int,
 
 def _load_shift_data(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    シフトデータを読み込み (sx, sy, frame_indices) を返す。
-    .json: pos_shifts.json の frame_results から shift_x_avg, shift_y_avg
-    .npz: pos_shifts_corr_data.npz の pass2_shift_x/y（channel_index でフィルタ可）
+    Load shift data and return (sx, sy, frame_indices).
+    .json: shift_x_avg, shift_y_avg from frame_results in pos_shifts.json
+    .npz: pass2_shift_x/y from pos_shifts_corr_data.npz (filterable by channel_index)
     """
     path = Path(path)
     if path.suffix.lower() == ".json":
@@ -175,16 +176,16 @@ def _load_shift_data(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 def _pick_frames(path: Path, n_pick: int, mode: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    mode="diverse": y が似て x が遠い 2 枚
-    mode="similar": シフト量が似た 2 枚（|Δx|+|Δy| が最小のペア）
-    戻り値: (indices, shifts_x, shifts_y)
+    mode="diverse": 2 frames with similar y but distant x
+    mode="similar": 2 frames with similar shift magnitudes (pair with smallest |dx|+|dy|)
+    Returns: (indices, shifts_x, shifts_y)
     """
     sx, sy, frame_indices = _load_shift_data(path)
     if len(sx) < n_pick:
         raise ValueError(f"Not enough frames with shift data: {len(sx)} < {n_pick}")
 
     if mode == "similar":
-        # シフト量が似た2枚: |Δx| + |Δy| を最小化（フレーム差 >= MIN_FRAME_GAP のペアのみ）
+        # 2 frames with similar shift: minimize |dx| + |dy| (only pairs with frame gap >= MIN_FRAME_GAP)
         best_dist = np.inf
         best_i, best_j = 0, 0
         for i in range(len(sx)):
@@ -199,7 +200,7 @@ def _pick_frames(path: Path, n_pick: int, mode: str) -> tuple[np.ndarray, np.nda
                     best_dist = dist
                     best_i, best_j = i, j
     else:
-        # diverse: |Δx| 大・|Δy| 小 を優先
+        # diverse: prioritize large |dx| and small |dy|
         best_score = -np.inf
         best_i, best_j = 0, 0
         for i in range(len(sx)):
@@ -228,7 +229,7 @@ def main():
         channel_rois_json = channels_dir / "channel_rois.json"
         shift_source = channels_dir / "pos_shifts.json"
 
-        # フォールバック: Pos0 等で output_phase/channels がない場合、FALLBACK_POS のメタデータを使用
+        # Fallback: use FALLBACK_POS metadata when output_phase/channels is missing (e.g., Pos0)
         fallback_dir = BASE_DIR / FALLBACK_POS / "output_phase" / "channels"
         _shift_source = shift_source if shift_source.exists() else fallback_dir / "pos_shifts.json"
         _channel_rois_json = channel_rois_json if channel_rois_json.exists() else fallback_dir / "channel_rois.json"
@@ -262,13 +263,13 @@ def main():
         crop_w, crop_h = roi["crop_w"], roi["crop_h"]
         center_y = crop_w // 2
 
-        # crop_sub_ecc*/ を自動検出して条件リストを構築
+        # Auto-detect crop_sub_ecc*/ and build condition list
         _cs_conds = sorted(
             [(d.name, d.name) for d in channels_dir.glob("crop_sub_ecc*") if d.is_dir()]
         )
         for source_type, label in _cs_conds + [("raw_crop", "raw_cropped"), ("raw_raw_force", "raw_raw"), ("aligned_raw", "aligned_raw"), ("grid_sub", "grid_subtracted")]:
             if source_type.startswith("crop_sub_ecc"):
-                path = None   # 後で _cs_dir として処理
+                path = None   # Processed later as _cs_dir
             elif source_type == "raw_crop":
                 path = output_phase_raw
             elif source_type == "raw_raw_force":
@@ -278,8 +279,8 @@ def main():
             else:
                 path = channels_dir / "grid_subtracted" / f"channel_{CHANNEL_INDEX:02d}_grid_sub.tif"
 
-            # Pos0 等で grid_subtracted がない場合 or raw_raw_force: raw-raw フォールバック
-            # output_phase_raw を crop → stack → stack[t] - stack[0]（raw の1枚目を引く）
+            # Fallback to raw-raw when grid_subtracted missing (e.g., Pos0) or raw_raw_force:
+            # crop output_phase_raw -> stack -> stack[t] - stack[0] (subtract first raw frame)
             use_raw_raw_fallback = False
             fallback_label = label
             if source_type == "raw_raw_force":
@@ -296,11 +297,11 @@ def main():
                 _raw_dir = output_phase_raw
                 if _raw_dir.exists():
                     use_raw_raw_fallback = True
-                    fallback_label = "raw_raw"  # raw crop - raw crop 1枚目
+                    fallback_label = "raw_raw"  # raw crop - raw crop 1st frame
                     path = None
 
             if source_type.startswith("crop_sub_ecc"):
-                # crop_sub_ecc*/ch{CHANNEL_INDEX:02d}/ を参照
+                # Reference crop_sub_ecc*/ch{CHANNEL_INDEX:02d}/
                 _cs_dir = channels_dir / source_type / f"ch{CHANNEL_INDEX:02d}"
                 if not _cs_dir.exists():
                     print(f"SKIP ({source_type} not found): {_cs_dir}")
@@ -360,19 +361,19 @@ def main():
                 idx_to_crop = {idx: c for idx, c in crops}
                 ref_crop = idx_to_crop.get(0)
                 if ref_crop is None:
-                    print(f"SKIP: frame 0 not in output_phase_raw (raw-raw に必要)")
+                    print(f"SKIP: frame 0 not in output_phase_raw (required for raw-raw)")
                     continue
-                print(f"  Loading raw-raw (output_phase_raw crop - 1枚目): ch{CHANNEL_INDEX}")
+                print(f"  Loading raw-raw (output_phase_raw crop - 1st frame): ch{CHANNEL_INDEX}")
                 for idx in indices:
                     c = idx_to_crop.get(idx)
                     if c is None:
                         continue
                     sub = c.astype(np.float64) - ref_crop.astype(np.float64)
                     line = sub[center_y, :]
-                    line = line - line.mean()  # 各プロファイルの平均を0に
+                    line = line - line.mean()  # Zero-mean each profile
                     profiles.append(line)
             elif source_type == "aligned_raw":
-                # raw_raw 形式: stack[t] - stack[0]、mean 引き算
+                # raw_raw format: stack[t] - stack[0], mean subtraction
                 print(f"  Loading aligned_raw (stack - frame0): ch{CHANNEL_INDEX}")
                 stack = load_tiff_stack(str(path))
                 n_frames_st, h, w = stack.shape
@@ -436,7 +437,7 @@ def main():
             plt.close()
             print(f"  Saved: {fig_path}")
 
-    # NPZ差分プロット: profiles1 - profiles0 をフレームごとに重ねてプロット
+    # NPZ diff plot: overlay profiles1 - profiles0 for each frame
     for pat1, label1, pat2, label2 in (NPZ_DIFF_PAIRS or []):
         print(f"\n{'='*60}")
         print(f"NPZ diff: ({label1}) - ({label2})")
@@ -540,7 +541,7 @@ def main():
         print(f"  Saved: {fig_path}")
 
     # =================================================================
-    # X-tilt 補正版 timelapse プロファイル（補正前後を比較）
+    # X-tilt corrected timelapse profiles (compare before/after correction)
     # =================================================================
     if TL_PHASE_DIR_XTILT.exists() and TL_ROIS_JSON_XTILT.exists():
         print(f"\n{'='*60}")
@@ -578,7 +579,7 @@ def main():
                     corr_profiles.append(big_corr[center_y_r, :])
                     print(f"  ch{c_idx} TP={tp}: slope={sl:.5f} rad/px")
 
-                # 補正前後を上下に並べて1枚の図に
+                # Stack before/after correction vertically in one figure
                 fig, (ax_top, ax_bot) = plt.subplots(2, 1, figsize=(12, 7), sharex=True)
                 fig.subplots_adjust(hspace=0.35, left=0.08, right=0.78, top=0.90, bottom=0.09)
 
@@ -633,7 +634,7 @@ def main():
                 print(f"  ch{c_idx}: saved")
 
     # ============================================================
-    # crop_sub_ecc* 全条件 × 全チャネル時系列重ねプロット
+    # crop_sub_ecc* all conditions x all channels time series overlay
     # ============================================================
     print(f"\n{'='*60}")
     print("crop_sub_ecc*: all-channel timeseries overlay")
@@ -675,11 +676,11 @@ def main():
             ax.tick_params(labelsize=6)
             ax.grid(True, alpha=0.2)
 
-          # 使わない軸を非表示
+          # Hide unused axes
           for ch_idx in range(n_ch, n_rows * n_cols):
             axes[ch_idx // n_cols][ch_idx % n_cols].set_visible(False)
 
-          # カラーバー（時間軸）
+          # Colorbar (time axis)
           sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(0, n_frames - 1))
           sm.set_array([])
           fig.colorbar(sm, ax=axes.ravel().tolist(), label="Frame index", shrink=0.6)

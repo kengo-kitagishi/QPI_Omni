@@ -1,14 +1,14 @@
 """
 plot_drift_summary.py
 ---------------------
-1コマンドで drift 解析に必要な図を全て生成する。
+Generate all figures needed for drift analysis in a single command.
 
-生成される図 (各々 figure_logger 経由で保存):
-  1. drift_overview        : 累積ドリフト / ECC相関 / ステップ補正 (3行)
-  2. drift_trajectory_2d   : 2D軌跡 (色 = 時刻)
-  3. drift_grid_proximity  : nearest grid距離 + grid index選択 (2行)
-  4. drift_kf_analysis     : raw vs KF / innovation / gain (2×2)
-  5. drift_center_profiles : centerプロファイル重ね (--profiles-dir 指定時のみ)
+Generated figures (each saved via figure_logger):
+  1. drift_overview        : Cumulative drift / ECC correlation / step corrections (3 rows)
+  2. drift_trajectory_2d   : 2D trajectory (color = time)
+  3. drift_grid_proximity  : Nearest grid distance + grid index selection (2 rows)
+  4. drift_kf_analysis     : Raw vs KF / innovation / gain (2x2)
+  5. drift_center_profiles : Center profile overlay (only with --profiles-dir)
 
 Usage:
     python scripts/plot_drift_summary.py

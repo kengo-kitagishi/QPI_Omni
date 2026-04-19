@@ -1,30 +1,30 @@
 #!/usr/bin/env python3
 """jsonl_to_obsidian.py
 
-Claude Code セッション JSONL を Obsidian の .md に変換する。
+Convert Claude Code session JSONL files to Obsidian .md files.
 
-- AI の thinking ブロック（内部推論）を含む完全な記録
-- ユーザー発言・AI返答・ツール実行・ツール結果をタイムスタンプ付き時系列で保存
-- 増分処理（処理済みセッションはスキップ。アクティブセッションもスキップ）
-- SQLite (session_db.py) にメタデータをキャッシュ
+- Complete records including AI thinking blocks (internal reasoning)
+- User messages, AI responses, tool executions, and tool results saved in chronological order with timestamps
+- Incremental processing (already-processed sessions are skipped; active sessions are also skipped)
+- Metadata cached in SQLite (session_db.py)
 
-出力 .md の構成（上から）:
-  1. フロントマター（session_id, date, metrics, edited_files）
-  2. 変更ファイル一覧
-  3. セッションサマリ（metrics table）
-  4. 設計ノート（thinking ブロックの先頭抜粋）
-  5. 再現コマンド一覧（Bash コマンドをコピペ可能な形式で）
-  6. コード変更詳細（Edit/Write の実際の内容）
-  7. エラーログ（エラーがある場合のみ）
-  8. タイムライン（全会話・ツール実行の時系列）
+Output .md structure (top to bottom):
+  1. Frontmatter (session_id, date, metrics, edited_files)
+  2. Changed files list
+  3. Session summary (metrics table)
+  4. Design notes (excerpts from thinking blocks)
+  5. Reproduction commands list (Bash commands in copy-pasteable format)
+  6. Code change details (actual Edit/Write content)
+  7. Error log (only when errors exist)
+  8. Timeline (chronological record of all conversations and tool executions)
 
-使い方:
-  python3 scripts/jsonl_to_obsidian.py              # 未処理を全部変換
-  python3 scripts/jsonl_to_obsidian.py --dry-run    # ファイル書き出しせず確認のみ
-  python3 scripts/jsonl_to_obsidian.py --session /path/to/file.jsonl  # 指定ファイル
-  python3 scripts/jsonl_to_obsidian.py --all        # 処理済み含め全セッションを再変換
+Usage:
+  python3 scripts/jsonl_to_obsidian.py              # convert all unprocessed
+  python3 scripts/jsonl_to_obsidian.py --dry-run    # preview without writing files
+  python3 scripts/jsonl_to_obsidian.py --session /path/to/file.jsonl  # specific file
+  python3 scripts/jsonl_to_obsidian.py --all        # reconvert all sessions including processed
 
-出力先:
+Output destination:
   ~/Documents/Obsidian Vault/00_Inbox/claude_sessions/YYYY-MM-DD_<session_id[:8]>.md
 """
 
@@ -42,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import session_db
 
 # ────────────────────────────────────────────
-# 設定
+# Configuration
 # ────────────────────────────────────────────
 
 SESSION_DIR = Path.home() / ".claude/projects/-Users-kitak-QPI-Omni"
@@ -54,19 +54,19 @@ SHARED_SESSION_DIR = Path(
 DEFAULT_SESSION_DIRS = [SESSION_DIR, SHARED_SESSION_DIR]
 OBSIDIAN_SESSIONS_DIR = Path("/Users/kitak/Documents/Obsidian Vault/00_Inbox/claude_sessions")
 
-# アクティブセッション（最終エントリが ACTIVE_THRESHOLD 分以内）はスキップ
+# Active sessions (last entry within ACTIVE_THRESHOLD minutes) are skipped
 ACTIVE_THRESHOLD_MINUTES = 15
 
 JST = timezone(timedelta(hours=9))
 
 
 # ────────────────────────────────────────────
-# JSONL パース
+# JSONL Parsing
 # ────────────────────────────────────────────
 
 def load_entries(path: Path) -> list:
-    """JSONL を読み込む。OSError (errno 11/35: deadlock/EAGAIN) は最大3回 retry。
-    最終的に失敗したら空リストを返してこのセッションだけスキップする。"""
+    """Load JSONL file. Retries up to 3 times on OSError (errno 11/35: deadlock/EAGAIN).
+    Returns an empty list on final failure, skipping this session only."""
     last_err = None
     for attempt in range(3):
         try:
@@ -87,7 +87,7 @@ def load_entries(path: Path) -> list:
                 time.sleep(0.5 * (attempt + 1))
                 continue
             raise
-    print(f"  WARN: {path.name} を3回 retry しても読めなかった ({last_err}). スキップします.",
+    print(f"  WARN: {path.name} could not be read after 3 retries ({last_err}). Skipping.",
           file=sys.stderr)
     return []
 
@@ -116,7 +116,7 @@ def _fmt_ts(ts: str) -> str:
 
 
 def get_session_date(entries: list) -> str | None:
-    """エントリからJST日付を取得。タイムスタンプが見つからなければ None を返す。"""
+    """Get JST date from entries. Returns None if no timestamp is found."""
     for e in entries:
         ts = e.get("timestamp", "")
         if ts:
@@ -138,9 +138,9 @@ def get_last_entry_time(entries: list) -> datetime | None:
 
 
 def group_timeline_by_date(timeline: list) -> dict[str, list]:
-    """timeline イベントを JST 日付ごとにグループ化する。
-    タイムスタンプがない（ts=None）イベントは直前のイベントと同じ日付に入れる。
-    Returns: {date_str: [events...]} を日付昇順で返す dict。"""
+    """Group timeline events by JST date.
+    Events without timestamps (ts=None) are assigned to the same date as the previous event.
+    Returns: dict of {date_str: [events...]} sorted by date in ascending order."""
     groups: dict[str, list] = {}
     last_date = None
     for event in timeline:
@@ -264,11 +264,11 @@ def parse_timeline(entries: list) -> list:
 
 
 # ────────────────────────────────────────────
-# DB 用データ抽出
+# Data Extraction for DB
 # ────────────────────────────────────────────
 
 def extract_db_data(timeline: list) -> dict:
-    """タイムラインから DB 書き込み用の構造化データを抽出する。"""
+    """Extract structured data from timeline for DB writes."""
     thinking_count = 0
     user_count = 0
     assistant_count = 0
@@ -296,18 +296,18 @@ def extract_db_data(timeline: list) -> dict:
             assistant_count += 1
             thinking_count += len(event.get("thinking", []))
 
-            # 設計ノート: thinking ブロックの先頭を抽出
+            # Design notes: extract from thinking blocks
             for tb in event.get("thinking", []):
                 design_notes_list.append(tb)
 
-            # セッションサマリ: 最初の AI テキスト
+            # Session summary: first AI text
             if session_summary is None:
                 for t in event.get("text", []):
                     if t.strip():
                         session_summary = t
                         break
 
-            # ツール呼び出し
+            # Tool calls
             for tc in event.get("tools", []):
                 tool_count += 1
                 event_order += 1
@@ -317,7 +317,7 @@ def extract_db_data(timeline: list) -> dict:
                 if is_error:
                     error_count += 1
 
-                # input_json (Bash/Edit/Write は完全保存、他は 500 文字)
+                # input_json (Bash/Edit/Write stored in full, others truncated to 500 chars)
                 inp_str = json.dumps(inp, ensure_ascii=False)
                 inp_stored = inp_str if name in ("Bash", "Edit", "Write") else inp_str[:500]
 
@@ -334,7 +334,7 @@ def extract_db_data(timeline: list) -> dict:
                     "error_text": error_text,
                 })
 
-                # ファイル操作
+                # File operations
                 if name in ("Edit", "Write", "Read"):
                     fp = inp.get("file_path", "")
                     if fp:
@@ -395,7 +395,7 @@ def write_session_to_db(
     jsonl_path: Path, md_path: Path,
     timeline: list, mtime: float
 ) -> None:
-    """セッションデータを DB に書き込む。"""
+    """Write session data to DB."""
     db_data = extract_db_data(timeline)
     meta = db_data["session_meta"]
 

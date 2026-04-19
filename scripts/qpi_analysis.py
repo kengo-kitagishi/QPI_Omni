@@ -58,7 +58,7 @@ cb.run()
 # %%
 
 IMG_SHAPE = img.shape
-offaxis_center = OFFAXIS_CENTER  # optical_config.py で管理
+offaxis_center = OFFAXIS_CENTER  # managed in optical_config.py
 
 params = QPIParameters(
     wavelength=WAVELENGTH,
@@ -72,20 +72,20 @@ params = QPIParameters(
 
 
 # %%
-# ログスケールの FFT を準備
+# Prepare log-scale FFT
 fft_image = np.log(np.abs(img_fft))
 
-# Figure & Axes を生成
+# Create Figure & Axes
 fig, ax = plt.subplots()
 ax.imshow(fft_image)
 
-# 円の半径と中心を指定
-aperture_size = params.aperturesize  # () は不要
+# Specify circle radius and center
+aperture_size = params.aperturesize  # no () needed
 radius = aperture_size // 2
-circle_center = (offaxis_center[1], offaxis_center[0])  # (x, y)に変換
+circle_center = (offaxis_center[1], offaxis_center[0])  # convert to (x, y)
 circle = plt.Circle(circle_center, radius, color='red', fill=False, linewidth=1)
 
-# 円を追加
+# Add circle
 ax.add_patch(circle)
 #ax.set_title("FFT with Aperture Circle")
 plt.show()
@@ -164,17 +164,17 @@ print(visibility.mean())
 import numpy as np
 import matplotlib.pyplot as plt
 
-# ファイルの読み込み
+# Load file
 #angle_nobg = np.load("/Users/kitak/QPI/angle_nobg.npy")
 
-# 表示
-plt.imshow(angle_nobg, cmap='viridis')  # または 'jet', 'gray' など
+# Display
+plt.imshow(angle_nobg, cmap='viridis')  # or 'jet', 'gray', etc.
 plt.colorbar(label="Phase (rad)")
 plt.title("Background-subtracted Phase Map")
 plt.tight_layout()
 plt.show()
 # %%
-x_coord = 200  # 任意のx位置
+x_coord = 200  # arbitrary x position
 profile = angle_nobg[:, x_coord]
 plt.ylim(-4,1)
 plt.plot(profile)
@@ -185,7 +185,7 @@ plt.ylabel('Phase (rad)')
 plt.grid(True)
 plt.show()
 
-# %% 250522 特徴量検出による位置合わせ。うまくいかず
+# %% 250522 Feature-based alignment. Did not work well
 
 # %%
 import os
@@ -196,11 +196,11 @@ from skimage.restoration import unwrap_phase
 from qpi import QPIParameters, get_field
 from tqdm import tqdm
 
-# 定数設定
+# Constants
 WAVELENGTH = 663e-9  # 663 nm
 NA = 0.95
 PIXELSIZE = 3.45e-6 / 40
-IMG_SHAPE = (1024, 1024)  # 後で上書きされるが仮置き
+IMG_SHAPE = (1024, 1024)  # placeholder, will be overwritten later
 OFFAXIS_CENTER = (858, 759)
 BG_PATH = "/Users/kitak/QPI/data/250522/bg.tif"
 TARGET_DIR = "/Users/kitak/QPI/data/250522/test_timelapse"
@@ -208,7 +208,7 @@ OUTPUT_DIR = os.path.join(TARGET_DIR, "output_phase")
 OUTPUT_DIR_2 = os.path.join(TARGET_DIR, "output_colormap")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR_2,exist_ok=True)
-# 背景画像読み込み・クロップ
+# Load and crop background image
 bg_img = Image.open(BG_PATH)
 bg_img = np.array(bg_img)[516:1540,720:1744]
 params = QPIParameters(
@@ -221,34 +221,34 @@ params = QPIParameters(
 field_bg = get_field(bg_img, params)
 angle_bg = unwrap_phase(np.angle(field_bg))
 
-# 処理ループ
+# Processing loop
 for filename in tqdm(sorted(os.listdir(TARGET_DIR))):
     if filename.lower().endswith(".tif"):
         filepath = os.path.join(TARGET_DIR, filename)
         outpath = os.path.join(OUTPUT_DIR, filename.replace(".tif", "_phase.tif"))
 
-        # 画像読み込み・クロップ
+        # Load and crop image
         img = Image.open(filepath)
         
 
-        # QPI再構成
+        # QPI reconstruction
         field = get_field(img, params)
         angle = unwrap_phase(np.angle(field))
 
-        # 背景差分と平均0調整
+        # Background subtraction and zero-mean adjustment
         angle_nobg = angle - angle_bg
         angle_nobg -= np.mean(angle_nobg[1:10, 1:10])
 
-        # 保存
+        # Save
         tifffile.imwrite(outpath, angle_nobg.astype(np.float32))
-        # 保存（カラーマップ付きPNG画像）
+        # Save (colormap PNG image)
         plt.figure(figsize=(6,6))
-        plt.imshow(angle_nobg, cmap='viridis',vmin=-4,vmax=2)  # 'jet' や 'gray' も可
+        plt.imshow(angle_nobg, cmap='viridis',vmin=-4,vmax=2)  # 'jet' or 'gray' also possible
         plt.colorbar(label='Phase (rad)')
         plt.title(f"Phase: {filename}")
         plt.axis('off')
 
-# 保存パス変更
+# Change save path
         png_outpath = os.path.join(OUTPUT_DIR_2, filename.replace(".tif", "_colormap.png"))
         plt.tight_layout()
         plt.savefig(png_outpath, dpi=300)
@@ -265,30 +265,30 @@ import cv2
 from glob import glob
 from natsort import natsorted
 
-# === パス設定 ===
+# === Path settings ===
 csv_path = "/Volumes/QPI/ph_1/Pos3/output_phase/Results.csv"
 image_dir = "/Volumes/QPI/ph_1/Pos3/output_phase"
 output_dir = os.path.join(image_dir, "aligned_left_center")
 os.makedirs(output_dir, exist_ok=True)
 
-# === CSV読み込みとSlice順ソート ===
+# === Load CSV and sort by Slice ===
 df = pd.read_csv(csv_path)
 df = df.sort_values("Slice").reset_index(drop=True)
 
-# 左辺の中点の座標を取得
+# Get coordinates of the left edge midpoint
 x = df["BX"]
 y = df["BY"] + df["Height"] / 2
 
-# 参照フレーム（最初のスライス）の座標
+# Reference frame (first slice) coordinates
 x0, y0 = x.iloc[0], y.iloc[0]
 dx = x - x0
 dy = y - y0
 
-# === 画像読み込み（自然順ソート） ===
+# === Load images (natural sort order) ===
 image_paths = natsorted(glob(os.path.join(image_dir, "*.tif")))
-assert len(image_paths) == len(dx), f"画像数（{len(image_paths)}）とCSV行数（{len(dx)}）が一致しません。"
+assert len(image_paths) == len(dx), f"Number of images ({len(image_paths)}) does not match CSV rows ({len(dx)})."
 
-# === アライメント処理 ===
+# === Alignment processing ===
 for i, path in enumerate(image_paths):
     img = tifffile.imread(path)
     M = np.float32([[1, 0, -dx.iloc[i]], [0, 1, -dy.iloc[i]]])
@@ -297,79 +297,79 @@ for i, path in enumerate(image_paths):
     fname = os.path.basename(path)
     tifffile.imwrite(os.path.join(output_dir, fname), aligned.astype(np.float32))
 
-print("アライメント完了", output_dir)
+print("Alignment complete", output_dir)
 # %%
 aligned_dir = "/Users/kitak/QPI/data/250522/test_timelapse/output_phase/test_channel/aligned_left_center"
 output_diff_dir = os.path.join(aligned_dir, "diff_from_first")
 os.makedirs(output_diff_dir, exist_ok=True)
 
-# === ファイル読み込みとソート ===
+# === Load and sort files ===
 image_paths = natsorted(glob(os.path.join(aligned_dir, "*.tif")))
-assert len(image_paths) > 1, "画像が1枚しか見つかりませんでした。"
+assert len(image_paths) > 1, "Only one image found."
 
-# === 1枚目を基準として読み込む ===
+# === Load the first image as reference ===
 ref_img = tifffile.imread(image_paths[0]).astype(np.float32)
 
-# === 差分画像を保存 ===
+# === Save difference images ===
 for i, path in enumerate(image_paths[1:], start=1):
     img = tifffile.imread(path).astype(np.float32)
     diff = img - ref_img
     fname = os.path.basename(path)
     tifffile.imwrite(os.path.join(output_diff_dir, fname), diff)
 
-print("✅ 差分画像を保存しました:", output_diff_dir)
+print("Done: saved difference images:", output_diff_dir)
 # %%
 output_colormap_dir = os.path.join(aligned_dir, "diff_colormap")
 os.makedirs(output_colormap_dir, exist_ok=True)
 
-# === ファイル読み込みとソート ===
+# === Load and sort files ===
 image_paths = natsorted(glob(os.path.join(aligned_dir, "*.tif")))
 ref_img = tifffile.imread(image_paths[0]).astype(np.float32)
 
 vmin, vmax = -0.5, 3.0
 
-# === 差分＋カラーマップ処理 ===
+# === Difference + colormap processing ===
 for i, path in enumerate(image_paths[1:], start=1):
     img = tifffile.imread(path).astype(np.float32)
     diff = img - ref_img
 
-    # 指定範囲でクリップして正規化（0-255）
+    # Clip to specified range and normalize (0-255)
     diff_clipped = np.clip(diff, vmin, vmax)
     diff_norm = ((diff_clipped - vmin) / (vmax - vmin) * 255).astype(np.uint8)
 
-    # カラーマップ適用（JET）
+    # Apply colormap (JET)
     color_mapped = cv2.applyColorMap(diff_norm, cv2.COLORMAP_JET)
 
-    # 保存
+    # Save
     fname = os.path.splitext(os.path.basename(path))[0] + "_cmap_fixed.png"
     cv2.imwrite(os.path.join(output_colormap_dir, fname), color_mapped)
 
-print("✅ カラーマップ画像を保存しました（範囲固定: -1〜3）→", output_colormap_dir)
+print("Done: saved colormap images (fixed range: -1 to 3) ->", output_colormap_dir)
 # %%
-# === パス設定 ===
+# === Path settings ===
 csv_path = "/Users/kitak/QPI/data/250522/test_timelapse/250526_rectangle.csv"
 image_dir = "/Users/kitak/QPI/data/250522/test_timelapse/output_phase/test_channel/output_phase_crop"
 output_dir = os.path.join(image_dir, "aligned_left_center")
 os.makedirs(output_dir, exist_ok=True)
 
-# === CSV読み込みとSlice順ソート ===
+# === Load CSV and sort by Slice ===
 df = pd.read_csv(csv_path)
 df = df.sort_values("Slice").reset_index(drop=True)
 
-# 左辺の中点の座標を取得
+# Get coordinates of the left edge midpoint
 x = df["BX"]
 y = df["BY"] + df["Height"] / 2
 
-# 参照フレーム（最初のスライス）の座標
+# Reference frame (first slice) coordinates
 x0, y0 = x.iloc[0], y.iloc[0]
 dx = x - x0
 dy = y - y0
 
-# === 画像読み込み（自然順ソート） ===
+# === Load images (natural sort order) ===
 image_paths = natsorted(glob(os.path.join(image_dir, "*.tif")))
-assert len(image_paths) == len(dx), f"画像数（{len(image_paths)}）とCSV行数（{len(dx)}）が一致しません。"
+assert len(image_paths) == len(dx), f"Number of images ({len(image_paths)}) does not match CSV rows ({len(dx)})."
 
-# === アライメント処理 ===
+# === Alignment processing ===
 for i, path in enumerate(image_paths):
     img = tifffile.imread(path)
     M = np.float32([[1, 0, -dx.iloc[i]], [0, 1, -dy.iloc[i]]])
@@ -378,27 +378,27 @@ for i, path in enumerate(image_paths):
     fname = os.path.basename(path)
     tifffile.imwrite(os.path.join(output_dir, fname), aligned.astype(np.float32))
 
-print("アライメント完了", output_dir)
+print("Alignment complete", output_dir)
 # %%
 aligned_dir = "/Users/kitak/QPI/data/250522/test_timelapse/output_phase/test_channel/output_phase_crop/aligned_left_center"
 output_diff_dir = os.path.join(aligned_dir, "diff_from_first")
 os.makedirs(output_diff_dir, exist_ok=True)
 
-# === ファイル読み込みとソート ===
+# === Load and sort files ===
 image_paths = natsorted(glob(os.path.join(aligned_dir, "*.tif")))
-assert len(image_paths) > 1, "画像が1枚しか見つかりませんでした。"
+assert len(image_paths) > 1, "Only one image found."
 
-# === 1枚目を基準として読み込む ===
+# === Load the first image as reference ===
 ref_img = tifffile.imread(image_paths[0]).astype(np.float32)
 
-# === 差分画像を保存 ===
+# === Save difference images ===
 for i, path in enumerate(image_paths[1:], start=1):
     img = tifffile.imread(path).astype(np.float32)
     diff = img - ref_img
     fname = os.path.basename(path)
     tifffile.imwrite(os.path.join(output_diff_dir, fname), diff)
 
-print("✅ 差分画像を保存しました:", output_diff_dir)
+print("Done: saved difference images:", output_diff_dir)
 
 # %%
 output_colormap_dir = os.path.join(aligned_dir, "diff_colormap")
@@ -407,30 +407,30 @@ output_colormap_tif_dir = os.path.join(aligned_dir, "diff_colormap_tif")
 os.makedirs(output_colormap_tif_dir, exist_ok=True)
 
 
-# === ファイル読み込みとソート ===
+# === Load and sort files ===
 image_paths = natsorted(glob(os.path.join(aligned_dir, "*.tif")))
 ref_img = tifffile.imread(image_paths[0]).astype(np.float32)
 
 vmin, vmax = -0.5, 3.0
 
-# === 差分＋カラーマップ処理 ===
+# === Difference + colormap processing ===
 for i, path in enumerate(image_paths[1:], start=1):
     img = tifffile.imread(path).astype(np.float32)
     diff = img - ref_img
 
-    # 指定範囲でクリップして正規化（0-255）
+    # Clip to specified range and normalize (0-255)
     diff_clipped = np.clip(diff, vmin, vmax)
     diff_norm = ((diff_clipped - vmin) / (vmax - vmin) * 255).astype(np.uint8)
 
-    # カラーマップ適用（JET）
+    # Apply colormap (JET)
     color_mapped = cv2.applyColorMap(diff_norm, cv2.COLORMAP_JET)
 
-    # 保存
+    # Save
     fname = os.path.splitext(os.path.basename(path))[0] + "_cmap_fixed.tif"
     tifffile.imwrite(os.path.join(output_colormap_tif_dir, fname), color_mapped)
 
-print("✅ カラーマップ画像を保存しました（範囲固定: -1〜3）→", output_colormap_dir)
-# %%　250528 visibilityを向上させたい.segmentation
+print("Done: saved colormap images (fixed range: -1 to 3) ->", output_colormap_dir)
+# %% 250528 Improve visibility. Segmentation
 
 path = "/Volumes/KIOXIA/vis_test_1/Image__2025-05-28__22-57-33.bmp"
 path_bg = "/Volumes/KIOXIA/vis_test_1/Image__2025-05-28__22-54-50.bmp"
@@ -555,7 +555,7 @@ plt.show()
 
 plt.hist(visibility.flatten(), bins=100, range=(0.8, 0.9))
 plt.show()
-# 空間の不均一性がないし波面の中心もある程度捉えているのでってことはそもそもの光軸のずれがあるのか、それとも
+# No spatial inhomogeneity and the wavefront center is captured to some extent, so is there an optical axis misalignment, or something else
 # %%
 
 # %% 250604_
@@ -568,13 +568,13 @@ from qpi import QPIParameters, get_field
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-# 定数設定
+# Constants
 WAVELENGTH = 663e-9  # 663 nm
 NA = 0.95
 PIXELSIZE = 3.45e-6 / 40
 OFFAXIS_CENTER = (841, 779)
 
-# ディレクトリ設定
+# Directory settings
 TARGET_DIR = "/Volumes/KIOXIA/timelapse_bin1_3/Pos3"
 BG_DIR = "/Volumes/KIOXIA/timelapse_bin1_3/Pos0"
 OUTPUT_DIR = os.path.join(TARGET_DIR, "output_phase")
@@ -582,22 +582,22 @@ OUTPUT_DIR_2 = os.path.join(TARGET_DIR, "output_colormap")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR_2, exist_ok=True)
 
-# 処理ループ
+# Processing loop
 for filename in tqdm(sorted(os.listdir(TARGET_DIR))):
     if filename.lower().endswith(".tif"):
 
         filepath = os.path.join(TARGET_DIR, filename)
-        bg_filepath = os.path.join(BG_DIR, filename)  # 同じ名前の背景画像を探す
+        bg_filepath = os.path.join(BG_DIR, filename)  # Look for background image with same name
 
         if not os.path.exists(bg_filepath):
-            print(f"背景画像が見つかりません: {bg_filepath} をスキップします。")
+            print(f"Background image not found: {bg_filepath} - skipping.")
             continue
 
-        # 背景画像読み込み
+        # Load background image
         bg_img = Image.open(bg_filepath)
         bg_img = np.array(bg_img)
 
-        # パラメータ設定（背景画像のshapeに合わせる）
+        # Set parameters (match shape to background image)
         params = QPIParameters(
             wavelength=WAVELENGTH,
             NA=NA,
@@ -608,23 +608,23 @@ for filename in tqdm(sorted(os.listdir(TARGET_DIR))):
         field_bg = get_field(bg_img, params)
         angle_bg = unwrap_phase(np.angle(field_bg))
 
-        # 処理対象画像読み込み
+        # Load target image
         img = Image.open(filepath)
         img = np.array(img)
 
-        # QPI再構成
+        # QPI reconstruction
         field = get_field(img, params)
         angle = unwrap_phase(np.angle(field))
 
-        # 背景差分と平均0調整
+        # Background subtraction and zero-mean adjustment
         angle_nobg = angle - angle_bg
         angle_nobg -= np.mean(angle_nobg[1:10, 1:254])
 
-        # 保存（TIF）
+        # Save (TIF)
         outpath = os.path.join(OUTPUT_DIR, filename.replace(".tif", "_phase.tif"))
         tifffile.imwrite(outpath, angle_nobg.astype(np.float32))
 
-        # 保存（カラーマップPNG）
+        # Save (colormap PNG)
         plt.figure(figsize=(6, 6))
         plt.imshow(angle_nobg, cmap='viridis', vmin=-4, vmax=2)
         plt.colorbar(label='Phase (rad)')
@@ -644,30 +644,30 @@ import cv2
 from glob import glob
 from natsort import natsorted
 
-# === パス設定 ===
+# === Path settings ===
 csv_path = "/Volumes/QPI/250604_kk/ph_3/Pos6/output_phase/3_Results.csv"
 image_dir = "/Volumes/QPI/250604_kk/ph_3/Pos6/output_phase"
 output_dir = os.path.join(image_dir, "aligned_left_center")
 os.makedirs(output_dir, exist_ok=True)
 
-# === CSV読み込みとSlice順ソート ===
+# === Load CSV and sort by Slice ===
 df = pd.read_csv(csv_path)
 df = df.sort_values("Slice").reset_index(drop=True)
 
-# 左辺の中点の座標を取得
+# Get coordinates of the left edge midpoint
 x = df["BX"]
 y = df["BY"] + df["Height"] / 2
 
-# 参照フレーム（最初のスライス）の座標
+# Reference frame (first slice) coordinates
 x0, y0 = x.iloc[0], y.iloc[0]
 dx = x - x0
 dy = y - y0
 
-# === 画像読み込み（自然順ソート） ===
+# === Load images (natural sort order) ===
 image_paths = natsorted(glob(os.path.join(image_dir, "*.tif")))
-assert len(image_paths) == len(dx), f"画像数（{len(image_paths)}）とCSV行数（{len(dx)}）が一致しません。"
+assert len(image_paths) == len(dx), f"Number of images ({len(image_paths)}) does not match CSV rows ({len(dx)})."
 
-# === アライメント処理 ===
+# === Alignment processing ===
 for i, path in enumerate(image_paths):
     img = tifffile.imread(path)
     M = np.float32([[1, 0, -dx.iloc[i]], [0, 1, -dy.iloc[i]]])
@@ -676,56 +676,56 @@ for i, path in enumerate(image_paths):
     fname = os.path.basename(path)
     tifffile.imwrite(os.path.join(output_dir, fname), aligned.astype(np.float32))
 
-print("アライメント完了", output_dir)
+print("Alignment complete", output_dir)
 # %%
 aligned_dir = output_dir
 output_diff_dir = os.path.join(aligned_dir, "diff_from_first")
 os.makedirs(output_diff_dir, exist_ok=True)
 
-# === ファイル読み込みとソート ===
+# === Load and sort files ===
 image_paths = natsorted(glob(os.path.join(aligned_dir, "*.tif")))
-assert len(image_paths) > 1, "画像が1枚しか見つかりませんでした。"
+assert len(image_paths) > 1, "Only one image found."
 
-# === 1枚目を基準として読み込む ===
+# === Load the first image as reference ===
 ref_img = tifffile.imread(image_paths[0]).astype(np.float32)
 
-# === 差分画像を保存 ===
+# === Save difference images ===
 for i, path in enumerate(image_paths[1:], start=1):
     img = tifffile.imread(path).astype(np.float32)
     diff = img - ref_img
     fname = os.path.basename(path)
     tifffile.imwrite(os.path.join(output_diff_dir, fname), diff)
 
-print("✅ 差分画像を保存しました:", output_diff_dir)
+print("Done: saved difference images:", output_diff_dir)
 # %%
 output_colormap_dir = os.path.join(aligned_dir, "diff_colormap")
 os.makedirs(output_colormap_dir, exist_ok=True)
 
-# === ファイル読み込みとソート ===
+# === Load and sort files ===
 image_paths = natsorted(glob(os.path.join(aligned_dir, "*.tif")))
 ref_img = tifffile.imread(image_paths[0]).astype(np.float32)
 
 vmin, vmax = -0.5, 3.0
 
-# === 差分＋カラーマップ処理 ===
+# === Difference + colormap processing ===
 for i, path in enumerate(image_paths[1:], start=1):
     img = tifffile.imread(path).astype(np.float32)
     diff = img - ref_img
 
-    # 指定範囲でクリップして正規化（0-255）
+    # Clip to specified range and normalize (0-255)
     diff_clipped = np.clip(diff, vmin, vmax)
     diff_norm = ((diff_clipped - vmin) / (vmax - vmin) * 255).astype(np.uint8)
 
-    # カラーマップ適用（JET）
+    # Apply colormap (JET)
     color_mapped = cv2.applyColorMap(diff_norm, cv2.COLORMAP_JET)
 
-    # 保存
+    # Save
     fname = os.path.splitext(os.path.basename(path))[0] + "_cmap_fixed.png"
     cv2.imwrite(os.path.join(output_colormap_dir, fname), color_mapped)
 
-print("✅ カラーマップ画像を保存しました（範囲固定: -1〜3）→", output_colormap_dir)
-# %% なんだこれは
-# === パス設定 ===
+print("Done: saved colormap images (fixed range: -1 to 3) ->", output_colormap_dir)
+# %% What is this
+# === Path settings ===
 import os
 import pandas as pd
 import numpy as np
@@ -743,24 +743,24 @@ image_dir = "/Volumes/QPI_2/250910_kk/with_focus_1/Pos15/output_phase"
 output_dir = os.path.join(image_dir, "aligned_left_center")
 os.makedirs(output_dir, exist_ok=True)
 
-# === CSV読み込みとSlice順ソート ===
+# === Load CSV and sort by Slice ===
 df = pd.read_csv(csv_path)
 df = df.sort_values("Slice").reset_index(drop=True)
 
-# 左辺の中点の座標を取得
+# Get coordinates of the left edge midpoint
 x = df["BX"]
 y = df["BY"] + df["Height"] / 2
 
-# 参照フレーム（最初のスライス）の座標
+# Reference frame (first slice) coordinates
 x0, y0 = x.iloc[0], y.iloc[0]
 dx = x - x0
 dy = y - y0
 
-# === 画像読み込み（自然順ソート） ===
+# === Load images (natural sort order) ===
 image_paths = natsorted(glob(os.path.join(image_dir, "*.tif")))
-assert len(image_paths) == len(dx), f"画像数（{len(image_paths)}）とCSV行数（{len(dx)}）が一致しません。"
+assert len(image_paths) == len(dx), f"Number of images ({len(image_paths)}) does not match CSV rows ({len(dx)})."
 
-# === アライメント処理 ===
+# === Alignment processing ===
 for i, path in enumerate(image_paths):
     img = tifffile.imread(path)
     M = np.float32([[1, 0, -dx.iloc[i]], [0, 1, -dy.iloc[i]]])
@@ -769,27 +769,27 @@ for i, path in enumerate(image_paths):
     fname = os.path.basename(path)
     tifffile.imwrite(os.path.join(output_dir, fname), aligned.astype(np.float32))
 
-print("アライメント完了", output_dir)
+print("Alignment complete", output_dir)
 # %%
 aligned_dir = output_dir
 output_diff_dir = os.path.join(aligned_dir, "diff_from_first")
 os.makedirs(output_diff_dir, exist_ok=True)
 
-# === ファイル読み込みとソート ===
+# === Load and sort files ===
 image_paths = natsorted(glob(os.path.join(aligned_dir, "*.tif")))
-assert len(image_paths) > 1, "画像が1枚しか見つかりませんでした。"
+assert len(image_paths) > 1, "Only one image found."
 
-# === 1枚目を基準として読み込む ===
+# === Load the first image as reference ===
 ref_img = tifffile.imread(image_paths[0]).astype(np.float32)
 
-# === 差分画像を保存 ===
+# === Save difference images ===
 for i, path in enumerate(image_paths[1:], start=1):
     img = tifffile.imread(path).astype(np.float32)
     diff = img - ref_img
     fname = os.path.basename(path)
     tifffile.imwrite(os.path.join(output_diff_dir, fname), diff)
 
-print("✅ 差分画像を保存しました:", output_diff_dir)
+print("Done: saved difference images:", output_diff_dir)
 
 # %%
 output_colormap_dir = os.path.join(aligned_dir, "diff_colormap")
@@ -798,31 +798,31 @@ output_colormap_tif_dir = os.path.join(aligned_dir, "diff_colormap_tif")
 os.makedirs(output_colormap_tif_dir, exist_ok=True)
 
 
-# === ファイル読み込みとソート ===
+# === Load and sort files ===
 image_paths = natsorted(glob(os.path.join(aligned_dir, "*.tif")))
 ref_img = tifffile.imread(image_paths[0]).astype(np.float32)
 
 vmin, vmax = -0.5, 2.0
 
-# === 差分＋カラーマップ処理 ===
+# === Difference + colormap processing ===
 for i, path in enumerate(image_paths[1:], start=1):
     img = tifffile.imread(path).astype(np.float32)
     diff = img - ref_img
 
-    # 指定範囲でクリップして正規化（0-255）
+    # Clip to specified range and normalize (0-255)
     diff_clipped = np.clip(diff, vmin, vmax)
     diff_norm = ((diff_clipped - vmin) / (vmax - vmin) * 255).astype(np.uint8)
 
-    # カラーマップ適用（JET）
+    # Apply colormap (JET)
     color_mapped = cv2.applyColorMap(diff_norm, cv2.COLORMAP_JET)
 
-    # 保存
+    # Save
     fname = os.path.splitext(os.path.basename(path))[0] + "_cmap_fixed.tif"
     tifffile.imwrite(os.path.join(output_colormap_tif_dir, fname), color_mapped)
 
-print("✅ カラーマップ画像を保存しました（範囲固定: -1〜3）→", output_colormap_dir)
+print("Done: saved colormap images (fixed range: -1 to 3) ->", output_colormap_dir)
 
-# %% 250618 右中点で揃える
+# %% 250618 Align by right midpoint
 import os
 import pandas as pd
 import numpy as np
@@ -835,7 +835,7 @@ from matplotlib import cm
 from matplotlib.colors import Normalize
 from PIL import Image
 
-# === パス設定 ===
+# === Path settings ===
 image_dir = "/Volumes/QPI_2/250815_kk/ph_1/Pos2/output_phase"
 csv_path = os.path.join(image_dir, "Results.csv")
 
@@ -847,11 +847,11 @@ os.makedirs(aligned_dir, exist_ok=True)
 os.makedirs(diff_dir, exist_ok=True)
 os.makedirs(cmap_tif_dir, exist_ok=True)
 
-# === CSV読み込みとソート ===
+# === Load CSV and sort ===
 df = pd.read_csv(csv_path)
 df = df.sort_values("Slice").reset_index(drop=True)
 
-# === 右辺の中点座標を計算 ===
+# === Calculate right edge midpoint coordinates ===
 x = df["BX"] + df["Width"]
 y = df["BY"] + df["Height"] / 2
 
@@ -859,9 +859,9 @@ x0, y0 = x.iloc[0], y.iloc[0]
 dx = x - x0
 dy = y - y0
 
-# === アライメント処理 ===
+# === Alignment processing ===
 image_paths = natsorted(glob(os.path.join(image_dir, "*.tif")))
-assert len(image_paths) == len(dx), f"画像数（{len(image_paths)}）とCSV行数（{len(dx)}）が一致しません。"
+assert len(image_paths) == len(dx), f"Number of images ({len(image_paths)}) does not match CSV rows ({len(dx)})."
 
 for i, path in enumerate(image_paths):
     img = tifffile.imread(path)
@@ -871,9 +871,9 @@ for i, path in enumerate(image_paths):
     fname = os.path.basename(path)
     tifffile.imwrite(os.path.join(aligned_dir, fname), aligned.astype(np.float32))
 
-print("✅ アライメント完了:", aligned_dir)
+print("Done: alignment complete:", aligned_dir)
 
-# === 差分画像（基準は最初の1枚） ===
+# === Difference images (reference is the first image) ===
 aligned_image_paths = natsorted(glob(os.path.join(aligned_dir, "*.tif")))
 ref_img = tifffile.imread(aligned_image_paths[0]).astype(np.float32)
 
@@ -883,28 +883,28 @@ for i, path in enumerate(aligned_image_paths[1:], start=1):
     fname = os.path.basename(path)
     tifffile.imwrite(os.path.join(diff_dir, fname), diff.astype(np.float32))
 
-print("✅ 差分画像を保存しました:", diff_dir)
+print("Done: saved difference images:", diff_dir)
 
-# === カラーマップ処理（範囲 -1〜3 に固定） ===
+# === Colormap processing (fixed range: -1 to 3) ===
 vmin, vmax = -1.0, 3.0
-colormap = cm.viridis  # ← 好きなものに変更可能（例: plasma, magma, cividis, etc.）
+colormap = cm.viridis  # can be changed to any colormap (e.g., plasma, magma, cividis, etc.)
 
 for i, path in enumerate(aligned_image_paths[1:], start=1):
     img = tifffile.imread(path).astype(np.float32)
     diff = img - ref_img
 
-    # 正規化してカラーマップに変換（RGBA）
+    # Normalize and convert to colormap (RGBA)
     norm = Normalize(vmin=vmin, vmax=vmax)
     rgba_image = colormap(norm(diff))  # shape: (H, W, 4)
     rgb_image = (rgba_image[..., :3] * 255).astype(np.uint8)
 
-    # 保存（PNGでもOKだがTIFに統一）
+    # Save (TIF for consistency, though PNG is also fine)
     fname = os.path.splitext(os.path.basename(path))[0] + "_cmap_mpl.tif"
     tifffile.imwrite(os.path.join(cmap_tif_dir, fname), rgb_image)
 
-print("✅ カラーマップ画像を保存しました（固定範囲 -1〜3）:", cmap_tif_dir)
+print("Done: saved colormap images (fixed range: -1 to 3):", cmap_tif_dir)
 
-# %%　250528 visibilityを向上させたい.segmentation
+# %% 250528 Improve visibility. Segmentation
 
 path = "/Volumes/KIOXIA/vis_test_1/Image__2025-05-28__22-57-33.bmp"
 path_bg = "/Volumes/KIOXIA/vis_test_1/Image__2025-05-28__22-54-50.bmp"
@@ -1029,10 +1029,10 @@ plt.show()
 
 plt.hist(visibility.flatten(), bins=100, range=(0.8, 0.9))
 plt.show()
-# 空間の不均一性がないし波面の中心もある程度捉えているのでってことはそもそもの光軸のずれがあるのか、それとも
+# No spatial inhomogeneity and the wavefront center is captured to some extent, so is there an optical axis misalignment, or something else
 # %%
-#250604_Pos1~Pos30の位相画像のバッチ処理,250618_amp以外の画像を出力
-#250604_Pos1~Pos30の位相画像のバッチ処理,250618_amp以外の画像を出力のコピー
+#250604_Batch processing of Pos1-Pos30 phase images, 250618_output images other than amp
+#250604_Batch processing of Pos1-Pos30 phase images, 250618_output images other than amp (copy)
 import os
 import numpy as np
 import tifffile
@@ -1042,24 +1042,24 @@ from qpi import QPIParameters, get_field
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-# 定数設定
+# Constants
 WAVELENGTH = 658e-9  # 663 nm
 NA = 0.95
 PIXELSIZE = 3.45e-6 / 40
 OFFAXIS_CENTER = (1664, 485) #250910 1623,1621 251017 1504,1710 251212 (1664, 485)
 
-# ディレクトリ設定
+# Directory settings
 BASE_DIR = r"F:\251212\wo_cell\ph_2"
 
-BG_DIR = os.path.join(BASE_DIR, "Pos0")  # 背景画像があるディレクトリ
+BG_DIR = os.path.join(BASE_DIR, "Pos0")  # Directory containing background images
 
-# Pos1〜Pos30 をループ
+# Loop through Pos1 to Pos30
 for pos_idx in range(24,47): #251017 46,92 250910 44,91
     pos_name = f"Pos{pos_idx}"
     TARGET_DIR = os.path.join(BASE_DIR, pos_name)
     
     if not os.path.exists(TARGET_DIR):
-        print(f"{TARGET_DIR} が存在しません。スキップします。")
+        print(f"{TARGET_DIR} does not exist. Skipping.")
         continue
 
     OUTPUT_DIR = os.path.join(TARGET_DIR, "output_phase")
@@ -1067,21 +1067,21 @@ for pos_idx in range(24,47): #251017 46,92 250910 44,91
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(OUTPUT_DIR_2, exist_ok=True)
 
-    print(f"\n▶ 処理中: {pos_name}")
+    print(f"\nProcessing: {pos_name}")
 
     for filename in tqdm(sorted(os.listdir(TARGET_DIR)), desc=pos_name):
         if filename.startswith("._"):
-            continue  # macOSの不要な隠しファイルをスキップ
+            continue  # Skip unnecessary macOS hidden files
 
         if filename.lower().endswith(".tif") and "output" not in filename:
             filepath = os.path.join(TARGET_DIR, filename)
-            bg_filepath = os.path.join(BG_DIR, filename)  # 対応する背景画像
+            bg_filepath = os.path.join(BG_DIR, filename)  # Corresponding background image
 
             if not os.path.exists(bg_filepath):
-                print(f"背景画像が見つかりません: {bg_filepath} をスキップします。")
+                print(f"Background image not found: {bg_filepath} - skipping.")
                 continue
 
-            # 背景画像読み込み
+            # Load background image
             bg_img = Image.open(bg_filepath)
             bg_img = np.array(bg_img)
             #bg_img = bg_img[8:2056,400:2448] #250712_crop #250801_crop
@@ -1089,7 +1089,7 @@ for pos_idx in range(24,47): #251017 46,92 250910 44,91
             
             
 
-            # パラメータ設定
+            # Parameter settings
             params = QPIParameters(
                 wavelength=WAVELENGTH,
                 NA=NA,
@@ -1100,26 +1100,26 @@ for pos_idx in range(24,47): #251017 46,92 250910 44,91
             field_bg = get_field(bg_img, params)
             angle_bg = unwrap_phase(np.angle(field_bg))
 
-            # 対象画像読み込み
+            # Load target image
             img = Image.open(filepath)
             img = np.array(img)
             #img = img[8:2056,400:2448] #250712_crop #250801_crop
             img = img[0:2048,0:2048] #250712_crop #250801_crop
 
 
-            # QPI再構成
+            # QPI reconstruction
             field = get_field(img, params)
             angle = unwrap_phase(np.angle(field))
 
-            # 背景差分と平均0調整
+            # Background subtraction and zero-mean adjustment
             angle_nobg = angle - angle_bg
             angle_nobg -= np.mean(angle_nobg[1:507, 254:507])
 
-            # TIF保存
+            # Save TIF
             outpath = os.path.join(OUTPUT_DIR, filename.replace(".tif", "_phase.tif"))
             tifffile.imwrite(outpath, angle_nobg.astype(np.float32))
 
-            # PNG保存（カラーマップ付き）
+            # Save PNG (with colormap)
             plt.figure(figsize=(6, 6))
             plt.imshow(angle_nobg, cmap='viridis', vmin=-4, vmax=2)
             plt.colorbar(label='Phase (rad)')
@@ -1131,7 +1131,7 @@ for pos_idx in range(24,47): #251017 46,92 250910 44,91
             plt.close()
 
 # %%
-#250604_Pos1~Pos30の位相画像のバッチ処理,250618_amp以外の画像を出力のコピー
+#250604_Batch processing of Pos1-Pos30 phase images, 250618_output images other than amp (copy)
 import os
 import numpy as np
 import tifffile
@@ -1141,24 +1141,24 @@ from qpi import QPIParameters, get_field
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-# 定数設定
+# Constants
 WAVELENGTH = 658e-9  # 663 nm
 NA = 0.95
 PIXELSIZE = 3.45e-6 / 40
 #OFFAXIS_CENTER = (1504,1708) 251017
 #OFFAXIS_CENTER = (1623,1621) # 250910
 OFFAXIS_CENTER = (1664, 485) #251212
-# ディレクトリ設定
+# Directory settings
 BASE_DIR =r"F:\251212\wo_cell\ph_2"
-BG_DIR = os.path.join(BASE_DIR, "Pos0")  # 背景画像があるディレクトリ
+BG_DIR = os.path.join(BASE_DIR, "Pos0")  # Directory containing background images
 
-# Pos1〜Pos30 をループ
+# Loop through Pos1 to Pos30
 for pos_idx in range(1,24): #251212 1,24 #251019 1,46 #250910 1,44
     pos_name = f"Pos{pos_idx}"
     TARGET_DIR = os.path.join(BASE_DIR, pos_name)
     
     if not os.path.exists(TARGET_DIR):
-        print(f"{TARGET_DIR} が存在しません。スキップします。")
+        print(f"{TARGET_DIR} does not exist. Skipping.")
         continue
 
     OUTPUT_DIR = os.path.join(TARGET_DIR, "output_phase")
@@ -1166,27 +1166,27 @@ for pos_idx in range(1,24): #251212 1,24 #251019 1,46 #250910 1,44
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(OUTPUT_DIR_2, exist_ok=True)
 
-    print(f"\n▶ 処理中: {pos_name}")
+    print(f"\nProcessing: {pos_name}")
 
     for filename in tqdm(sorted(os.listdir(TARGET_DIR)), desc=pos_name):
         if filename.startswith("._"):
-            continue  # macOSの不要な隠しファイルをスキップ
+            continue  # Skip unnecessary macOS hidden files
 
         if filename.lower().endswith(".tif") and "output" not in filename:
             filepath = os.path.join(TARGET_DIR, filename)
-            bg_filepath = os.path.join(BG_DIR, filename)  # 対応する背景画像
+            bg_filepath = os.path.join(BG_DIR, filename)  # Corresponding background image
 
             if not os.path.exists(bg_filepath):
-                print(f"背景画像が見つかりません: {bg_filepath} をスキップします。")
+                print(f"Background image not found: {bg_filepath} - skipping.")
                 continue
 
-            # 背景画像読み込み
+            # Load background image
             bg_img = Image.open(bg_filepath)
             bg_img = np.array(bg_img)
             bg_img = bg_img[0:2048,400:2448] #250712_crop #250801_crop
             
 
-            # パラメータ設定
+            # Parameter settings
             params = QPIParameters(
                 wavelength=WAVELENGTH,
                 NA=NA,
@@ -1197,24 +1197,24 @@ for pos_idx in range(1,24): #251212 1,24 #251019 1,46 #250910 1,44
             field_bg = get_field(bg_img, params)
             angle_bg = unwrap_phase(np.angle(field_bg))
 
-            # 対象画像読み込み
+            # Load target image
             img = Image.open(filepath)
             img = np.array(img)
             img = img[0:2048,400:2448] #250712_crop #250801_crop
 
-            # QPI再構成
+            # QPI reconstruction
             field = get_field(img, params)
             angle = unwrap_phase(np.angle(field))
 
-            # 背景差分と平均0調整
+            # Background subtraction and zero-mean adjustment
             angle_nobg = angle - angle_bg
             angle_nobg -= np.mean(angle_nobg[1:507, 1:253])
 
-            # TIF保存
+            # Save TIF
             outpath = os.path.join(OUTPUT_DIR, filename.replace(".tif", "_phase.tif"))
             tifffile.imwrite(outpath, angle_nobg.astype(np.float32))
 
-            # PNG保存（カラーマップ付き）
+            # Save PNG (with colormap)
             plt.figure(figsize=(6, 6))
             plt.imshow(angle_nobg, cmap='viridis', vmin=-4, vmax=2)
             plt.colorbar(label='Phase (rad)')
@@ -1226,8 +1226,8 @@ for pos_idx in range(1,24): #251212 1,24 #251019 1,46 #250910 1,44
             plt.close()
 
 # %%
-#250604_Pos1~Pos30の位相画像のバッチ処理,250618_Pos1~26,27~45のバッチ処理,250630_focus_test
-#make_disk is not difined errorが出ます。上のコードを使いましょう
+#250604_Batch processing of Pos1-Pos30 phase images, 250618_Pos1-26,27-45 batch processing, 250630_focus_test
+#make_disk is not defined error occurs. Use the code above instead
 import os
 import numpy as np
 import tifffile
@@ -1237,51 +1237,51 @@ from qpi import QPIParameters, get_field
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-# 定数設定
+# Constants
 WAVELENGTH = 663e-9  # 663 nm
 NA = 0.95
 PIXELSIZE = 3.45e-6 / 40
 OFFAXIS_CENTER = (1619,1621)
 
-# ディレクトリ設定
+# Directory settings
 BASE_DIR = "/Volumes/QPI/ph_1"
-BG_DIR = os.path.join(BASE_DIR, "Pos0")  # 背景画像があるディレクトリ
+BG_DIR = os.path.join(BASE_DIR, "Pos0")  # Directory containing background images
 
-# Pos1〜Pos30 をループ
+# Loop through Pos1 to Pos30
 for pos_idx in range(1, 24):
     pos_name = f"Pos{pos_idx}"
     TARGET_DIR = os.path.join(BASE_DIR, pos_name)
     
     if not os.path.exists(TARGET_DIR):
-        print(f"{TARGET_DIR} が存在しません。スキップします。")
+        print(f"{TARGET_DIR} does not exist. Skipping.")
         continue
 
     OUTPUT_DIR = os.path.join(TARGET_DIR, "output_phase")
     OUTPUT_DIR_2 = os.path.join(TARGET_DIR, "output_colormap")
-    OUTPUT_DIR_AMP = os.path.join(TARGET_DIR, "output_amplitude")  # 振幅保存用
+    OUTPUT_DIR_AMP = os.path.join(TARGET_DIR, "output_amplitude")  # For amplitude output
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(OUTPUT_DIR_2, exist_ok=True)
     os.makedirs(OUTPUT_DIR_AMP, exist_ok=True)
 
-    print(f"\n▶ 処理中: {pos_name}")
+    print(f"\nProcessing: {pos_name}")
 
     for filename in tqdm(sorted(os.listdir(TARGET_DIR)), desc=pos_name):
         if filename.startswith("._"):
-            continue  # macOSの不要な隠しファイルをスキップ
+            continue  # Skip unnecessary macOS hidden files
 
         if filename.lower().endswith(".tif") and "output" not in filename:
             filepath = os.path.join(TARGET_DIR, filename)
-            bg_filepath = os.path.join(BG_DIR, filename)  # 対応する背景画像
+            bg_filepath = os.path.join(BG_DIR, filename)  # Corresponding background image
 
             if not os.path.exists(bg_filepath):
-                print(f"背景画像が見つかりません: {bg_filepath} をスキップします。")
+                print(f"Background image not found: {bg_filepath} - skipping.")
                 continue
 
-            # 背景画像読み込み
+            # Load background image
             bg_img = Image.open(bg_filepath)
             bg_img = np.array(bg_img)
 
-            # パラメータ設定
+            # Parameter settings
             params = QPIParameters(
                 wavelength=WAVELENGTH,
                 NA=NA,
@@ -1292,19 +1292,19 @@ for pos_idx in range(1, 24):
             field_bg = get_field(bg_img, params)
             angle_bg = unwrap_phase(np.angle(field_bg))
 
-            # 対象画像読み込み
+            # Load target image
             img = Image.open(filepath)
             img = np.array(img)
 
-            # QPI再構成
+            # QPI reconstruction
             field = get_field(img, params)
             angle = unwrap_phase(np.angle(field))
 
-            # 背景差分と平均0調整
+            # Background subtraction and zero-mean adjustment
             angle_nobg = angle - angle_bg
             angle_nobg -= np.mean(angle_nobg[1:80, 1:254])
 
-            # TIF保存
+            # Save TIF
             outpath = os.path.join(OUTPUT_DIR, filename.replace(".tif", "_phase.tif"))
             tifffile.imwrite(outpath, angle_nobg.astype(np.float32))
             img_fft = np.fft.fftshift(np.fft.fft2(img))
@@ -1317,7 +1317,7 @@ for pos_idx in range(1, 24):
             amp_outpath = os.path.join(OUTPUT_DIR_AMP, filename.replace(".tif", "_amplitude.tif"))
             tifffile.imwrite(amp_outpath, img_1st_abs.astype(np.float32))
 
-            # PNG保存（カラーマップ付き）
+            # Save PNG (with colormap)
             plt.figure(figsize=(6, 6))
             plt.imshow(angle_nobg, cmap='viridis', vmin=-4, vmax=2)
             plt.colorbar(label='Phase (rad)')
@@ -1330,30 +1330,30 @@ for pos_idx in range(1, 24):
 
 # %%
 
-#Pos6の一次光をアライメント
+# Align first-order light for Pos6
 csv_path = "/Volumes/QPI/ph_1/Pos3/output_phase/Results.csv"
 image_dir = "/Volumes/QPI/ph_1/Pos3/output_phase"
 output_dir = os.path.join(image_dir, "aligned_left_center")
 os.makedirs(output_dir, exist_ok=True)
 
-# === CSV読み込みとSlice順ソート ===
+# === Load CSV and sort by Slice ===
 df = pd.read_csv(csv_path)
 df = df.sort_values("Slice").reset_index(drop=True)
 
-# 左辺の中点の座標を取得
+# Get coordinates of the left edge midpoint
 x = df["BX"]
 y = df["BY"] + df["Height"] / 2
 
-# 参照フレーム（最初のスライス）の座標
+# Reference frame (first slice) coordinates
 x0, y0 = x.iloc[0], y.iloc[0]
 dx = x - x0
 dy = y - y0
 
-# === 画像読み込み（自然順ソート） ===
+# === Load images (natural sort order) ===
 image_paths = natsorted(glob(os.path.join(image_dir, "*.tif")))
-assert len(image_paths) == len(dx), f"画像数（{len(image_paths)}）とCSV行数（{len(dx)}）が一致しません。"
+assert len(image_paths) == len(dx), f"Number of images ({len(image_paths)}) does not match CSV rows ({len(dx)})."
 
-# === アライメント処理 ===
+# === Alignment processing ===
 for i, path in enumerate(image_paths):
     img = tifffile.imread(path)
     M = np.float32([[1, 0, -dx.iloc[i]], [0, 1, -dy.iloc[i]]])
@@ -1362,10 +1362,10 @@ for i, path in enumerate(image_paths):
     fname = os.path.basename(path)
     tifffile.imwrite(os.path.join(output_dir, fname), aligned.astype(np.float32))
 
-print("アライメント完了", output_dir)
+print("Alignment complete", output_dir)
 # %% 250630_focus
 
-# 基本定数
+# Basic constants
 WAVELENGTH = 663e-9
 NA = 0.95
 PIXELSIZE = 3.45e-6 / 40
@@ -1373,7 +1373,7 @@ offaxis_center = (1609, 1639)
 crop_slice = np.s_[8:2056,400:2448]
 x_coord = 200
 
-# 出力ディレクトリ
+# Output directories
 output_base = "/Volumes/KIOXIA/250813_kk/vis_focus_2"
 angle_dir = os.path.join(output_base, "angle_nobg")
 visib_dir = os.path.join(output_base, "visibility")
@@ -1383,7 +1383,7 @@ os.makedirs(angle_dir, exist_ok=True)
 os.makedirs(visib_dir, exist_ok=True)
 os.makedirs(profile_dir, exist_ok=True)
 
-# 可視性計算関数
+# Visibility calculation function
 def visibility(img: np.ndarray, params: QPIParameters) -> np.ndarray:
     radius = params.aperturesize // 2
     img_freq = np.fft.fftshift(np.fft.fft2(img))
@@ -1397,13 +1397,13 @@ for pos in range(0, 106):
     pos_name = f"Pos{pos}"
     print(f"Processing {pos_name}...")
 
-    # ファイル読み込み
+    # Load files
     path = f"/Volumes/ESD-USB/250801_focus/1/mm_1/{pos_name}/img_000000000_Default_000.tif"
     path_bg = f"/Volumes/ESD-USB/250801_vis/1/bg_1/Pos0/img_000000000_Default_000.tif"
     img = np.array(Image.open(path))[crop_slice]
     img_bg = np.array(Image.open(path_bg))[crop_slice]
 
-    # パラメータ更新
+    # Update parameters
     params = QPIParameters(
         wavelength=WAVELENGTH,
         NA=NA,
@@ -1412,7 +1412,7 @@ for pos in range(0, 106):
         offaxis_center=offaxis_center
     )
 
-    # 位相画像取得
+    # Acquire phase image
     field = get_field(img, params)
     field_bg = get_field(img_bg, params)
     angle = unwrap_phase(np.angle(field))
@@ -1420,22 +1420,22 @@ for pos in range(0, 106):
     angle_nobg = angle - angle_bg
     angle_nobg -= np.mean(angle_nobg[145:254, 1:254])
 
-    # 可視性マップ
+    # Visibility map
     vis_map = visibility(img, params)
 
-    # プロファイル画像 (縦方向の位相プロファイル)
+    # Profile image (vertical phase profile)
     profile = angle_nobg[:, x_coord]
-    profile_img = np.tile(profile[:, np.newaxis], (1, 100))  # 縦ベクトルを可視化用に横に100ピクセル複製
+    profile_img = np.tile(profile[:, np.newaxis], (1, 100))  # Replicate vertical vector to 100 pixels wide for visualization
 
-    # 保存
+    # Save
     tifffile.imwrite(os.path.join(angle_dir, f"{pos_name}.tif"), angle_nobg.astype(np.float32))
     tifffile.imwrite(os.path.join(visib_dir, f"{pos_name}.tif"), vis_map.astype(np.float32))
     tifffile.imwrite(os.path.join(profile_dir, f"{pos_name}.tif"), profile_img.astype(np.float32))
 
-print("✅ 全ポジションの処理と保存が完了しました。")
+print("Done: processing and saving complete for all positions.")
 
-# %%250630_焦点_カラーマップも保存
-# 基本定数
+# %%250630_Focus_Save colormap too
+# Basic constants
 WAVELENGTH = 663e-9
 NA = 0.95
 PIXELSIZE = 3.45e-6 / 40
@@ -1443,7 +1443,7 @@ offaxis_center = (1623, 1621)
 crop_slice = np.s_[8:2056,400:2448]
 x_coord = 200
 
-# 出力ディレクトリ
+# Output directories
 output_base = "/Volumes/KIOXIA/250813_kk/vis_focus_2"
 angle_dir = os.path.join(output_base, "angle_nobg")
 visib_dir = os.path.join(output_base, "visibility")
@@ -1454,7 +1454,7 @@ os.makedirs(visib_dir, exist_ok=True)
 os.makedirs(profile_dir, exist_ok=True)
 
 def save_with_colormap(data, save_path, cmap="viridis", vmin=None, vmax=None, colorbar_label=""):
-    """カラーマップ付きPNG画像として保存"""
+    """Save as PNG image with colormap"""
     plt.figure()
     im = plt.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax)
     plt.colorbar(label=colorbar_label)
@@ -1467,13 +1467,13 @@ for pos in range(1,2):
     pos_name = f"Pos{pos}"
     print(f"Processing {pos_name}...")
 
-    # ファイル読み込み
+    # Load files
     path = f"/Volumes/ESD-USB/250801_focus/1/mm_1/{pos_name}/img_000000000_Default_000.tif"
     path_bg = f"/Volumes/ESD-USB/250801_vis/1/bg_1/Pos0/img_000000000_Default_000.tif"
     img = np.array(Image.open(path))[crop_slice]
     img_bg = np.array(Image.open(path_bg))[crop_slice]
 
-    # パラメータ更新
+    # Update parameters
     params = QPIParameters(
         wavelength=WAVELENGTH,
         NA=NA,
@@ -1482,7 +1482,7 @@ for pos in range(1,2):
         offaxis_center=offaxis_center
     )
 
-    # 位相画像取得
+    # Acquire phase image
     field = get_field(img, params)
     field_bg = get_field(img_bg, params)
     angle = unwrap_phase(np.angle(field))
@@ -1490,23 +1490,23 @@ for pos in range(1,2):
     angle_nobg = angle - angle_bg
     angle_nobg -= np.mean(angle_nobg[145:254, 1:254])
 
-    # 可視性マップ
+    # Visibility map
     #vis_map = visibility(img, params)
 
-    # プロファイル画像 (縦方向の位相プロファイル)
+    # Profile image (vertical phase profile)
     #profile = angle_nobg[:, x_coord]
-    #profile_img = np.tile(profile[:, np.newaxis], (1, 100))  # 縦ベクトルを可視化用に横に100ピクセル複製
+    #profile_img = np.tile(profile[:, np.newaxis], (1, 100))  # Replicate vertical vector to 100 pixels wide for visualization
 
-    # 保存（定量データ）
+    # Save (quantitative data)
     tifffile.imwrite(os.path.join(angle_dir, f"{pos_name}.tif"), angle_nobg.astype(np.float32))
     #tifffile.imwrite(os.path.join(visib_dir, f"{pos_name}.tif"), vis_map.astype(np.float32))
     #tifffile.imwrite(os.path.join(profile_dir, f"{pos_name}.tif"), profile_img.astype(np.float32))
 
-    # 保存（可視画像）
+    # Save (visualization images)
     save_with_colormap(angle_nobg, os.path.join(angle_dir, f"{pos_name}.png"),
                        cmap='viridis', vmin=-4, vmax=2, colorbar_label='Phase (rad)')
 
-print("✅ 全ポジションの .tif + カラーマップ画像の保存が完了しました。")
+print("Done: .tif + colormap image saving complete for all positions.")
 
 # %%
 import os
@@ -1517,34 +1517,34 @@ from skimage.restoration import unwrap_phase
 from qpi import QPIParameters, get_field
 import matplotlib.pyplot as plt
 
-# 定数設定
+# Constants
 WAVELENGTH = 663e-9  # 663 nm
 NA = 0.95
 PIXELSIZE = 3.45e-6 / 40
 OFFAXIS_CENTER = (1619,1621)
 
-# ディレクトリ設定
+# Directory settings
 BASE_DIR = "/Volumes/QPI_2/250815_kk/ph_1"
-BG_DIR = os.path.join(BASE_DIR, "Pos0")  # 背景画像があるディレクトリ
-TARGET_FILENAME = "img_000000000_Default_000.tif"  # ← この1枚だけ処理する
+BG_DIR = os.path.join(BASE_DIR, "Pos0")  # Directory containing background images
+TARGET_FILENAME = "img_000000000_Default_000.tif"  # Only process this single file
 
-# Pos5〜Pos49 をループ
+# Loop through Pos5 to Pos49
 for pos_idx in range(1, 50):
     pos_name = f"Pos{pos_idx}"
     TARGET_DIR = os.path.join(BASE_DIR, pos_name)
     
     if not os.path.exists(TARGET_DIR):
-        print(f"{TARGET_DIR} が存在しません。スキップします。")
+        print(f"{TARGET_DIR} does not exist. Skipping.")
         continue
 
     filepath = os.path.join(TARGET_DIR, TARGET_FILENAME)
     bg_filepath = os.path.join(BG_DIR, TARGET_FILENAME)
 
     if not os.path.exists(filepath):
-        print(f"{filepath} が存在しません。スキップします。")
+        print(f"{filepath} does not exist. Skipping.")
         continue
     if not os.path.exists(bg_filepath):
-        print(f"背景画像が見つかりません: {bg_filepath} をスキップします。")
+        print(f"Background image not found: {bg_filepath} - skipping.")
         continue
 
     OUTPUT_DIR = os.path.join(TARGET_DIR, "output_phase")
@@ -1552,9 +1552,9 @@ for pos_idx in range(1, 50):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(OUTPUT_DIR_2, exist_ok=True)
 
-    print(f"\n▶ 処理中: {pos_name}/{TARGET_FILENAME}")
+    print(f"\nProcessing: {pos_name}/{TARGET_FILENAME}")
 
-    # 背景画像読み込み
+    # Load background image
     bg_img = np.array(Image.open(bg_filepath))
     bg_img = bg_img[8:2056,400:2448] # crop
     
@@ -1568,22 +1568,22 @@ for pos_idx in range(1, 50):
     field_bg = get_field(bg_img, params)
     angle_bg = unwrap_phase(np.angle(field_bg))
 
-    # 対象画像読み込み
+    # Load target image
     img = np.array(Image.open(filepath))
     img = img[8:2056,400:2448] # crop
 
     field = get_field(img, params)
     angle = unwrap_phase(np.angle(field))
 
-    # 背景差分と平均0調整
+    # Background subtraction and zero-mean adjustment
     angle_nobg = angle - angle_bg
     angle_nobg -= np.mean(angle_nobg[1:507, 1:253])
 
-    # TIF保存
+    # Save TIF
     outpath = os.path.join(OUTPUT_DIR, TARGET_FILENAME.replace(".tif", "_phase.tif"))
     tifffile.imwrite(outpath, angle_nobg.astype(np.float32))
 
-    # PNG保存（カラーマップ付き）
+    # Save PNG (with colormap)
     plt.figure(figsize=(6, 6))
     plt.imshow(angle_nobg, cmap='viridis', vmin=-4, vmax=2)
     plt.colorbar(label='Phase (rad)')
@@ -1594,17 +1594,17 @@ for pos_idx in range(1, 50):
     plt.savefig(png_outpath, dpi=300)
     plt.close()
 
-# %% 250911 focus　with - wo
-# === パス設定（固定） ===
+# %% 250911 focus with - wo
+# === Path settings (fixed) ===
 import os
 import numpy as np
 import pandas as pd
 import tifffile
 import cv2
 
-csv_path_align = "/Volumes/QPI3/251009_focus/focus_with_2/Results.csv"  # 2行のみ
-dir_A = "/Volumes/QPI_2/250910_kk/vis_10/Pos43/output_phase"          # A: vis_10（固定）
-dir_B = "/Volumes/QPI_2/250910_kk/with_focus_1/Pos43/output_phase"    # B: with_focus_1（Aに合わせて移動）
+csv_path_align = "/Volumes/QPI3/251009_focus/focus_with_2/Results.csv"  # 2 rows only
+dir_A = "/Volumes/QPI_2/250910_kk/vis_10/Pos43/output_phase"          # A: vis_10 (fixed)
+dir_B = "/Volumes/QPI_2/250910_kk/with_focus_1/Pos43/output_phase"    # B: with_focus_1 (shifted to match A)
 
 out_root = os.path.join(dir_B, "aligned_diff_vs_vis10_rowbased")
 out_A_aligned = os.path.join(out_root, "A_vis10_fixed")
@@ -1617,23 +1617,23 @@ for d in [out_root, out_A_aligned, out_B_aligned, out_diff, out_cmap]:
 def slice_fname(i: int) -> str:
     return f"img_000000000_Default_{i:03d}_phase.tif"
 
-# === アライメント（行数=2、行0をA・行1をBとして扱う） ===
+# === Alignment (2 rows, row 0 as A, row 1 as B) ===
 df = pd.read_csv(csv_path_align).reset_index(drop=True)
-assert len(df) == 2, f"Results.csv は2行前提です（検出: {len(df)}行）"
+assert len(df) == 2, f"Results.csv must have exactly 2 rows (found: {len(df)} rows)"
 
-# 左辺中点
-x0 = float(df.loc[0, "BX"]); y0 = float(df.loc[0, "BY"] + df.loc[0, "Height"]/2)  # A(基準)
-x1 = float(df.loc[1, "BX"]); y1 = float(df.loc[1, "BY"] + df.loc[1, "Height"]/2)  # B(移動)
+# Left edge midpoint
+x0 = float(df.loc[0, "BX"]); y0 = float(df.loc[0, "BY"] + df.loc[0, "Height"]/2)  # A (reference)
+x1 = float(df.loc[1, "BX"]); y1 = float(df.loc[1, "BY"] + df.loc[1, "Height"]/2)  # B (moving)
 
-# B を A に合わせるためのシフト量（A座標系 <- B）
+# Shift amount to align B to A (A coordinate system <- B)
 dx_B2A = x1 - x0
 dy_B2A = y1 - y0
-# warpAffine では「-dx, -dy」を指定すると右(+x)/下(+y)へ dx,dy だけ移動
+# In warpAffine, specifying (-dx, -dy) shifts right(+x)/down(+y) by dx,dy
 M_B = np.float32([[1, 0, dx_B2A], [0, 1, dy_B2A]])
 
-print(f"[INFO] B→A シフト: dx={dx_B2A:.3f}, dy={dy_B2A:.3f}")
+print(f"[INFO] B->A shift: dx={dx_B2A:.3f}, dy={dy_B2A:.3f}")
 
-# === 可視化レンジ ===
+# === Visualization range ===
 vmin, vmax = -0.5, 2.0
 
 missing = []
@@ -1650,28 +1650,28 @@ for i in range(0, 41):
     B = tifffile.imread(path_B).astype(np.float32)
     H, W = A.shape[:2]
 
-    # Aは固定（無変換で保存）／Bのみ A に合わせて平行移動
+    # A is fixed (no transform) / Only B is translated to match A
     A_fix = A
     B_aln = cv2.warpAffine(B, M_B, (W, H),
                            flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
 
-    # 保存
+    # Save
     tifffile.imwrite(os.path.join(out_A_aligned, fname), A_fix, dtype=np.float32)
     tifffile.imwrite(os.path.join(out_B_aligned, fname), B_aln, dtype=np.float32)
 
-    # 差分（B - A）
+    # Difference (B - A)
     diff = B_aln - A_fix
     tifffile.imwrite(os.path.join(out_diff, fname), diff, dtype=np.float32)
 
-    # カラーマップ（固定範囲）
+    # Colormap (fixed range)
     diff_clip = np.clip(diff, vmin, vmax)
     diff_u8 = ((diff_clip - vmin) / (vmax - vmin) * 255).astype(np.uint8)
     cmap = cv2.applyColorMap(diff_u8, cv2.COLORMAP_JET)
     tifffile.imwrite(os.path.join(out_cmap, fname.replace(".tif", "_cmap_fixed.tif")), cmap)
 
-print("✅ 完了：A固定・BをAへ整列し、B-A差分を保存:", out_root)
+print("Done: A fixed, B aligned to A, B-A difference saved:", out_root)
 if missing:
-    print("⚠️ 欠損スライス:", missing)
+    print("Warning: missing slices:", missing)
 
 # %%
 import os
@@ -1680,38 +1680,38 @@ import pandas as pd
 import tifffile
 import cv2
 
-# === アライメント用CSV（Pos15固定, 行数=2） ===
+# === Alignment CSV (Pos15 fixed, 2 rows) ===
 csv_path_align = "/Volumes/QPI3/251017/with_focus_3/Results.csv"
 
 df = pd.read_csv(csv_path_align).reset_index(drop=True)
-assert len(df) == 2, f"Results.csv は2行前提です（検出: {len(df)}行）"
+assert len(df) == 2, f"Results.csv must have exactly 2 rows (found: {len(df)} rows)"
 
-# 左辺中点の座標
+# Left edge midpoint coordinates
 x0 = float(df.loc[0, "BX"]); y0 = float(df.loc[0, "BY"] + df.loc[0, "Height"]/2)
 x1 = float(df.loc[1, "BX"]); y1 = float(df.loc[1, "BY"] + df.loc[1, "Height"]/2)
 
-# B を A に合わせるためのシフト
+# Shift to align B to A
 dx_B2A = -(x1 - x0)
 dy_B2A = -(y1 - y0)
 M_B = np.float32([[1, 0, dx_B2A], [0, 1, dy_B2A]])
 
-print(f"[INFO] 共通シフト: dx={dx_B2A:.3f}, dy={dy_B2A:.3f}")
+print(f"[INFO] Common shift: dx={dx_B2A:.3f}, dy={dy_B2A:.3f}")
 
-# === ユーティリティ ===
+# === Utilities ===
 def slice_fname(i: int) -> str:
     return f"img_000000000_Default_{i:03d}_phase.tif"
 
-# 可視化レンジ
+# Visualization range
 vmin, vmax = -0.5, 2.0
 
-# === Pos1〜Pos91 ループ ===
+# === Pos1 to Pos91 loop ===
 for pos_idx in range(1, 4):
     pos_name = f"Pos{pos_idx}"
     dir_A = f"/Volumes/QPI3/251017/with_focus_3/{pos_name}/output_phase"       # A: vis_10
     dir_B = f"/Volumes/QPI3/251017/wo_focus_5/{pos_name}/output_phase" # B: with_focus_1
 
     if not (os.path.exists(dir_A) and os.path.exists(dir_B)):
-        print(f"⚠️ {pos_name}: フォルダが見つかりません。スキップします。")
+        print(f"Warning: {pos_name}: folder not found. Skipping.")
         continue
 
     out_root = os.path.join(dir_B, "aligned_diff_vs_vis10_rowbased")
@@ -1736,26 +1736,26 @@ for pos_idx in range(1, 4):
         B = tifffile.imread(path_B).astype(np.float32)
         H, W = A.shape[:2]
 
-        # Aはそのまま / Bのみシフト
+        # Keep A as-is / Shift only B
         A_fix = A
         B_aln = cv2.warpAffine(B, M_B, (W, H),
                                flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
 
-        # 保存
+        # Save
         tifffile.imwrite(os.path.join(out_A_aligned, fname), A_fix, dtype=np.float32)
         tifffile.imwrite(os.path.join(out_B_aligned, fname), B_aln, dtype=np.float32)
 
-        # 差分
+        # Difference
         diff = B_aln - A_fix
         tifffile.imwrite(os.path.join(out_diff, fname), diff, dtype=np.float32)
 
-        # カラーマップ
+        # Colormap
         diff_clip = np.clip(diff, vmin, vmax)
         diff_u8 = ((diff_clip - vmin) / (vmax - vmin) * 255).astype(np.uint8)
         cmap = cv2.applyColorMap(diff_u8, cv2.COLORMAP_JET)
         tifffile.imwrite(os.path.join(out_cmap, fname.replace(".tif", "_cmap_fixed.tif")), cmap)
 
-    print(f"✅ {pos_name}: 完了 ({len(missing)} 枚欠損) → {out_root}")
+    print(f"Done: {pos_name}: complete ({len(missing)} missing) -> {out_root}")
 
 # %%
 import numpy as np
@@ -1764,32 +1764,32 @@ from PIL import Image
 from glob import glob
 import os
 
-#%% フォルダ設定
+#%% Folder settings
 FOLDER = r"/Volumes/QPI_2/250815_kk/ph_1/Pos3/3_one_channel/"
 SAVE_FOLDER = os.path.join(FOLDER, "phase_png")
 os.makedirs(SAVE_FOLDER, exist_ok=True)
 
 tif_files = sorted(glob(os.path.join(FOLDER, "*.tif")))
 
-#%% 位相画像を読み込み PNG 保存
+#%% Load phase images and save as PNG
 for path in tif_files:
     print("Processing:", path)
     
-    # 画像読み込み
+    # Load image
     phase_img = np.array(Image.open(path))
-    
-    # PNG 保存用ファイル名
+
+    # Filename for PNG output
     filename = os.path.basename(path).replace(".tif", ".png")
     save_path = os.path.join(SAVE_FOLDER, filename)
     
-    # プロットして PNG 保存
+    # Plot and save as PNG
     plt.figure(figsize=(6,6))
     plt.imshow(phase_img, cmap='viridis',vmin=0,vmax=1.9)
     plt.colorbar(label='Phase [rad]')
     plt.title(os.path.basename(path))
-    plt.axis('off')  # 軸は非表示
+    plt.axis('off')  # Hide axes
     plt.tight_layout()
     plt.savefig(save_path, dpi=300)
-    plt.close()  # メモリ節約のため閉じる
+    plt.close()  # Close to save memory
 
 # %%

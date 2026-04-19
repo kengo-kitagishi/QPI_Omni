@@ -1,19 +1,19 @@
 # %%
 # ===========================================================
-# [DEPRECATED] このスクリプトは使用しない。
-# 後継: qpi_fig_01_reconstruction_procedure.py
-#   → 6パネル・スネーク状レイアウト（a-b-c / f-e-d）に刷新。
+# [DEPRECATED] Do not use this script.
+# Successor: qpi_fig_01_reconstruction_procedure.py
+#   -> Redesigned with 6-panel snake layout (a-b-c / f-e-d).
 # ===========================================================
 
 """
 qpi_fig_01_panel.py
 
-qpi_fig_01_reconstruction_overview の出力画像を組み合わせた修論用パネル図。
+Panel figure for thesis combining output images from qpi_fig_01_reconstruction_overview.
 
-入力: Google Drive inbox の PNG (f001, f003, f005, f006)
-出力: 4パネル横並び + 解析順矢印ラベル + スケールバー
+Input: PNG files from Google Drive inbox (f001, f003, f005, f006)
+Output: 4 panels side by side + analysis flow arrow labels + scale bar
 
-パネル構成:
+Panel layout:
   Raw image → (FFT) → FFT + filter circles → (Crop) → Cropped FFT → (IFFT) → Phase
 """
 
@@ -29,7 +29,7 @@ sys.path.insert(0, "/Users/kitak/QPI_Omni/scripts")
 from figure_logger import save_figure
 
 # ============================================================
-# 入力パス (Drive inbox)
+# Input paths (Drive inbox)
 # ============================================================
 INBOX = (
     "/Users/kitak/Library/CloudStorage/"
@@ -51,15 +51,15 @@ def load_png(fname, grayscale=True):
 
 
 img_raw   = load_png("f001.png", grayscale=True)
-img_fft   = load_png("f003.png", grayscale=False)  # RGB (赤い円を保持)
+img_fft   = load_png("f003.png", grayscale=False)  # RGB (preserve red circles)
 img_crop  = load_png("f005.png", grayscale=True)
 img_phase = load_png("f006.png", grayscale=True)
 
 # ============================================================
-# スケールバー設定
+# Scale bar settings
 # ============================================================
-PIXELSIZE_UM = 3.45 / 40   # 0.08625 µm/px (センサー 3.45 µm, 40x 対物)
-ORIG_SIZE    = 2048         # 元データのピクセルサイズ
+PIXELSIZE_UM = 3.45 / 40   # 0.08625 um/px (sensor 3.45 um, 40x objective)
+ORIG_SIZE    = 2048         # original data pixel size
 SCALEBAR_UM  = 10           # µm
 
 H, W = img_raw.shape
@@ -68,7 +68,7 @@ scale_px = int(round(SCALEBAR_UM / PIXELSIZE_UM * (H / ORIG_SIZE)))
 
 def add_scalebar(ax, img_shape, scale_px, label,
                  color="white", pad_frac=0.05, thickness_frac=0.015):
-    """右下にスケールバーを追加"""
+    """Add scale bar to bottom right"""
     h, w = img_shape
     pad = int(h * pad_frac)
     thickness = max(2, int(h * thickness_frac))
@@ -85,7 +85,7 @@ def add_scalebar(ax, img_shape, scale_px, label,
 
 
 # ============================================================
-# パネル図
+# Panel figure
 # ============================================================
 panels        = [img_raw,    img_fft,  img_crop,      img_phase]
 titles        = ["Raw image", "FFT",   "Cropped FFT", "Phase"]
@@ -140,13 +140,13 @@ save_figure(
         "panels": "f001_raw, f003_fft_red, f005_crop, f006_phase",
     },
     description=(
-        "QPI再構成概要パネル図（修論用）: "
-        "Raw → FFT → Cropped FFT → Phase, "
-        "矢印ラベル・スケールバー付き"
+        "QPI reconstruction overview panel figure (for thesis): "
+        "Raw -> FFT -> Cropped FFT -> Phase, "
+        "with arrow labels and scale bar"
     ),
 )
 
-# PDF（Affinity Designer編集・figure-hub登録用）・SVG も inbox に保存
+# Also save PDF (for Affinity Designer editing / figure-hub registration) and SVG to inbox
 import pathlib
 inbox_dir = pathlib.Path(
     "/Users/kitak/Library/CloudStorage/"
@@ -157,8 +157,8 @@ inbox_dir.mkdir(parents=True, exist_ok=True)
 fig.savefig(inbox_dir / "qpi_fig_01_panel.pdf", bbox_inches="tight")
 fig.savefig(inbox_dir / "qpi_fig_01_panel.svg", bbox_inches="tight")
 
-# thesis/figure/ への直接保存は行わない。
-# 修論への反映は figure-hub で管理する:
+# Do not save directly to thesis/figure/.
+# Integration into the thesis is managed via figure-hub:
 #   register → use → sync → git push
 
 print(f"PNG: results/figures/")

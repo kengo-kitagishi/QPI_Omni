@@ -1,19 +1,19 @@
 """
 analyze_stage_repeatability.py
 -------------------------------
-test_stage_repeatability.bsh で収集した画像を解析し、
-ステージ再現性 vs. ECC精度 を定量比較する。
+Analyze images collected by test_stage_repeatability.bsh and
+quantitatively compare stage repositioning accuracy vs. ECC precision.
 
-出力:
-  <test-dir>/repeatability_results.json  数値結果
-  figure_logger 経由で図を保存（inbox / results/figure_inbox）
+Output:
+  <test-dir>/repeatability_results.json  numerical results
+  figure saved via figure_logger (inbox / results/figure_inbox)
 
-見方:
-  std_repositioning_tx_nm  ← ステージY再現性 (image X方向)
-  std_ecc_precision_tx_nm  ← ECC単一測定精度 (チャネル間σ, image X)
-  ratio_tx                 ← std_repositioning / std_ecc_precision
-    ratio ≈ 1 → ステージは精確、ECC精度が残差の主因
-    ratio >> 1 → ステージ位置決めノイズが残差の主因
+Interpretation:
+  std_repositioning_tx_nm  <- stage Y repositioning accuracy (image X direction)
+  std_ecc_precision_tx_nm  <- ECC single-measurement precision (inter-channel sigma, image X)
+  ratio_tx                 <- std_repositioning / std_ecc_precision
+    ratio ~ 1  -> stage is accurate, ECC precision is the main source of residual
+    ratio >> 1 -> stage positioning noise is the main source of residual
 """
 
 import sys
@@ -54,7 +54,7 @@ def parse_args():
 
 def run_ecc_one_rep(phase: np.ndarray, rois: list, grid_ref_crops: np.ndarray,
                     cfg: dict) -> dict:
-    """1フレームのECC計算。pass1のみ(絶対シフト測定)。
+    """ECC computation for one frame. Pass1 only (absolute shift measurement).
     Returns: {tx_avg, ty_avg, corr_avg, tx_per_ch, ty_per_ch, corr_per_ch}
     """
     vmin = cfg.get("ecc_vmin", -5.0)
@@ -186,10 +186,10 @@ def main():
 
     # ---- Verdict ----
     def verdict(ratio):
-        if np.isnan(ratio):  return "判定不能"
-        if ratio < 1.5:      return "ステージ精確 (ECC精度が主因)"
-        if ratio < 3.0:      return "ステージノイズ混在 (中程度)"
-        return                      "ステージ位置決めノイズが支配的"
+        if np.isnan(ratio):  return "Cannot determine"
+        if ratio < 1.5:      return "Stage is accurate (ECC precision is the main source)"
+        if ratio < 3.0:      return "Mixed stage noise (moderate)"
+        return                      "Stage positioning noise is dominant"
 
     # ---- Print summary ----
     print("\n" + "="*55)
@@ -206,14 +206,14 @@ def main():
     print(f"  image Y (stage X): {verdict(ratio_ty)}")
     print()
     timelapse_residual_nm = 112.0  # from previous drift_log analysis
-    print(f"  [参考] タイムラプス残差 std ~= {timelapse_residual_nm:.0f} nm")
-    print(f"  今回の temporal std     = {std_repo_tx_nm:.1f} nm")
+    print(f"  [Reference] Timelapse residual std ~= {timelapse_residual_nm:.0f} nm")
+    print(f"  Current temporal std     = {std_repo_tx_nm:.1f} nm")
     if std_repo_tx_nm > 80:
-        print(f"  → 一致。ステージノイズがタイムラプス振動の主因と確認。")
+        print(f"  -> Consistent. Stage noise confirmed as main cause of timelapse oscillation.")
     elif std_repo_tx_nm < 40:
-        print(f"  → 不一致。KF velocity feedforward または生物学的運動が主因。")
+        print(f"  -> Inconsistent. KF velocity feedforward or biological motion is the main cause.")
     else:
-        print(f"  → 部分的一致。ステージノイズ + KF の複合。")
+        print(f"  -> Partial match. Combination of stage noise + KF.")
     print("="*55)
 
     # ---- Save JSON results ----
@@ -293,7 +293,7 @@ def _save_figure(tx_avgs, ty_avgs, pixel_scale, std_repo_tx, std_repo_ty,
                 "ratio_tx": round(std_repo_tx / std_ecc_tx, 2) if std_ecc_tx > 0 else None,
                 "ratio_ty": round(std_repo_ty / std_ecc_ty, 2) if std_ecc_ty > 0 else None,
             },
-            description="ステージ再現性テスト: temporal std vs. ECC within-frame precision",
+            description="Stage repositioning test: temporal std vs. ECC within-frame precision",
             data={
                 "tx_nm_per_rep": tx_nm,
                 "ty_nm_per_rep": ty_nm,

@@ -1,21 +1,21 @@
 """
 analyze_ch_xtilt_corrected_ecc.py
 ----------------------------------
-チャネルROI を X 方向に 270px に拡大し、左 1/3（90px）の BG で線形フィット → 引いてから ECC。
-補正前後の ECC X シフトのチャネル間 std を比較する。
+Expand channel ROI to 270px in X direction, linear fit on the left 1/3 (90px) BG, subtract, then ECC.
+Compare inter-channel std of ECC X shift before and after correction.
 
-処理:
-  1. チャネルごとに crop_h を 270px に拡大した横長 ROI を取得 → shape (crop_w=40, 270)
-  2. X プロファイル = crop.mean(axis=0) → 270点（Y方向を平均）
-  3. 左 1/3（90pt）で np.polyfit → slope [rad/px]
-  4. slope * x_local を全 270px に引く（intercept は保持）
-  5. 中央 crop_h=80px を切り出して backsub → to_uint8 → ECC
-  6. grid ref 側も同じ補正を適用
-  7. 補正前後の ECC X シフトのチャネル間 std を比較
+Processing:
+  1. For each channel, obtain a wide ROI with crop_h expanded to 270px -> shape (crop_w=40, 270)
+  2. X profile = crop.mean(axis=0) -> 270 points (averaged along Y)
+  3. Linear fit on the left 1/3 (90pt) with np.polyfit -> slope [rad/px]
+  4. Subtract slope * x_local from the full 270px (intercept is preserved)
+  5. Extract central crop_h=80px, backsub -> to_uint8 -> ECC
+  6. Apply the same correction to the grid ref side
+  7. Compare inter-channel std of ECC X shift before and after correction
 
-可視化:
-  Fig 1 - summary: inter-ch std / histogram / mean ECC X / per-channel 時系列 / 代表ch プロファイル
-  Fig 2 - images: 代表 4ch の横長 crop (raw 40×270 / corrected 40×270) + X プロファイル
+Visualization:
+  Fig 1 - summary: inter-ch std / histogram / mean ECC X / per-channel time series / representative ch profile
+  Fig 2 - images: representative 4ch wide crops (raw 40x270 / corrected 40x270) + X profile
 """
 
 import json
@@ -40,7 +40,7 @@ from compute_drift_online import (
 from figure_logger import save_figure
 
 # ============================================================
-# 設定
+# Settings
 # ============================================================
 PHASE_DIR = Path(r"D:\AquisitionData\Kitagishi\basler_image_seq\ph_3\Pos0\output_phase")
 ROIS_JSON = Path(
@@ -52,21 +52,21 @@ PIXEL_SCALE_UM   = 0.3462
 ECC_VMIN         = -5.0
 ECC_VMAX         =  2.0
 
-# grid 参照 crops（補正なし版 = 従来の reference）
+# Grid reference crops (uncorrected version = conventional reference)
 GRID_REF_CROPS_TIF = Path(r"C:\Users\QPI\Documents\QPI_Omni\drift_session\grid_ref_crops.tif")
 
-# grid(0,0) フル位相画像（補正あり ref crops 計算用）
+# Grid(0,0) full phase image (for computing corrected ref crops)
 GRID_REF_PHASE = Path(
     r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
     r"\Pos1_x+0_y+0\output_phase\img_000000000_ph_009_phase.tif"
 )
 
-# X 方向 tilt 補正パラメータ
-CH_CROP_H_TILT = 270   # X 方向拡大サイズ [px]
-FIT_FRAC       = 1/3   # 左 1/3 (90pt) = BG 領域
-N_MAX_TP       = 20    # 検証用フレーム上限（None で全フレーム）
+# X-direction tilt correction parameters
+CH_CROP_H_TILT = 270   # expanded size in X direction [px]
+FIT_FRAC       = 1/3   # left 1/3 (90pt) = BG region
+N_MAX_TP       = 20    # max frames for verification (None for all frames)
 
-# 画像可視化用 代表チャネル数
+# Number of representative channels for image visualization
 VIS_N_CH = 4
 # ============================================================
 
@@ -77,25 +77,25 @@ def compute_x_slope_and_correct(
     crop_w: int, orig_crop_h: int,
 ) -> tuple[np.ndarray, float]:
     """
-    270px X 拡大 crop の左 1/3 で slope を推定し、補正後の orig_crop_h crop を返す。
+    Estimate slope from the left 1/3 of the 270px X-expanded crop and return the corrected orig_crop_h crop.
 
-    戻り値:
-        corrected_crop: shape (crop_w, orig_crop_h) - 中央 orig_crop_h px を切り出したもの
+    Returns:
+        corrected_crop: shape (crop_w, orig_crop_h) - central orig_crop_h px extracted
         slope: float [rad/px]
     """
     big_crop = extract_rect_roi(
         phase_img, cy, cx, crop_w, CH_CROP_H_TILT
     ).astype(np.float32)   # shape: (crop_w, CH_CROP_H_TILT) = (40, 270)
 
-    x_profile = big_crop.mean(axis=0).astype(np.float64)   # (270,) = X プロファイル
+    x_profile = big_crop.mean(axis=0).astype(np.float64)   # (270,) = X profile
     n_fit = max(3, int(len(x_profile) * FIT_FRAC))         # 90
     slope, _ = np.polyfit(np.arange(n_fit, dtype=float), x_profile[:n_fit], 1)
 
-    # 補正: slope * x を全 270px から引く（intercept は保持）
+    # Correction: subtract slope * x from all 270px (intercept is preserved)
     x_local = np.arange(CH_CROP_H_TILT, dtype=np.float32)
     corrected_big = big_crop - (slope * x_local).astype(np.float32)[np.newaxis, :]
 
-    # 中央 orig_crop_h px を切り出す
+    # Extract central orig_crop_h px
     start = (CH_CROP_H_TILT - orig_crop_h) // 2
     corrected_crop = corrected_big[:, start:start + orig_crop_h]
 
@@ -105,7 +105,7 @@ def compute_x_slope_and_correct(
 def main():
     phase_paths = sorted(PHASE_DIR.glob("img_*_phase.tif"))
     if not phase_paths:
-        print(f"ERROR: 位相画像が見つかりません: {PHASE_DIR}")
+        print(f"ERROR: no phase images found: {PHASE_DIR}")
         sys.exit(1)
     if N_MAX_TP is not None:
         phase_paths = phase_paths[:N_MAX_TP + 1]
@@ -114,12 +114,12 @@ def main():
     n_tp = len(phase_paths) - 1
     print(f"Phase: {len(phase_paths)} imgs, Channels: {n_ch}, TPs: {n_tp}")
 
-    # ---- 補正なし ref（grid_ref_crops.tif そのまま）----
+    # ---- Uncorrected ref (grid_ref_crops.tif as-is) ----
     grid_ref_f = tifffile.imread(str(GRID_REF_CROPS_TIF)).astype(np.float64)
     ref_u8_raw = [to_uint8(grid_ref_f[ch], ECC_VMIN, ECC_VMAX) for ch in range(n_ch)]
     print(f"grid_ref_crops loaded: shape={grid_ref_f.shape}")
 
-    # ---- 補正あり ref（grid ph_009 から 270px → 補正 → 80px 切り出し → backsub → u8）----
+    # ---- Corrected ref (grid ph_009: 270px -> correction -> 80px extraction -> backsub -> u8) ----
     grid_phase = tifffile.imread(str(GRID_REF_PHASE)).astype(np.float32)
     cfg_dummy = {}
     ref_u8_corr = []
@@ -144,7 +144,7 @@ def main():
             continue
 
         for c_idx, roi in enumerate(rois):
-            # --- 補正なし ECC ---
+            # --- Uncorrected ECC ---
             crop = extract_rect_roi(
                 phase_tp, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"]
             ).astype(np.float32)
@@ -154,7 +154,7 @@ def main():
             if res_raw is not None:
                 tx_raw[c_idx, t_idx] = res_raw[0]   # image-X shift [px]
 
-            # --- 補正あり ECC（270px → fit → 引く → 80px 切り出し）---
+            # --- Corrected ECC (270px -> fit -> subtract -> 80px extraction) ---
             crop_c, sl = compute_x_slope_and_correct(
                 phase_tp, roi["cy"], roi["cx"], roi["crop_w"], roi["crop_h"]
             )
@@ -180,7 +180,7 @@ def main():
     print(f"Mean |ECC X|        raw={np.nanmean(np.abs(mean_raw)):.4f} um  corr={np.nanmean(np.abs(mean_corr)):.4f} um")
 
     # =================================================================
-    # Fig 1: Summary statistics（ytilt 版と同じ構成、X 方向版）
+    # Fig 1: Summary statistics (same layout as ytilt version, X direction)
     # =================================================================
     tp_axis = np.arange(n_tp)
     COLORS  = plt.cm.tab20(np.linspace(0, 1, n_ch))
@@ -188,7 +188,7 @@ def main():
     gs1  = gridspec.GridSpec(3, 3, hspace=0.48, wspace=0.38,
                              left=0.07, right=0.97, top=0.92, bottom=0.07)
 
-    # (A) inter-channel std 時系列
+    # (A) inter-channel std time series
     ax0 = fig1.add_subplot(gs1[0, 0])
     ax0.plot(tp_axis, std_raw,  color="#E53935", lw=0.9, label="Raw")
     ax0.plot(tp_axis, std_corr, color="#1E88E5", lw=0.9, label="X-tilt corr")
@@ -209,7 +209,7 @@ def main():
     ax1.legend(fontsize=8)
     ax1.spines["top"].set_visible(False); ax1.spines["right"].set_visible(False)
 
-    # (C) mean ECC X 時系列
+    # (C) mean ECC X time series
     ax2 = fig1.add_subplot(gs1[0, 2])
     ax2.plot(tp_axis, mean_raw,  color="#E53935", lw=0.9, label="Raw")
     ax2.plot(tp_axis, mean_corr, color="#1E88E5", lw=0.9, label="X-tilt corr")
@@ -218,7 +218,7 @@ def main():
     ax2.legend(fontsize=8)
     ax2.spines["top"].set_visible(False); ax2.spines["right"].set_visible(False)
 
-    # (D) per-channel 時系列 raw
+    # (D) per-channel time series raw
     ax3 = fig1.add_subplot(gs1[1, 0])
     for c in range(n_ch):
         ax3.plot(tp_axis, tx_raw_um[c], lw=0.5, alpha=0.7, color=COLORS[c])
@@ -226,7 +226,7 @@ def main():
     ax3.set_title("Per-channel ECC X — Raw", fontsize=10)
     ax3.spines["top"].set_visible(False); ax3.spines["right"].set_visible(False)
 
-    # (E) per-channel 時系列 corrected
+    # (E) per-channel time series corrected
     ax4 = fig1.add_subplot(gs1[1, 1])
     for c in range(n_ch):
         ax4.plot(tp_axis, tx_corr_um[c], lw=0.5, alpha=0.7, color=COLORS[c])
@@ -247,7 +247,7 @@ def main():
     ax5.set_xlabel("Raw ECC X (um)"); ax5.set_ylabel("Corr ECC X (um)")
     ax5.spines["top"].set_visible(False); ax5.spines["right"].set_visible(False)
 
-    # (G) 代表チャネルの X プロファイル（中央ch, TP5）
+    # (G) Representative channel X profile (center ch, TP5)
     _t = min(4, n_tp - 1)
     phase_ex = tifffile.imread(str(phase_paths[_t + 1])).astype(np.float32)
     roi_ex = rois[n_ch // 2]
@@ -272,7 +272,7 @@ def main():
     ax6.legend(fontsize=7)
     ax6.spines["top"].set_visible(False); ax6.spines["right"].set_visible(False)
 
-    # (H) raw ECC crop imshow（中央ch, TP5）
+    # (H) raw ECC crop imshow (center ch, TP5)
     ax7 = fig1.add_subplot(gs1[2, 1])
     c_raw_ex = extract_rect_roi(phase_ex, roi_ex["cy"], roi_ex["cx"],
                                 roi_ex["crop_w"], roi_ex["crop_h"]).astype(np.float32)
@@ -283,7 +283,7 @@ def main():
     ax7.set_xlabel("X [px]"); ax7.set_ylabel("Y [px]")
     ax7.tick_params(labelsize=6)
 
-    # (I) corrected ECC crop imshow（中央ch, TP5）
+    # (I) corrected ECC crop imshow (center ch, TP5)
     ax8 = fig1.add_subplot(gs1[2, 2])
     crop_c_ex, _ = compute_x_slope_and_correct(
         phase_ex, roi_ex["cy"], roi_ex["cx"], roi_ex["crop_w"], roi_ex["crop_h"]
@@ -321,11 +321,11 @@ def main():
     plt.close(fig1)
 
     # =================================================================
-    # Fig 2: 代表 4ch の横長 crop 画像（raw 40×270 / corrected 40×270）+ X プロファイル
+    # Fig 2: Wide crop images for representative 4ch (raw 40x270 / corrected 40x270) + X profile
     # =================================================================
     vis_ch_indices = np.linspace(0, n_ch - 1, VIS_N_CH, dtype=int).tolist()
     n_fit_vis = max(3, int(CH_CROP_H_TILT * FIT_FRAC))  # 90
-    ecc_start  = (CH_CROP_H_TILT - rois[0]["crop_h"]) // 2  # 95（crop_h=80 の場合）
+    ecc_start  = (CH_CROP_H_TILT - rois[0]["crop_h"]) // 2  # 95 (when crop_h=80)
 
     fig2, axes2 = plt.subplots(3, VIS_N_CH, figsize=(4 * VIS_N_CH, 9))
     fig2.subplots_adjust(hspace=0.50, wspace=0.35,
@@ -335,7 +335,7 @@ def main():
         roi_v = rois[c_idx]
         ecc_s = (CH_CROP_H_TILT - roi_v["crop_h"]) // 2
 
-        # 横長 big crop: shape (crop_w=40, 270)
+        # Wide big crop: shape (crop_w=40, 270)
         big_v = extract_rect_roi(
             phase_ex, roi_v["cy"], roi_v["cx"], roi_v["crop_w"], CH_CROP_H_TILT
         ).astype(np.float32)
@@ -346,10 +346,10 @@ def main():
         x_ax_v = np.arange(CH_CROP_H_TILT, dtype=float)
         corrected_big_v = big_v - (sl_v * np.arange(CH_CROP_H_TILT, dtype=np.float32))[np.newaxis, :]
 
-        # 共通 vmin/vmax（raw の 2-98 パーセンタイルで統一）
+        # Common vmin/vmax (unified at 2-98 percentile of raw)
         vmin_v, vmax_v = np.nanpercentile(big_v, [2, 98])
 
-        # Row 0: X プロファイル
+        # Row 0: X profile
         ax_p = axes2[0, col]
         ax_p.plot(x_ax_v, x_prof_v, color="#E53935", lw=0.9, label="Raw")
         ax_p.plot(x_ax_v[:n_fit_vis], sl_v * x_ax_v[:n_fit_vis] + ic_v,
@@ -363,7 +363,7 @@ def main():
             ax_p.legend(fontsize=6, loc="upper right")
         ax_p.spines["top"].set_visible(False); ax_p.spines["right"].set_visible(False)
 
-        # Row 1: raw big crop imshow（40×270）
+        # Row 1: raw big crop imshow (40x270)
         ax_r = axes2[1, col]
         ax_r.imshow(big_v, cmap="RdBu_r", aspect="auto", interpolation="nearest",
                     vmin=vmin_v, vmax=vmax_v)
@@ -374,7 +374,7 @@ def main():
         ax_r.set_xlabel("X [px]"); ax_r.set_ylabel("Y [px]")
         ax_r.tick_params(labelsize=6)
 
-        # Row 2: corrected big crop imshow（40×270）
+        # Row 2: corrected big crop imshow (40x270)
         ax_c = axes2[2, col]
         ax_c.imshow(corrected_big_v, cmap="RdBu_r", aspect="auto", interpolation="nearest",
                     vmin=vmin_v, vmax=vmax_v)

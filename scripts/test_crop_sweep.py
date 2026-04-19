@@ -1,15 +1,15 @@
-"""test_crop_sweep.py — ECC crop サイズの最適化（grid参照版）
+"""test_crop_sweep.py -- ECC crop size optimization (grid reference version)
 
-保存済み位相再構成画像（ph_3/Pos0/output_phase/）を使い、
-複数の crop_w × crop_h の組み合わせで ECC を再実行する。
+Using saved reconstructed phase images (ph_3/Pos0/output_phase/),
+re-run ECC with multiple crop_w x crop_h combinations.
 
-参照画像: grid_2pergluc_60ms_1/Pos1_x+0_y+0 の第0フレーム（実際のパイプラインと同条件）。
-ph_3 はドリフトなし → 各チャンネルのシフトは「grid-ph3 固定オフセット + ECC ノイズ」。
+Reference image: frame 0 of grid_2pergluc_60ms_1/Pos1_x+0_y+0 (same conditions as actual pipeline).
+ph_3 has no drift -> each channel's shift is "grid-ph3 fixed offset + ECC noise".
 
-評価指標:
-  temporal_std  各チャンネルの TP 間シフト std の平均 = ECC 精度（純粋ノイズ）
-  mean_shift    各チャンネルの平均シフト = 系統的バイアス（波面 tilt 影響の可能性）
-  ch_corr       チャンネル間シフトの Pearson 相関
+Metrics:
+  temporal_std  Mean of per-channel inter-TP shift std = ECC precision (pure noise)
+  mean_shift    Per-channel mean shift = systematic bias (possible wavefront tilt effect)
+  ch_corr       Inter-channel shift Pearson correlation
 
 Usage:
     python scripts/test_crop_sweep.py
@@ -41,14 +41,14 @@ from compute_drift_online import (
     _remove_outliers_mad,
 )
 
-# ---- デフォルト設定 ----
+# ---- Default settings ----
 DEFAULT_CONFIG = Path(r"C:\Users\QPI\Documents\QPI_Omni\drift_session\drift_config.json")
-CROP_W_LIST = [30, 40, 50]            # Y 方向（チャネル長; 40 が現在値）
-CROP_H_LIST = [30, 50, 80, 120, 160]  # X 方向（チャネル幅; 80 が現在値）
+CROP_W_LIST = [30, 40, 50]            # Y direction (channel length; 40 is current value)
+CROP_H_LIST = [30, 50, 80, 120, 160]  # X direction (channel width; 80 is current value)
 CURRENT_CROP_W = 40
 CURRENT_CROP_H = 80
 
-# ph_3 → grid ref 設定
+# ph_3 -> grid ref settings
 PHASE_DIR_OVERRIDE = r"D:\AquisitionData\Kitagishi\basler_image_seq\ph_3\Pos0\output_phase"
 ROIS_JSON_OVERRIDE = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
 GRID_REF_PATH      = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1\Pos1_x+0_y+0\output_phase\img_000000000_ph_000_phase.tif"
@@ -59,22 +59,22 @@ PH3_INTERVAL_S = 0.1  # 100 ms/frame
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--config", default=str(DEFAULT_CONFIG))
-    p.add_argument("--max-tp", type=int, default=None, help="使用する最大 TP 数（テスト用）")
+    p.add_argument("--max-tp", type=int, default=None, help="Maximum number of TPs to use (for testing)")
     return p.parse_args()
 
 
 def load_channels(rois_path):
-    """channel_rois.json からチャネル中心座標を読む。"""
+    """Read channel center coordinates from channel_rois.json."""
     rois = json.loads(Path(rois_path).read_text(encoding="utf-8"))
     return [(r["cy"], r["cx"]) for r in rois]
 
 
 def run_ecc_one_tp(ref_crops_u8, phase_tp, channels, crop_w, crop_h, cfg):
-    """1 TP 分の per-channel ECC を実行。
+    """Run per-channel ECC for one TP.
 
     Returns
     -------
-    ch_shifts : dict {ch_idx: (tx_px, ty_px)} — MAD 外れ値除去済み
+    ch_shifts : dict {ch_idx: (tx_px, ty_px)} -- MAD outlier-removed
     corr_mean : float
     """
     vmin = cfg.get("ecc_vmin", -5.0)
@@ -112,12 +112,12 @@ def run_ecc_one_tp(ref_crops_u8, phase_tp, channels, crop_w, crop_h, cfg):
 
 
 def sweep_one_crop(crop_w, crop_h, phase_paths, tp_indices, channels, cfg):
-    """(crop_w, crop_h) 1 組分の全 TP ECC を実行。"""
+    """Run all-TP ECC for one (crop_w, crop_h) combination."""
     vmin = cfg.get("ecc_vmin", -5.0)
     vmax = cfg.get("ecc_vmax",  2.0)
     pixel_scale = cfg.get("pixel_scale_um", 0.3462)
 
-    # 参照: grid Pos1 の位相画像（実際のパイプラインと同じ）
+    # Reference: grid Pos1 phase image (same as actual pipeline)
     phase_ref = tifffile.imread(GRID_REF_PATH).astype(np.float32)
     ref_crops_u8 = []
     for cy, cx in channels:
@@ -126,8 +126,8 @@ def sweep_one_crop(crop_w, crop_h, phase_paths, tp_indices, channels, cfg):
         ref_crops_u8.append(to_uint8(crop + offset, vmin, vmax))
 
     n_ch = len(channels)
-    shifts_x = [[] for _ in range(n_ch)]  # image X（列）方向 um
-    shifts_y = [[] for _ in range(n_ch)]  # image Y（行）方向 um
+    shifts_x = [[] for _ in range(n_ch)]  # image X (column) direction um
+    shifts_y = [[] for _ in range(n_ch)]  # image Y (row) direction um
     corr_series = []
     valid_tps = []
 
@@ -147,13 +147,13 @@ def sweep_one_crop(crop_w, crop_h, phase_paths, tp_indices, channels, cfg):
         corr_series.append(corr_mean)
         valid_tps.append(tp_indices[i] if i < len(tp_indices) else i)
 
-    # ECC 精度 = 各チャンネルの temporal std → 平均
+    # ECC precision = mean of per-channel temporal std
     ch_stds_x = [np.std(s) for s in shifts_x if len(s) > 1]
     ch_stds_y = [np.std(s) for s in shifts_y if len(s) > 1]
     temporal_std_x = float(np.mean(ch_stds_x)) if ch_stds_x else np.nan
     temporal_std_y = float(np.mean(ch_stds_y)) if ch_stds_y else np.nan
 
-    # 系統的バイアス = 各チャンネルの平均シフト
+    # Systematic bias = per-channel mean shift
     mean_shift_x = [float(np.mean(s)) if len(s) > 0 else np.nan for s in shifts_x]
     mean_shift_y = [float(np.mean(s)) if len(s) > 0 else np.nan for s in shifts_y]
 
@@ -171,7 +171,7 @@ def sweep_one_crop(crop_w, crop_h, phase_paths, tp_indices, channels, cfg):
 
 
 def _corr_matrix(shifts_list):
-    """shifts_list: per-channel list of lists。Pearson 相関行列を返す。"""
+    """shifts_list: per-channel list of lists. Return Pearson correlation matrix."""
     valid = [s for s in shifts_list if len(s) > 1]
     n = len(shifts_list)
     if len(valid) < 2:
@@ -235,13 +235,13 @@ def main():
 
     phase_paths = sorted(phase_dir.glob("img_*_phase.tif"))
     if not phase_paths:
-        print(f"ERROR: 位相画像が見つかりません: {phase_dir}"); sys.exit(1)
+        print(f"ERROR: No phase images found: {phase_dir}"); sys.exit(1)
     print(f"Phase images: {len(phase_paths)}  ({phase_paths[0].name} .. {phase_paths[-1].name})")
     print(f"Grid ref: {GRID_REF_PATH}")
 
     if args.max_tp is not None:
         phase_paths = phase_paths[:args.max_tp]
-        print(f"  -> max_tp={args.max_tp} で {len(phase_paths)} TP に制限")
+        print(f"  -> Limited to {len(phase_paths)} TPs with max_tp={args.max_tp}")
 
     channels = load_channels(rois_path)
     n_ch = len(channels)
@@ -251,9 +251,9 @@ def main():
         return int(p.stem.split("_")[1])
     tp_indices = [tp_from_path(p) for p in phase_paths]
 
-    # ---- Sweep 実行 ----
+    # ---- Run sweep ----
     sweep_params = list(product(CROP_W_LIST, CROP_H_LIST))
-    print(f"\nSweep: {len(sweep_params)} 組み合わせ × {len(phase_paths)} TP × {n_ch} ch")
+    print(f"\nSweep: {len(sweep_params)} combinations x {len(phase_paths)} TPs x {n_ch} ch")
 
     results = [None] * len(sweep_params)
 
@@ -271,7 +271,7 @@ def main():
                   f"temporal_std_y={res['temporal_std_y']:.4f}  "
                   f"corr2={res['corr_mean']:.4f}")
 
-    # ---- サマリー ----
+    # ---- Summary ----
     print("\n=== Temporal ECC Precision (um) -- lower is better ===")
     print(f"{'crop_w':>7} {'crop_h':>7}  {'tmp_std_x':>10}  {'tmp_std_y':>10}  {'corr2':>8}")
     for r in sorted(results, key=lambda r: r["temporal_std_x"] + r["temporal_std_y"]):
@@ -285,7 +285,7 @@ def main():
     )
     print(f"\nBest: crop_w={best['crop_w']}  crop_h={best['crop_h']}")
 
-    # ---- 図（3 行 × 3 列）----
+    # ---- Figure (3 rows x 3 cols) ----
     fig = plt.figure(figsize=(16, 14))
     gs = gridspec.GridSpec(3, 3, hspace=0.55, wspace=0.45,
                            left=0.07, right=0.97, top=0.93, bottom=0.06)
@@ -303,7 +303,7 @@ def main():
 
     # ---- Row 1: Per-channel time series (best crop) ----
     cmap_ch = plt.cm.tab20
-    t_s = np.arange(len(best["tps"])) * PH3_INTERVAL_S  # 秒
+    t_s = np.arange(len(best["tps"])) * PH3_INTERVAL_S  # seconds
 
     for col, (axis_label, shifts_key, mean_key) in enumerate([
         ("X (col, um)", "shifts_x", "mean_shift_x"),
@@ -328,7 +328,7 @@ def main():
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
 
-    # Row 1 col 2: mean shift scatter（X vs Y、1 点/channel、cy で色分け）
+    # Row 1 col 2: mean shift scatter (X vs Y, 1 point/channel, colored by cy)
     ax_sc = fig.add_subplot(gs[1, 2])
     cy_vals = np.array([cy for cy, cx in channels])
     mx = np.array(best["mean_shift_x"])
@@ -378,7 +378,7 @@ def main():
 
     fig.suptitle("ECC Crop Sweep: Temporal Precision + Channel Bias (grid ref)", fontsize=12)
 
-    # ---- 数値データ保存 ----
+    # ---- Save numerical data ----
     data = {}
     for r in results:
         k = f"w{r['crop_w']}h{r['crop_h']}"

@@ -2,15 +2,15 @@
 """
 focus_check_subtract.py
 -----------------------
-焦点確認用スクリプト。
+Focus check script.
 
-grid/00（各 Pos の背景参照 = Pos{N}_x+0_y+0）と focus_test（サンプルの z スタック）の
-対応する z フレームを引き算し、焦点位置を視覚的に確認する。
+Subtracts corresponding z frames between grid/00 (background reference = Pos{N}_x+0_y+0
+for each Pos) and focus_test (sample z-stack) to visually verify the focal position.
 
-アライメントは Pos ごとに 1 回だけ ECC で計算して全 z に適用する。
+Alignment is computed once per Pos via ECC and applied to all z frames.
 
-出力: OUTPUT_DIR/Pos{N}/z{z:03d}.tif（float32）
-ImageJ で File > Import > Image Sequence → Pos{N}/ を開けば z スタックとして閲覧可能。
+Output: OUTPUT_DIR/Pos{N}/z{z:03d}.tif (float32)
+Open Pos{N}/ in ImageJ via File > Import > Image Sequence to browse as a z-stack.
 """
 
 import json
@@ -31,53 +31,53 @@ if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
 # ===========================================================================
-# パラメータ（ここを編集して使う）
+# Parameters (edit here before use)
 # ===========================================================================
 
 DO_RECONSTRUCTION = True
-GRID_DIR    = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"   # Pos{N}_x+0_y+0 を含む親ディレクトリ
-FOCUS_DIR   = r"E:\Acuisition\kitagishi\260331\focus_check_6"  # Pos0..PosN を含む親ディレクトリ
-GRID_SUFFIX = "x+0_y+0"           # 背景参照グリッド位置のサフィックス
+GRID_DIR    = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"   # Parent directory containing Pos{N}_x+0_y+0
+FOCUS_DIR   = r"E:\Acuisition\kitagishi\260331\focus_check_6"  # Parent directory containing Pos0..PosN
+GRID_SUFFIX = "x+0_y+0"           # Suffix for background reference grid position
 
-POS_LABELS  = None     # None=自動検出, 例: ["Pos1", "Pos2"]（Pos0=BG は自動除外）
-ALIGN_Z     = 10                   # ECC アライメントに使う z インデックス（z=0 = index 10）
+POS_LABELS  = None     # None=auto-detect, e.g.: ["Pos1", "Pos2"] (Pos0=BG auto-excluded)
+ALIGN_Z     = 10                   # z index used for ECC alignment (z=0 = index 10)
 
-CROP_OUTPUT = False                # True=channel ROI でクロップ, False=全体画像
+CROP_OUTPUT = False                # True=crop by channel ROI, False=full frame
 OUTPUT_DIR  = r"E:\Acuisition\kitagishi\260331\focus_check_subtracted_6"
 
-N_WORKERS   = 4                    # 再構成時の並列数（DO_RECONSTRUCTION=True 時のみ）
+N_WORKERS   = 4                    # Number of parallel workers (only when DO_RECONSTRUCTION=True)
 
-# 再構成パラメータ（DO_RECONSTRUCTION=True 時のみ使用）
-# batch_reconstruction_grid.py と同じ規約で記述する
+# Reconstruction parameters (only used when DO_RECONSTRUCTION=True)
+# Written following the same convention as batch_reconstruction_grid.py
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 
-# Pos番号によるクロップ切り替え（batch_reconstruction_grid.py に合わせる）
-# Pos番号 < POS_SPLIT → CROP_BEFORE;  Pos番号 >= POS_SPLIT → CROP_AFTER
-# OFFAXIS_CENTER はクロップ後の座標で左右共通
-# 物理的な対応:
-#   小Pos番号（< POS_SPLIT）= 右チャンネル → col 400:2448
-#   大Pos番号（>= POS_SPLIT）= 左チャンネル → col 0:2048
-# [!] データセットによって左右が入れ替わる場合あり。必ず実データで確認すること。
+# Crop selection by Pos number (matching batch_reconstruction_grid.py)
+# Pos number < POS_SPLIT -> CROP_BEFORE;  Pos number >= POS_SPLIT -> CROP_AFTER
+# OFFAXIS_CENTER is in post-crop coordinates, shared for left/right
+# Physical mapping:
+#   Low Pos number (< POS_SPLIT) = right channel -> col 400:2448
+#   High Pos number (>= POS_SPLIT) = left channel -> col 0:2048
+# [!] Left/right may swap depending on dataset. Always verify with actual data.
 POS_SPLIT    = 33
-CROP_BEFORE  = (0, 2048, 400, 2448)   # pos < POS_SPLIT  → 右チャンネル（col 400-2448）
-CROP_AFTER   = (0, 2048,   0, 2048)   # pos >= POS_SPLIT → 左チャンネル（col 0-2048）
+CROP_BEFORE  = (0, 2048, 400, 2448)   # pos < POS_SPLIT  -> right channel (col 400-2448)
+CROP_AFTER   = (0, 2048,   0, 2048)   # pos >= POS_SPLIT -> left channel (col 0-2048)
 
-FORCE_RECONSTRUCT = False            # True: 既存 output_phase を上書き再構成
+FORCE_RECONSTRUCT = False            # True: overwrite existing output_phase with new reconstruction
 
-# ECC 正規化範囲
+# ECC normalization range
 ECC_VMIN = -5.0
 ECC_VMAX =  2.0
 
-# tilt 補正（compute_pos_shifts.py と同一設定）
-USE_SLOPE_CORRECTION = True   # True: _tilt_correct を使う（backsub 不要）
-TILT_CROP_H = 270             # 傾き補正用横幅 [px]
-ECC_CROP_H  = 80              # ECC・フォーカスメトリクス用 crop 幅 [px]
+# Tilt correction (same settings as compute_pos_shifts.py)
+USE_SLOPE_CORRECTION = True   # True: use _tilt_correct (no backsub needed)
+TILT_CROP_H = 270             # X width for tilt correction [px]
+ECC_CROP_H  = 80              # Crop width for ECC and focus metrics [px]
 
 # ===========================================================================
 
 
 # ---------------------------------------------------------------------------
-# ユーティリティ
+# Utilities
 # ---------------------------------------------------------------------------
 
 def to_uint8(img: np.ndarray, vmin: float = ECC_VMIN, vmax: float = ECC_VMAX) -> np.ndarray:
@@ -88,17 +88,17 @@ def to_uint8(img: np.ndarray, vmin: float = ECC_VMIN, vmax: float = ECC_VMAX) ->
 
 def compute_ecc_warp(ref_img: np.ndarray, src_img: np.ndarray):
     """
-    ECC (MOTION_TRANSLATION) でワープ行列を計算して返す。
+    Compute and return the warp matrix using ECC (MOTION_TRANSLATION).
 
     Parameters
     ----------
-    ref_img : grid 側の z=ALIGN_Z フレーム（参照）
-    src_img : focus 側の z=ALIGN_Z フレーム（補正対象）
+    ref_img : z=ALIGN_Z frame from the grid side (reference)
+    src_img : z=ALIGN_Z frame from the focus side (target to align)
 
     Returns
     -------
-    warp_matrix : np.ndarray (2×3)  失敗時は None
-    correlation : float             失敗時は None
+    warp_matrix : np.ndarray (2x3)  None on failure
+    correlation : float             None on failure
     """
     ref_u8 = to_uint8(ref_img)
     src_u8 = to_uint8(src_img)
@@ -110,7 +110,7 @@ def compute_ecc_warp(ref_img: np.ndarray, src_img: np.ndarray):
         )
         return warp_matrix, float(correlation)
     except Exception as e:
-        print(f"  ECC 失敗: {e}")
+        print(f"  ECC failed: {e}")
         return None, None
 
 
@@ -125,11 +125,11 @@ def apply_warp(img: np.ndarray, warp_matrix: np.ndarray) -> np.ndarray:
 
 
 def _z_from_filename(fname: str):
-    """ファイル名から z インデックスを抽出する。
+    """Extract z index from filename.
 
-    例:
-        img_000000000_ph_003_phase.tif → 3
-        img_000000000_ph_003.tif       → 3  (未再構成フォールバック)
+    Examples:
+        img_000000000_ph_003_phase.tif -> 3
+        img_000000000_ph_003.tif       -> 3  (unreconstructed fallback)
     """
     m = re.search(r'_ph_(\d+)_phase\.tif$', fname, re.IGNORECASE)
     if m:
@@ -141,7 +141,7 @@ def _z_from_filename(fname: str):
 
 
 def _detect_pos_labels(focus_dir: Path):
-    """Pos1 以降を返す。Pos0 は BG なので除外。"""
+    """Return Pos1 and above. Pos0 is excluded as it is the background."""
     candidates = [
         item for item in focus_dir.iterdir()
         if item.is_dir() and re.match(r'^Pos\d+$', item.name) and item.name != "Pos0"
@@ -150,7 +150,7 @@ def _detect_pos_labels(focus_dir: Path):
 
 
 def _load_phase_stack(phase_dir: Path) -> dict:
-    """output_phase/ から全 z フレームを読み込み {z_idx: ndarray} を返す。"""
+    """Load all z frames from output_phase/ and return {z_idx: ndarray}."""
     stack = {}
     for f in sorted(phase_dir.glob("*_phase.tif")):
         z = _z_from_filename(f.name)
@@ -161,15 +161,15 @@ def _load_phase_stack(phase_dir: Path) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 再構成
+# Reconstruction
 # ---------------------------------------------------------------------------
 
 def _reconstruct_one(raw_path: Path, out_dir: Path, params_dict: dict):
-    """1 枚の生ホログラムを再構成して output_phase/ に保存。既存なら skip。
+    """Reconstruct a single raw hologram and save to output_phase/. Skip if exists.
 
-    batch_reconstruction_dual と同一処理:
-    - bg_path が指定されていれば Pos0 を再構成して位相差分を取る
-    - 中央領域の平均を引いてオフセット正規化
+    Same processing as batch_reconstruction_dual:
+    - If bg_path is specified, reconstruct Pos0 and compute the phase difference
+    - Subtract the mean of the center region for offset normalization
     """
     try:
         from PIL import Image
@@ -198,7 +198,7 @@ def _reconstruct_one(raw_path: Path, out_dir: Path, params_dict: dict):
         field = get_field(img, params)
         angle = unwrap_phase(np.angle(field))
 
-        # Pos0 背景引き算（batch_reconstruction_dual と同一処理）
+        # Pos0 background subtraction (same processing as batch_reconstruction_dual)
         bg_path = params_dict.get("bg_path")
         if bg_path is not None and Path(bg_path).exists():
             bg_img = np.array(Image.open(str(bg_path)))
@@ -207,7 +207,7 @@ def _reconstruct_one(raw_path: Path, out_dir: Path, params_dict: dict):
             angle_bg = unwrap_phase(np.angle(field_bg))
             angle = angle - angle_bg
 
-            # 中央領域の平均を引いてオフセット正規化
+            # Subtract center region mean for offset normalization
             h, w = angle.shape
             if pos_number < pos_split:
                 center_region = angle[1:h-1, 1:w//2]
@@ -224,9 +224,9 @@ def _reconstruct_one(raw_path: Path, out_dir: Path, params_dict: dict):
 
 def reconstruct_dir(raw_dir: Path, recon_params: dict, pos_number: int, n_workers: int = 4,
                     bg_dir: Path = None):
-    """ディレクトリ内の生 TIFF を全て再構成して output_phase/ に保存。
+    """Reconstruct all raw TIFFs in the directory and save to output_phase/.
 
-    bg_dir が指定されていれば同名ファイルを Pos0 として引き算する（batch_reconstruction_dual と同一）。
+    If bg_dir is specified, subtract the same-named file as Pos0 (same as batch_reconstruction_dual).
     """
     out_dir = raw_dir / "output_phase"
     out_dir.mkdir(exist_ok=True)
@@ -236,7 +236,7 @@ def reconstruct_dir(raw_dir: Path, recon_params: dict, pos_number: int, n_worker
         if not f.name.startswith("._") and "output" not in f.name.lower()
     ]
     if not raw_files:
-        print(f"  [!] 生 TIFF が見つかりません: {raw_dir}")
+        print(f"  [!] No raw TIFFs found: {raw_dir}")
         return
 
     tasks = []
@@ -265,11 +265,11 @@ def reconstruct_dir(raw_dir: Path, recon_params: dict, pos_number: int, n_worker
             n_err += 1
             print(f"  [x] {name}: {status}")
 
-    print(f"  完了={n_ok}, スキップ={n_skip}, エラー={n_err}")
+    print(f"  done={n_ok}, skipped={n_skip}, errors={n_err}")
 
 
 # ---------------------------------------------------------------------------
-# Pos 処理
+# Pos processing
 # ---------------------------------------------------------------------------
 
 def process_pos(pos_label: str,
@@ -279,58 +279,58 @@ def process_pos(pos_label: str,
                 crop_output: bool,
                 output_dir: Path,
                 pos_number: int = 1):
-    """1 Pos の ECC アライメント + 引き算処理。
+    """ECC alignment + subtraction for a single Pos.
 
     Returns
     -------
-    (z_list, diff_frames) or None（スキップ時）
+    (z_list, diff_frames) or None (when skipped)
     """
     focus_pos_dir = focus_dir / pos_label
     grid_pos_name = f"{pos_label}_{GRID_SUFFIX}"
     grid_pos_dir  = grid_dir / grid_pos_name
 
     if not focus_pos_dir.exists():
-        print(f"  [!] スキップ: {focus_pos_dir} が存在しない")
+        print(f"  [!] Skipping: {focus_pos_dir} does not exist")
         return None
     if not grid_pos_dir.exists():
-        print(f"  [!] スキップ: {grid_pos_dir} が存在しない")
+        print(f"  [!] Skipping: {grid_pos_dir} does not exist")
         return None
 
     focus_phase_dir = focus_pos_dir / "output_phase"
     grid_phase_dir  = grid_pos_dir  / "output_phase"
 
     if not focus_phase_dir.exists():
-        print(f"  [!] output_phase が見つかりません: {focus_phase_dir}")
+        print(f"  [!] output_phase not found: {focus_phase_dir}")
         return None
     if not grid_phase_dir.exists():
-        print(f"  [!] output_phase が見つかりません: {grid_phase_dir}")
+        print(f"  [!] output_phase not found: {grid_phase_dir}")
         return None
 
-    # スタック読込
-    print(f"  focus スタック読込: {focus_phase_dir}")
+    # Load stacks
+    print(f"  Loading focus stack: {focus_phase_dir}")
     focus_stack = _load_phase_stack(focus_phase_dir)
-    print(f"  grid  スタック読込: {grid_phase_dir}")
+    print(f"  Loading grid  stack: {grid_phase_dir}")
     grid_stack  = _load_phase_stack(grid_phase_dir)
 
     if not focus_stack:
-        print(f"  [!] focus phase ファイルが見つかりません")
+        print(f"  [!] No focus phase files found")
         return None
     if not grid_stack:
-        print(f"  [!] grid phase ファイルが見つかりません")
+        print(f"  [!] No grid phase files found")
         return None
 
     z_list = sorted(focus_stack.keys())
-    print(f"  z フレーム数: {len(z_list)}  (z={z_list[0]}..{z_list[-1]})")
+    print(f"  Number of z frames: {len(z_list)}  (z={z_list[0]}..{z_list[-1]})")
 
-    # ECC アライメント計算（ALIGN_Z フレームのみ）
+    # ECC alignment computation (ALIGN_Z frame only)
     actual_align_z = align_z if align_z in focus_stack else z_list[0]
     actual_grid_z  = align_z if align_z in grid_stack  else min(grid_stack.keys())
 
     ref_img = grid_stack[actual_grid_z]
     src_img = focus_stack[actual_align_z]
 
-    # channel_rois.json を読み込み（ECC + 出力クロップ共用）
-    # grid の output_phase/channels/ に置かれている（focus_test 側ではなく grid 側）
+    # Load channel_rois.json (shared for ECC + output crop)
+    # Located in grid's output_phase/channels/ (not on the focus_test side)
     ecc_rois_path = grid_pos_dir / "output_phase" / "channels" / "channel_rois.json"
     if ecc_rois_path.exists():
         with open(ecc_rois_path) as fp:
@@ -343,7 +343,7 @@ def process_pos(pos_label: str,
 
     warp_matrix = np.eye(2, 3, dtype=np.float32)
     if rois:
-        # チャンネルごとに tilt_correct → ECC → MAD 外れ値除去（compute_pos_shifts と同一パターン）
+        # Per-channel tilt_correct -> ECC -> MAD outlier removal (same pattern as compute_pos_shifts)
         from ecc_utils import tilt_fit_crop, remove_outliers_mad
 
         fit_right = pos_number >= POS_SPLIT
@@ -365,7 +365,7 @@ def process_pos(pos_label: str,
                 print(f"    ch{ch_idx}: corr={corr_ch:.4f}, tx={warp_ch[0,2]:.2f}, ty={warp_ch[1,2]:.2f}")
 
         if len(tx_list) == 0:
-            print("  [!] 全チャンネルで ECC 失敗。アライメントなしで続行")
+            print("  [!] ECC failed on all channels. Proceeding without alignment")
             warp_matrix = np.eye(2, 3, dtype=np.float32)
         else:
             valid_mask = np.ones(len(tx_list), dtype=bool)
@@ -393,17 +393,17 @@ def process_pos(pos_label: str,
         else:
             print("  [!] Full-frame ECC failed; using identity")
 
-    rois_for_focus = rois  # フォーカス評価用に保持
+    rois_for_focus = rois  # Retained for focus evaluation
 
-    # 出力ディレクトリ
+    # Output directory
     pos_out_dir = output_dir / pos_label
     pos_out_dir.mkdir(parents=True, exist_ok=True)
 
-    # 全 z フレーム処理
+    # Process all z frames
     diff_frames = []
     for z in tqdm(z_list, desc=f"  {pos_label}"):
         focus_frame = focus_stack[z]
-        # grid は対応 z がなければ最近傍
+        # Use nearest z from grid if exact match not available
         grid_z = z if z in grid_stack else min(grid_stack.keys(), key=lambda gz: abs(gz - z))
         grid_frame = grid_stack[grid_z]
 
@@ -411,10 +411,10 @@ def process_pos(pos_label: str,
         diff = warped_focus - grid_frame
         diff_frames.append(diff)
 
-        # 全体フレームを保存
+        # Save full frame
         tifffile.imwrite(str(pos_out_dir / f"z{z:03d}.tif"), diff.astype(np.float32))
 
-        # channel ROI crop を保存（tilt 補正済み crop_w × TILT_CROP_H = 40 × 270）
+        # Save channel ROI crops (tilt-corrected crop_w x TILT_CROP_H = 40 x 270)
         if rois_for_focus:
             for ch_idx, roi_info in enumerate(rois_for_focus):
                 cy     = roi_info["cy"]
@@ -429,14 +429,14 @@ def process_pos(pos_label: str,
 
 
 # ---------------------------------------------------------------------------
-# モンタージュ
+# Montage
 # ---------------------------------------------------------------------------
 
 def make_montage(z_list, diff_frames, pos_label: str):
     try:
         from figure_logger import save_figure
     except ImportError:
-        print("  figure_logger が見つかりません。モンタージュをスキップ")
+        print("  figure_logger not found. Skipping montage")
         return
 
     n = len(diff_frames)
@@ -463,15 +463,15 @@ def make_montage(z_list, diff_frames, pos_label: str):
         description=f"Focus check subtracted montage: {pos_label}",
     )
     plt.close(fig)
-    print(f"  モンタージュ保存完了")
+    print(f"  Montage saved")
 
 
 # ---------------------------------------------------------------------------
-# フォーカス検出
+# Focus detection
 # ---------------------------------------------------------------------------
 
 def _focus_metrics(frames: list) -> tuple:
-    """フレームリストから (lap_vars, stds) を計算して返す。"""
+    """Compute and return (lap_vars, stds) from a list of frames."""
     lap_vars, stds = [], []
     for frame in frames:
         f32 = frame.astype(np.float32)
@@ -490,15 +490,15 @@ def _best_z_from_metrics(z_list, lap_vars, stds):
 
 def find_best_focus_z(z_list: list, diff_frames: list, pos_label: str,
                       rois: list = None, pos_number: int = 1) -> dict:
-    """background引き算済み位相フレームから最良フォーカスzをチャンネル別に検出する。
+    """Detect the best focus z per channel from background-subtracted phase frames.
 
-    rois が指定された場合はチャンネルROIごとに評価し、指定がなければ全体フレームで評価する。
+    If rois is specified, evaluation is per channel ROI; otherwise full frame is used.
 
-    指標: Laplacian分散（エッジの鮮鋭さ）+ 標準偏差（位相コントラスト量）の平均ランク。
+    Metric: average rank of Laplacian variance (edge sharpness) + standard deviation (phase contrast).
 
     Returns
     -------
-    results : dict   {"ch0": best_z, "ch1": best_z, ...}  または {"full": best_z}
+    results : dict   {"ch0": best_z, "ch1": best_z, ...}  or {"full": best_z}
     """
     try:
         from figure_logger import save_figure
@@ -507,7 +507,7 @@ def find_best_focus_z(z_list: list, diff_frames: list, pos_label: str,
 
     from ecc_utils import tilt_fit_crop as _tilt_fit
 
-    # チャンネルごとのフレームリストを作成（compute_pos_shifts と同一パターン）
+    # Build per-channel frame lists (same pattern as compute_pos_shifts)
     if rois:
         fit_right = pos_number >= POS_SPLIT
         channels = {}
@@ -523,9 +523,9 @@ def find_best_focus_z(z_list: list, diff_frames: list, pos_label: str,
         channels = {"full": diff_frames}
 
     results = {}
-    all_metrics = {}  # プロット用
+    all_metrics = {}  # For plotting
 
-    print(f"\n  === フォーカス検出結果: {pos_label} ===")
+    print(f"\n  === Focus detection results: {pos_label} ===")
     for ch_name, frames in channels.items():
         lap_vars, stds = _focus_metrics(frames)
         best_z, combined = _best_z_from_metrics(z_list, lap_vars, stds)
@@ -533,7 +533,7 @@ def find_best_focus_z(z_list: list, diff_frames: list, pos_label: str,
         all_metrics[ch_name] = {"lap_vars": lap_vars, "stds": stds, "combined": combined}
 
         print(f"\n  [{ch_name}]")
-        header = f"{'z':>4}  {'Lap分散':>12}  {'std':>10}  {'スコア':>6}"
+        header = f"{'z':>4}  {'Lap var':>12}  {'std':>10}  {'score':>6}"
         print(f"  {header}")
         best_idx = z_list.index(best_z)
         for i, z in enumerate(z_list):
@@ -541,12 +541,12 @@ def find_best_focus_z(z_list: list, diff_frames: list, pos_label: str,
             print(f"  {z:>4}  {lap_vars[i]:>12.4f}  {stds[i]:>10.4f}  {combined[i]:>6.0f}{marker}")
         print(f"  => best z = {best_z}")
 
-    # フォーカスカーブをプロット（チャンネル数 × 2 パネル）
+    # Plot focus curves (n_channels x 2 panels)
     if save_figure is not None:
         n_ch = len(channels)
         fig, axes = plt.subplots(n_ch, 2, figsize=(9, 2.2 * n_ch), squeeze=False)
 
-        # 列ごとの共通 ylim を事前計算
+        # Pre-compute common ylim per column
         all_lap = [v for m in all_metrics.values() for v in m["lap_vars"]]
         all_std = [v for m in all_metrics.values() for v in m["stds"]]
         margin = 0.05
@@ -600,16 +600,16 @@ def main():
     output_dir = Path(OUTPUT_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Pos ラベル検出
+    # Detect Pos labels
     pos_labels = POS_LABELS if POS_LABELS is not None else _detect_pos_labels(focus_dir)
     if not pos_labels:
-        print("[x] Pos ディレクトリが見つかりません")
+        print("[x] No Pos directories found")
         return
-    print(f"対象 Pos: {pos_labels}")
+    print(f"Target Pos: {pos_labels}")
 
-    # 再構成フェーズ（DO_RECONSTRUCTION=True の場合）
+    # Reconstruction phase (when DO_RECONSTRUCTION=True)
     if DO_RECONSTRUCTION:
-        print("\n=== 再構成フェーズ ===")
+        print("\n=== Reconstruction phase ===")
         recon_params = {
             "wavelength":     WAVELENGTH,
             "NA":             NA,
@@ -625,12 +625,12 @@ def main():
         if focus_bg_dir.exists():
             print(f"  Pos0 BG (focus): {focus_bg_dir}")
         else:
-            print(f"  [!] Pos0 BG が見つかりません（引き算なし）: {focus_bg_dir}")
+            print(f"  [!] Pos0 BG not found (no subtraction): {focus_bg_dir}")
             focus_bg_dir = None
         if grid_bg_dir.exists():
             print(f"  Pos0 BG (grid ): {grid_bg_dir}")
         else:
-            print(f"  [!] Pos0 BG が見つかりません（引き算なし）: {grid_bg_dir}")
+            print(f"  [!] Pos0 BG not found (no subtraction): {grid_bg_dir}")
             grid_bg_dir = None
 
         for pos_label in pos_labels:
@@ -644,8 +644,8 @@ def main():
             reconstruct_dir(grid_dir / grid_pos_name, recon_params, pos_number, N_WORKERS,
                             bg_dir=grid_bg_dir)
 
-    # 引き算フェーズ
-    print("\n=== 引き算フェーズ ===")
+    # Subtraction phase
+    print("\n=== Subtraction phase ===")
     for pos_label in pos_labels:
         print(f"\n[{pos_label}]")
         pos_number = int(re.search(r'\d+', pos_label).group())
@@ -655,16 +655,16 @@ def main():
             continue
         z_list, diff_frames, rois = result
 
-        # フォーカス検出（全 Pos、チャンネル別）
+        # Focus detection (all Pos, per channel)
         best_z_per_ch = find_best_focus_z(z_list, diff_frames, pos_label, rois=rois,
                                           pos_number=pos_number)
 
-        # モンタージュは先頭 Pos のみ
+        # Montage for first Pos only
         if pos_label == pos_labels[0]:
-            print("  モンタージュ生成...")
+            print("  Generating montage...")
             make_montage(z_list, diff_frames, pos_label)
 
-    print(f"\n完了: {output_dir}")
+    print(f"\nDone: {output_dir}")
 
 
 if __name__ == "__main__":

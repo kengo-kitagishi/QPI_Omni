@@ -1,33 +1,33 @@
 #!/usr/bin/env python3
 """
-バッチ解析：全パラメータ組み合わせを網羅的に実行
+Batch analysis: exhaustive execution of all parameter combinations.
 
-実行する組み合わせ:
-【CSVファイル】
+Combinations to execute:
+[CSV files]
   - Results_enlarge.csv
   - Results_enlarge_interpolate.csv
 
-【形状推定】
-  - ellipse (楕円)
-  - feret (Feret直径)
+[Shape estimation]
+  - ellipse
+  - feret (Feret diameter)
 
-【サブピクセル精度】
-  - 1×1
-  - 5×5
-  - 10×10
+[Subpixel precision]
+  - 1x1
+  - 5x5
+  - 10x10
 
-【厚みマップモード】
-  - continuous (連続値) ※厚みマップをキャッシュに保存
-  - discrete (離散値: round, ceil, floor, pomegranate) ※キャッシュを再利用して高速化
+[Thickness map mode]
+  - continuous: saves thickness map to cache
+  - discrete (round, ceil, floor, pomegranate): reuses cache for speedup
 
-デフォルト設定で全パターン実行：
-  2 (CSV) × 2 (形状) × 3 (サブピクセル) × (1 + 4) = 60パターン
+Default settings run all patterns:
+  2 (CSV) x 2 (shape) x 3 (subpixel) x (1 + 4) = 60 patterns
 
-【最適化機能】
-continuousモードで計算した厚みマップをキャッシュに保存し、
-discreteモードではそれを再利用することで計算時間を大幅短縮。
-  - continuous: 全計算（位相差画像から厚みマップまで）
-  - discrete: キャッシュ読込 → 離散化 → 体積再計算のみ（約10倍高速）
+[Optimization]
+Thickness maps computed in continuous mode are cached,
+and discrete mode reuses them for significant speedup.
+  - continuous: full computation (phase image to thickness map)
+  - discrete: cache load -> discretize -> volume recalculation only (~10x faster)
 """
 # %%
 import os
@@ -45,31 +45,31 @@ import re
 import tifffile
 from scipy import ndimage
 
-# 24_ellipse_volume.pyからTimeSeriesDensityMapperクラスをコピー
-# （インポートの問題を避けるため、直接定義）
+# Copy TimeSeriesDensityMapper class from 24_ellipse_volume.py
+# (defined directly to avoid import issues)
 
 class TimeSeriesDensityMapper:
-    """時系列画像とResults.csvから屈折率（RI）マップを生成"""
-    
-    # ... (24_ellipse_volume.pyのTimeSeriesDensityMapperクラス全体をコピー)
-    # スペースの都合上、exec()を使用してインポート
+    """Generate refractive index (RI) maps from time-series images and Results.csv"""
+
+    # ... (copy entire TimeSeriesDensityMapper class from 24_ellipse_volume.py)
+    # Using exec() for import due to space constraints
     pass
 
-def check_if_completed(shape_type, subpixel_sampling, results_csv, thickness_mode, 
+def check_if_completed(shape_type, subpixel_sampling, results_csv, thickness_mode,
                        discretize_method, csv_suffix):
     """
-    指定された条件の解析が既に完了しているかチェック
-    
+    Check if analysis for the specified conditions has already been completed.
+
     Returns:
     --------
-    bool : 完了している場合True
+    bool : True if already completed
     """
-    # 出力フォルダ名を生成
+    # Generate output folder name
     csv_name = os.path.basename(results_csv)
     csv_name_without_ext = os.path.splitext(csv_name)[0]
     
     if csv_suffix is None:
-        # CSVファイル名から自動抽出
+        # Auto-extract from CSV filename
         if '_' in csv_name_without_ext:
             parts = csv_name_without_ext.split('_', 1)
             csv_identifier = parts[1] if len(parts) > 1 and parts[1] else None
@@ -78,7 +78,7 @@ def check_if_completed(shape_type, subpixel_sampling, results_csv, thickness_mod
     else:
         csv_identifier = csv_suffix
     
-    # フォルダ名生成
+    # Generate folder name
     if thickness_mode == 'discrete':
         mode_suffix = f"{thickness_mode}_{discretize_method}"
     else:
@@ -91,37 +91,37 @@ def check_if_completed(shape_type, subpixel_sampling, results_csv, thickness_mod
     
     output_dir = f"timeseries_density_output_{dir_suffix}"
     
-    # 完了フラグファイルのパス
+    # Path to completion flag file
     script_dir = os.path.dirname(os.path.abspath(__file__))
     flag_file = os.path.join(script_dir, output_dir, '.completed')
     
     return os.path.exists(flag_file)
 
 
-def run_analysis(shape_type, subpixel_sampling, results_csv, image_directory, 
-                 wavelength_nm, n_medium, pixel_size_um, alpha_ri, max_rois, 
+def run_analysis(shape_type, subpixel_sampling, results_csv, image_directory,
+                 wavelength_nm, n_medium, pixel_size_um, alpha_ri, max_rois,
                  thickness_mode='continuous', voxel_z_um=0.3, discretize_method='round',
                  min_thickness_px=0.0, csv_suffix=None, skip_if_completed=True):
     """
-    指定されたパラメータで解析を実行
-    
+    Execute analysis with specified parameters.
+
     Parameters:
     -----------
     thickness_mode : str
-        厚みマップのモード。デフォルト: 'continuous'
+        Thickness map mode. Default: 'continuous'
     voxel_z_um : float
-        Z方向のボクセルサイズ（µm）。デフォルト: 0.3
+        Z-direction voxel size (um). Default: 0.3
     discretize_method : str
-        離散化の方法。デフォルト: 'round'
+        Discretization method. Default: 'round'
     min_thickness_px : float
-        最小厚み閾値（ピクセル単位）。デフォルト: 0.0
+        Minimum thickness threshold (in pixel units). Default: 0.0
     csv_suffix : str, optional
-        出力フォルダ名に追加するサフィックス。デフォルト: None
-        Noneの場合、CSVファイル名から自動抽出
+        Suffix appended to output folder name. Default: None
+        If None, auto-extracted from CSV filename
     skip_if_completed : bool, optional
-        完了済みの場合スキップする。デフォルト: True
+        Skip if already completed. Default: True
     """
-    # 完了チェック
+    # Completion check
     if skip_if_completed:
         if check_if_completed(shape_type, subpixel_sampling, results_csv, 
                              thickness_mode, discretize_method, csv_suffix):
@@ -133,7 +133,7 @@ def run_analysis(shape_type, subpixel_sampling, results_csv, image_directory,
             if thickness_mode == 'discrete':
                 print(f"  Discretize method: {discretize_method}")
             print(f"{'='*80}\n")
-            return True  # スキップしたが成功扱い
+            return True  # Skipped but treated as success
     
     print(f"\n{'='*80}")
     print(f"Starting analysis:")
@@ -144,8 +144,8 @@ def run_analysis(shape_type, subpixel_sampling, results_csv, image_directory,
     start_time = time.time()
     
     try:
-        # 24_ellipse_volume.pyをexec()で実行
-        # グローバル変数として渡す
+        # Execute 24_ellipse_volume.py via exec()
+        # Pass as global variables
         globals_dict = {
             '__name__': '__main__',
             'RESULTS_CSV': results_csv,
@@ -164,14 +164,14 @@ def run_analysis(shape_type, subpixel_sampling, results_csv, image_directory,
             'CSV_SUFFIX': csv_suffix,
         }
         
-        # 24_ellipse_volume.pyの内容を読み込んで実行
+        # Read and execute the contents of 24_ellipse_volume.py
         script_dir = os.path.dirname(os.path.abspath(__file__))
         script_path = os.path.join(script_dir, '24_ellipse_volume.py')
         
         with open(script_path, 'r', encoding='utf-8') as f:
             code = f.read()
         
-        # if __name__ == "__main__"の部分を強制実行するため、置き換え
+        # Replace to force execution of the if __name__ == "__main__" block
         code = code.replace('if __name__ == "__main__":', 'if True:')
         
         exec(code, globals_dict)
@@ -195,10 +195,10 @@ def run_analysis(shape_type, subpixel_sampling, results_csv, image_directory,
     return success
 
 
-# ===== メイン実行 =====
+# ===== Main execution =====
 if __name__ == "__main__":
-    # 共通パラメータ
-    # === 複数のCSVファイルを処理する場合はリストで指定 ===
+    # Common parameters
+    # === Specify as list when processing multiple CSV files ===
     RESULTS_CSVS = [
         #r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted\inference_out\Results_enlarge.csv",
         #r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted\inference_out\Results_enlarge_interpolate.csv",
@@ -213,69 +213,69 @@ if __name__ == "__main__":
     PIXEL_SIZE_UM = 0.348
     ALPHA_RI = 0.00018
     
-    MAX_ROIS = None  # テスト実行（Noneで全ROI）
+    MAX_ROIS = None  # Test run (None for all ROIs)
+
+    # === Thickness map parameters (for discrete mode) ===
+    VOXEL_Z_UM = 0.3  # Z-direction voxel size (um)
+    MIN_THICKNESS_PX = 0.0  # Minimum thickness threshold (pixels, 0.0=no threshold)
+
+    # === CSV suffix (for identifying output folder name) ===
+    # Option 1: Auto-extract (specify None)
+    #   - Automatically extracted from CSV filename
+    #   - Results_enlarge.csv -> 'enlarge'
+    #   - Results_enlarge_interpolate.csv -> 'enlarge_interpolate'
+    # Option 2: Manual specification (specify a string)
+    #   - e.g.: CSV_SUFFIX = 'my_custom_name'
+    CSV_SUFFIX = None  # None for auto-extract, or manually specify a string
+
+    # === Resume functionality ===
+    # True: Skip completed conditions (allows resuming after crash)
+    # False: Re-run everything
+    SKIP_IF_COMPLETED = True  # Resume functionality enabled (recommended)
+
+    # ===== Parameter combinations =====
+    # [Shape estimation method]
+    # - 'ellipse': Ellipse fitting
+    # - 'feret': Feret diameter based
+    SHAPE_TYPES = ['ellipse', 'feret']  # Try both
+    # SHAPE_TYPES = ['ellipse']  # Ellipse only
+    # SHAPE_TYPES = ['feret']  # Feret only
+
+    # [Subpixel precision]
+    # Subpixel sampling count (NxN)
+    SUBPIXEL_SAMPLINGS = [1, 5, 10]  # Try all
+    # SUBPIXEL_SAMPLINGS = [1]  # Fast test
+    # SUBPIXEL_SAMPLINGS = [5, 10]  # High precision only
+
+    # [Thickness map mode]
+    # - 'continuous': Continuous values (real-valued) *run first to cache thickness maps
+    # - 'discrete': Discrete values (rounded to voxel units) *reuses cache for speedup
+    #
+    # IMPORTANT: Run continuous first!
+    #   Discrete mode reuses thickness maps saved by continuous for speedup
+    THICKNESS_MODES = ['continuous', 'discrete']  # All patterns (recommended, continuous first)
+    # THICKNESS_MODES = ['continuous']  # Continuous only
+    # THICKNESS_MODES = ['discrete']  # Discrete only (requires prior continuous run)
+
+    # [Discretization method] (used only in discrete mode)
+    # - 'round': Round to nearest integer
+    # - 'ceil': Round up
+    # - 'floor': Round down
+    # - 'pomegranate': Pomegranate method
+    DISCRETIZE_METHODS_FOR_DISCRETE = ['round', 'ceil', 'floor', 'pomegranate']  # Try all
+    # DISCRETIZE_METHODS_FOR_DISCRETE = ['round']  # Round only
     
-    # === 厚みマップパラメータ（discreteモード用）===
-    VOXEL_Z_UM = 0.3  # Z方向のボクセルサイズ（µm）
-    MIN_THICKNESS_PX = 0.0  # 最小厚み閾値（ピクセル単位、0.0=閾値なし）
-    
-    # === CSVサフィックス（出力フォルダ名の識別用）===
-    # オプション1: 自動抽出（Noneを指定）
-    #   - CSVファイル名から自動で抽出されます
-    #   - Results_enlarge.csv → 'enlarge'
-    #   - Results_enlarge_interpolate.csv → 'enlarge_interpolate'
-    # オプション2: 手動指定（文字列を指定）
-    #   - 例: CSV_SUFFIX = 'my_custom_name'
-    CSV_SUFFIX = None  # Noneで自動抽出、または手動で文字列を指定
-    
-    # === レジューム機能 ===
-    # True: 完了済みの条件をスキップ（クラッシュから再開可能）
-    # False: すべて再実行
-    SKIP_IF_COMPLETED = True  # ✅ レジューム機能を有効化（推奨）
-    
-    # ===== パラメータの組み合わせ =====
-    # 【形状推定方法】
-    # - 'ellipse': 楕円フィッティング
-    # - 'feret': Feret直径ベース
-    SHAPE_TYPES = ['ellipse', 'feret']  # 両方試す
-    # SHAPE_TYPES = ['ellipse']  # 楕円のみ
-    # SHAPE_TYPES = ['feret']  # Feretのみ
-    
-    # 【サブピクセル精度】
-    # サブピクセルサンプリング数（N×N）
-    SUBPIXEL_SAMPLINGS = [1, 5, 10]  # 全部試す
-    # SUBPIXEL_SAMPLINGS = [1]  # 高速テスト用
-    # SUBPIXEL_SAMPLINGS = [5, 10]  # 高精度のみ
-    
-    # 【厚みマップモード】
-    # - 'continuous': 連続値（実数値のまま）※先に実行して厚みマップをキャッシュ
-    # - 'discrete': 離散値（ボクセル単位に丸める）※キャッシュを再利用して高速化
-    # 
-    # ⚠️ 重要: continuousを先に実行してください！
-    #   discreteモードは、continuousで保存された厚みマップを再利用して高速化します
-    THICKNESS_MODES = ['continuous', 'discrete']  # ✅ 全パターン（推奨、continuousが先）
-    # THICKNESS_MODES = ['continuous']  # continuousのみ
-    # THICKNESS_MODES = ['discrete']  # discreteのみ（要: 事前にcontinuous実行）
-    
-    # 【離散化方法】（discreteモードのみで使用）
-    # - 'round': 四捨五入
-    # - 'ceil': 切り上げ
-    # - 'floor': 切り捨て
-    # - 'pomegranate': ポメグラネート法
-    DISCRETIZE_METHODS_FOR_DISCRETE = ['round', 'ceil', 'floor', 'pomegranate']  # 全部試す
-    # DISCRETIZE_METHODS_FOR_DISCRETE = ['round']  # roundのみ
-    
-    # ===== 実行順序の最適化 =====
-    # continuousを先に実行してキャッシュを生成、discreteはそれを再利用
+    # ===== Execution order optimization =====
+    # Run continuous first to generate cache, discrete reuses it
     if 'continuous' in THICKNESS_MODES and 'discrete' in THICKNESS_MODES:
-        # 両方含まれている場合、continuousを先に
+        # If both are included, run continuous first
         THICKNESS_MODES_SORTED = ['continuous', 'discrete']
-        print("\n💡 最適化: continuousモードを先に実行してキャッシュを生成します")
-        print("   discreteモードはキャッシュを再利用して高速化されます\n")
+        print("\nOptimization: Running continuous mode first to generate cache")
+        print("   Discrete mode will reuse cache for speedup\n")
     else:
         THICKNESS_MODES_SORTED = THICKNESS_MODES
     
-    # ===== パターン数の計算と表示 =====
+    # ===== Calculate and display pattern count =====
     total_combos = 0
     for mode in THICKNESS_MODES_SORTED:
         if mode == 'discrete':
@@ -283,21 +283,21 @@ if __name__ == "__main__":
         else:
             total_combos += len(RESULTS_CSVS) * len(SHAPE_TYPES) * len(SUBPIXEL_SAMPLINGS)
     
-    # パターン数の内訳を表示
+    # Display pattern count breakdown
     print(f"\n{'='*80}")
-    print(f"📊 実行パターン数の内訳")
+    print(f"Execution pattern breakdown")
     print(f"{'='*80}")
-    print(f"  CSVファイル数: {len(RESULTS_CSVS)}")
-    print(f"  形状推定方法: {SHAPE_TYPES} ({len(SHAPE_TYPES)}種類)")
-    print(f"  サブピクセル: {SUBPIXEL_SAMPLINGS} ({len(SUBPIXEL_SAMPLINGS)}種類)")
-    print(f"  厚みマップモード: {THICKNESS_MODES_SORTED} (実行順)")
+    print(f"  CSV files: {len(RESULTS_CSVS)}")
+    print(f"  Shape estimation methods: {SHAPE_TYPES} ({len(SHAPE_TYPES)} types)")
+    print(f"  Subpixel: {SUBPIXEL_SAMPLINGS} ({len(SUBPIXEL_SAMPLINGS)} types)")
+    print(f"  Thickness map modes: {THICKNESS_MODES_SORTED} (execution order)")
     if 'continuous' in THICKNESS_MODES_SORTED and 'discrete' in THICKNESS_MODES_SORTED:
         continuous_combos = len(RESULTS_CSVS) * len(SHAPE_TYPES) * len(SUBPIXEL_SAMPLINGS)
         discrete_combos = len(RESULTS_CSVS) * len(SHAPE_TYPES) * len(SUBPIXEL_SAMPLINGS) * len(DISCRETIZE_METHODS_FOR_DISCRETE)
-        print(f"    - continuous: {continuous_combos}パターン")
-        print(f"    - discrete: {discrete_combos}パターン ({len(DISCRETIZE_METHODS_FOR_DISCRETE)}種類の離散化方法)")
-    print(f"  ━━━━━━━━━━━━━━━━━━━━━━━━")
-    print(f"  ✅ 合計実行数: {total_combos}パターン")
+        print(f"    - continuous: {continuous_combos} patterns")
+        print(f"    - discrete: {discrete_combos} patterns ({len(DISCRETIZE_METHODS_FOR_DISCRETE)} discretization methods)")
+    print(f"  {'='*24}")
+    print(f"  Total executions: {total_combos} patterns")
     print(f"{'='*80}\n")
     
     print(f"\n{'#'*80}")
@@ -316,7 +316,7 @@ if __name__ == "__main__":
     results = []
     combo_num = 0
     
-    # 全組み合わせを実行
+    # Execute all combinations
     for csv_idx, results_csv in enumerate(RESULTS_CSVS, 1):
         csv_name = os.path.basename(results_csv)
         print(f"\n{'='*80}")
@@ -324,20 +324,20 @@ if __name__ == "__main__":
         print(f"{'='*80}\n")
         
         for thickness_mode in THICKNESS_MODES_SORTED:
-            # thickness_modeに応じて離散化方法を設定
+            # Set discretization method according to thickness_mode
             if thickness_mode == 'discrete':
                 discretize_methods = DISCRETIZE_METHODS_FOR_DISCRETE
             else:
-                discretize_methods = [None]  # continuousモードでは1回だけ
+                discretize_methods = [None]  # Only once in continuous mode
             
             for i, shape_type in enumerate(SHAPE_TYPES, 1):
                 for j, subpixel_sampling in enumerate(SUBPIXEL_SAMPLINGS, 1):
                     for k, discretize_method in enumerate(discretize_methods, 1):
                         combo_num += 1
                         
-                        # continuousモードの場合はdiscretize_methodは使用しない
+                        # discretize_method is not used in continuous mode
                         if thickness_mode == 'continuous':
-                            actual_discretize_method = 'round'  # デフォルト値（使用されない）
+                            actual_discretize_method = 'round'  # default value (not used)
                             method_str = ''
                         else:
                             actual_discretize_method = discretize_method
@@ -382,7 +382,7 @@ if __name__ == "__main__":
                             )
                         })
     
-    # 最終サマリー
+    # Final summary
     total_elapsed = time.time() - total_start_time
     
     print(f"\n{'#'*80}")
@@ -403,7 +403,7 @@ if __name__ == "__main__":
         
         csv_short = result['csv_file'].replace('Results_', '').replace('.csv', '')
         
-        # thickness_modeに応じて表示を変更
+        # Change display according to thickness_mode
         if result['thickness_mode'] == 'discrete' and result['discretize_method']:
             mode_str = f"{result['thickness_mode']}[{result['discretize_method']}]"
         else:
@@ -427,14 +427,14 @@ if __name__ == "__main__":
     print(f"# All output directories:")
     print(f"{'#'*80}")
     
-    # キャッシュ機能の説明
+    # Cache functionality description
     if 'continuous' in THICKNESS_MODES and 'discrete' in THICKNESS_MODES:
-        print(f"\n💾 キャッシュ機能:")
-        print(f"  continuousモードで生成された厚みマップは以下に保存されています:")
-        print(f"  → timeseries_density_output_*/thickness_cache/")
-        print(f"  discreteモードはこれを再利用して高速化されました")
+        print(f"\nCache functionality:")
+        print(f"  Thickness maps generated in continuous mode are saved at:")
+        print(f"  -> timeseries_density_output_*/thickness_cache/")
+        print(f"  Discrete mode reused these for speedup")
     
-    # CSVファイルごとにグループ化して表示
+    # Display grouped by CSV file
     for results_csv in RESULTS_CSVS:
         csv_name = os.path.basename(results_csv)
         csv_short = csv_name.replace('Results_', '').replace('.csv', '')
@@ -442,7 +442,7 @@ if __name__ == "__main__":
         
         for result in results:
             if result['csv_file'] == csv_name:
-                # CSVファイル名から自動抽出されるサフィックスを推定
+                # Estimate the auto-extracted suffix from CSV filename
                 csv_name_without_ext = os.path.splitext(csv_name)[0]
                 if '_' in csv_name_without_ext:
                     parts = csv_name_without_ext.split('_', 1)

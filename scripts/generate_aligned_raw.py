@@ -1,13 +1,13 @@
 """
 generate_aligned_raw.py
 -----------------------
-grid_subtract.py の内部中間産物である「warp済み・grid未引き算」の
-aligned_raw スタックを Pos ごとに生成して保存する。
+Generate and save per-Pos aligned_raw stacks, which are the internal
+intermediate products of grid_subtract.py (warped, before grid subtraction).
 
-Pos1: 既存の grid_subtract_log.json を再利用して warp+crop のみ実行。
-Pos0: Pos1 の pos_shifts.json を使い、同じ grid 選択+warp+crop を実行。
+Pos1: Reuse existing grid_subtract_log.json, execute warp+crop only.
+Pos0: Use Pos1's pos_shifts.json, run same grid selection+warp+crop.
 
-出力: {pos}/output_phase/channels/grid_subtracted/channel_{ch:02d}_aligned_raw.tif
+Output: {pos}/output_phase/channels/grid_subtracted/channel_{ch:02d}_aligned_raw.tif
 """
 import json
 import sys
@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import grid_subtract as gs
 
 # ============================================================
-# 設定
+# Settings
 # ============================================================
 BASE_DIR   = Path(r"E:\Acuisition\kitagishi\260301\movetest_9")
 POS1_LABEL = "Pos1"
@@ -30,8 +30,8 @@ POS1_LABEL = "Pos1"
 GRID_DIR   = r"E:\Acuisition\kitagishi\260301\multipos_test_1"
 BASE_LABEL = "Pos4"
 
-X_STEP = 0.1   # μm
-Y_STEP = 0.1   # μm
+X_STEP = 0.1   # um
+Y_STEP = 0.1   # um
 
 SENSOR_PIXEL_SIZE = 3.45e-6
 MAGNIFICATION     = 40
@@ -41,20 +41,20 @@ SHIFT_SIGN_X      = 1
 SHIFT_SIGN_Y      = 1
 TL_Z_INDEX        = 0
 
-# 対象チャネル (None で全チャネル)
+# Target channel (None for all channels)
 CHANNEL_INDEX = 1
 
-MAX_FRAMES = None  # テスト用: None で全フレーム
+MAX_FRAMES = None  # For testing: None for all frames
 
 TARGET_POS = [
-    {"pos": "Pos1", "use_log": True},   # grid_subtract_log.json から復元
-    {"pos": "Pos0", "use_log": False},  # Pos1 のシフトを使って再計算
+    {"pos": "Pos1", "use_log": True},   # Restore from grid_subtract_log.json
+    {"pos": "Pos0", "use_log": False},  # Recalculate using Pos1 shifts
 ]
 # ============================================================
 
 
 def apply_warp(img: np.ndarray, rx: float, ry: float) -> np.ndarray:
-    """(-rx, -ry) の affine warp を適用 (grid_subtract と同じ)。"""
+    """Apply (-rx, -ry) affine warp (same as grid_subtract)."""
     h, w = img.shape
     M = np.array([[1.0, 0.0, -rx], [0.0, 1.0, -ry]], dtype=np.float32)
     return cv2.warpAffine(
@@ -75,7 +75,7 @@ def process_pos(
     tl_phase_dir  = pos_dir / "output_phase"
     own_channels  = pos_dir / "output_phase" / "channels"
 
-    # ROI は Pos 固有のものを使う（Pos0 も channel_rois.json が存在する）
+    # Use Pos-specific ROI (Pos0 also has channel_rois.json)
     rois_json = own_channels / "channel_rois.json"
     if not rois_json.exists():
         print(f"SKIP {pos_label}: channel_rois.json not found")
@@ -87,7 +87,7 @@ def process_pos(
         [channel_index] if channel_index is not None else list(range(len(rois)))
     )
 
-    # タイムラプスフレーム一覧
+    # List of timelapse frames
     pattern   = f"img_*_ph_{TL_Z_INDEX:03d}_phase.tif"
     tl_frames = sorted(tl_phase_dir.glob(pattern))
     if not tl_frames:
@@ -98,14 +98,14 @@ def process_pos(
     if max_frames:
         n_total = min(max_frames, n_total)
 
-    # 出力先
+    # Output destination
     out_dir = own_channels / "grid_subtracted"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     out_stacks = {ch: [] for ch in ch_indices}
 
     if use_log:
-        # ── Pos1: grid_subtract_log.json から residual と crop 位置を復元 ──
+        # -- Pos1: Restore residual and crop position from grid_subtract_log.json --
         log_path = pos1_channels / "grid_subtract_log.json"
         with open(log_path, encoding="utf-8") as f:
             log_data = json.load(f)
@@ -148,7 +148,7 @@ def process_pos(
                 out_stacks[ch].append(crop.astype(np.float32))
 
     else:
-        # ── Pos0: Pos1 の pos_shifts.json を使って grid 選択+warp+crop ──
+        # -- Pos0: Use Pos1's pos_shifts.json for grid selection+warp+crop --
         shifts_json = pos1_channels / "pos_shifts.json"
         if not shifts_json.exists():
             print(f"SKIP {pos_label}: pos_shifts.json not found at {shifts_json}")
@@ -200,19 +200,19 @@ def process_pos(
                 )
                 out_stacks[ch].append(crop.astype(np.float32))
 
-    # 保存
+    # Save
     for ch in ch_indices:
         arr = np.array(out_stacks[ch], dtype=np.float32)
         out_path = out_dir / f"channel_{ch:02d}_aligned_raw.tif"
         tifffile.imwrite(str(out_path), arr, imagej=True)
-        print(f"保存: {out_path}  shape={arr.shape}")
+        print(f"Saved: {out_path}  shape={arr.shape}")
 
 
 def main():
     pixel_scale_um = (
         SENSOR_PIXEL_SIZE / MAGNIFICATION * ORIGINAL_DIM / RECONSTRUCTED_DIM * 1e6
     )
-    print(f"Pixel scale: {pixel_scale_um:.4f} μm/px")
+    print(f"Pixel scale: {pixel_scale_um:.4f} um/px")
 
     pos1_channels = BASE_DIR / POS1_LABEL / "output_phase" / "channels"
 

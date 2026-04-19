@@ -4,16 +4,16 @@ from cellpose_omni import io
 
 def convert_seg_to_masks(root_dir: str, savedir: str | None = None, verbose: bool = True):
     """
-    Omnipose/Cellpose GUIで保存された *_seg.npy から *_masks.tif を生成する。
+    Generate *_masks.tif from *_seg.npy files saved by the Omnipose/Cellpose GUI.
 
     Parameters
     ----------
     root_dir : str
-        *_seg.npy ファイルが存在するディレクトリ（サブフォルダは探索しません）
+        Directory containing *_seg.npy files (sub-folders are not searched)
     savedir : str or None, default=None
-        出力先ディレクトリ。Noneの場合は元ファイルと同じ場所に保存。
+        Output directory. If None, saves in the same location as the source file.
     verbose : bool, default=True
-        True の場合は進行ログを表示。
+        If True, print progress logs.
     """
 
     seg_files = sorted(glob.glob(os.path.join(root_dir, "*_seg.npy")))
@@ -34,19 +34,19 @@ def convert_seg_to_masks(root_dir: str, savedir: str | None = None, verbose: boo
                     print(f"[SKIP] {os.path.basename(seg_path)} → 'masks' or 'flows' missing")
                 continue
 
-            # 出力ベース名を決定
+            # Determine output base name
             if base_name:
                 base_noext = os.path.splitext(base_name)[0]
             else:
                 base_noext = os.path.splitext(seg_path)[0].replace("_seg", "")
 
-            # API仕様に合わせてリスト形式で渡す
+            # Pass as lists to match the API specification
             images     = [img if img is not None else np.zeros_like(masks, dtype=np.uint8)]
             masks_list = [masks.astype(np.int32, copy=False)]
             flows_list = [flows]
             file_names = [base_noext]
 
-            # 公式API：tif=True で _cp_masks.tif を生成
+            # Official API: tif=True generates _cp_masks.tif
             io.save_masks(
                 images, masks_list, flows_list, file_names,
                 png=False, tif=True,
@@ -54,7 +54,7 @@ def convert_seg_to_masks(root_dir: str, savedir: str | None = None, verbose: boo
                 savedir=savedir, omni=True
             )
 
-            # 出力後に "_cp_masks.tif" → "_masks.tif" にリネーム
+            # Rename "_cp_masks.tif" to "_masks.tif" after output
             out_dir = savedir or os.path.dirname(seg_path)
             cp_mask_path = os.path.join(out_dir, os.path.basename(base_noext) + "_cp_masks.tif")
             mask_path = os.path.join(out_dir, os.path.basename(base_noext) + "_masks.tif")
@@ -71,7 +71,7 @@ def convert_seg_to_masks(root_dir: str, savedir: str | None = None, verbose: boo
 
     print("Done.")
 
-# 指定フォルダ直下の *_seg.npy から *_mask.tif を生成
+# Generate *_mask.tif from *_seg.npy files in the specified folder
 convert_seg_to_masks(r"C:\Users\QPI\Desktop\train")
 
 # %%

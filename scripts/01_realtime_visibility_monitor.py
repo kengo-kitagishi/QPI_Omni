@@ -13,7 +13,7 @@ from threading import Lock
 from optical_config import OFFAXIS_CENTER, WAVELENGTH as WAVELENGHTH, NA, PIXELSIZE
 
 WATCH_FOLDER = r"D:\AquisitionData\Kitagishi\basler_image_seq\vis_2\Pos0"
-# Basler aca2440は最大2048行のためMicroManager用CROP_REGIONは使わない
+# Basler aca2440 has max 2048 rows, so MicroManager CROP_REGION is not used
 CROP_REGION = (0, 2048, 208, 2256)
 
 VMIN= .75
@@ -60,11 +60,11 @@ class ImageHandlar(FileSystemEventHandler):
                     offaxis_center = OFFAXIS_CENTER,
                 )
             
-            # dc, acを計算
+            # Compute dc, ac
             dc, ac = _get_dc_ac(img, params)
             vis = _get_visibility(dc, ac)
             
-            # 絶対値を取得
+            # Get absolute values
             dc_abs = np.abs(dc)
             ac_abs = np.abs(ac)
 
@@ -85,7 +85,7 @@ def update_plot(frame):
 
     with data_lock:
         if latest_visibility is not None:
-            # 全てのaxesをクリア
+            # Clear all axes
             ax_vis.clear()
             ax_ac.clear()
             ax_dc.clear()
@@ -101,7 +101,7 @@ def update_plot(frame):
                        verticalalignment="top",
                        bbox=dict(boxstyle="round", facecolor="white", alpha=0.8))
             
-            # 干渉光 |ac| (右上)
+            # Interference light |ac| (upper right)
             ax_ac.imshow(latest_ac, cmap="hot")
             ax_ac.set_title("Interference light |ac|", fontsize=10)
             ax_ac.axis("off")
@@ -111,7 +111,7 @@ def update_plot(frame):
                       verticalalignment="top",
                       bbox=dict(boxstyle="round", facecolor="white", alpha=0.8))
             
-            # 非干渉光 |dc| (左下)
+            # Non-interference light |dc| (lower left)
             ax_dc.imshow(latest_dc, cmap="hot")
             ax_dc.set_title("Non-interference light |dc|", fontsize=10)
             ax_dc.axis("off")
@@ -121,7 +121,7 @@ def update_plot(frame):
                       verticalalignment="top",
                       bbox=dict(boxstyle="round", facecolor="white", alpha=0.8))
             
-            # Visibilityヒストグラム (右下)
+            # Visibility histogram (lower right)
             vis_float = latest_visibility.flatten()
             ax_hist.hist(vis_float, bins=HIST_BINS, range=HIST_RANGE,
                         color="steelblue", edgecolor="black", alpha=0.7)
@@ -141,7 +141,7 @@ def main():
     print("="*70)
 
     if not os.path.exists(WATCH_FOLDER):
-        print(f"\n フォルダが見つかりません")
+        print(f"\n Folder not found")
         print(f"{WATCH_FOLDER}")
         return
 
@@ -151,7 +151,7 @@ def main():
     observer.start()
     print(f"file monitoring start")
 
-    # 2×2グリッドの作成
+    # Create 2x2 grid
     fig, ((ax_vis, ax_ac), (ax_dc, ax_hist)) = plt.subplots(2, 2, figsize=(14, 12))
     plt.tight_layout()
 
@@ -160,11 +160,11 @@ def main():
     try:
         plt.show()
     except KeyboardInterrupt:
-        print("\n\n中断されました")
+        print("\n\nInterrupted")
     finally:
         observer.stop()
         observer.join()
-        print("停止しました")
+        print("Stopped")
 
 if __name__ == "__main__":
     main()

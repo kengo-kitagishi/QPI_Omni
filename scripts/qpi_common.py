@@ -1,7 +1,7 @@
 """
 QPI Analysis - Common Functions and Constants
 
-共通で使用する関数と定数を定義
+Define commonly used functions and constants
 """
 
 import numpy as np
@@ -12,49 +12,49 @@ from qpi import QPIParameters, make_disk
 
 # ==================== Default Parameters ====================
 
-# 光学系の定数
+# Optical system constants
 WAVELENGTH = 663e-9  # 663 nm
 NA = 0.95
 PIXELSIZE = 3.45e-6 / 40  # 8.625e-8 m
 
-# よく使うオフ軸中心の座標
+# Commonly used off-axis center coordinates
 OFFAXIS_CENTER_DEFAULT = (1623, 1621)
 
 # ==================== Visibility Function ====================
 
 def visibility(array: np.ndarray, params: QPIParameters) -> np.ndarray:
     """
-    干渉縞の可視性（visibility）を計算
-    
+    Compute interference fringe visibility
+
     Parameters
     ----------
     array : np.ndarray
-        入力画像
+        Input image
     params : QPIParameters
-        QPI パラメータ
-    
+        QPI parameters
+
     Returns
     -------
     np.ndarray
-        可視性マップ
+        Visibility map
     """
     img = np.array(array)
     radius = params.aperturesize // 2
     
-    # 0次光の画像を取得
+    # Get 0th order (DC) image
     img_freq = np.fft.fftshift(np.fft.fft2(img))
     disk_0th = make_disk(params.img_center, radius, img.shape)
     img_freq_0th = img_freq * disk_0th
     img_0th = np.fft.ifft2(np.fft.ifftshift(img_freq_0th))
     img_0th_abs = np.abs(img_0th)
     
-    # 1次光の画像を取得
+    # Get 1st order (interferometric) image
     disk_1th = make_disk(params.offaxis_center, radius, img.shape)
     img_freq_interfere = img_freq * disk_1th
     img_interfere = np.fft.ifft2(np.fft.ifftshift(img_freq_interfere))
     img_interfere_abs = np.abs(img_interfere)
     
-    # 可視性を計算
+    # Compute visibility
     img_interfere_vis = img_interfere_abs / img_0th_abs * 2
     
     return img_interfere_vis
@@ -63,7 +63,7 @@ def visibility(array: np.ndarray, params: QPIParameters) -> np.ndarray:
 # ==================== Gaussian Background Subtraction ====================
 
 def gaussian(x, amp, mean, std):
-    """ガウス関数"""
+    """Gaussian function"""
     return amp * np.exp(-((x - mean)**2) / (2 * std**2))
 
 
@@ -72,42 +72,42 @@ def gaussian_background_subtraction(phase_image,
                                    n_bins=512, smooth_window=20,
                                    min_phase=-1.1):
     """
-    位相画像のGaussian背景引き
-    
-    ヒストグラムのピークを検出し、Gaussianフィットして0にシフトする
-    
+    Gaussian background subtraction for phase images
+
+    Detect the histogram peak, fit a Gaussian, and shift to zero
+
     Parameters
     ----------
     phase_image : np.ndarray
-        位相画像（rad）
+        Phase image (rad)
     hist_min : float
-        ヒストグラムの最小値
+        Histogram minimum value
     hist_max : float
-        ヒストグラムの最大値
+        Histogram maximum value
     n_bins : int
-        ヒストグラムのビン数
+        Number of histogram bins
     smooth_window : int
-        スムージングのウィンドウサイズ
+        Smoothing window size
     min_phase : float
-        ピーク検出の下限
-    
+        Lower bound for peak detection
+
     Returns
     -------
     corrected_image : np.ndarray
-        補正後の位相画像
+        Corrected phase image
     correction_value : float
-        補正値（rad）
+        Correction value (rad)
     """
-    # ヒストグラム作成
+    # Create histogram
     bin_edges = np.linspace(hist_min, hist_max, n_bins + 1)
     hist_counts, _ = np.histogram(phase_image.flatten(), bins=bin_edges)
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
     
-    # スムージング
+    # Smoothing
     smoothed_histo = uniform_filter1d(hist_counts, size=smooth_window, mode='nearest')
     smoothed_histo = uniform_filter1d(smoothed_histo, size=smooth_window, mode='nearest')
     
-    # ピーク検出
+    # Peak detection
     valid_indices = np.where(bin_centers >= min_phase)[0]
     max_search_idx = int(len(bin_centers) * 0.95)
     search_indices = valid_indices[valid_indices < max_search_idx]
@@ -117,7 +117,7 @@ def gaussian_background_subtraction(phase_image,
     peak_idx = search_indices[peak_idx_relative]
     peak_value = bin_centers[peak_idx]
     
-    # Gaussianフィット
+    # Gaussian fit
     fit_width = 300
     start_idx = max(0, peak_idx - fit_width)
     end_idx = min(len(bin_centers), peak_idx + fit_width)
@@ -125,13 +125,13 @@ def gaussian_background_subtraction(phase_image,
     x_data = bin_centers[start_idx:end_idx]
     y_data = smoothed_histo[start_idx:end_idx]
     
-    # 初期推定値
+    # Initial estimates
     p0 = [np.max(y_data), peak_value, (bin_centers[1] - bin_centers[0]) * 20]
     
     popt, _ = curve_fit(gaussian, x_data, y_data, p0=p0, maxfev=5000)
     amp, mean, std = popt
     
-    # 背景補正（ピークを0にシフト）
+    # Background correction (shift peak to 0)
     correction_value = 0.0 - mean
     corrected_image = phase_image + correction_value
     
@@ -142,34 +142,34 @@ def gaussian_background_subtraction(phase_image,
 
 def visualize_crop_region(image, crop_coords, title="Crop Region Visualization"):
     """
-    Crop領域を元画像上に可視化
-    
+    Visualize the crop region on the original image
+
     Parameters
     ----------
     image : np.ndarray
-        元画像
+        Original image
     crop_coords : tuple
         (y_start, y_end, x_start, x_end)
     title : str
-        タイトル
+        Title
     """
     y_s, y_e, x_s, x_e = crop_coords
     
     fig, ax = plt.subplots(figsize=(12, 10))
     ax.imshow(image, cmap='gray')
     
-    # Crop領域を矩形で描画
+    # Draw crop region as rectangle
     from matplotlib.patches import Rectangle
     rect = Rectangle((x_s, y_s), x_e - x_s, y_e - y_s, 
                      linewidth=3, edgecolor='red', facecolor='none',
                      label=f'Crop Region\n({y_s}:{y_e}, {x_s}:{x_e})')
     ax.add_patch(rect)
     
-    # 角に点を追加
+    # Add corner points
     ax.plot([x_s, x_e, x_e, x_s], [y_s, y_s, y_e, y_e], 
            'ro', markersize=8)
     
-    # 領域サイズを表示
+    # Display region size
     width = x_e - x_s
     height = y_e - y_s
     ax.text(x_s + width/2, y_s - 20, f'Width: {width}px', 
@@ -189,29 +189,29 @@ def visualize_crop_region(image, crop_coords, title="Crop Region Visualization")
     return fig
 
 
-def save_with_colormap(data, save_path, cmap="viridis", vmin=None, vmax=None, 
+def save_with_colormap(data, save_path, cmap="viridis", vmin=None, vmax=None,
                        colorbar_label="", title="", dpi=300):
     """
-    カラーマップ付きPNG画像として保存
-    
+    Save as PNG image with colormap
+
     Parameters
     ----------
     data : np.ndarray
-        保存するデータ
+        Data to save
     save_path : str
-        保存先パス
+        Output path
     cmap : str, optional
-        カラーマップ名, by default "viridis"
+        Colormap name, by default "viridis"
     vmin : float, optional
-        最小値, by default None
+        Minimum value, by default None
     vmax : float, optional
-        最大値, by default None
+        Maximum value, by default None
     colorbar_label : str, optional
-        カラーバーのラベル, by default ""
+        Colorbar label, by default ""
     title : str, optional
-        タイトル, by default ""
+        Title, by default ""
     dpi : int, optional
-        解像度, by default 300
+        Resolution, by default 300
     """
     plt.figure(figsize=(6, 6))
     im = plt.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax)
@@ -226,17 +226,17 @@ def save_with_colormap(data, save_path, cmap="viridis", vmin=None, vmax=None,
 
 def to_uint8(img):
     """
-    float画像をuint8に変換（OpenCV用）
-    
+    Convert float image to uint8 (for OpenCV)
+
     Parameters
     ----------
     img : np.ndarray
-        入力画像（float）
-    
+        Input image (float)
+
     Returns
     -------
     np.ndarray
-        uint8画像
+        uint8 image
     """
     img_min = np.min(img)
     img_max = np.max(img)
@@ -250,25 +250,25 @@ def to_uint8(img):
 def create_qpi_params(img_shape, offaxis_center=OFFAXIS_CENTER_DEFAULT,
                       wavelength=WAVELENGTH, NA=NA, pixelsize=PIXELSIZE):
     """
-    QPIParametersオブジェクトを作成するヘルパー関数
-    
+    Helper function to create a QPIParameters object
+
     Parameters
     ----------
     img_shape : tuple
-        画像のshape
+        Image shape
     offaxis_center : tuple, optional
-        オフ軸中心座標, by default OFFAXIS_CENTER_DEFAULT
+        Off-axis center coordinates, by default OFFAXIS_CENTER_DEFAULT
     wavelength : float, optional
-        波長, by default WAVELENGTH
+        Wavelength, by default WAVELENGTH
     NA : float, optional
-        開口数, by default NA
+        Numerical aperture, by default NA
     pixelsize : float, optional
-        ピクセルサイズ, by default PIXELSIZE
-    
+        Pixel size, by default PIXELSIZE
+
     Returns
     -------
     QPIParameters
-        QPIパラメータオブジェクト
+        QPI parameters object
     """
     return QPIParameters(
         wavelength=wavelength,

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-時系列画像対応の密度マップワークフロー
+Density map workflow for time-series images.
 
-画像枚数とResults.csvの行数が異なる場合でも、
-各ROIを対応する画像に自動マッチングして処理。
+Automatically matches each ROI to its corresponding image,
+even when the number of images differs from the number of rows in Results.csv.
 """
 # %% 
 import numpy as np
@@ -18,9 +18,9 @@ import tifffile
 from scipy import ndimage
 
 class TimeSeriesDensityMapper:
-    """時系列画像とResults.csvから屈折率（RI）マップを生成"""
-    
-    def __init__(self, results_csv, image_directory, 
+    """Generate refractive index (RI) maps from time-series images and Results.csv"""
+
+    def __init__(self, results_csv, image_directory,
                  wavelength_nm=663, n_medium=1.333, pixel_size_um=0.348,
                  alpha_ri=0.0018, shape_type='ellipse', subpixel_sampling=5,
                  thickness_mode='continuous', voxel_z_um=0.3, discretize_method='round',
@@ -29,62 +29,62 @@ class TimeSeriesDensityMapper:
         Parameters:
         -----------
         results_csv : str
-            ImageJ Results.csvのパス
+            Path to ImageJ Results.csv
         image_directory : str
-            時系列画像が入ったディレクトリ
+            Directory containing time-series images
         wavelength_nm : float
-            波長（ナノメートル）。デフォルト: 663nm
+            Wavelength (nanometers). Default: 663nm
         n_medium : float
-            培地の屈折率。デフォルト: 1.333
+            Refractive index of the medium. Default: 1.333
         pixel_size_um : float
-            ピクセルサイズ（マイクロメートル）。デフォルト: 0.348 µm
-            507×507の再構成画像用: 0.08625 × (2048/507) ≈ 0.348 µm/pixel
+            Pixel size (micrometers). Default: 0.348 um
+            For 507x507 reconstructed images: 0.08625 x (2048/507) = 0.348 um/pixel
         alpha_ri : float
-            比屈折率増分（specific refractive index increment）[ml/mg]
-            デフォルト: 0.0018 ml/mg（タンパク質の一般的な値）
+            Specific refractive index increment [ml/mg]
+            Default: 0.0018 ml/mg (typical value for proteins)
         shape_type : str
-            ROI形状の近似方法。デフォルト: 'ellipse'
-            'ellipse': Major/Minor/Angleを使用（楕円近似）
-            'feret': Feret/MinFeret/FeretAngleを使用（Feret径近似）
+            ROI shape approximation method. Default: 'ellipse'
+            'ellipse': Use Major/Minor/Angle (ellipse approximation)
+            'feret': Use Feret/MinFeret/FeretAngle (Feret diameter approximation)
         subpixel_sampling : int
-            ピクセル内サブサンプリング数（N×N）。デフォルト: 5
-            1: ピクセル中心のみ（高速だが端で精度低）
-            5: 5×5サブピクセル（推奨、バランス良い）
-            10: 10×10サブピクセル（高精度だが遅い）
+            Number of subpixel samples per pixel (NxN). Default: 5
+            1: Pixel center only (fast but low accuracy at edges)
+            5: 5x5 subpixels (recommended, good balance)
+            10: 10x10 subpixels (high accuracy but slow)
         thickness_mode : str
-            厚みマップのモード。デフォルト: 'continuous'
-            'continuous': 連続的な厚み値（ピクセル単位）
-            'discrete': 離散的なZ-stackスライス数
+            Thickness map mode. Default: 'continuous'
+            'continuous': Continuous thickness values (in pixel units)
+            'discrete': Discrete Z-stack slice counts
         voxel_z_um : float
-            Z方向のボクセルサイズ（マイクロメートル）。デフォルト: 0.3 µm
-            discrete modeで厚みをスライス数に変換する際に使用
+            Voxel size in Z direction (micrometers). Default: 0.3 um
+            Used to convert thickness to slice counts in discrete mode
         discretize_method : str
-            離散化の方法（discrete modeのみ有効）。デフォルト: 'round'
-            'round': 四捨五入
-            'ceil': 切り上げ
-            'floor': 切り捨て
-            'pomegranate': Pomegranate互換の閾値ベース判定
+            Discretization method (only for discrete mode). Default: 'round'
+            'round': Round to nearest integer
+            'ceil': Round up
+            'floor': Round down
+            'pomegranate': Pomegranate-compatible threshold-based decision
         min_thickness_px : float
-            最小厚み閾値（ピクセル単位）。デフォルト: 0.0
-            この値未満の厚みを持つピクセルは無視される（0にセット）
-            例: 1.0 → 1ピクセル未満の厚みを無視
+            Minimum thickness threshold (in pixel units). Default: 0.0
+            Pixels with thickness below this value are ignored (set to 0)
+            e.g.: 1.0 -> ignore thickness below 1 pixel
         csv_suffix : str, optional
-            出力フォルダ名に追加するサフィックス。デフォルト: None
-            Noneの場合、CSVファイル名から自動抽出（例: Results_enlarge.csv → enlarge）
-            手動で指定する場合: 'enlarge', 'interpolate', 'custom_name'など
-        
+            Suffix appended to the output folder name. Default: None
+            If None, automatically extracted from CSV filename (e.g.: Results_enlarge.csv -> enlarge)
+            For manual specification: 'enlarge', 'interpolate', 'custom_name', etc.
+
         Note:
         -----
-        位相差から屈折率への変換:
-        φ = (2π/λ) × (n_sample - n_medium) × thickness
-        n_sample = n_medium + (φ × λ) / (2π × thickness)
-        
-        屈折率から質量濃度への変換:
-        C [mg/ml] = (RI - RI_medium) / α
-        
-        サブピクセルサンプリング:
-        マスク端の精度を向上させるため、各ピクセルをN×Nに分割し、
-        サブピクセル中心での厚みを平均します。
+        Phase-to-refractive-index conversion:
+        phi = (2*pi/lambda) x (n_sample - n_medium) x thickness
+        n_sample = n_medium + (phi x lambda) / (2*pi x thickness)
+
+        Refractive-index-to-mass-concentration conversion:
+        C [mg/ml] = (RI - RI_medium) / alpha
+
+        Subpixel sampling:
+        To improve accuracy at mask edges, each pixel is divided into NxN
+        subpixels and thickness is averaged at subpixel centers.
         """
         self.results_csv = results_csv
         self.image_directory = image_directory
@@ -99,14 +99,14 @@ class TimeSeriesDensityMapper:
         self.discretize_method = discretize_method
         self.min_thickness_px = min_thickness_px
         
-        # CSVサフィックスを決定（手動指定 or 自動抽出）
+        # Determine CSV suffix (manual specification or auto-extraction)
         if csv_suffix is not None:
             self.csv_suffix = csv_suffix
         else:
-            # CSVファイル名から自動抽出 (例: Results_enlarge.csv → enlarge)
+            # Auto-extract from CSV filename (e.g.: Results_enlarge.csv -> enlarge)
             csv_filename = os.path.basename(results_csv)
             csv_name_without_ext = os.path.splitext(csv_filename)[0]  # Results_enlarge
-            # "Results_"の後の部分を取得（あれば）
+            # Get the part after "Results_" (if any)
             if '_' in csv_name_without_ext:
                 parts = csv_name_without_ext.split('_', 1)  # ['Results', 'enlarge']
                 if len(parts) > 1 and parts[1]:
@@ -116,27 +116,27 @@ class TimeSeriesDensityMapper:
             else:
                 self.csv_suffix = None
         
-        # 単位変換
-        self.wavelength_um = wavelength_nm / 1000.0  # nm → µm
+        # Unit conversion
+        self.wavelength_um = wavelength_nm / 1000.0  # nm -> um
         
-        # Results.csvを読み込み
+        # Load Results.csv
         print(f"Loading Results.csv: {results_csv}")
         self.df = pd.read_csv(results_csv)
         print(f"  Found {len(self.df)} ROIs")
         
-        # フレーム番号を抽出
+        # Extract frame numbers
         self._extract_frame_numbers()
-        
-        # 画像ファイルを検索
+
+        # Scan image files
         self._scan_image_files()
-        
-        # 出力ディレクトリ（パラメータに応じた名前）
+
+        # Output directory (named according to parameters)
         if self.csv_suffix:
             base_dir_suffix = f"{self.shape_type}_subpixel{self.subpixel_sampling}_{self.csv_suffix}"
         else:
             base_dir_suffix = f"{self.shape_type}_subpixel{self.subpixel_sampling}"
         
-        # thickness_modeがdiscreteの場合は追加情報を含める
+        # Include additional info when thickness_mode is discrete
         if self.thickness_mode == 'discrete':
             self.dir_suffix = f"{base_dir_suffix}_discrete_{self.discretize_method}"
         else:
@@ -151,15 +151,15 @@ class TimeSeriesDensityMapper:
         print(f"Output directory: {self.output_dir}")
         
     def _extract_frame_numbers(self):
-        """Results.csvからフレーム番号を抽出"""
+        """Extract frame numbers from Results.csv"""
         print("\nExtracting frame numbers from Results.csv...")
         
-        # Sliceカラムを使用（最も信頼性が高い）
+        # Use Slice column (most reliable)
         if 'Slice' in self.df.columns:
             self.df['frame_number'] = self.df['Slice']
             print(f"  Using 'Slice' column")
         else:
-            # Labelから抽出
+            # Extract from Label
             print(f"  Extracting from 'Label' column...")
             def extract_frame(label):
                 match = re.search(r'output_phase(\d+)', label)
@@ -169,16 +169,16 @@ class TimeSeriesDensityMapper:
             
             self.df['frame_number'] = self.df['Label'].apply(extract_frame)
         
-        # フレーム番号の統計
+        # Frame number statistics
         unique_frames = self.df['frame_number'].dropna().unique()
         print(f"  Frame range: {unique_frames.min():.0f} to {unique_frames.max():.0f}")
         print(f"  Number of unique frames: {len(unique_frames)}")
         
     def _scan_image_files(self):
-        """画像ファイルをスキャンしてフレーム番号とパスをマッピング"""
+        """Scan image files and create frame number to path mapping"""
         print(f"\nScanning image files in: {self.image_directory}")
         
-        # 画像ファイルを検索
+        # Search for image files
         patterns = [
             os.path.join(self.image_directory, "*.tif"),
             os.path.join(self.image_directory, "*.tiff"),
@@ -194,13 +194,13 @@ class TimeSeriesDensityMapper:
         
         print(f"  Found {len(image_files)} image files")
         
-        # フレーム番号を抽出してマッピング
+        # Extract frame numbers and create mapping
         self.frame_to_path = {}
         
         for img_path in image_files:
             filename = os.path.basename(img_path)
             
-            # "output_phase0001" のような部分を抽出
+            # Extract part like "output_phase0001"
             match = re.search(r'output_phase(\d+)', filename)
             if match:
                 frame_num = int(match.group(1))
@@ -209,19 +209,19 @@ class TimeSeriesDensityMapper:
         print(f"  Mapped {len(self.frame_to_path)} frames to image files")
         
         if len(self.frame_to_path) == 0:
-            # フレーム番号が見つからない場合、連番として扱う
+            # If frame numbers not found, treat as sequential numbering
             print("  WARNING: Could not extract frame numbers from filenames")
             print("  Using sequential numbering instead...")
             sorted_files = sorted(image_files)
             for i, img_path in enumerate(sorted_files, start=1):
                 self.frame_to_path[i] = img_path
         
-        # フレーム番号の範囲を表示
+        # Display frame number range
         frame_numbers = sorted(self.frame_to_path.keys())
         print(f"  Image frame range: {frame_numbers[0]} to {frame_numbers[-1]}")
         
     def load_image(self, frame_number):
-        """指定されたフレーム番号の画像を読み込み"""
+        """Load the image for the specified frame number"""
         if frame_number not in self.frame_to_path:
             raise ValueError(f"Frame {frame_number} not found in image files")
         
@@ -232,91 +232,91 @@ class TimeSeriesDensityMapper:
     
     def create_rod_zstack_map(self, roi_params, image_shape, shape_type='ellipse', subpixel_sampling=5):
         """
-        ROI用のz-stackカウントマップを生成（サブピクセルサンプリング対応）
-        
+        Generate z-stack count map for ROI (with subpixel sampling support).
+
         Parameters:
         -----------
         roi_params : dict
-            ROIのパラメータ
+            ROI parameters
         image_shape : tuple
-            画像のサイズ (height, width)
+            Image size (height, width)
         shape_type : str
-            'ellipse': Major/Minor/Angleを使用（楕円近似）
-            'feret': Feret/MinFeret/FeretAngleを使用（Feret径近似）
+            'ellipse': Use Major/Minor/Angle (ellipse approximation)
+            'feret': Use Feret/MinFeret/FeretAngle (Feret diameter approximation)
         subpixel_sampling : int
-            ピクセル内のサブサンプリング数（N×Nグリッド）
-            1: ピクセル中心のみ（高速だが精度低）
-            5: 5×5サブピクセル（推奨、バランス良い）
-            10: 10×10サブピクセル（高精度だが遅い）
-        
+            Number of subpixel samples per pixel (NxN grid)
+            1: Pixel center only (fast but low accuracy)
+            5: 5x5 subpixels (recommended, good balance)
+            10: 10x10 subpixels (high accuracy but slow)
+
         Returns:
         --------
         zstack_map : 2D numpy array
-            z-stackカウントマップ（ピクセル内平均厚み）
-        
+            Z-stack count map (average thickness within each pixel)
+
         Note:
         -----
-        サブピクセルサンプリングにより、マスク端での精度が向上します。
-        各ピクセルを N×N のサブピクセルに分割し、各サブピクセル中心で
-        厚みを計算して平均を取ります。これにより、部分的にマスク領域に
-        かかるピクセルでも正確な平均厚みが得られます。
+        Subpixel sampling improves accuracy at mask edges.
+        Each pixel is divided into NxN subpixels, thickness is calculated
+        at each subpixel center, and the average is taken. This provides
+        accurate mean thickness even for pixels partially overlapping the mask.
         """
-        # パラメータ取得（shape_typeに応じて切り替え）
+        # Get parameters (switch according to shape_type)
         center_x = roi_params['X']
         center_y = roi_params['Y']
         
         if shape_type == 'feret':
-            # Feret径を使用
+            # Use Feret diameter
             length = roi_params.get('Feret', roi_params.get('Major'))
             width = roi_params.get('MinFeret', roi_params.get('Minor'))
             angle = roi_params.get('FeretAngle', roi_params.get('Angle'))
-        else:  # 'ellipse' (デフォルト)
-            # 楕円パラメータを使用
+        else:  # 'ellipse' (default)
+            # Use ellipse parameters
             length = roi_params['Major']
             width = roi_params['Minor']
             angle = roi_params['Angle']
         
-        # ロッド形状パラメータ
+        # Rod shape parameters
         r = width / 2.0
         h = length - 2 * r
         
         if h < 0:
             h = 0
         
-        # ImageJ座標系対応
+        # ImageJ coordinate system compatibility
         angle_rad = np.deg2rad(-angle)
         cos_a = np.cos(angle_rad)
         sin_a = np.sin(angle_rad)
         
-        # z-stackカウントマップ
+        # Z-stack count map
         img_height, img_width = image_shape
         zstack_map = np.zeros((img_height, img_width), dtype=np.float64)
         
-        # サブピクセルオフセットを計算
+        # Calculate subpixel offsets
         if subpixel_sampling > 1:
-            # N×Nサブピクセルの中心座標オフセット
+            # Center coordinate offsets for NxN subpixels
             offsets = np.linspace(0.5/subpixel_sampling, 1 - 0.5/subpixel_sampling, subpixel_sampling) - 0.5
         else:
-            # サブピクセルなし（ピクセル中心のみ）
+            # No subpixel (pixel center only)
             offsets = np.array([0.0])
         
-        # 各ピクセルについてz-stack数を計算（サブピクセルサンプリング）
+        # Calculate z-stack count for each pixel (subpixel sampling)
         for py in range(img_height):
             for px in range(img_width):
                 thickness_sum = 0.0
                 valid_subpixels = 0
                 
-                # サブピクセルごとに厚みを計算
+                # Calculate thickness for each subpixel
                 for dy_offset in offsets:
                     for dx_offset in offsets:
-                        # サブピクセル中心座標
+                        # Subpixel center coordinates
                         px_sub = px + 0.5 + dx_offset
                         py_sub = py + 0.5 + dy_offset
                         
                         dx = px_sub - center_x
                         dy = py_sub - center_y
                         
-                        # ローカル座標系に変換
+                        # Transform to local coordinate system
                         x_local = dx * cos_a + dy * sin_a
                         y_local = -dx * sin_a + dy * cos_a
                         
@@ -325,17 +325,17 @@ class TimeSeriesDensityMapper:
                         if dist_from_axis > r:
                             continue
                         
-                        # z方向の厚み
+                        # Thickness in z direction
                         z_half = np.sqrt(r**2 - y_local**2)
                         thickness = 2 * z_half
                         
-                        # 長軸方向の位置
+                        # Position along major axis
                         if abs(x_local) <= h / 2.0:
-                            # 円柱部分
+                            # Cylinder section
                             thickness_sum += thickness
                             valid_subpixels += 1
                         else:
-                            # 半球部分
+                            # Hemisphere section
                             if x_local > 0:
                                 x_from_sphere_center = x_local - h / 2.0
                             else:
@@ -349,7 +349,7 @@ class TimeSeriesDensityMapper:
                                 thickness_sum += thickness_sphere
                                 valid_subpixels += 1
                 
-                # ピクセル内の平均厚みを計算
+                # Calculate average thickness within pixel
                 if valid_subpixels > 0:
                     zstack_map[py, px] = thickness_sum / valid_subpixels
         
@@ -357,25 +357,25 @@ class TimeSeriesDensityMapper:
     
     def _discretize_thickness(self, z_continuous_px):
         """
-        連続的なZ方向の厚み（ピクセル単位）を離散的なスライス数に変換する。
-        
+        Convert continuous Z-direction thickness (in pixel units) to discrete slice counts.
+
         Parameters
         ----------
         z_continuous_px : float or np.ndarray
-            連続的なZ方向の厚み（ピクセル単位）
-        
+            Continuous Z-direction thickness (in pixel units)
+
         Returns
         -------
         int or np.ndarray
-            離散化されたスライス数
+            Discretized slice count
         """
         if self.voxel_z_um <= 0:
-            # voxel_z_umが無効な場合は、元の値を返す
+            # If voxel_z_um is invalid, return the original value
             if isinstance(z_continuous_px, np.ndarray):
                 return z_continuous_px.astype(int)
             return int(z_continuous_px)
         
-        # ピクセル単位の厚みをµm単位に変換
+        # Convert thickness from pixel units to um units
         z_um = z_continuous_px * self.pixel_size_um
         
         if self.discretize_method == 'round':
@@ -385,20 +385,20 @@ class TimeSeriesDensityMapper:
         elif self.discretize_method == 'floor':
             z_slices = np.floor(z_um / self.voxel_z_um)
         elif self.discretize_method == 'pomegranate':
-            # Pomegranate方式の離散化
-            # 最小半径閾値（ここではピクセルサイズの2倍とする）
+            # Pomegranate-style discretization
+            # Minimum radius threshold (set to 2x pixel size here)
             min_radius_threshold_um = 2.0 * self.pixel_size_um
             
-            # 配列の場合と単一値の場合で処理を分岐
+            # Branch processing for array vs scalar
             if isinstance(z_um, np.ndarray):
                 num_z_voxels_float = z_um / self.voxel_z_um
                 z_slices = np.zeros_like(num_z_voxels_float)
                 
-                # 閾値を超える要素のみ処理
+                # Process only elements exceeding threshold
                 mask = z_um > min_radius_threshold_um
                 z_slices[mask] = np.round(num_z_voxels_float[mask])
                 
-                # 少なくとも1スライスは確保（閾値を超える場合）
+                # Ensure at least 1 slice (when exceeding threshold)
                 small_mask = (num_z_voxels_float > 0) & (z_slices == 0) & mask
                 z_slices[small_mask] = 1
             else:
@@ -410,30 +410,30 @@ class TimeSeriesDensityMapper:
                 else:
                     z_slices = 0
         else:
-            # デフォルトはround
+            # Default is round
             z_slices = np.round(z_um / self.voxel_z_um)
         
-        # 負の値を0にクリップ
+        # Clip negative values to 0
         z_slices = np.maximum(0, z_slices)
         
-        # 整数に変換
+        # Convert to integer
         if isinstance(z_slices, np.ndarray):
             return z_slices.astype(int)
         return int(z_slices)
     
     def process_roi(self, roi_index):
         """
-        特定のROIを処理
-        
+        Process a specific ROI.
+
         Parameters:
         -----------
         roi_index : int
-            Results.csv内のROIインデックス
-        
+            ROI index in Results.csv
+
         Returns:
         --------
         results : dict
-            処理結果
+            Processing results
         """
         row = self.df.iloc[roi_index]
         frame_number = int(row['frame_number'])
@@ -442,7 +442,7 @@ class TimeSeriesDensityMapper:
         print(f"Processing ROI {roi_index} (Frame {frame_number})")
         print(f"{'='*70}")
         
-        # 画像を読み込み
+        # Load image
         try:
             image, img_path = self.load_image(frame_number)
             print(f"Loaded image: {os.path.basename(img_path)}")
@@ -451,7 +451,7 @@ class TimeSeriesDensityMapper:
             print(f"  ERROR: {e}")
             return None
         
-        # ROIパラメータ
+        # ROI parameters
         roi_params = {
             'X': row['X'],
             'Y': row['Y'],
@@ -460,7 +460,7 @@ class TimeSeriesDensityMapper:
             'Angle': row['Angle'],
         }
         
-        # Feret径パラメータを追加（存在する場合）
+        # Add Feret diameter parameters (if available)
         if 'Feret' in row:
             roi_params['Feret'] = row['Feret']
         if 'MinFeret' in row:
@@ -479,22 +479,22 @@ class TimeSeriesDensityMapper:
             print(f"    Minor: {roi_params['Minor']:.2f} pixels")
             print(f"    Angle: {roi_params['Angle']:.2f}°")
         
-        # ROI識別子を生成（キャッシュファイル名用）
+        # Generate ROI identifier (for cache filename)
         roi_id = f"frame{frame_number:04d}"
         
-        # z-stackカウントマップを生成または読み込み
-        # キャッシュファイル名を生成
+        # Generate or load z-stack count map
+        # Generate cache filename
         cache_dir = os.path.join(self.output_dir, 'thickness_cache')
         cache_path = os.path.join(cache_dir, f"roi_{roi_index:04d}_{roi_id}.npz")
         
-        # discreteモードで、キャッシュが存在する場合は読み込む
+        # Load from cache if in discrete mode and cache exists
         if self.thickness_mode == 'discrete' and os.path.exists(cache_path):
             print(f"  Loading cached thickness map from: {os.path.basename(cache_path)}")
             cached_data = np.load(cache_path)
             zstack_map_continuous = cached_data['thickness_map_continuous']
             print(f"    Loaded shape: {zstack_map_continuous.shape}")
         else:
-            # 新規に計算
+            # Calculate from scratch
             print(f"  Generating z-stack map (shape_type: {self.shape_type}, subpixel: {self.subpixel_sampling}×{self.subpixel_sampling})...")
             print(f"    Thickness mode: {self.thickness_mode}")
             if self.thickness_mode == 'discrete':
@@ -505,7 +505,7 @@ class TimeSeriesDensityMapper:
                                                                  shape_type=self.shape_type,
                                                                  subpixel_sampling=self.subpixel_sampling)
             
-            # continuousモードの場合はキャッシュに保存
+            # Save to cache in continuous mode
             if self.thickness_mode == 'continuous':
                 os.makedirs(cache_dir, exist_ok=True)
                 np.savez_compressed(cache_path, 
@@ -514,24 +514,24 @@ class TimeSeriesDensityMapper:
                                     roi_index=roi_index)
                 print(f"    Saved thickness cache: {os.path.basename(cache_path)}")
         
-        # thickness_modeに応じてzstack_mapを決定
+        # Determine zstack_map according to thickness_mode
         if self.thickness_mode == 'discrete':
-            # 離散化されたスライス数
+            # Discretized slice counts
             zstack_map = self._discretize_thickness(zstack_map_continuous)
         else:
-            # 連続値（ピクセル単位の厚み）
+            # Continuous values (thickness in pixel units)
             zstack_map = zstack_map_continuous
         
-        # 最小厚み閾値フィルタリング（ピクセル単位で判定）
+        # Minimum thickness threshold filtering (evaluated in pixel units)
         if self.min_thickness_px > 0:
-            # continuousモードでは直接比較、discreteモードでは換算して比較
+            # Direct comparison in continuous mode, converted comparison in discrete mode
             if self.thickness_mode == 'discrete':
-                # スライス数をピクセル単位に換算して閾値判定
+                # Convert slice count to pixel units for threshold evaluation
                 thickness_px_for_threshold = zstack_map * (self.voxel_z_um / self.pixel_size_um)
             else:
                 thickness_px_for_threshold = zstack_map
             
-            # 閾値未満を0にする
+            # Set values below threshold to 0
             pixels_before = np.count_nonzero(zstack_map > 0)
             zstack_map = np.where(thickness_px_for_threshold >= self.min_thickness_px, zstack_map, 0)
             pixels_after = np.count_nonzero(zstack_map > 0)
@@ -549,34 +549,34 @@ class TimeSeriesDensityMapper:
         print(f"    Mean z-stack: {zstack_map[mask].mean():.2f}")
         print(f"    Non-zero pixels: {np.count_nonzero(mask)}")
         
-        # 位相差から屈折率（RI）を計算
+        # Calculate refractive index (RI) from phase
         print(f"  Converting phase to refractive index...")
         print(f"    Wavelength: {self.wavelength_nm} nm")
         print(f"    Medium RI: {self.n_medium}")
         print(f"    Pixel size: {self.pixel_size_um} µm")
         
-        # 厚みをµm単位に変換（thickness_modeに応じて）
+        # Convert thickness to um units (according to thickness_mode)
         if self.thickness_mode == 'discrete':
-            # 離散モード：スライス数 × Z方向のボクセルサイズ
+            # Discrete mode: slice count x Z-direction voxel size
             thickness_um = zstack_map * self.voxel_z_um
         else:
-            # 連続モード：ピクセル単位の厚み × XY方向のピクセルサイズ
+            # Continuous mode: thickness in pixel units x XY pixel size
             thickness_um = zstack_map * self.pixel_size_um
-        
-        # RIマップを初期化（培地の屈折率で）
+
+        # Initialize RI map (with medium refractive index)
         ri_map = np.full_like(image, self.n_medium, dtype=np.float64)
         
-        # 位相差→屈折率変換
-        # n_sample = n_medium + (φ × λ) / (2π × thickness)
-        # ここで、imageは位相差φに比例する値と仮定
-        # 実際のシステムでは、imageの単位を確認して適切なスケーリングが必要
+        # Phase-to-refractive-index conversion
+        # n_sample = n_medium + (phi x lambda) / (2*pi x thickness)
+        # Here, image is assumed to be proportional to phase phi
+        # In practice, verify the image units and apply appropriate scaling
         ri_map[mask] = self.n_medium + (image[mask] * self.wavelength_um) / (2 * np.pi * thickness_um[mask])
         
         print(f"    RI range: [{ri_map[mask].min():.6f}, {ri_map[mask].max():.6f}]")
         print(f"    Mean RI: {ri_map[mask].mean():.6f}")
         print(f"    ΔRI from medium: {(ri_map[mask].mean() - self.n_medium):.6f}")
         
-        # 質量濃度マップを計算（mg/ml）
+        # Calculate mass concentration map (mg/ml)
         # C = (RI - RI_medium) / α
         concentration_map = np.zeros_like(image, dtype=np.float64)
         concentration_map[mask] = (ri_map[mask] - self.n_medium) / self.alpha_ri
@@ -585,8 +585,8 @@ class TimeSeriesDensityMapper:
         print(f"    Concentration range: [{concentration_map[mask].min():.2f}, {concentration_map[mask].max():.2f}] mg/ml")
         print(f"    Mean concentration: {concentration_map[mask].mean():.2f} mg/ml")
         
-        # 体積を計算
-        # 体積 = Σ(各ピクセルの厚み[µm] × ピクセル面積[µm²])
+        # Calculate volume
+        # Volume = sum(thickness per pixel [um] x pixel area [um^2])
         pixel_area_um2 = self.pixel_size_um ** 2
         volume_um3 = np.sum(thickness_um[mask]) * pixel_area_um2
         
@@ -595,25 +595,25 @@ class TimeSeriesDensityMapper:
         print(f"    Mean thickness: {thickness_um[mask].mean():.4f} µm")
         print(f"    Max thickness: {thickness_um[mask].max():.4f} µm")
         
-        # Total massを計算
-        # Total mass [pg] = Σ(concentration [mg/ml] × pixel_volume [µm³])
-        # 単位変換: 1 mg/ml = 1 pg/µm³
-        pixel_volumes = thickness_um[mask] * pixel_area_um2  # 各ピクセルの体積 [µm³]
+        # Calculate total mass
+        # Total mass [pg] = sum(concentration [mg/ml] x pixel_volume [um^3])
+        # Unit conversion: 1 mg/ml = 1 pg/um^3
+        pixel_volumes = thickness_um[mask] * pixel_area_um2  # volume per pixel [um^3]
         total_mass_pg = np.sum(concentration_map[mask] * pixel_volumes)  # [pg]
         
         print(f"  Calculating total mass...")
         print(f"    Total mass: {total_mass_pg:.2f} pg")
         print(f"    Mean concentration: {concentration_map[mask].mean():.2f} mg/ml")
         
-        # 結果をパッケージング
+        # Package results
         results = {
             'roi_index': roi_index,
             'frame_number': frame_number,
             'image_path': img_path,
             'image': image,
             'zstack_map': zstack_map,
-            'ri_map': ri_map,  # 屈折率マップ
-            'concentration_map': concentration_map,  # 質量濃度マップ（mg/ml）
+            'ri_map': ri_map,  # refractive index map
+            'concentration_map': concentration_map,  # mass concentration map (mg/ml)
             'roi_params': roi_params,
             'stats': {
                 'zstack_max': float(zstack_map.max()),
@@ -628,7 +628,7 @@ class TimeSeriesDensityMapper:
                 'concentration_max': float(concentration_map[mask].max()),
                 'ri_min': float(ri_map[mask].min()),
                 'ri_max': float(ri_map[mask].max()),
-                'ri_delta': float(ri_map[mask].mean() - self.n_medium),  # 培地との差
+                'ri_delta': float(ri_map[mask].mean() - self.n_medium),  # difference from medium
                 'num_pixels': int(np.count_nonzero(mask)),
             }
         }
@@ -636,7 +636,7 @@ class TimeSeriesDensityMapper:
         return results
     
     def save_results(self, results):
-        """結果を保存"""
+        """Save results"""
         if results is None:
             return
         
@@ -644,7 +644,7 @@ class TimeSeriesDensityMapper:
         frame_number = results['frame_number']
         roi_str = f"ROI_{roi_index:04d}_Frame_{frame_number:04d}"
         
-        # TIFF保存
+        # Save TIFF
         ri_tiff = os.path.join(self.output_dir, "density_tiff", f"{roi_str}_ri.tif")
         concentration_tiff = os.path.join(self.output_dir, "density_tiff", f"{roi_str}_concentration.tif")
         zstack_tiff = os.path.join(self.output_dir, "density_tiff", f"{roi_str}_zstack.tif")
@@ -653,26 +653,26 @@ class TimeSeriesDensityMapper:
         tifffile.imwrite(ri_tiff, results['ri_map'].astype(np.float32))
         tifffile.imwrite(concentration_tiff, results['concentration_map'].astype(np.float32))
         tifffile.imwrite(zstack_tiff, results['zstack_map'].astype(np.float32))
-        tifffile.imwrite(phase_tiff, results['image'].astype(np.float32))  # 元の位相差画像
+        tifffile.imwrite(phase_tiff, results['image'].astype(np.float32))  # original phase image
         
         print(f"\nSaved: {os.path.basename(ri_tiff)}")
         print(f"Saved: {os.path.basename(concentration_tiff)}")
         print(f"Saved: {os.path.basename(zstack_tiff)}")
         print(f"Saved: {os.path.basename(phase_tiff)}")
         
-        # CSV保存
+        # Save CSV
         csv_path = os.path.join(self.output_dir, "csv_data", f"{roi_str}_pixel_data.csv")
         
         mask = results['zstack_map'] > 0
         y_coords, x_coords = np.where(mask)
         
-        # 厚みをµm単位に変換（thickness_modeに応じて）
+        # Convert thickness to um units (according to thickness_mode)
         if self.thickness_mode == 'discrete':
-            # 離散モード：スライス数 × Z方向のボクセルサイズ
+            # Discrete mode: slice count x Z-direction voxel size
             thickness_um_map = results['zstack_map'][mask] * self.voxel_z_um
             z_column_name = 'Z_slice_count'
         else:
-            # 連続モード：ピクセル単位の厚み × XY方向のピクセルサイズ
+            # Continuous mode: thickness in pixel units x XY pixel size
             thickness_um_map = results['zstack_map'][mask] * self.pixel_size_um
             z_column_name = 'Z_thickness_pixel'
         
@@ -689,7 +689,7 @@ class TimeSeriesDensityMapper:
         pixel_data.to_csv(csv_path, index=False)
         print(f"Saved: {os.path.basename(csv_path)}")
         
-        # パラメータCSV
+        # Parameters CSV
         params_path = os.path.join(self.output_dir, "csv_data", f"{roi_str}_parameters.csv")
         params_dict = {
             'roi_index': roi_index,
@@ -706,24 +706,24 @@ class TimeSeriesDensityMapper:
         params_df.to_csv(params_path, index=False)
         print(f"Saved: {os.path.basename(params_path)}")
         
-        # 可視化
+        # Visualization
         self.create_visualization(results, roi_str)
     
     def create_visualization(self, results, roi_str):
-        """可視化図を作成"""
+        """Create visualization figure"""
         fig = plt.figure(figsize=(26, 12))
         gs = fig.add_gridspec(2, 4, hspace=0.3, wspace=0.3)
         
         image = results['image']
         zstack_map = results['zstack_map']
-        ri_map = results['ri_map']  # 屈折率マップ
-        concentration_map = results['concentration_map']  # 質量濃度マップ
+        ri_map = results['ri_map']  # refractive index map
+        concentration_map = results['concentration_map']  # mass concentration map
         roi_params = results['roi_params']
         stats = results['stats']
         
         mask = zstack_map > 0
         
-        # 1. 元画像 + ROI + マスク輪郭線
+        # 1. Original image + ROI + mask contour
         ax1 = fig.add_subplot(gs[0, 0])
         im1 = ax1.imshow(image, cmap='gray',vmin=-0.5,vmax=2.5)
         ax1.set_title(f'Original Image + Mask Contour\nFrame {results["frame_number"]}', 
@@ -732,7 +732,7 @@ class TimeSeriesDensityMapper:
         ax1.set_ylabel('Y (pixels)')
         plt.colorbar(im1, ax=ax1, label='Intensity')
         
-        # マスク輪郭線を描画（zstack > 0の領域）
+        # Draw mask contour (region where zstack > 0)
         from skimage import measure
         binary_mask = (zstack_map > 0).astype(np.uint8)
         contours = measure.find_contours(binary_mask, 0.5)
@@ -740,7 +740,7 @@ class TimeSeriesDensityMapper:
             ax1.plot(contour[:, 1], contour[:, 0], 'c-', linewidth=2, alpha=0.8)
         
 
-        # 2. Z-stackマップ（厚みマップ）
+        # 2. Z-stack map (thickness map)
         ax2 = fig.add_subplot(gs[0, 1])
         thickness_um = zstack_map * self.pixel_size_um
         im2 = ax2.imshow(thickness_um, cmap='viridis',vmin=0,vmax=12)
@@ -750,7 +750,7 @@ class TimeSeriesDensityMapper:
         ax2.set_ylabel('Y (pixels)')
         plt.colorbar(im2, ax=ax2, label='Thickness (µm)')
         
-        # 3. 屈折率マップ（RI map）
+        # 3. Refractive index map (RI map)
         ax3 = fig.add_subplot(gs[0, 2])
         im3 = ax3.imshow(ri_map, cmap='jet',
                         vmin=1.3, vmax=1.39)
@@ -759,10 +759,10 @@ class TimeSeriesDensityMapper:
         ax3.set_xlabel('X (pixels)')
         ax3.set_ylabel('Y (pixels)')
         cbar3 = plt.colorbar(im3, ax=ax3, label='RI')
-        # 培地RIを示す線を追加
+        # Add line indicating medium RI
         cbar3.ax.axhline(y=self.n_medium, color='cyan', linestyle='--', linewidth=2, alpha=0.8)
         
-        # 4. 質量濃度マップ（mg/ml）
+        # 4. Mass concentration map (mg/ml)
         ax4 = fig.add_subplot(gs[0, 3])
         im4 = ax4.imshow(concentration_map, cmap='hot',
                         vmin=0, vmax=450)
@@ -772,7 +772,7 @@ class TimeSeriesDensityMapper:
         ax4.set_ylabel('Y (pixels)')
         plt.colorbar(im4, ax=ax4, label='Concentration (mg/ml)')
         
-        # 5. ΔRI マップ（培地との差）
+        # 5. Delta-RI map (difference from medium)
         ax5 = fig.add_subplot(gs[1, 0])
         delta_ri = ri_map - self.n_medium
         im5 = ax5.imshow(delta_ri, cmap='plasma',vmin=-0.1,vmax=0.3)
@@ -789,10 +789,10 @@ class TimeSeriesDensityMapper:
             ri_masked = ri_map[mask]
             ax6.scatter(thickness_masked, ri_masked, alpha=0.3, s=10, c='blue')
             
-            # 培地RIの参照線
+            # Reference line for medium RI
             ax6.axhline(y=self.n_medium, color='cyan', linestyle='--', linewidth=2,
                        label=f'Medium RI: {self.n_medium:.3f}')
-            # 平均RIの参照線
+            # Reference line for mean RI
             ax6.axhline(y=stats['ri_mean'], color='red', linestyle='--', linewidth=2,
                        label=f'Mean RI: {stats["ri_mean"]:.6f}')
             
@@ -804,7 +804,7 @@ class TimeSeriesDensityMapper:
             ax6.legend()
             ax6.grid(True, alpha=0.3)
         
-        # 7. RI分布
+        # 7. RI distribution
         ax7 = fig.add_subplot(gs[1, 2])
         if np.any(mask):
             ri_masked = ri_map[mask].flatten()
@@ -816,11 +816,11 @@ class TimeSeriesDensityMapper:
             ax7.set_xlabel('Refractive Index', fontsize=11)
             ax7.set_ylabel('Frequency', fontsize=11)
             ax7.set_title('RI Distribution', fontsize=12, fontweight='bold')
-            ax7.set_xlim(1.30, 1.60)  # X軸範囲を固定
+            ax7.set_xlim(1.30, 1.60)  # Fix X-axis range
             ax7.legend()
             ax7.grid(True, alpha=0.3)
         
-        # 8. 質量濃度分布
+        # 8. Mass concentration distribution
         ax8 = fig.add_subplot(gs[1, 3])
         if np.any(mask):
             concentration_masked = concentration_map[mask].flatten()
@@ -830,7 +830,7 @@ class TimeSeriesDensityMapper:
             ax8.set_xlabel('Concentration (mg/ml)', fontsize=11)
             ax8.set_ylabel('Frequency', fontsize=11)
             ax8.set_title('Protein Concentration Distribution', fontsize=12, fontweight='bold')
-            ax8.set_xlim(0, 600)  # X軸範囲を固定
+            ax8.set_xlim(0, 600)  # Fix X-axis range
             ax8.legend()
             ax8.grid(True, alpha=0.3)
         
@@ -845,12 +845,12 @@ class TimeSeriesDensityMapper:
     
     def process_all_rois(self, max_rois=None):
         """
-        全ROIを処理
-        
+        Process all ROIs.
+
         Parameters:
         -----------
         max_rois : int or None
-            処理する最大ROI数（Noneなら全て）
+            Maximum number of ROIs to process (None for all)
         """
         num_rois = len(self.df) if max_rois is None else min(max_rois, len(self.df))
         
@@ -884,7 +884,7 @@ class TimeSeriesDensityMapper:
                 import traceback
                 traceback.print_exc()
         
-        # サマリー保存
+        # Save summary
         if all_results:
             summary_path = os.path.join(self.output_dir, "all_rois_summary.csv")
             summary_df = pd.DataFrame(all_results)
@@ -900,72 +900,72 @@ class TimeSeriesDensityMapper:
         print(f"{'#'*80}\n")
 
 
-# ===== メイン実行 =====
+# ===== Main execution =====
 if __name__ == "__main__":
-    # パラメータ設定
-    # バッチ実行時はglobals()から、単独実行時はデフォルト値を使用
+    # Parameter settings
+    # Use globals() for batch execution, default values for standalone execution
     RESULTS_CSV = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted\inference_out\Results_enlarge.csv" if 'RESULTS_CSV' not in globals() else globals()['RESULTS_CSV']
     
-    # 画像ディレクトリ（ユーザーの環境に合わせて変更）
-    # Windowsパスの例: r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted"
-    # Linuxパスの例: "/home/user/images/subtracted"
+    # Image directory (change according to your environment)
+    # Windows path example: r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted"
+    # Linux path example: "/home/user/images/subtracted"
     IMAGE_DIRECTORY = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted" if 'IMAGE_DIRECTORY' not in globals() else globals()['IMAGE_DIRECTORY']
     
-    # QPI実験パラメータ（01_QPI_analysis.pyと同じ値）
+    # QPI experiment parameters (same values as 01_QPI_analysis.py)
     WAVELENGTH_NM = 663 if 'WAVELENGTH_NM' not in globals() else globals()['WAVELENGTH_NM']
-                                 # レーザー波長（ナノメートル）
-                                 # 実験値: 663nm (赤色レーザー)
+                                 # Laser wavelength (nanometers)
+                                 # Experimental value: 663nm (red laser)
     N_MEDIUM = 1.333 if 'N_MEDIUM' not in globals() else globals()['N_MEDIUM']
-                                 # 培地の屈折率
-                                 # 水: 1.333, PBS: 1.334, DMEM: ~1.335
+                                 # Medium refractive index
+                                 # Water: 1.333, PBS: 1.334, DMEM: ~1.335
     PIXEL_SIZE_UM = 0.348 if 'PIXEL_SIZE_UM' not in globals() else globals()['PIXEL_SIZE_UM']
-                                 # ピクセルサイズ（マイクロメートル）
-                                 # 507×507の再構成画像用
-                                 # 計算: 0.08625 µm × (2048/507) ≈ 0.348 µm/pixel
-                                 # ※元のホログラム2048×2048では0.08625 µm/pixel
+                                 # Pixel size (micrometers)
+                                 # For 507x507 reconstructed images
+                                 # Calculation: 0.08625 um x (2048/507) = 0.348 um/pixel
+                                 # Note: Original hologram 2048x2048 has 0.08625 um/pixel
     ALPHA_RI = 0.00018 if 'ALPHA_RI' not in globals() else globals()['ALPHA_RI']
-                                 # 比屈折率増分 [ml/mg]
-                                 # タンパク質の一般的な値: 0.0018 ml/mg
-                                 # 参考: RI = RI_medium + α × C [mg/ml]
-    
+                                 # Specific refractive index increment [ml/mg]
+                                 # Typical value for proteins: 0.0018 ml/mg
+                                 # Reference: RI = RI_medium + alpha x C [mg/ml]
+
     SHAPE_TYPE = 'feret' if 'SHAPE_TYPE' not in globals() else globals()['SHAPE_TYPE']
-                                 # ROI形状近似方法
-                                 # 'ellipse': Major/Minor/Angle（楕円近似）
-                                 # 'feret': Feret/MinFeret/FeretAngle（Feret径近似）
-    
+                                 # ROI shape approximation method
+                                 # 'ellipse': Major/Minor/Angle (ellipse approximation)
+                                 # 'feret': Feret/MinFeret/FeretAngle (Feret diameter approximation)
+
     SUBPIXEL_SAMPLING = 5 if 'SUBPIXEL_SAMPLING' not in globals() else globals()['SUBPIXEL_SAMPLING']
-                                 # サブピクセルサンプリング数（N×N）
-                                 # 1: ピクセル中心のみ（高速、端で精度低）
-                                 # 5: 5×5サブピクセル（推奨、バランス良い）
-                                 # 10: 10×10サブピクセル（高精度、遅い）
-    
+                                 # Subpixel sampling count (NxN)
+                                 # 1: Pixel center only (fast, low edge accuracy)
+                                 # 5: 5x5 subpixels (recommended, good balance)
+                                 # 10: 10x10 subpixels (high accuracy, slow)
+
     THICKNESS_MODE = 'continuous' if 'THICKNESS_MODE' not in globals() else globals()['THICKNESS_MODE']
-                                 # 厚みマップのモード
-                                 # 'continuous': 連続的な厚み値（ピクセル単位）
-                                 # 'discrete': 離散的なZ-stackスライス数
-    
+                                 # Thickness map mode
+                                 # 'continuous': Continuous thickness values (in pixel units)
+                                 # 'discrete': Discrete Z-stack slice counts
+
     VOXEL_Z_UM = 0.3 if 'VOXEL_Z_UM' not in globals() else globals()['VOXEL_Z_UM']
-                                 # Z方向のボクセルサイズ（マイクロメートル）
-                                 # discrete modeで厚みをスライス数に変換する際に使用
-    
+                                 # Z-direction voxel size (micrometers)
+                                 # Used to convert thickness to slice counts in discrete mode
+
     DISCRETIZE_METHOD = 'round' if 'DISCRETIZE_METHOD' not in globals() else globals()['DISCRETIZE_METHOD']
-                                 # 離散化の方法（discrete modeのみ有効）
-                                 # 'round': 四捨五入
-                                 # 'ceil': 切り上げ
-                                 # 'floor': 切り捨て
-                                 # 'pomegranate': Pomegranate互換の閾値ベース判定
-    
+                                 # Discretization method (only for discrete mode)
+                                 # 'round': Round to nearest integer
+                                 # 'ceil': Round up
+                                 # 'floor': Round down
+                                 # 'pomegranate': Pomegranate-compatible threshold-based decision
+
     MIN_THICKNESS_PX = 0.0 if 'MIN_THICKNESS_PX' not in globals() else globals()['MIN_THICKNESS_PX']
-                                 # 最小厚み閾値（ピクセル単位）
-                                 # 0.0: 閾値なし（すべて含む）
-                                 # 1.0: 1ピクセル未満を無視
-                                 # 2.0: 2ピクセル未満を無視
-    
-    MAX_ROIS = None if 'MAX_ROIS' not in globals() else globals()['MAX_ROIS']  # テスト実行（Noneで全ROI）
-    
-    # CSVサフィックス（出力フォルダ名の識別用）
-    # None: CSVファイル名から自動抽出（Results_enlarge.csv → 'enlarge'）
-    # 文字列: 手動で指定（例: 'custom_name'）
+                                 # Minimum thickness threshold (in pixel units)
+                                 # 0.0: No threshold (include all)
+                                 # 1.0: Ignore thickness below 1 pixel
+                                 # 2.0: Ignore thickness below 2 pixels
+
+    MAX_ROIS = None if 'MAX_ROIS' not in globals() else globals()['MAX_ROIS']  # Test run (None for all ROIs)
+
+    # CSV suffix (for identifying output folder name)
+    # None: Auto-extract from CSV filename (Results_enlarge.csv -> 'enlarge')
+    # String: Manual specification (e.g.: 'custom_name')
     CSV_SUFFIX = None if 'CSV_SUFFIX' not in globals() else globals()['CSV_SUFFIX']
     
     print(f"\n{'='*70}")
@@ -985,7 +985,7 @@ if __name__ == "__main__":
     print(f"  Note: Concentration (mg/ml) = (RI - {N_MEDIUM}) / {ALPHA_RI}")
     print(f"{'='*70}\n")
     
-    # ワークフロー実行
+    # Execute workflow
     mapper = TimeSeriesDensityMapper(
         results_csv=RESULTS_CSV,
         image_directory=IMAGE_DIRECTORY,
@@ -1004,23 +1004,23 @@ if __name__ == "__main__":
     
     mapper.process_all_rois(max_rois=MAX_ROIS)
     
-    # ===== 時系列プロット生成 =====
+    # ===== Generate time-series plots =====
     print(f"\n{'#'*80}")
     print(f"# Generating time-series plots...")
     print(f"{'#'*80}\n")
     
-    # 27_timeseries_plot.pyの機能を統合
+    # Integrate functionality from 27_timeseries_plot.py
     from matplotlib.gridspec import GridSpec
     
-    # all_rois_summary.csvを読み込み
+    # Load all_rois_summary.csv
     summary_path = os.path.join(mapper.output_dir, "all_rois_summary.csv")
     
     if os.path.exists(summary_path):
         print(f"Loading summary data: {summary_path}")
         df_summary = pd.read_csv(summary_path)
         
-        # 時間を計算（frame_number / 12 = 時間[h]）
-        # または既存のsliceがあればそれを使用
+        # Calculate time (frame_number / 12 = time [h])
+        # Or use existing slice if available
         if 'Slice' in mapper.df.columns:
             df_summary['time_h'] = df_summary['frame_number'] / 12.0
         else:
@@ -1029,19 +1029,19 @@ if __name__ == "__main__":
         print(f"  Time range: {df_summary['time_h'].min():.2f} - {df_summary['time_h'].max():.2f} h")
         print(f"  Number of data points: {len(df_summary)}")
         
-        # 時系列プロット用の出力ディレクトリ
+        # Output directory for time-series plots
         plot_output_dir = f"timeseries_plots_{mapper.dir_suffix}"
         os.makedirs(plot_output_dir, exist_ok=True)
         
-        # 時間ビンを作成
-        time_bin_h = 1.0  # 1時間ごとに集計
+        # Create time bins
+        time_bin_h = 1.0  # aggregate per 1 hour
         time_bins = np.arange(
             np.floor(df_summary['time_h'].min()),
             np.ceil(df_summary['time_h'].max()) + time_bin_h,
             time_bin_h
         )
         
-        # 時間ごとの統計を計算
+        # Calculate statistics per time bin
         time_centers = []
         volume_means = []
         mass_means = []
@@ -1061,11 +1061,11 @@ if __name__ == "__main__":
                 if 'ri_mean' in df_summary.columns:
                     ri_means.append(df_summary.loc[mask, 'ri_mean'].mean())
         
-        # プロット作成
+        # Create plots
         fig = plt.figure(figsize=(14, 14))
         gs = GridSpec(3, 1, figure=fig, hspace=0.3, wspace=0.3)
         
-        # 1. 体積の時間変化
+        # 1. Volume over time
         ax1 = fig.add_subplot(gs[0, 0])
         if 'volume_um3' in df_summary.columns:
             ax1.scatter(df_summary['time_h'], df_summary['volume_um3'], 
@@ -1079,7 +1079,7 @@ if __name__ == "__main__":
             ax1.legend(fontsize=10)
             ax1.grid(True, alpha=0.3)
         
-        # 2. 平均RIの時間変化
+        # 2. Mean RI over time
         ax2 = fig.add_subplot(gs[1, 0])
         if 'ri_mean' in df_summary.columns:
             ax2.scatter(df_summary['time_h'], df_summary['ri_mean'], 
@@ -1096,7 +1096,7 @@ if __name__ == "__main__":
             ax2.legend(fontsize=10)
             ax2.grid(True, alpha=0.3)
         
-        # 3. Total Massの時間変化
+        # 3. Total mass over time
         ax3 = fig.add_subplot(gs[2, 0])
         if 'total_mass_pg' in df_summary.columns:
             ax3.scatter(df_summary['time_h'], df_summary['total_mass_pg'], 
@@ -1113,7 +1113,7 @@ if __name__ == "__main__":
         fig.suptitle(f'Time-Series Analysis: {SHAPE_TYPE}, {SUBPIXEL_SAMPLING}×{SUBPIXEL_SAMPLING} subpixel', 
                     fontsize=18, fontweight='bold', y=0.995)
         
-        # 保存
+        # Save
         plot_path = os.path.join(plot_output_dir, 'timeseries_volume_ri_mass.png')
         plt.savefig(plot_path, dpi=300, bbox_inches='tight')
         plt.close()
@@ -1130,7 +1130,7 @@ if __name__ == "__main__":
     print(f"# Plots output: {plot_output_dir if os.path.exists(summary_path) else 'N/A'}")
     print(f"{'#'*80}\n")
     
-    # 完了フラグファイルを作成（レジューム機能用）
+    # Create completion flag file (for resume functionality)
     flag_file = os.path.join(mapper.output_dir, '.completed')
     with open(flag_file, 'w') as f:
         f.write(f"Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")

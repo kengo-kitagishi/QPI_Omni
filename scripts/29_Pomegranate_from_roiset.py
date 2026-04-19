@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
 """
-Time-series Volume Tracking from ROI Set (Pomegranate互換)
-ImageJ ROIセットから時系列の体積変化を追跡
+Time-series Volume Tracking from ROI Set (Pomegranate compatible)
+Track time-series volume changes from ImageJ ROI sets
 
-本家Pomegranateアルゴリズムに準拠:
+Compliant with the original Pomegranate algorithm:
 - Baybay et al. (2020) Pomegranate: Nuclear and whole-cell segmentation for fission yeast
 - GitHub: https://github.com/erodb/Pomegranate
 
-アルゴリズム:
-1. Distance Transform → 局所半径
-2. Skeleton → 中心線抽出
-3. Medial Axis Transform → Skeleton × Distance Map
-4. Spherical Expansion → Z方向に球体を展開
-   - 各Zスライスで: r(z) = √(R² - z²)
-   - 閾値判定: if r(z) > 2*pixel_size_xy: 描画
+Algorithm:
+1. Distance Transform -> local radius
+2. Skeleton -> centerline extraction
+3. Medial Axis Transform -> Skeleton x Distance Map
+4. Spherical Expansion -> expand spheres in Z direction
+   - At each Z slice: r(z) = sqrt(R^2 - z^2)
+   - Threshold check: if r(z) > 2*pixel_size_xy: draw
 
-離散化方法:
-- 'pomegranate': 閾値ベース（本家準拠）
-  → 各Zスライスで半径が閾値以上なら描画
-- 'round': 四捨五入方式
-  → 厚みを計算してround()で変換
+Discretization methods:
+- 'pomegranate': threshold-based (original implementation)
+  -> draw if radius >= threshold at each Z slice
+- 'round': rounding method
+  -> compute thickness and convert with round()
 
-処理フロー:
-各ROIを2Dマスクに変換 → 3D再構成 → 体積計算 → 厚みマップ生成
+Processing flow:
+Convert each ROI to 2D mask -> 3D reconstruction -> volume calculation -> thickness map generation
 """
 # %%
 import numpy as np
@@ -40,11 +40,11 @@ from skimage.draw import polygon
 import re
 from collections import defaultdict
 
-# 日本語フォント設定（エラー回避）
+# Font setting (avoid errors)
 rcParams['font.sans-serif'] = ['Arial']
 
 class TimeSeriesVolumeTracker:
-    """ROIセットから時系列体積を追跡"""
+    """Track time-series volume from ROI sets"""
     
     def __init__(self, roi_zip_path, voxel_xy=0.1, voxel_z=0.3, 
                  radius_enlarge=1.0, image_width=512, image_height=512,
@@ -53,21 +53,21 @@ class TimeSeriesVolumeTracker:
         Parameters
         ----------
         roi_zip_path : str
-            ImageJ ROIセット（.zip）のパス
+            Path to ImageJ ROI set (.zip)
         voxel_xy : float
-            XY方向のピクセルサイズ (um)
+            Pixel size in XY direction (um)
         voxel_z : float
-            Z方向のステップサイズ (um)
+            Step size in Z direction (um)
         radius_enlarge : float
-            半径の拡張量 (pixels) - Pomegranate本家は+1
+            Radius enlargement amount (pixels) - original Pomegranate uses +1
         image_width : int
-            画像の幅（pixels）
+            Image width (pixels)
         image_height : int
-            画像の高さ（pixels）
+            Image height (pixels)
         min_radius_threshold_px : float
-            最小半径閾値（ピクセル）- 本家Pomegranateは2
+            Minimum radius threshold (pixels) - original Pomegranate uses 2
         discretization_method : str
-            離散化方法：'pomegranate'（閾値ベース）または'round'（四捨五入）
+            Discretization method: 'pomegranate' (threshold-based) or 'round' (rounding)
         """
         self.roi_zip_path = roi_zip_path
         self.voxel_xy = voxel_xy
@@ -85,22 +85,22 @@ class TimeSeriesVolumeTracker:
         print(f"Voxel Z: {voxel_z} um")
         print(f"Elongation Factor: {self.elongation_factor:.4f}")
         print(f"Image Size: {image_width} x {image_height}")
-        print(f"Radius enlarge: {radius_enlarge} px (Pomegranate本家: +1)")
-        print(f"Min radius threshold: {min_radius_threshold_px} px (Pomegranate本家: 2)")
+        print(f"Radius enlarge: {radius_enlarge} px (original Pomegranate: +1)")
+        print(f"Min radius threshold: {min_radius_threshold_px} px (original Pomegranate: 2)")
         print(f"Discretization method: {discretization_method}")
         
-        # ROIセットを読み込み
+        # Load ROI set
         self.load_roi_set()
-        
+
     def load_roi_set(self):
-        """ROIセットを読み込んで整理"""
+        """Load and organize the ROI set"""
         print(f"\n=== Loading ROI Set ===")
         
         with zipfile.ZipFile(self.roi_zip_path, 'r') as zf:
             roi_names = zf.namelist()
             print(f"  Total ROIs: {len(roi_names)}")
             
-            # ROIを解析
+            # Parse ROIs
             self.rois_by_time = defaultdict(list)
             self.roi_data = []
             
@@ -108,8 +108,8 @@ class TimeSeriesVolumeTracker:
                 if idx % 100 == 0:
                     print(f"    Processing: {idx}/{len(roi_names)}")
                 
-                # ROI名からメタデータを抽出
-                # 例: "2438-0026-0048.roi" → フレーム、セルID、その他
+                # Extract metadata from ROI name
+                # Example: "2438-0026-0048.roi" -> frame, cell ID, etc.
                 try:
                     roi_bytes = zf.read(roi_name)
                     roi_info = self.parse_roi_basic(roi_bytes, roi_name)
@@ -117,7 +117,7 @@ class TimeSeriesVolumeTracker:
                     if roi_info is not None:
                         self.roi_data.append(roi_info)
                         
-                        # 時間でグループ化（ROI名の最初の数字をフレーム番号と仮定）
+                        # Group by time (assume the first number in ROI name is frame number)
                         frame_num = self.extract_frame_number(roi_name)
                         self.rois_by_time[frame_num].append(roi_info)
                         
@@ -129,15 +129,15 @@ class TimeSeriesVolumeTracker:
             print(f"  Time points: {len(self.rois_by_time)}")
             
     def extract_frame_number(self, roi_name):
-        """ROI名からフレーム番号を抽出"""
-        # 例: "2438-0026-0048.roi" → 2438
+        """Extract frame number from ROI name"""
+        # Example: "2438-0026-0048.roi" -> 2438
         match = re.match(r'(\d+)-', roi_name)
         if match:
             return int(match.group(1))
         return 0
     
     def parse_roi_basic(self, roi_bytes, roi_name):
-        """ImageJ ROIの基本情報を解析"""
+        """Parse basic information of an ImageJ ROI"""
         if len(roi_bytes) < 64:
             return None
         
@@ -182,18 +182,18 @@ class TimeSeriesVolumeTracker:
         return roi_info
     
     def roi_to_mask(self, roi_info):
-        """ROIをバイナリマスクに変換"""
+        """Convert ROI to binary mask"""
         roi_bytes = roi_info['bytes']
         roi_type = roi_info['type']
         
-        # マスクを初期化
+        # Initialize mask
         mask = np.zeros((self.image_height, self.image_width), dtype=np.uint8)
         
         try:
             if roi_type in [0, 7, 8]:  # Polygon, Freehand, Traced
                 n_coords = roi_info['n_coordinates']
                 if n_coords > 0 and len(roi_bytes) >= 64 + n_coords * 4:
-                    # 座標を読み込み
+                    # Read coordinates
                     x_coords = []
                     y_coords = []
                     
@@ -209,7 +209,7 @@ class TimeSeriesVolumeTracker:
                             y_coords.append(y + roi_info['top'])
                     
                     if len(x_coords) > 2:
-                        # Polygonを描画
+                        # Draw polygon
                         rr, cc = polygon(y_coords, x_coords, shape=mask.shape)
                         mask[rr, cc] = 255
                         
@@ -235,8 +235,8 @@ class TimeSeriesVolumeTracker:
         return mask > 0
     
     def compute_volume_from_roi(self, roi_info, return_stack=False, return_thickness_map=False):
-        """単一ROIから体積を計算"""
-        # ROIをマスクに変換
+        """Compute volume from a single ROI"""
+        # Convert ROI to mask
         mask = self.roi_to_mask(roi_info)
         
         if mask is None or np.sum(mask) == 0:
@@ -249,7 +249,7 @@ class TimeSeriesVolumeTracker:
         if max_dist == 0:
             return None
         
-        # Z方向のスライス数を推定
+        # Estimate the number of Z slices
         z_slices = int(2 * (np.ceil(max_dist * self.elongation_factor) + 2))
         mid_slice = z_slices // 2
         
@@ -259,25 +259,25 @@ class TimeSeriesVolumeTracker:
         # Medial Axis
         medial_axis = skeleton * distance_map
         
-        # 3D再構成
+        # 3D reconstruction
         stack_3d = np.zeros((z_slices, self.image_height, self.image_width), dtype=np.uint8)
         
         medial_coords = np.argwhere(skeleton)
         
         for y, x in medial_coords:
-            # 本家Pomegranate: rinput (局所半径) + radius_enlarge
+            # Original Pomegranate: rinput (local radius) + radius_enlarge
             r0 = medial_axis[y, x] + self.radius_enlarge
             
             for z in range(z_slices):
-                # 本家Pomegranate: zinput = (mid - k) / efactor
+                # Original Pomegranate: zinput = (mid - k) / efactor
                 z_distance = (mid_slice - z) / self.elongation_factor
                 r_squared = r0**2 - z_distance**2
                 
                 if r_squared > 0:
-                    # 本家Pomegranate: segmentRadius = √(R² - z²) + 1 ← +1は既にr0に含まれる
+                    # Original Pomegranate: segmentRadius = sqrt(R^2 - z^2) + 1 <- +1 is already included in r0
                     segment_radius = np.sqrt(r_squared)
                     
-                    # 本家Pomegranate閾値判定: segmentRadius > (2 * nvx)
+                    # Original Pomegranate threshold check: segmentRadius > (2 * nvx)
                     if segment_radius > self.min_radius_threshold_px:
                         try:
                             from skimage.draw import disk as draw_disk
@@ -287,10 +287,10 @@ class TimeSeriesVolumeTracker:
                         except:
                             pass
         
-        # 厚みマップを作成（各XY位置でのZ方向の占有スライス数）
+        # Create thickness map (number of occupied Z slices at each XY position)
         thickness_map = np.sum(stack_3d > 0, axis=0).astype(np.float32)
         
-        # 体積計算
+        # Volume calculation
         voxel_volume = self.voxel_xy * self.voxel_xy * self.voxel_z  # um^3
         total_voxels = np.sum(stack_3d > 0)
         volume_um3 = total_voxels * voxel_volume
@@ -302,7 +302,7 @@ class TimeSeriesVolumeTracker:
             'z_slices': z_slices,
             'total_voxels': total_voxels,
             'volume_um3': volume_um3,
-            'thickness_map': thickness_map  # 常に含める
+            'thickness_map': thickness_map  # Always include
         }
         
         if return_stack:
@@ -312,10 +312,10 @@ class TimeSeriesVolumeTracker:
         return result
     
     def track_volume_timeseries(self, max_frames=None, save_stacks=False, save_thickness_maps=True):
-        """時系列で体積を追跡"""
+        """Track volume over time-series"""
         print(f"\n=== Tracking Volume Time-series ===")
         
-        # 時間順にソート
+        # Sort by time
         time_points = sorted(self.rois_by_time.keys())
         
         if max_frames is not None:
@@ -325,7 +325,7 @@ class TimeSeriesVolumeTracker:
         print(f"  Time points to process: {len(time_points)}")
         
         results = []
-        self.thickness_maps = []  # 厚みマップを保存
+        self.thickness_maps = []  # Store thickness maps
         
         for t_idx, t in enumerate(time_points):
             print(f"\n  Frame {t_idx+1}/{len(time_points)} (t={t})")
@@ -346,7 +346,7 @@ class TimeSeriesVolumeTracker:
                     vol_result['time_index'] = t_idx
                     vol_result['cell_index'] = cell_idx
                     
-                    # 厚みマップを保存
+                    # Save thickness map
                     if save_thickness_maps:
                         thickness_info = {
                             'time_point': t,
@@ -357,7 +357,7 @@ class TimeSeriesVolumeTracker:
                         }
                         self.thickness_maps.append(thickness_info)
                     
-                    # thickness_mapはDataFrameに含めない（大きすぎるため）
+                    # Exclude thickness_map from DataFrame (too large)
                     vol_result_for_df = {k: v for k, v in vol_result.items() if k != 'thickness_map'}
                     results.append(vol_result_for_df)
                     
@@ -365,7 +365,7 @@ class TimeSeriesVolumeTracker:
                 else:
                     print(f"        [FAIL] Failed to compute volume")
         
-        # DataFrameに変換
+        # Convert to DataFrame
         self.results_df = pd.DataFrame(results)
         
         print(f"\n  Total processed: {len(self.results_df)} cells")
@@ -378,14 +378,14 @@ class TimeSeriesVolumeTracker:
         return self.results_df
     
     def plot_volume_timeseries(self, save_path='volume_timeseries.png'):
-        """体積の時系列をプロット"""
+        """Plot volume time-series"""
         if not hasattr(self, 'results_df'):
             print("Error: Run track_volume_timeseries() first")
             return
         
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
         
-        # 1. 全体の体積変化
+        # 1. Overall volume change
         ax = axes[0, 0]
         for cell_idx in self.results_df['cell_index'].unique():
             cell_data = self.results_df[self.results_df['cell_index'] == cell_idx]
@@ -397,7 +397,7 @@ class TimeSeriesVolumeTracker:
         ax.set_title('Volume Time-series (All Cells)', fontsize=14, fontweight='bold')
         ax.grid(True, alpha=0.3)
         
-        # 2. 平均体積変化
+        # 2. Mean volume change
         ax = axes[0, 1]
         mean_vol = self.results_df.groupby('time_index')['volume_um3'].mean()
         std_vol = self.results_df.groupby('time_index')['volume_um3'].std()
@@ -413,11 +413,11 @@ class TimeSeriesVolumeTracker:
         ax.legend(fontsize=10)
         ax.grid(True, alpha=0.3)
         
-        # 3. 体積分布の変化
+        # 3. Volume distribution change
         ax = axes[1, 0]
         time_points = sorted(self.results_df['time_index'].unique())
         
-        # 各時間点での分布をバイオリンプロット
+        # Violin plot for distribution at each time point
         data_for_violin = [self.results_df[self.results_df['time_index'] == t]['volume_um3'].values 
                           for t in time_points[::max(1, len(time_points)//20)]]
         
@@ -430,7 +430,7 @@ class TimeSeriesVolumeTracker:
         ax.set_title('Volume Distribution Over Time', fontsize=14, fontweight='bold')
         ax.grid(True, alpha=0.3, axis='y')
         
-        # 4. 2D面積 vs 3D体積
+        # 4. 2D Area vs 3D Volume
         ax = axes[1, 1]
         ax.scatter(self.results_df['area_2d'], self.results_df['volume_um3'], 
                   alpha=0.3, s=10)
@@ -440,7 +440,7 @@ class TimeSeriesVolumeTracker:
         ax.set_title('2D Area vs 3D Volume', fontsize=14, fontweight='bold')
         ax.grid(True, alpha=0.3)
         
-        # 回帰線
+        # Regression line
         from scipy.stats import linregress
         slope, intercept, r_value, _, _ = linregress(
             self.results_df['area_2d'], self.results_df['volume_um3'])
@@ -456,7 +456,7 @@ class TimeSeriesVolumeTracker:
         plt.show()
     
     def save_results(self, output_dir='timeseries_volume_output'):
-        """結果を保存"""
+        """Save results"""
         os.makedirs(output_dir, exist_ok=True)
         
         print(f"\n=== Saving Results to {output_dir} ===")
@@ -466,14 +466,14 @@ class TimeSeriesVolumeTracker:
         self.results_df.to_csv(csv_path, index=False)
         print(f"  Saved: {csv_path}")
         
-        # 厚みマップをTIFFスタックとして保存
+        # Save thickness maps as TIFF stack
         if hasattr(self, 'thickness_maps') and len(self.thickness_maps) > 0:
             thickness_dir = os.path.join(output_dir, 'thickness_maps')
             os.makedirs(thickness_dir, exist_ok=True)
             
             print(f"\n  Saving thickness maps ({len(self.thickness_maps)} maps)...")
             
-            # 個別のTIFFファイルとして保存
+            # Save as individual TIFF files
             for idx, thick_info in enumerate(self.thickness_maps):
                 if idx % 100 == 0:
                     print(f"    Progress: {idx}/{len(self.thickness_maps)}")
@@ -481,12 +481,12 @@ class TimeSeriesVolumeTracker:
                 roi_name = thick_info['roi_name'].replace('.roi', '')
                 thick_path = os.path.join(thickness_dir, f"{roi_name}_thickness.tif")
                 
-                # 厚みマップを保存（浮動小数点）
+                # Save thickness map (floating point)
                 tifffile.imwrite(thick_path, thick_info['thickness_map'])
             
             print(f"  Saved: {len(self.thickness_maps)} thickness maps to {thickness_dir}/")
             
-            # 統合スタック（全時間点）を作成
+            # Create combined stack (all time points)
             if len(self.thickness_maps) > 0:
                 stack_list = [tm['thickness_map'] for tm in self.thickness_maps]
                 stack_array = np.stack(stack_list, axis=0)
@@ -496,7 +496,7 @@ class TimeSeriesVolumeTracker:
                                 metadata={'axes': 'TYX'})
                 print(f"  Saved: {stack_path} (shape: {stack_array.shape})")
         
-        # 統計サマリー
+        # Statistical summary
         summary_path = os.path.join(output_dir, 'volume_summary.txt')
         with open(summary_path, 'w') as f:
             f.write("=== Volume Time-series Summary ===\n\n")
@@ -517,21 +517,21 @@ class TimeSeriesVolumeTracker:
     
     def compute_ri_from_phase_images(self, phase_image_dir, wavelength_nm=663, n_medium=1.333):
         """
-        位相差画像と厚みマップからRI (Refractive Index) を計算
-        
+        Compute RI (Refractive Index) from phase images and thickness maps
+
         Parameters
         ----------
         phase_image_dir : str
-            位相差画像が入ったディレクトリ
+            Directory containing phase images
         wavelength_nm : float
-            波長（ナノメートル）
+            Wavelength (nanometers)
         n_medium : float
-            培地の屈折率
-        
+            Refractive index of the medium
+
         Returns
         -------
         ri_results : list of dict
-            各フレームのRI計算結果
+            RI calculation results for each frame
         """
         if not hasattr(self, 'thickness_maps') or len(self.thickness_maps) == 0:
             print("Error: No thickness maps available. Run track_volume_timeseries() first.")
@@ -544,7 +544,7 @@ class TimeSeriesVolumeTracker:
         
         wavelength_um = wavelength_nm / 1000.0
         
-        # 位相差画像を検索
+        # Search for phase images
         import glob
         phase_files = sorted(glob.glob(os.path.join(phase_image_dir, "*.tif")))
         
@@ -561,40 +561,40 @@ class TimeSeriesVolumeTracker:
             roi_name = thick_info['roi_name']
             thickness_map = thick_info['thickness_map']
             
-            # 対応する位相差画像を読み込み
+            # Load corresponding phase image
             if t_idx < len(phase_files):
                 phase_img = tifffile.imread(phase_files[t_idx])
                 
-                # 位相差 → 屈折率
+                # Phase -> refractive index
                 # φ = (2π/λ) × (n_sample - n_medium) × thickness
                 # n_sample = n_medium + (φ × λ) / (2π × thickness)
                 
-                # 厚みマップ（スライス数）を実際の厚み（um）に変換
+                # Convert thickness map (slice count) to actual thickness (um)
                 thickness_um = thickness_map * self.voxel_z
                 
-                # 位相差画像とマスクのサイズを確認
+                # Check size match between phase image and mask
                 if phase_img.shape != thickness_map.shape:
                     print(f"  Warning: Size mismatch for {roi_name}")
                     print(f"    Phase: {phase_img.shape}, Thickness: {thickness_map.shape}")
                     continue
                 
-                # ゼロ除算を避ける
+                # Avoid division by zero
                 thickness_um_safe = np.where(thickness_um > 0, thickness_um, np.nan)
                 
-                # RI計算
-                # phase_imgは既に位相差（ラジアン）と仮定
+                # RI calculation
+                # Assuming phase_img is already phase difference (radians)
                 n_sample = n_medium + (phase_img * wavelength_um) / (2 * np.pi * thickness_um_safe)
                 
-                # マスク内のみ
+                # Only within mask
                 mask = thickness_map > 0
                 
                 if np.sum(mask) > 0:
-                    # 統計量
+                    # Statistics
                     mean_ri = np.nanmean(n_sample[mask])
                     median_ri = np.nanmedian(n_sample[mask])
                     std_ri = np.nanstd(n_sample[mask])
                     
-                    # Total RI (積分)
+                    # Total RI (integral)
                     total_ri = np.nansum(n_sample[mask] - n_medium)
                     
                     ri_result = {
@@ -605,7 +605,7 @@ class TimeSeriesVolumeTracker:
                         'std_ri': std_ri,
                         'total_ri': total_ri,
                         'n_pixels': np.sum(mask),
-                        'ri_map': n_sample  # RI分布マップ
+                        'ri_map': n_sample  # RI distribution map
                     }
                     
                     ri_results.append(ri_result)
@@ -619,7 +619,7 @@ class TimeSeriesVolumeTracker:
         return ri_results
     
     def save_ri_results(self, output_dir='Pomegranate_volume_output'):
-        """RI計算結果を保存"""
+        """Save RI calculation results"""
         if not hasattr(self, 'ri_results') or len(self.ri_results) == 0:
             print("No RI results to save")
             return
@@ -629,7 +629,7 @@ class TimeSeriesVolumeTracker:
         
         print(f"\n=== Saving RI Results to {ri_dir} ===")
         
-        # RI統計をCSVに保存
+        # Save RI statistics to CSV
         ri_stats = []
         for ri_res in self.ri_results:
             stats = {k: v for k, v in ri_res.items() if k != 'ri_map'}
@@ -640,7 +640,7 @@ class TimeSeriesVolumeTracker:
         ri_df.to_csv(csv_path, index=False)
         print(f"  Saved: {csv_path}")
         
-        # RIマップを個別に保存
+        # Save individual RI maps
         print(f"  Saving {len(self.ri_results)} RI maps...")
         for idx, ri_res in enumerate(self.ri_results):
             if idx % 100 == 0:
@@ -653,7 +653,7 @@ class TimeSeriesVolumeTracker:
         
         print(f"  Saved: {len(self.ri_results)} RI maps")
         
-        # サマリー
+        # Summary
         summary_path = os.path.join(output_dir, 'ri_summary.txt')
         with open(summary_path, 'w') as f:
             f.write("=== RI Time-series Summary ===\n\n")
@@ -678,43 +678,43 @@ class TimeSeriesVolumeTracker:
 
 
 def demo_with_roiset(roi_zip_path, max_frames=5):
-    """ROIセットでデモ実行（Pomegranate本家準拠）"""
+    """Run demo with ROI set (original Pomegranate compliant)"""
     print("\n" + "="*60)
     print("DEMO: Time-series Volume Tracking from ROI Set (Pomegranate)")
     print("="*60)
     
-    # Trackerを作成（本家Pomegranate準拠のパラメータ）
+    # Create Tracker (with original Pomegranate-compliant parameters)
     tracker = TimeSeriesVolumeTracker(
         roi_zip_path=roi_zip_path,
-        voxel_xy=0.348,  # 24_ellipse_volume.pyと同じ
+        voxel_xy=0.348,  # Same as 24_ellipse_volume.py
         voxel_z=0.174,
-        radius_enlarge=1.0,  # 本家Pomegranateは+1
+        radius_enlarge=1.0,  # Original Pomegranate uses +1
         image_width=512,
         image_height=512,
-        min_radius_threshold_px=2,  # 本家Pomegranateは2ピクセル
-        discretization_method='pomegranate'  # 閾値ベース判定
+        min_radius_threshold_px=2,  # Original Pomegranate uses 2 pixels
+        discretization_method='pomegranate'  # Threshold-based judgment
     )
     
-    # 体積を追跡
+    # Track volume
     results_df = tracker.track_volume_timeseries(max_frames=max_frames)
     
-    # プロット
+    # Plot
     tracker.plot_volume_timeseries('Pomegranate_volume_plot.png')
     
-    # 保存
+    # Save
     tracker.save_results()
     
     return tracker
 
 
 if __name__ == "__main__":
-    # ROIセットのパス
+    # Path to ROI set
     roi_zip_path = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted\inference_out\Roiset_enlarge_interpolate.zip"
     
     if os.path.exists(roi_zip_path):
         print(f"Found ROI set: {roi_zip_path}")
         
-        # デモ実行（最初の5フレーム）
+        # Run demo (first 5 frames)
         tracker = demo_with_roiset(roi_zip_path, max_frames=2000)
         
         print("\n" + "="*60)

@@ -1,34 +1,34 @@
 """
 calibrate_grid_pos.py
 ---------------------
-温度ドリフトで生じたサンプル位置ずれを補正し、
-各glucose条件の grid pos ファイルを生成するスクリプト。
+Correct sample position drift caused by temperature changes
+and generate grid pos files for each glucose condition.
 
-【撮影パターン（毎回共通）】
-  - キャリブ撮影: timelapse.pos を使って MDA で1タイムポイント撮影
-    → Pos0(BG), Pos1(サンプル) が ph_000 の1枚ずつ取れる
-  - grid2per 基準: grid_2pergluc_60ms_1 の Pos1_x+0_y+0 を ph_005（真ん中z）で参照
-    → 未再構成なら自動で再構成する
+Acquisition pattern (common for each run):
+  - Calibration acquisition: use timelapse.pos with MDA for a single time point
+    -> Pos0 (BG), Pos1 (sample) each yield one frame at ph_000
+  - grid2per reference: use Pos1_x+0_y+0 from grid_2pergluc_60ms_1 at ph_005 (middle z)
+    -> auto-reconstructed if not yet done
 
-【処理の流れ】
-  Step 0. grid2per 基準画像（ph_005）が未再構成なら自動再構成
-  Step 1. キャリブ Pos1 を ph_000 で位相再構成（on-the-fly）
-  Step 2. grid2per 基準画像（再構成済み ph_005）を読み込み
-  Step 3. 各チャネルで ECC アライメント（channel_rois.json の全チャネル）
-  Step 4. チャネル平均（MAD 外れ値除去）
-  Step 5. 画像シフト → ステージ補正量（符号は compute_drift_online.py と完全一致）
-  Step 6. timelapse.pos の全ポジションに補正を適用 → 補正済み pos 保存
-  Step 7. generate_grid_pos.py のグリッド展開ロジック → 条件別 grid pos 生成
+Processing workflow:
+  Step 0. Auto-reconstruct grid2per reference image (ph_005) if not yet reconstructed
+  Step 1. Phase-reconstruct calibration Pos1 at ph_000 (on-the-fly)
+  Step 2. Load grid2per reference image (pre-reconstructed ph_005)
+  Step 3. ECC alignment per channel (all channels from channel_rois.json)
+  Step 4. Channel average (MAD outlier removal)
+  Step 5. Image shift -> stage correction (sign identical to compute_drift_online.py)
+  Step 6. Apply correction to all positions in timelapse.pos -> save corrected pos
+  Step 7. Grid expansion logic from generate_grid_pos.py -> generate per-condition grid pos
 
-【使い方】
-  新しい条件ごとに CALIB_DIR と CONDITION だけ変えて実行する。
-  GRID2PER_* は Day1 から固定（変えない）。
+Usage:
+  Only change CALIB_DIR and CONDITION for each new condition.
+  GRID2PER_* is fixed from Day 1 (do not change).
 
-【符号の考え方（compute_drift_online.py と完全一致）】
-  findTransformECC(ref, sample) → (tx, ty)  [ref→sample 方向の画像シフト]
-  drift_stage_x_um = sx_sign * ty * pixel_scale_um  （画像 Y → ステージ X）
-  drift_stage_y_um = sy_sign * tx * pixel_scale_um  （画像 X → ステージ Y）
-  pos 補正量 = -drift  （ドリフトを打ち消す方向）
+Sign convention (identical to compute_drift_online.py):
+  findTransformECC(ref, sample) -> (tx, ty)  [image shift in ref->sample direction]
+  drift_stage_x_um = sx_sign * ty * pixel_scale_um  (image Y -> stage X)
+  drift_stage_y_um = sy_sign * tx * pixel_scale_um  (image X -> stage Y)
+  pos correction = -drift  (direction to cancel drift)
 """
 
 import sys
@@ -44,62 +44,62 @@ from scipy.optimize import curve_fit
 
 
 # ============================================================
-# ★ 設定パラメータ — 毎回ここを編集する
+# Configuration parameters -- edit here before each run
 # ============================================================
 
-# キャリブレーション撮影フォルダ（timelapse.pos で1タイムポイント撮影したもの）
+# Calibration acquisition folder (single time-point shot with timelapse.pos)
 CALIB_DIR      = r"E:\Acuisition\kitagishi\_calib_grid_0p00525pergluc_60ms_1"
-CALIB_LABEL    = "Pos1"   # ECC に使うポジション（温度ドリフト計算用）
-CALIB_BG_LABEL = "Pos0"   # BG（再構成時に使用、"none" でスキップ）
-# キャリブは timelapse.pos で撮影 → z-stack なし → 常に ph_000 の1枚
+CALIB_LABEL    = "Pos1"   # Position used for ECC (for temperature drift calculation)
+CALIB_BG_LABEL = "Pos0"   # BG (used during reconstruction, "none" to skip)
+# Calibration is acquired with timelapse.pos -> no z-stack -> always a single ph_000 frame
 CALIB_Z_INDEX  = 0
 
-# ---- 出力 — CONDITION だけ変えて繰り返し使う ----
+# ---- Output -- only change CONDITION for repeated use ----
 CONDITION = "0p00525pergluc"
 BASE_DIR  = r"D:\AquisitionData\Kitagishi\260321"
-# 補正後 timelapse.pos（グリッド展開前の小さいファイル）
+# Corrected timelapse.pos (small file before grid expansion)
 OUTPUT_POS_CORRECTED = rf"{BASE_DIR}\timelapse_{CONDITION}.pos"
-# グリッド展開済み pos ファイル（MicroManager の MDA に読み込むもの）
+# Grid-expanded pos file (to be loaded into MicroManager MDA)
 OUTPUT_GRID_POS      = rf"{BASE_DIR}\timelapse_grid_{CONDITION}_60ms_1.pos"
 
 # ============================================================
-# ★★ Day1 から固定 — 通常は変えない ★★
+# Fixed from Day 1 -- normally do not change
 # ============================================================
 
-# grid2per raw データフォルダ（基準再構成に使う）
+# grid2per raw data folder (used for reference reconstruction)
 GRID2PER_DIR      = r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
-GRID2PER_LABEL    = "Pos1_x+0_y+0"   # グリッド中心ラベル
+GRID2PER_LABEL    = "Pos1_x+0_y+0"   # Grid center label
 GRID2PER_BG_LABEL = "Pos0_x+0_y+0"   # BG
-# z スタック 11 枚（ph_000〜ph_010）→ 真ん中 = ph_005
-# grid 撮影段階ではフォーカス未確定のため真ん中 z を基準に使う
+# z-stack 11 frames (ph_000 to ph_010) -> middle = ph_005
+# At the grid acquisition stage, focus is not yet determined so the middle z is used as reference
 GRID2PER_Z_INDEX  = 5
 
-# channel_rois.json（ECC に使う ROI 定義）
+# channel_rois.json (ROI definitions used for ECC)
 CHANNEL_ROIS_JSON = (
     r"D:\AquisitionData\Kitagishi\260321\grid_2pergluc_60ms_1"
     r"\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
 )
 
-# 補正するposファイル（generate_grid_pos.py の入力と同じファイル）
+# Pos file to correct (same file as generate_grid_pos.py input)
 TIMELAPSE_POS = r"D:\AquisitionData\Kitagishi\260321\timelapse.pos"
 
-# drift_config.json（光学パラメータ・符号・backsub 設定をここから取得）
+# drift_config.json (optical parameters, signs, backsub settings loaded from here)
 DRIFT_CONFIG = r"C:\Users\QPI\Documents\QPI_Omni\drift_session\drift_config.json"
 
-# ---- ECC クロップ ----
-ECC_CROP_H = 80   # ECC 用 X 方向クロップ幅 [px]（compute_pos_shifts.py と統一）
+# ---- ECC crop ----
+ECC_CROP_H = 80   # X-direction crop width for ECC [px] (unified with compute_pos_shifts.py)
 
-# ---- generate_grid_pos パラメータ（generate_grid_pos.py と合わせる） ----
-X_STEP = 0.1   # μm（ステージ X 方向、画像 Y 方向）
-Y_STEP = 0.1   # μm（ステージ Y 方向、画像 X 方向）
-X_HALF = 3     # 片側グリッド数 → 合計 2*X_HALF+1 点
-Y_HALF = 3     # 片側グリッド数 → 合計 2*Y_HALF+1 点
-
-# ============================================================
-
+# ---- generate_grid_pos parameters (must match generate_grid_pos.py) ----
+X_STEP = 0.1   # um (stage X direction, image Y direction)
+Y_STEP = 0.1   # um (stage Y direction, image X direction)
+X_HALF = 3     # Half grid count -> total 2*X_HALF+1 points
+Y_HALF = 3     # Half grid count -> total 2*Y_HALF+1 points
 
 # ============================================================
-# ユーティリティ関数（compute_drift_online.py から一字一句コピー）
+
+
+# ============================================================
+# Utility functions (verbatim copy from compute_drift_online.py)
 # ============================================================
 
 def load_config(config_path):
@@ -160,7 +160,7 @@ def compute_backsub_offset(img, cfg) -> float:
 
 
 def ecc_align(ref_u8, tl_u8):
-    """ECC アライメント。(tx, ty, correlation) を返す。失敗時は None。"""
+    """ECC alignment. Returns (tx, ty, correlation). None on failure."""
     warp_matrix = np.eye(2, 3, dtype=np.float32)
     criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-8)
     try:
@@ -186,7 +186,7 @@ def _remove_outliers_mad(values, thresh=5.0):
 
 
 def reconstruct_phase(raw_path: Path, cfg: dict, bg_path: Path = None) -> np.ndarray:
-    """QPI 位相再構成。bg_path があれば差分を返す。"""
+    """QPI phase reconstruction. Returns phase difference if bg_path is provided."""
     script_dir = Path(cfg["script_dir"])
     sys.path.insert(0, str(script_dir))
 
@@ -225,8 +225,8 @@ def reconstruct_phase(raw_path: Path, cfg: dict, bg_path: Path = None) -> np.nda
 
 
 def postprocess_phase(phase: np.ndarray, cfg: dict) -> np.ndarray:
-    """位相再構成後の後処理（平均除去 + Gaussian 勾配除去）。
-    compute_drift_online.py main() と同じ手順。"""
+    """Post-processing after phase reconstruction (mean removal + Gaussian gradient removal).
+    Same procedure as compute_drift_online.py main()."""
     h_p, w_p = phase.shape
     region = phase[1:h_p - 1, 1:w_p // 2]
     if region.size > 0:
@@ -242,7 +242,7 @@ def postprocess_phase(phase: np.ndarray, cfg: dict) -> np.ndarray:
 
 
 # ============================================================
-# メイン
+# Main
 # ============================================================
 
 def main():
@@ -251,21 +251,21 @@ def main():
     # ---- channel_rois.json ----
     rois_path = Path(CHANNEL_ROIS_JSON)
     if not rois_path.exists():
-        print(f"ERROR: channel_rois.json が見つかりません: {rois_path}")
+        print(f"ERROR: channel_rois.json not found: {rois_path}")
         sys.exit(1)
     with open(rois_path, encoding="utf-8") as f:
         rois = json.load(f)
     n_channels = len(rois)
-    print(f"channel_rois: {n_channels} チャネル")
+    print(f"channel_rois: {n_channels} channels")
     print(f"CONDITION: {CONDITION}")
 
-    # ---- Step 0: grid2per 基準画像（ph_{GRID2PER_Z_INDEX:03d}）が未再構成なら自動再構成 ----
+    # ---- Step 0: Auto-reconstruct grid2per reference image (ph_{GRID2PER_Z_INDEX:03d}) if not yet done ----
     grid2per_ref_path = (
         Path(GRID2PER_DIR) / GRID2PER_LABEL / "output_phase"
         / f"img_000000000_ph_{GRID2PER_Z_INDEX:03d}_phase.tif"
     )
     if not grid2per_ref_path.exists():
-        print(f"\n[Step 0] grid2per 基準画像が未再構成 → 自動再構成")
+        print(f"\n[Step 0] grid2per reference image not reconstructed -> auto-reconstructing")
         grid2per_raw = (
             Path(GRID2PER_DIR) / GRID2PER_LABEL
             / f"img_000000000_ph_{GRID2PER_Z_INDEX:03d}.tif"
@@ -275,10 +275,10 @@ def main():
             / f"img_000000000_ph_{GRID2PER_Z_INDEX:03d}.tif"
         )
         if not grid2per_raw.exists():
-            print(f"ERROR: grid2per raw 画像が見つかりません: {grid2per_raw}")
+            print(f"ERROR: grid2per raw image not found: {grid2per_raw}")
             sys.exit(1)
         if not grid2per_bg.exists():
-            print(f"  [WARNING] grid2per BG が見つかりません: {grid2per_bg}  → BG なし")
+            print(f"  [WARNING] grid2per BG not found: {grid2per_bg}  -> no BG")
             grid2per_bg = None
 
         print(f"  raw: {grid2per_raw.name}")
@@ -287,12 +287,12 @@ def main():
 
         grid2per_ref_path.parent.mkdir(exist_ok=True)
         tifffile.imwrite(str(grid2per_ref_path), phase_grid2per.astype(np.float32))
-        print(f"  grid2per 基準画像を保存: {grid2per_ref_path}")
+        print(f"  grid2per reference image saved: {grid2per_ref_path}")
     else:
-        print(f"\n[Step 0] grid2per 基準画像: 再構成済み → スキップ")
+        print(f"\n[Step 0] grid2per reference image: already reconstructed -> skipping")
         print(f"  {grid2per_ref_path}")
 
-    # ---- Step 1: キャリブレーション位相再構成 ----
+    # ---- Step 1: Calibration phase reconstruction ----
     raw_path = Path(CALIB_DIR) / CALIB_LABEL / f"img_000000000_ph_{CALIB_Z_INDEX:03d}.tif"
     if CALIB_BG_LABEL.strip().lower() == "none":
         bg_path = None
@@ -302,14 +302,14 @@ def main():
             / f"img_000000000_ph_{CALIB_Z_INDEX:03d}.tif"
         )
         if not bg_path.exists():
-            print(f"  [WARNING] BG が見つかりません: {bg_path}  → BG なしで再構成")
+            print(f"  [WARNING] BG not found: {bg_path}  -> reconstructing without BG")
             bg_path = None
 
     if not raw_path.exists():
-        print(f"ERROR: キャリブレーション画像が見つかりません: {raw_path}")
+        print(f"ERROR: Calibration image not found: {raw_path}")
         sys.exit(1)
 
-    print(f"\n[Step 1] キャリブ位相再構成: {raw_path}")
+    print(f"\n[Step 1] Calibration phase reconstruction: {raw_path}")
     phase_calib = reconstruct_phase(raw_path, cfg, bg_path)
     phase_calib = postprocess_phase(phase_calib, cfg)
 
@@ -319,12 +319,12 @@ def main():
     tifffile.imwrite(str(out_phase_path), phase_calib.astype(np.float32))
     print(f"  Phase saved: {out_phase_path}")
 
-    # ---- Step 2: grid2per 基準画像を読む ----
+    # ---- Step 2: Load grid2per reference image ----
     phase_ref = tifffile.imread(str(grid2per_ref_path)).astype(np.float64)
-    print(f"\n[Step 2] grid2per 基準画像: {grid2per_ref_path.name}  shape={phase_ref.shape}")
+    print(f"\n[Step 2] grid2per reference image: {grid2per_ref_path.name}  shape={phase_ref.shape}")
 
-    # ---- Step 3: 各チャネルで ECC アライメント ----
-    print(f"\n[Step 3] ECC アライメント ({n_channels} チャネル)...")
+    # ---- Step 3: ECC alignment per channel ----
+    print(f"\n[Step 3] ECC alignment ({n_channels} channels)...")
     vmin = cfg.get("ecc_vmin", -5.0)
     vmax = cfg.get("ecc_vmax",  2.0)
 
@@ -357,10 +357,10 @@ def main():
             print(f"  ch{ch_idx:02d}: tx={tx:+.3f}px  ty={ty:+.3f}px  corr={corr:.4f}")
 
     if not tx_list:
-        print("ERROR: 全チャネルで ECC が失敗しました")
+        print("ERROR: ECC failed on all channels")
         sys.exit(1)
 
-    # ---- Step 4: チャネル平均（MAD 外れ値除去）----
+    # ---- Step 4: Channel average (MAD outlier removal) ----
     n_raw = len(tx_list)
     if n_raw >= 3:
         out_x  = _remove_outliers_mad(tx_list)
@@ -371,7 +371,7 @@ def main():
         if not used:
             used = list(range(n_raw))
         if excl:
-            print(f"  [外れ値除去] idx={excl}: {len(excl)}ch 除外")
+            print(f"  [outlier removal] idx={excl}: {len(excl)}ch excluded")
     else:
         used = list(range(n_raw))
 
@@ -381,30 +381,30 @@ def main():
     tx_avg   = float(np.mean(tx_arr[used]))
     ty_avg   = float(np.mean(ty_arr[used]))
     corr_avg = float(np.mean(corr_arr[used]))
-    print(f"  ECC 平均: tx={tx_avg:+.4f}px  ty={ty_avg:+.4f}px  corr={corr_avg:.4f}"
-          f"  (使用 {len(used)}/{n_raw}ch)")
+    print(f"  ECC average: tx={tx_avg:+.4f}px  ty={ty_avg:+.4f}px  corr={corr_avg:.4f}"
+          f"  (used {len(used)}/{n_raw}ch)")
 
-    # ---- Step 5: 画像シフト → ステージ補正量 ----
-    # compute_drift_online.py L505-506 と完全同一の式
+    # ---- Step 5: Image shift -> stage correction ----
+    # Identical formula to compute_drift_online.py L505-506
     sx_sign        = cfg.get("shift_sign_x", 1)
     sy_sign        = cfg.get("shift_sign_y", 1)
     pixel_scale_um = cfg["pixel_scale_um"]
 
-    shift_x = tx_avg   # 画像 X (col) 方向のずれ [px]
-    shift_y = ty_avg   # 画像 Y (row) 方向のずれ [px]
+    shift_x = tx_avg   # Image X (col) direction shift [px]
+    shift_y = ty_avg   # Image Y (row) direction shift [px]
 
-    drift_stage_x_um = sx_sign * shift_y * pixel_scale_um   # 画像 Y → ステージ X
-    drift_stage_y_um = sy_sign * shift_x * pixel_scale_um   # 画像 X → ステージ Y
+    drift_stage_x_um = sx_sign * shift_y * pixel_scale_um   # Image Y -> stage X
+    drift_stage_y_um = sy_sign * shift_x * pixel_scale_um   # Image X -> stage Y
 
-    # pos 補正量 = -drift（ドリフトを打ち消す方向）
+    # pos correction = -drift (direction to cancel drift)
     pos_correct_x_um = -drift_stage_x_um
     pos_correct_y_um = -drift_stage_y_um
 
-    print(f"\n[Step 5] シフト → ステージ補正量")
+    print(f"\n[Step 5] Shift -> stage correction")
     print(f"  drift:   stage_X={drift_stage_x_um:+.4f}μm  stage_Y={drift_stage_y_um:+.4f}μm")
     print(f"  correct: stage_X={pos_correct_x_um:+.4f}μm  stage_Y={pos_correct_y_um:+.4f}μm")
 
-    # ---- Step 6: timelapse.pos の全ポジションに補正を適用 ----
+    # ---- Step 6: Apply correction to all positions in timelapse.pos ----
     with open(TIMELAPSE_POS, "r") as f:
         pos_data = json.load(f)
 
@@ -418,10 +418,10 @@ def main():
     out_corrected = Path(OUTPUT_POS_CORRECTED)
     with open(out_corrected, "w") as f:
         json.dump(pos_data, f, indent=3)
-    print(f"\n[Step 6] 補正済み pos 保存: {out_corrected}  ({n_pos} positions)")
+    print(f"\n[Step 6] Corrected pos saved: {out_corrected}  ({n_pos} positions)")
 
-    # ---- Step 7: generate_grid_pos ロジックでグリッド展開 ----
-    # generate_grid_pos.py の展開ロジックをそのままインライン流用
+    # ---- Step 7: Grid expansion using generate_grid_pos logic ----
+    # Inline reuse of expansion logic from generate_grid_pos.py
     new_positions = []
     for orig in pos_data["POSITIONS"]:
         base_label = orig["LABEL"]
@@ -450,14 +450,14 @@ def main():
     with open(out_grid, "w") as f:
         json.dump(pos_data, f, indent=3)
     n_new = len(new_positions)
-    print(f"\n[Step 7] grid 展開済み pos 保存: {out_grid}")
-    print(f"  元ポジション数: {n_pos}  "
-          f"グリッド展開後: {n_new}  "
+    print(f"\n[Step 7] Grid-expanded pos saved: {out_grid}")
+    print(f"  Original positions: {n_pos}  "
+          f"After grid expansion: {n_new}  "
           f"({n_pos} x {2*X_HALF+1} x {2*Y_HALF+1})")
 
-    print(f"\n--- 完了 ---")
-    print(f"  MicroManager に {out_grid.name} を読み込んで、")
-    print(f"  Pos1_x+0_y+0 を目視確認してください（grid2per の Pos1_x+0_y+0 と一致するはず）。")
+    print(f"\n--- Done ---")
+    print(f"  Load {out_grid.name} into MicroManager,")
+    print(f"  and visually verify Pos1_x+0_y+0 (should match grid2per Pos1_x+0_y+0).")
 
 
 if __name__ == "__main__":

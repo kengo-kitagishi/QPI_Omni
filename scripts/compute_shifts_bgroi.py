@@ -1,16 +1,16 @@
 """
 compute_shifts_bgroi.py
 -----------------------
-output_phase フレームから BG ROI を切り出し、3パス ECC でシフト量を計算する。
+Extract BG ROI from output_phase frames and compute shift amounts via 3-pass ECC.
 
-3パス ECC（compute_drift_online.py v2 と同方針）:
-  Pass 1: grid(0,0) BG ROI vs TL BG ROI → 粗いシフト (sx1, sy1)
-  Pass 2: (sx1,sy1) → 最近傍 grid(xi2,yi2) → その BG ROI vs TL BG ROI → 相対シフト → 絶対シフト
-  Pass 3: Pass2 絶対シフト → 最近傍 grid(xi3,yi3) → ECC → 最終絶対シフト
+3-pass ECC (same approach as compute_drift_online.py v2):
+  Pass 1: grid(0,0) BG ROI vs TL BG ROI -> coarse shift (sx1, sy1)
+  Pass 2: (sx1,sy1) -> nearest grid(xi2,yi2) -> its BG ROI vs TL BG ROI -> relative shift -> absolute shift
+  Pass 3: Pass2 absolute shift -> nearest grid(xi3,yi3) -> ECC -> final absolute shift
 
-出力: TL_DIR/output_phase/channels/pos_shifts.json
+Output: TL_DIR/output_phase/channels/pos_shifts.json
 
-このファイルは timelapse_plane_bgsub.py がそのまま読める。
+This file can be read directly by timelapse_plane_bgsub.py.
 """
 import sys
 import re
@@ -24,53 +24,53 @@ from scipy.ndimage import uniform_filter1d, median_filter
 from scipy.optimize import curve_fit
 
 # ============================================================
-# 設定パラメータ
+# Configuration parameters
 # ============================================================
 TL_DIR    = Path(r"F:\timelapse_11day_exp200ms_1pos_EMM2\Pos1")
 GRID_DIR  = Path(r"F:\grid_0p5_0p5_0p1_exp200ms_1pos_EMM2_1")
 BASE_LABEL = "Pos1"
-TL_Z_INDEX   = 0   # タイムラプス z インデックス
-GRID_Z_INDEX = 5   # グリッド参照 z インデックス
+TL_Z_INDEX   = 0   # Timelapse z index
+GRID_Z_INDEX = 5   # Grid reference z index
 
-# ---- BG ROI（extract_rect_roi 規則: crop_w=y方向サイズ, crop_h=x方向サイズ）----
-BG_CY     = 359   # y 中心（ch8: 暗いチャネル縞でECCコントラストあり）
-BG_CX     = 260   # x 中心（channel_rois.json と同じ）
-BG_CROP_W = 40    # y 方向サイズ [px]（channel_rois と同じ）
-BG_CROP_H = 440   # x 方向サイズ [px]（チャネル全長）
+# ---- BG ROI (extract_rect_roi convention: crop_w=y-direction size, crop_h=x-direction size) ----
+BG_CY     = 359   # y center (ch8: dark channel stripe with ECC contrast)
+BG_CX     = 260   # x center (same as channel_rois.json)
+BG_CROP_W = 40    # y-direction size [px] (same as channel_rois)
+BG_CROP_H = 440   # x-direction size [px] (full channel length)
 
-# ---- ECC パラメータ ----
+# ---- ECC parameters ----
 ECC_VMIN     = -5.0
 ECC_VMAX     =  2.0
 ECC_MAX_ITER = 100000
 ECC_EPSILON  = 1e-8
 
-# ---- 座標変換（グリッド最近傍選択用）----
-# 画像X(shift_x) ↔ ステージY(dy_um), 画像Y(shift_y) ↔ ステージX(dx_um)
-SHIFT_SIGN_X = 1   # 実データで確認後に変更（1 or -1）
+# ---- Coordinate conversion (for nearest grid selection) ----
+# Image X(shift_x) <-> Stage Y(dy_um), Image Y(shift_y) <-> Stage X(dx_um)
+SHIFT_SIGN_X = 1   # Adjust after verifying with real data (1 or -1)
 SHIFT_SIGN_Y = 1
 SENSOR_PIXEL_SIZE = 3.45e-6
 MAGNIFICATION     = 40
 ORIGINAL_DIM      = 2048
 RECONSTRUCTED_DIM = 511
-X_STEP = 0.1   # グリッドステップ [μm]（MicroManager設定値, grid_0p5_0p5_0p1 の 0p1）
+X_STEP = 0.1   # Grid step [um] (MicroManager setting, 0p1 in grid_0p5_0p5_0p1)
 Y_STEP = 0.1
 
-# ---- Backsub パラメータ ----
+# ---- Backsub parameters ----
 BACKSUB_MIN_PHASE    = -1.1
 BACKSUB_HIST_MIN     = -1.1
 BACKSUB_HIST_MAX     =  1.5
 BACKSUB_N_BINS       = 512
 BACKSUB_SMOOTH_WINDOW = 20
 
-# ---- 時系列外れ値除去 ----
+# ---- Timeseries outlier removal ----
 OUTLIER_TIMESERIES_WINDOW = 11
-OUTLIER_TIMESERIES_THRESH = 3.0   # 0 で無効
+OUTLIER_TIMESERIES_THRESH = 3.0   # 0 to disable
 
-MAX_FRAMES = None   # テスト用: None = 全フレーム, 整数 = 先頭 N フレームのみ
+MAX_FRAMES = None   # For testing: None = all frames, integer = first N frames only
 # ============================================================
 
 
-# ---- ユーティリティ ----
+# ---- Utilities ----
 
 from ecc_utils import (
     extract_rect_roi,
@@ -128,7 +128,7 @@ def detect_timeseries_outliers(shifts: list, window: int, thresh: float) -> list
     return [bool(abs(r) > thresh * mad) for r in residual]
 
 
-# ---- グリッドユーティリティ ----
+# ---- Grid utilities ----
 
 def scan_grid_positions(grid_dir: Path, base_label: str) -> dict:
     pattern = re.compile(rf"^{re.escape(base_label)}_x([+-]?\d+)_y([+-]?\d+)$")
@@ -152,21 +152,21 @@ def find_nearest_grid(pos_map: dict, dx_um: float, dy_um: float) -> tuple:
 
 
 def shift_to_um(sx: float, sy: float, pixel_scale_um: float) -> tuple:
-    """画像シフト [px] → ステージ座標 (dx_um, dy_um)"""
-    dx_um = SHIFT_SIGN_X * sy * pixel_scale_um   # 画像Y → ステージX
-    dy_um = SHIFT_SIGN_Y * sx * pixel_scale_um   # 画像X → ステージY
+    """Image shift [px] -> stage coordinates (dx_um, dy_um)"""
+    dx_um = SHIFT_SIGN_X * sy * pixel_scale_um   # Image Y -> Stage X
+    dy_um = SHIFT_SIGN_Y * sx * pixel_scale_um   # Image X -> Stage Y
     return dx_um, dy_um
 
 
 def grid_offset_px(xi: int, yi: int, pixel_scale_um: float) -> tuple:
-    """grid(xi,yi) の grid(0,0) 基準オフセット [画像px]"""
-    offset_x = SHIFT_SIGN_Y * yi * Y_STEP / pixel_scale_um   # ステージY → 画像X
-    offset_y = SHIFT_SIGN_X * xi * X_STEP / pixel_scale_um   # ステージX → 画像Y
+    """Offset of grid(xi,yi) relative to grid(0,0) [image px]"""
+    offset_x = SHIFT_SIGN_Y * yi * Y_STEP / pixel_scale_um   # Stage Y -> Image X
+    offset_y = SHIFT_SIGN_X * xi * X_STEP / pixel_scale_um   # Stage X -> Image Y
     return offset_x, offset_y
 
 
 def load_grid_crop(pos_map: dict, xi: int, yi: int, cache: dict) -> np.ndarray:
-    """grid(xi,yi) の BG ROI（backsub済み）をキャッシュ付きで返す"""
+    """Return BG ROI (backsub applied) for grid(xi,yi) with caching"""
     key = (xi, yi)
     if key not in cache:
         pos_dir = pos_map[key]
@@ -176,40 +176,40 @@ def load_grid_crop(pos_map: dict, xi: int, yi: int, cache: dict) -> np.ndarray:
     return cache[key]
 
 
-# ---- メイン ----
+# ---- Main ----
 
 def main():
     tl_dir = TL_DIR
     out_json = tl_dir / "output_phase" / "channels" / "pos_shifts.json"
     out_json.parent.mkdir(parents=True, exist_ok=True)
 
-    # タイムラプスフレームリスト
+    # Timelapse frame list
     tl_frames = sorted((tl_dir / "output_phase").glob(f"img_*_ph_{TL_Z_INDEX:03d}_phase.tif"))
     if not tl_frames:
-        print(f"ERROR: TL フレームが見つかりません"); sys.exit(1)
+        print(f"ERROR: No TL frames found"); sys.exit(1)
     n_frames = len(tl_frames)
     if MAX_FRAMES is not None:
         n_frames = min(MAX_FRAMES, n_frames)
         tl_frames = tl_frames[:n_frames]
-        print(f"[TEST] フレームを {n_frames} に制限")
-    print(f"TL フレーム数: {n_frames}")
+        print(f"[TEST] Limiting to {n_frames} frames")
+    print(f"TL frames: {n_frames}")
 
-    # グリッドスキャン
+    # Grid scan
     pos_map = scan_grid_positions(GRID_DIR, BASE_LABEL)
     if (0, 0) not in pos_map:
-        print(f"ERROR: grid(0,0) が見つかりません"); sys.exit(1)
-    print(f"グリッドPos数: {len(pos_map)}")
+        print(f"ERROR: grid(0,0) not found"); sys.exit(1)
+    print(f"Grid positions: {len(pos_map)}")
 
     pixel_scale_um = SENSOR_PIXEL_SIZE / MAGNIFICATION * ORIGINAL_DIM / RECONSTRUCTED_DIM * 1e6
     print(f"Pixel scale: {pixel_scale_um:.4f} μm/px")
 
-    # BG ROI 情報表示
-    print(f"BG ROI: cy={BG_CY}, cx={BG_CX}, y:{BG_CY-BG_CROP_W//2}〜{BG_CY+BG_CROP_W//2}, x:{BG_CX-BG_CROP_H//2}〜{BG_CX+BG_CROP_H//2}")
+    # BG ROI info display
+    print(f"BG ROI: cy={BG_CY}, cx={BG_CX}, y:{BG_CY-BG_CROP_W//2}-{BG_CY+BG_CROP_W//2}, x:{BG_CX-BG_CROP_H//2}-{BG_CX+BG_CROP_H//2}")
 
-    # グリッド BG ROI キャッシュ
+    # Grid BG ROI cache
     grid_cache: dict = {}
 
-    # 3パス ECC ループ
+    # 3-pass ECC loop
     alignment_results = []
     shift_x_list = []
     shift_y_list = []
@@ -219,9 +219,9 @@ def main():
         tl_crop = crop_and_backsub(tl_img)
         tl_u8 = to_uint8(tl_crop)
 
-        # ---- ECC: grid(0,0) BG ROI を基準に1パス ----
-        # BG ROI は平坦な背景なのでどのgrid位置でも見た目が同じ
-        # → grid(0,0) との相対シフトがそのまま絶対シフトになる
+        # ---- ECC: single pass using grid(0,0) BG ROI as reference ----
+        # BG ROI is a flat background that looks the same at any grid position
+        # -> relative shift from grid(0,0) directly gives the absolute shift
         ref = load_grid_crop(pos_map, 0, 0, grid_cache)
         res = ecc_align(to_uint8(ref), tl_u8)
         if res is None:
@@ -240,7 +240,7 @@ def main():
         shift_x_list.append(sx_final)
         shift_y_list.append(sy_final)
 
-    # ---- 時系列外れ値除去 ----
+    # ---- Timeseries outlier removal ----
     outlier_x = detect_timeseries_outliers(
         [v if v is not None else 0.0 for v in shift_x_list],
         OUTLIER_TIMESERIES_WINDOW, OUTLIER_TIMESERIES_THRESH
@@ -250,7 +250,7 @@ def main():
         OUTLIER_TIMESERIES_WINDOW, OUTLIER_TIMESERIES_THRESH
     )
 
-    # ---- frame_results 生成 ----
+    # ---- Generate frame_results ----
     frame_results = []
     for i, (sx, sy) in enumerate(zip(shift_x_list, shift_y_list)):
         is_outlier = outlier_x[i] or outlier_y[i] or sx is None
@@ -262,17 +262,17 @@ def main():
             "is_outlier_timeseries": bool(is_outlier),
         })
 
-    # ---- 統計 ----
+    # ---- Statistics ----
     sx_arr = np.array([r["shift_x_avg"] for r in frame_results if r["shift_x_avg"] is not None])
     sy_arr = np.array([r["shift_y_avg"] for r in frame_results if r["shift_y_avg"] is not None])
     n_outliers = sum(1 for r in frame_results if r["is_outlier_timeseries"])
-    print(f"\n--- 結果 ---")
-    print(f"フレーム数: {n_frames}  外れ値: {n_outliers}")
+    print(f"\n--- Results ---")
+    print(f"Frames: {n_frames}  Outliers: {n_outliers}")
     if len(sx_arr):
         print(f"shift_x: mean={sx_arr.mean():.3f}  std={sx_arr.std():.3f}  [{sx_arr.min():.3f}, {sx_arr.max():.3f}]")
         print(f"shift_y: mean={sy_arr.mean():.3f}  std={sy_arr.std():.3f}  [{sy_arr.min():.3f}, {sy_arr.max():.3f}]")
 
-    # ---- JSON 保存 ----
+    # ---- Save JSON ----
     out_data = {
         "method": "ecc_bgroi_3pass",
         "n_frames": n_frames,
@@ -292,7 +292,7 @@ def main():
     }
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump(out_data, f, ensure_ascii=False, indent=2)
-    print(f"JSON 保存: {out_json}")
+    print(f"JSON saved: {out_json}")
 
 
 if __name__ == "__main__":

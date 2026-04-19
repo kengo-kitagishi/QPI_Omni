@@ -1,12 +1,12 @@
-"""analyze_channel_drift.py — チャネル別 ECC データを使って複数の集計手法を比較検証する。
+"""analyze_channel_drift.py -- Compare multiple aggregation methods using per-channel ECC data.
 
-drift_log.json に channel_details が含まれる TP を対象に、
-4 種類の集計方法で tx/ty 時系列を再計算し、ノイズの大きさを比較する。
+Targets TPs in drift_log.json that contain channel_details,
+recomputes tx/ty time series with 4 aggregation methods, and compares noise levels.
 
-使用条件: channel_details が 50 TP 以上蓄積していること。
+Prerequisite: channel_details accumulated for at least 50 TPs.
 
-評価指標: Savitzky-Golay フィルタで低周波トレンドを除去した後の残差 std
-  → 最小 = 真のドリフトを最もよく再現している
+Evaluation metric: residual std after removing low-frequency trend with Savitzky-Golay filter
+  -> minimum = best reproduction of true drift
 """
 
 import json
@@ -23,31 +23,31 @@ from scipy.signal import savgol_filter
 sys.path.insert(0, str(Path(__file__).parent))
 from figure_logger import save_figure
 
-# ---- 設定 ----
+# ---- Settings ----
 DRIFT_LOG      = Path(r"C:\Users\QPI\Documents\QPI_Omni\drift_session\drift_log.json")
 INTERVAL_MIN   = 5.0
-SMOOTH_WINDOW  = 51    # フレーム数（~4 時間窓）。奇数であること
+SMOOTH_WINDOW  = 51    # number of frames (~4 hour window). Must be odd
 SMOOTH_ORDER   = 2
-CORR_THRESHOLD = 0.98  # 手法 B: corr2 < この値を除外
+CORR_THRESHOLD = 0.98  # method B: exclude corr2 < this value
 PIXEL_SCALE_UM = 0.3462  # μm/px
 
-# ---- データ読み込み ----
+# ---- Data loading ----
 records = json.loads(DRIFT_LOG.read_text(encoding="utf-8"))
 
-# channel_details があるレコードのみ使用
+# Use only records that have channel_details
 detail_records = [r for r in records if r.get("channel_details")]
 if len(detail_records) < SMOOTH_WINDOW:
-    print(f"ERROR: channel_details が {len(detail_records)} TP しかない（最低 {SMOOTH_WINDOW} TP 必要）")
+    print(f"ERROR: channel_details has only {len(detail_records)} TPs (minimum {SMOOTH_WINDOW} TPs required)")
     sys.exit(1)
 
-print(f"channel_details あり: {len(detail_records)} TP / 全 {len(records)} TP")
+print(f"channel_details present: {len(detail_records)} TPs / total {len(records)} TPs")
 
 tp_arr = np.array([r["timepoint"] for r in detail_records])
 time_h = tp_arr * INTERVAL_MIN / 60
 
 
 def _aggregate(method: str, records_: list) -> tuple[np.ndarray, np.ndarray]:
-    """各レコードの channel_details から tx/ty を指定手法で集計する。"""
+    """Aggregate tx/ty from channel_details of each record using the specified method."""
     tx_out, ty_out = [], []
 
     for r in records_:
@@ -62,7 +62,7 @@ def _aggregate(method: str, records_: list) -> tuple[np.ndarray, np.ndarray]:
             continue
 
         if method == "A":
-            # 現行: MAD 外れ値除外 → 単純平均
+            # Current: MAD outlier removal -> simple mean
             mask = ~_mad_outlier(tx_all) & ~_mad_outlier(ty_all)
             if mask.sum() == 0:
                 mask = np.ones(len(tx_all), dtype=bool)
@@ -70,7 +70,7 @@ def _aggregate(method: str, records_: list) -> tuple[np.ndarray, np.ndarray]:
             ty_out.append(ty_all[mask].mean())
 
         elif method == "B":
-            # corr 閾値除外 → 単純平均
+            # Correlation threshold exclusion -> simple mean
             mask = corr_all >= CORR_THRESHOLD
             if mask.sum() == 0:
                 mask = np.ones(len(tx_all), dtype=bool)
@@ -78,7 +78,7 @@ def _aggregate(method: str, records_: list) -> tuple[np.ndarray, np.ndarray]:
             ty_out.append(ty_all[mask].mean())
 
         elif method == "C":
-            # MAD 保持 + corr² 重み付き平均
+            # MAD retention + corr^2 weighted mean
             mask = ~_mad_outlier(tx_all) & ~_mad_outlier(ty_all)
             if mask.sum() == 0:
                 mask = np.ones(len(tx_all), dtype=bool)
@@ -89,7 +89,7 @@ def _aggregate(method: str, records_: list) -> tuple[np.ndarray, np.ndarray]:
             ty_out.append(np.average(ty_all[mask], weights=w))
 
         elif method == "D":
-            # 外れ値除去なし → 単純 median
+            # No outlier removal -> simple median
             tx_out.append(np.median(tx_all))
             ty_out.append(np.median(ty_all))
 
@@ -97,7 +97,7 @@ def _aggregate(method: str, records_: list) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _mad_outlier(arr: np.ndarray, thresh: float = 5.0) -> np.ndarray:
-    """MAD ベースの外れ値フラグ（True = 外れ値）"""
+    """MAD-based outlier flag (True = outlier)"""
     if len(arr) < 3:
         return np.zeros(len(arr), dtype=bool)
     med = np.median(arr)
@@ -108,7 +108,7 @@ def _mad_outlier(arr: np.ndarray, thresh: float = 5.0) -> np.ndarray:
 
 
 def noise_std(series: np.ndarray) -> float:
-    """Savitzky-Golay で低周波成分を除去した残差の std"""
+    """Std of residual after removing low-frequency component with Savitzky-Golay"""
     valid = ~np.isnan(series)
     if valid.sum() < SMOOTH_WINDOW:
         return np.nan
@@ -119,7 +119,7 @@ def noise_std(series: np.ndarray) -> float:
     return float(np.std(series[valid] - trend))
 
 
-# ---- 各手法で集計 ----
+# ---- Aggregate with each method ----
 methods = {
     "A: MAD->mean (current)": "A",
     f"B: corr>={CORR_THRESHOLD}->mean": "B",
@@ -140,7 +140,7 @@ for label, key in methods.items():
     }
     print(f"  {label:35s}  noise_x={results[label]['noise_x']:.4f} um  noise_y={results[label]['noise_y']:.4f} um")
 
-# ---- 図 ----
+# ---- Figure ----
 n_methods = len(methods)
 colors = ["#2196F3", "#F44336", "#FF9800", "#4CAF50"]
 
@@ -173,7 +173,7 @@ for row, (label, key) in enumerate(methods.items()):
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
 
-# ---- サマリー表示 ----
+# ---- Summary display ----
 print("\n=== Noise std summary (μm) ===")
 print(f"{'Method':<35}  {'noise_x':>8}  {'noise_y':>8}")
 for label in methods:
@@ -184,7 +184,7 @@ best_y = min(methods, key=lambda l: results[l]["noise_y"] or 1e9)
 print(f"\nBest X: {best_x}")
 print(f"Best Y: {best_y}")
 
-# ---- 保存 ----
+# ---- Save ----
 save_figure(
     fig,
     params={

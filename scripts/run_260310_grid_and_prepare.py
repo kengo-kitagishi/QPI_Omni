@@ -1,18 +1,18 @@
 """
 run_260310_grid_and_prepare.py
 ------------------------------
-タイムラプス開始前のセットアップを一括実行する。
+Batch-execute setup steps before starting a timelapse.
 
-実行順:
-  Step 1. Grid reconstruction   : GRID_DIR の全 Pos を再構成
-  Step 2. Channel crop          : GRID_ORIGIN_DIR/output_phase/ に対して検出＆適用
-  Step 3. prepare_drift_session : drift_config.json / positions.csv / grid_ref_crops.tif 生成
+Execution order:
+  Step 1. Grid reconstruction   : Reconstruct all Pos in GRID_DIR
+  Step 2. Channel crop          : Detect & apply on GRID_ORIGIN_DIR/output_phase/
+  Step 3. prepare_drift_session : Generate drift_config.json / positions.csv / grid_ref_crops.tif
 
-使い方:
+Usage:
   python run_260310_grid_and_prepare.py
 
-次のステップ:
-  MM1.4 の Script Panel で realtime_drift_mda.bsh を開いて Run する。
+Next step:
+  Open realtime_drift_mda.bsh in the MM1.4 Script Panel and click Run.
 """
 # %%
 import sys
@@ -23,31 +23,31 @@ _script_dir = Path(__file__).parent
 sys.path.insert(0, str(_script_dir))
 
 # ============================================================
-# ★★★ 実験ごとにここを変更 ★★★
+# *** Modify here for each experiment ***
 # ============================================================
 
-# グリッド撮影ディレクトリ
+# Grid acquisition directory
 GRID_DIR        = r"E:\Acuisition\kitagishi\260317_0p0055\grid_0p5_0p5_0p1_exp60ms_allpos_EMM2_1"
-GRID_BASE_LABEL = "Pos1"   # ドリフト推定・channel_crop に使う Pos ラベル
-GRID_Z_INDEX    = 0        # grid_ref_crops に使う z スライス番号
+GRID_BASE_LABEL = "Pos1"   # Pos label used for drift estimation & channel_crop
+GRID_Z_INDEX    = 0        # z-slice index used for grid_ref_crops
 
-# チャネルクロップ設定（検出後に自動で上書きされる）
-CHANNEL_CROP_W  = 40   # y 方向サイズ [px]（チャネル高さ）
-CHANNEL_CX      = 340  # x 中心 [px]（ピーク位置の中心）
-CHANNEL_CROP_H  = 80   # x 方向サイズ [px]（ピーク幅）
+# Channel crop settings (overwritten automatically after detection)
+CHANNEL_CROP_W  = 40   # y-direction size [px] (channel height)
+CHANNEL_CX      = 340  # x center [px] (center of peak position)
+CHANNEL_CROP_H  = 80   # x-direction size [px] (peak width)
 
-# タイムラプス撮影設定
+# Timelapse acquisition settings
 POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\260310\movetest.pos"
 SAVE_DIR         = r"C:\ph_1"
-REF_POS_INDEX    = 1    # ドリフト推定用 Pos（サンプルがいる Pos）
-BG_POS_INDEX     = 0    # BG Pos（細胞なし、位相補正用）
-N_TIMEPOINTS     = 3168  # 11日間 × 5分間隔 (11*24*60/5)
-INTERVAL_SEC     = 300   # タイムポイント間隔 [秒]
+REF_POS_INDEX    = 1    # Pos for drift estimation (Pos with sample)
+BG_POS_INDEX     = 0    # BG Pos (no cells, for phase correction)
+N_TIMEPOINTS     = 3168  # 11 days x 5 min interval (11*24*60/5)
+INTERVAL_SEC     = 300   # Interval between timepoints [sec]
 EXPOSURE_MS      = 60.0
 SETTLE_MS        = 150
 PFS_SETTLE_MS    = 200
 
-# セッションファイルの出力先
+# Session file output directory
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # ============================================================
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     pf.STEP_ALIGN_SIMPLE             = False
     pf.STEP_COMPUTE_SHIFTS           = False
     pf.STEP_GRID_SUBTRACT            = False
-    pf.GRID_SKIP_IF_EXISTS           = True   # 再構成済みならスキップ
+    pf.GRID_SKIP_IF_EXISTS           = True   # Skip if already reconstructed
 
     pf.step_grid_reconstruction()
     print("\nStep 1 done\n")
@@ -92,20 +92,20 @@ if __name__ == "__main__":
 
     channel_rois_json = phase_dir / "channels" / "channel_rois.json"
 
-    # 検出（cy を自動取得）→ cx/crop_h を設定値で上書き
+    # Detect (auto-acquire cy) -> overwrite cx/crop_h with configured values
     pf.CROP_W               = CHANNEL_CROP_W
     pf.CROP_H               = 120
     pf.CROP_FORCE_RECOMPUTE = False
-    pf.CROP_FORCE_DETECT    = True   # 常に cy を再検出して最新の位置を取得
+    pf.CROP_FORCE_DETECT    = True   # Always re-detect cy to get the latest position
     pf.CROP_DETECT          = True
-    pf.CROP_APPLY           = False  # apply は cx/crop_h 上書き後にまとめて行う
+    pf.CROP_APPLY           = False  # apply is done after cx/crop_h override
 
     ok = pf.step_channel_crop(phase_dir)
     if not ok:
         print("ERROR: channel_crop failed")
         sys.exit(1)
 
-    # cy はそのまま、cx と crop_h を設定値で上書き
+    # Keep cy as-is, overwrite cx and crop_h with configured values
     with open(channel_rois_json, encoding="utf-8") as f:
         rois = json.load(f)
     for roi in rois:
@@ -114,9 +114,9 @@ if __name__ == "__main__":
         roi["crop_h"] = CHANNEL_CROP_H
     with open(channel_rois_json, "w", encoding="utf-8") as f:
         json.dump(rois, f, indent=2)
-    print(f"  ROI 上書き: cx={CHANNEL_CX}, crop_w={CHANNEL_CROP_W}, crop_h={CHANNEL_CROP_H}")
+    print(f"  ROI override: cx={CHANNEL_CX}, crop_w={CHANNEL_CROP_W}, crop_h={CHANNEL_CROP_H}")
 
-    # apply（上書き後の ROI で実行）
+    # apply (execute with the overridden ROIs)
     pf.CROP_FORCE_DETECT = False
     pf.CROP_DETECT       = False
     pf.CROP_APPLY        = True

@@ -2,35 +2,35 @@
 """
 calibrate_grid_pos_per_pos.py
 -----------------------------
-各 base pos (PosN) について、対応する PosN_x+0_y+0 を個別に参照して
-ECC 中心補正を行い、0.1 μm 名目 grid を展開する。
+For each base pos (PosN), perform ECC center correction by referencing
+the corresponding PosN_x+0_y+0 individually, then expand a 0.1 um nominal grid.
 
-【処理の流れ】
-  For each PosN in TIMELAPSE_POS（BG_COPY_FROM のキーを除く）:
-    1. 中心補正用 reconstruction:
-       CALIB_GRID/PosN_x+0_y+0 の output_phase が未作成なら自動再構成。
-       (x+0_y+0 のみ。全 grid 点の再構成はしない。)
-    2. 中心補正: ECC( REF_GRID/PosN_x+0_y+0, CALIB_GRID/PosN_x+0_y+0 )
-       - _tilt_correct + 固定 ecc_vmin/ecc_vmax
-       - MAD 外れ値除去 (thresh=5.0)
-       - 補正量を PosN 座標に適用 (calibrate_grid_pos.py と同じ符号規約)
+Workflow:
+  For each PosN in TIMELAPSE_POS (excluding keys in BG_COPY_FROM):
+    1. Center correction reconstruction:
+       Auto-reconstruct CALIB_GRID/PosN_x+0_y+0 output_phase if not yet created.
+       (Only x+0_y+0; does not reconstruct all grid points.)
+    2. Center correction: ECC( REF_GRID/PosN_x+0_y+0, CALIB_GRID/PosN_x+0_y+0 )
+       - _tilt_correct + fixed ecc_vmin/ecc_vmax
+       - MAD outlier removal (thresh=5.0)
+       - Apply correction to PosN coordinates (same sign convention as calibrate_grid_pos.py)
 
-  BG_COPY_FROM で指定した BG pos（例: Pos0）には、
-  対応するサンプル pos（例: Pos1）の補正量をそのままコピーする。
+  For BG pos specified by BG_COPY_FROM (e.g. Pos0),
+  the correction from the corresponding sample pos (e.g. Pos1) is copied as-is.
 
-  出力:
-    BASE_DIR/_per_pos_ecc_corrected.pos  : 補正済み base pos
-    BASE_DIR/_per_pos_ecc_grid.pos       : 名目 0.1 μm grid 展開 (snake scan)
-    BASE_DIR/per_pos_ecc_log.json        : 補正ログ
+  Output:
+    BASE_DIR/_per_pos_ecc_corrected.pos  : corrected base pos
+    BASE_DIR/_per_pos_ecc_grid.pos       : nominal 0.1 um grid expansion (snake scan)
+    BASE_DIR/per_pos_ecc_log.json        : correction log
 
-【符号規約】
-  findTransformECC(ref, sample) → (tx, ty)
-    tx = warp[0,2] : 画像 X (col) 方向のずれ [px]
-    ty = warp[1,2] : 画像 Y (row) 方向のずれ [px]
-  drift_stage_x_um = sx_sign * ty * pixel_scale_um   (画像Y → ステージX)
-  drift_stage_y_um = sy_sign * tx * pixel_scale_um   (画像X → ステージY)
-  pos_correct = -drift  (ドリフトを打ち消す方向)
-  ※ calibrate_grid_pos.py L389-394 と完全同一
+Sign convention:
+  findTransformECC(ref, sample) -> (tx, ty)
+    tx = warp[0,2] : image X (col) direction shift [px]
+    ty = warp[1,2] : image Y (row) direction shift [px]
+  drift_stage_x_um = sx_sign * ty * pixel_scale_um   (image Y -> stage X)
+  drift_stage_y_um = sy_sign * tx * pixel_scale_um   (image X -> stage Y)
+  pos_correct = -drift  (direction to cancel drift)
+  Identical to calibrate_grid_pos.py L389-394
 """
 
 import json
@@ -43,51 +43,51 @@ import cv2
 from pathlib import Path
 
 # ============================================================
-# ★ 設定パラメータ — 毎回ここを編集する
+# Configuration parameters -- edit here before each run
 # ============================================================
 
-# 出力先ディレクトリ
+# Output directory
 BASE_DIR = r"C:\260416"
 
-# 補正する timelapse.pos（base positions のみ含む）
+# timelapse.pos to correct (contains only base positions)
 TIMELAPSE_POS = r"D:\AquisitionData\Kitagishi\260416\timelapse.pos"
 
-# 今日の calibration データフォルダ
-# grid データ（Pos1_x+0_y+0）のとき CALIB_SUFFIX = "x+0_y+0"
-# focus/timelapse データ（Pos1）のとき CALIB_SUFFIX = ""
+# Today's calibration data folder
+# For grid data (Pos1_x+0_y+0): CALIB_SUFFIX = "x+0_y+0"
+# For focus/timelapse data (Pos1): CALIB_SUFFIX = ""
 CALIB_SUFFIX   = ""
-CALIB_GRID_DIR = r"C:\260416\_for_0per_gridgluc_2"
+CALIB_GRID_DIR = r"C:\260416\_for_lowper_gridgluc_1"
 
-# Day-1 固定参照 grid フォルダ
-# PosN_x+0_y+0/output_phase/*_phase.tif が再構成済みであること
+# Day-1 fixed reference grid folder
+# PosN_x+0_y+0/output_phase/*_phase.tif must be pre-reconstructed
 REF_GRID_DIR   = r"C:\260416\2per_gridgluc_1"
 
-# z インデックス（img_000000000_ph_{Z:03d}_phase.tif）
-REF_Z_INDEX   = 5    # REF 側（260416: 11枚z-stack, z=0=index5）
-CALIB_Z_INDEX = 0    # CALIB 側（single z 撮影）
+# z index (img_000000000_ph_{Z:03d}_phase.tif)
+REF_Z_INDEX   = 5    # REF side (260416: 11-frame z-stack, z=0=index5)
+CALIB_Z_INDEX = 0    # CALIB side (single z acquisition)
 
-# CALIB_GRID の BG base label（再構成時の BG 差し引きに使う Pos0_x+0_y+0）
+# BG base label for CALIB_GRID (Pos0_x+0_y+0 used for BG subtraction during reconstruction)
 CALIB_BG_BASE_LABEL = "Pos0"
 
-# channel_rois.json が per-pos に存在しない場合は channel_crop.py --detect を自動実行する
+# If channel_rois.json does not exist per-pos, channel_crop.py --detect is auto-executed
 
-# drift_config.json（光学パラメータ・符号・ECC vmin/vmax・crop 設定）
+# drift_config.json (optical parameters, signs, ECC vmin/vmax, crop settings)
 DRIFT_CONFIG = r"C:\Users\QPI\Documents\QPI_Omni\drift_session\drift_config.json"
 
-# ECC / tilt 補正パラメータ
-TILT_CROP_H = 270   # tilt 補正用 X 幅 [px]（compute_pos_shifts.py と同値）
-ECC_CROP_H  = 80    # ECC に使う crop X 幅 [px]
-MAD_THRESH  = 5.0   # チャネル間 MAD 外れ値閾値
+# ECC / tilt correction parameters
+TILT_CROP_H = 270   # X width for tilt correction [px] (same as compute_pos_shifts.py)
+ECC_CROP_H  = 80    # Crop X width used for ECC [px]
+MAD_THRESH  = 5.0   # Inter-channel MAD outlier threshold
 
-# グリッド展開パラメータ（generate_grid_pos.py と一致させる）
-X_STEP = 0.1   # [μm]  ステージ X → 画像 Y
-Y_STEP = 0.1   # [μm]  ステージ Y → 画像 X
-X_HALF = 4     # → 合計 9 点/軸 → 81 点/Pos
+# Grid expansion parameters (must match generate_grid_pos.py)
+X_STEP = 0.1   # [um]  stage X -> image Y
+Y_STEP = 0.1   # [um]  stage Y -> image X
+X_HALF = 4     # -> total 9 points/axis -> 81 points/Pos
 Y_HALF = 4
 
-# BG pos の補正量コピー設定
-# キー: BG の LABEL、値: 補正量をコピーするサンプル pos の LABEL
-# 例: Pos0 には Pos1 の補正量をそのまま適用する
+# BG pos correction copy settings
+# Key: BG LABEL, Value: sample pos LABEL to copy correction from
+# Example: apply Pos1's correction to Pos0 as-is
 BG_COPY_FROM = {"Pos0": "Pos1"}
 
 # ============================================================
@@ -116,7 +116,7 @@ def get_crops_u8(img_f64, rois, n_channels, vmin, vmax, fit_right: bool = False)
 
 
 def load_phase_image(grid_dir, label, z_index):
-    """output_phase/img_000000000_ph_{z_index:03d}_phase.tif を読む。"""
+    """Read output_phase/img_000000000_ph_{z_index:03d}_phase.tif."""
     path = (Path(grid_dir) / label / "output_phase"
             / f"img_000000000_ph_{z_index:03d}_phase.tif")
     if not path.exists():
@@ -125,12 +125,12 @@ def load_phase_image(grid_dir, label, z_index):
 
 
 # ============================================================
-# 位相再構成（calibrate_grid_pos.py から移植、per-Pos crop 対応）
+# Phase reconstruction (ported from calibrate_grid_pos.py, with per-Pos crop support)
 # ============================================================
 
 def reconstruct_phase(raw_path: Path, cfg: dict, bg_path: Path = None,
                       pos_num: int = 1) -> np.ndarray:
-    """QPI 位相再構成。pos_num で crop_before / crop_after を切り替える。"""
+    """QPI phase reconstruction. Switches crop_before / crop_after based on pos_num."""
     script_dir = Path(cfg["script_dir"])
     if str(script_dir) not in sys.path:
         sys.path.insert(0, str(script_dir))
@@ -160,12 +160,12 @@ def reconstruct_phase(raw_path: Path, cfg: dict, bg_path: Path = None,
         phase = phase - _recon(bg_path)
         print(f"    BG: {bg_path.parent.name}/{bg_path.name}")
     else:
-        print("    BG なし")
+        print("    No BG")
     return phase
 
 
 def postprocess_phase(phase: np.ndarray, cfg: dict) -> np.ndarray:
-    """calibrate_grid_pos.py と同一。平均除去 + Gaussian 勾配除去。"""
+    """Same as calibrate_grid_pos.py. Mean removal + Gaussian gradient removal."""
     from scipy.ndimage import gaussian_filter
     h_p, w_p = phase.shape
     region = phase[1:h_p - 1, 1:w_p // 2]
@@ -181,25 +181,25 @@ def ensure_center_reconstructed(calib_grid_dir: str, label: str, z_index: int,
                                  bg_base_label: str, cfg: dict,
                                  bg_suffix: str = "x+0_y+0") -> Path:
     """
-    CALIB_GRID/label/output_phase/img_..._phase.tif が存在しなければ再構成する。
-    label 例: "Pos1_x+0_y+0"（grid）または "Pos1"（focus/timelapse）。再構成済みパスを返す。
-    bg_suffix: BG ディレクトリのサフィックス（grid: "x+0_y+0"、focus: ""）
+    Reconstruct if CALIB_GRID/label/output_phase/img_..._phase.tif does not exist.
+    label example: "Pos1_x+0_y+0" (grid) or "Pos1" (focus/timelapse). Returns path of reconstructed file.
+    bg_suffix: BG directory suffix (grid: "x+0_y+0", focus: "")
     """
     out_path = (Path(calib_grid_dir) / label / "output_phase"
                 / f"img_000000000_ph_{z_index:03d}_phase.tif")
     if out_path.exists():
         return out_path
 
-    print(f"  [reconstruction] {label} → 自動再構成")
+    print(f"  [reconstruction] {label} -> auto-reconstructing")
     raw_path = (Path(calib_grid_dir) / label
                 / f"img_000000000_ph_{z_index:03d}.tif")
     if not raw_path.exists():
-        raise FileNotFoundError(f"raw 画像が見つかりません: {raw_path}")
+        raise FileNotFoundError(f"Raw image not found: {raw_path}")
 
     bg_label = f"{bg_base_label}_{bg_suffix}" if bg_suffix else bg_base_label
     bg_raw   = Path(calib_grid_dir) / bg_label / f"img_000000000_ph_{z_index:03d}.tif"
     if not bg_raw.exists():
-        print(f"    WARNING: BG raw が見つかりません: {bg_raw} → BG なし")
+        print(f"    WARNING: BG raw not found: {bg_raw} -> no BG")
         bg_raw = None
 
     m = re.match(r"Pos(\d+)", label)
@@ -209,19 +209,19 @@ def ensure_center_reconstructed(calib_grid_dir: str, label: str, z_index: int,
     phase = postprocess_phase(phase, cfg)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     tifffile.imwrite(str(out_path), phase.astype(np.float32))
-    print(f"    保存: {out_path}")
+    print(f"    Saved: {out_path}")
     return out_path
 
 
 # ============================================================
-# 中心補正 ECC
+# Center correction ECC
 # ============================================================
 
 def center_ecc(ref_img, calib_img, rois, n_channels, vmin, vmax, fit_right: bool = False):
     """
-    ECC → MAD 外れ値除去 → 平均。
-    Returns: (tx_avg, ty_avg, per_ch_list) | (None, None, per_ch_list) 全失敗時。
-    tx: 画像 X (col) [px], ty: 画像 Y (row) [px]
+    ECC -> MAD outlier removal -> average.
+    Returns: (tx_avg, ty_avg, per_ch_list) | (None, None, per_ch_list) when all fail.
+    tx: image X (col) [px], ty: image Y (row) [px]
     """
     ref_crops   = get_crops_u8(ref_img,   rois, n_channels, vmin, vmax, fit_right)
     calib_crops = get_crops_u8(calib_img, rois, n_channels, vmin, vmax, fit_right)
@@ -260,7 +260,7 @@ def center_ecc(ref_img, calib_img, rois, n_channels, vmin, vmax, fit_right: bool
 
     used_mask = ~is_out
     if not np.any(used_mask):
-        # 全部外れ値 → 全部使う（calibrate_grid_pos.py L364-365 相当）
+        # All are outliers -> use all (equivalent to calibrate_grid_pos.py L364-365)
         used_mask = np.ones(n_raw, dtype=bool)
         for idx in valid_indices:
             per_ch[idx]["excluded"] = False
@@ -271,18 +271,18 @@ def center_ecc(ref_img, calib_img, rois, n_channels, vmin, vmax, fit_right: bool
     n_used   = int(np.sum(used_mask))
     corr_avg = float(np.mean(np.array(corr_list)[used_mask]))
     print(f"  ECC: tx={tx_avg:+.3f}px  ty={ty_avg:+.3f}px  "
-          f"使用 {n_used}/{n_raw}ch  corr={corr_avg:.4f}")
+          f"used {n_used}/{n_raw}ch  corr={corr_avg:.4f}")
     return tx_avg, ty_avg, per_ch
 
 
 # ============================================================
-# メイン
+# Main
 # ============================================================
 
 def _run_channel_detect(pos_dir: Path, z_index: int = 0):
-    """channel_crop.py --detect を output_phase/ の phase 画像に対して実行する。
-    out_dir = img_dir / "channels" なので --dir に output_phase/ を渡すことで
-    output_phase/channels/channel_rois.json に出力される。
+    """Run channel_crop.py --detect on the phase images in output_phase/.
+    Since out_dir = img_dir / "channels", passing output_phase/ to --dir
+    outputs to output_phase/channels/channel_rois.json.
     """
     import subprocess
     script = Path(__file__).resolve().parent / "channel_crop.py"
@@ -292,7 +292,7 @@ def _run_channel_detect(pos_dir: Path, z_index: int = 0):
            "--dir", str(output_phase_dir),
            "--pattern", pattern,
            "--detect"]
-    print(f"  実行: {' '.join(cmd)}")
+    print(f"  Running: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=False)
     if result.returncode != 0:
         print(f"  [!] channel_crop.py --detect failed (returncode={result.returncode})")
@@ -367,44 +367,44 @@ def main():
     positions = pos_data["POSITIONS"]
     print(f"timelapse.pos: {len(positions)} positions")
 
-    # label → pos dict（BG コピー時に座標を更新するため）
+    # label -> pos dict (for updating coordinates during BG copy)
     pos_by_label = {p["LABEL"]: p for p in positions}
 
-    # label → 補正量 dict（BG コピー用に記録）
+    # label -> correction dict (recorded for BG copy)
     correction_by_label: dict[str, dict] = {}
 
     bg_labels = set(BG_COPY_FROM.keys())
 
     log_entries = []
 
-    # ---- サンプル pos の中心補正 ----
+    # ---- Center correction for sample pos ----
     for pos in positions:
         base_label = pos["LABEL"]
         if base_label in bg_labels:
-            continue   # BG は後でコピー
+            continue   # BG will be copied later
 
         ref_label   = f"{base_label}_x+0_y+0"
         calib_label = f"{base_label}_{CALIB_SUFFIX}" if CALIB_SUFFIX else base_label
         print(f"\n=== {base_label} ===")
 
-        # Step 1: 必要なら CALIB 側のみ再構成
+        # Step 1: Reconstruct CALIB side only if needed
         try:
             ensure_center_reconstructed(
                 CALIB_GRID_DIR, calib_label, CALIB_Z_INDEX,
                 CALIB_BG_BASE_LABEL, cfg, bg_suffix=CALIB_SUFFIX,
             )
         except FileNotFoundError as e:
-            print(f"  [reconstruction] 失敗 → スキップ: {e}")
+            print(f"  [reconstruction] Failed -> skipping: {e}")
             log_entries.append({"base_label": base_label, "center_correction": None,
                                  "error": f"reconstruction failed: {e}"})
             continue
 
-        # Step 2: 中心補正 ECC
+        # Step 2: Center correction ECC
         try:
             ref_img   = load_phase_image(REF_GRID_DIR,   ref_label,   REF_Z_INDEX)
             calib_img = load_phase_image(CALIB_GRID_DIR, calib_label, CALIB_Z_INDEX)
         except FileNotFoundError as e:
-            print(f"  [中心補正] 画像読み込み失敗 → スキップ: {e}")
+            print(f"  [center correction] Image load failed -> skipping: {e}")
             log_entries.append({"base_label": base_label, "center_correction": None,
                                  "error": str(e)})
             continue
@@ -412,17 +412,17 @@ def main():
         pos_num   = int(re.match(r"Pos(\d+)", base_label).group(1))
         fit_right = pos_num >= pos_split
 
-        # per-pos channel_rois.json を REF_GRID_DIR から読む
-        # 存在しなければ channel_crop.py --detect を自動実行して生成する
+        # Load per-pos channel_rois.json from REF_GRID_DIR
+        # If not found, auto-run channel_crop.py --detect to generate it
         perpos_rois_path = (Path(REF_GRID_DIR) / ref_label
                             / "output_phase" / "channels" / "channel_rois.json")
         if not perpos_rois_path.exists():
-            print(f"  [channel_detect] channel_rois.json なし → 自動 detect: {ref_label}")
+            print(f"  [channel_detect] No channel_rois.json -> auto-detecting: {ref_label}")
             _run_channel_detect(Path(REF_GRID_DIR) / ref_label, z_index=REF_Z_INDEX)
         if not perpos_rois_path.exists():
             raise FileNotFoundError(
-                f"channel_rois.json の生成に失敗しました: {perpos_rois_path}\n"
-                f"手動で実行: python scripts/channel_crop.py --dir \"{Path(REF_GRID_DIR) / ref_label}\" --detect"
+                f"Failed to generate channel_rois.json: {perpos_rois_path}\n"
+                f"Run manually: python scripts/channel_crop.py --dir \"{Path(REF_GRID_DIR) / ref_label}\" --detect"
             )
         with open(perpos_rois_path, encoding="utf-8") as f:
             rois = json.load(f)
@@ -433,18 +433,18 @@ def main():
                                             fit_right=fit_right)
 
         if tx_avg is None:
-            print(f"  [中心補正] 全チャネル ECC 失敗 → スキップ")
+            print(f"  [center correction] All channels ECC failed -> skipping")
             log_entries.append({"base_label": base_label, "center_correction": None,
                                  "error": "all_ecc_failed", "per_channel": per_ch})
             continue
 
-        # 符号規約: calibrate_grid_pos.py L389-394 と完全同一
-        drift_stage_x_um = sx_sign * ty_avg * pixel_scale_um   # 画像Y → ステージX
-        drift_stage_y_um = sy_sign * tx_avg * pixel_scale_um   # 画像X → ステージY
+        # Sign convention: identical to calibrate_grid_pos.py L389-394
+        drift_stage_x_um = sx_sign * ty_avg * pixel_scale_um   # image Y -> stage X
+        drift_stage_y_um = sy_sign * tx_avg * pixel_scale_um   # image X -> stage Y
         pos_correct_x_um = -drift_stage_x_um
         pos_correct_y_um = -drift_stage_y_um
 
-        print(f"  補正: stage_X={pos_correct_x_um:+.4f}μm  stage_Y={pos_correct_y_um:+.4f}μm")
+        print(f"  Correction: stage_X={pos_correct_x_um:+.4f}um  stage_Y={pos_correct_y_um:+.4f}um")
 
         for dev in pos["DEVICES"]:
             if dev["DEVICE"] == "XYStage":
@@ -464,11 +464,11 @@ def main():
         correction_by_label[base_label] = correction
         log_entries.append({"base_label": base_label, "center_correction": correction})
 
-    # ---- BG pos に対応サンプルの補正量をコピー ----
+    # ---- Copy corresponding sample correction to BG pos ----
     for bg_label, src_label in BG_COPY_FROM.items():
-        print(f"\n=== {bg_label} (BG: {src_label} の補正量をコピー) ===")
+        print(f"\n=== {bg_label} (BG: copying correction from {src_label}) ===")
         if src_label not in correction_by_label:
-            print(f"  WARNING: {src_label} の補正量が未計算 → {bg_label} はスキップ")
+            print(f"  WARNING: Correction for {src_label} not computed -> skipping {bg_label}")
             log_entries.append({"base_label": bg_label,
                                  "center_correction": None,
                                  "copied_from": src_label,
@@ -478,7 +478,7 @@ def main():
         src_corr = correction_by_label[src_label]
         pos = pos_by_label.get(bg_label)
         if pos is None:
-            print(f"  WARNING: {bg_label} が timelapse.pos に見つかりません → スキップ")
+            print(f"  WARNING: {bg_label} not found in timelapse.pos -> skipping")
             continue
 
         for dev in pos["DEVICES"]:
@@ -486,8 +486,8 @@ def main():
                 dev["X"] += src_corr["pos_correct_x_um"]
                 dev["Y"] += src_corr["pos_correct_y_um"]
 
-        print(f"  補正: stage_X={src_corr['pos_correct_x_um']:+.4f}μm"
-              f"  stage_Y={src_corr['pos_correct_y_um']:+.4f}μm  (コピー元: {src_label})")
+        print(f"  Correction: stage_X={src_corr['pos_correct_x_um']:+.4f}um"
+              f"  stage_Y={src_corr['pos_correct_y_um']:+.4f}um  (copied from: {src_label})")
         log_entries.append({
             "base_label": bg_label,
             "copied_from": src_label,
@@ -496,14 +496,14 @@ def main():
             },
         })
 
-    # ---- 補正済み base pos 保存 ----
+    # ---- Save corrected base pos ----
     base_dir = Path(BASE_DIR)
     out_corrected = base_dir / "_per_pos_ecc_corrected.pos"
     with open(out_corrected, "w") as f:
         json.dump(pos_data, f, indent=3)
-    print(f"\n補正済み base pos: {out_corrected}  ({len(positions)} positions)")
+    print(f"\nCorrected base pos: {out_corrected}  ({len(positions)} positions)")
 
-    # ---- grid 展開（snake scan: generate_grid_pos.py と完全一致） ----
+    # ---- Grid expansion (snake scan: identical to generate_grid_pos.py) ----
     new_positions = []
     for pos in positions:
         base_x = base_y = base_z = 0.0
@@ -534,10 +534,10 @@ def main():
     with open(out_grid, "w") as f:
         json.dump(pos_data, f, indent=3)
     n_base = len(positions)
-    print(f"grid 展開後: {out_grid}  "
-          f"({len(new_positions)} = {n_base} × {(2*X_HALF+1)*(2*Y_HALF+1)})")
+    print(f"After grid expansion: {out_grid}  "
+          f"({len(new_positions)} = {n_base} x {(2*X_HALF+1)*(2*Y_HALF+1)})")
 
-    # ---- ログ保存 ----
+    # ---- Save log ----
     out_log = base_dir / "per_pos_ecc_log.json"
     with open(out_log, "w", encoding="utf-8") as f:
         json.dump({
@@ -558,12 +558,12 @@ def main():
             "bg_copy_from":    BG_COPY_FROM,
             "per_pos":         log_entries,
         }, f, indent=2, ensure_ascii=False)
-    print(f"ログ: {out_log}")
+    print(f"Log: {out_log}")
 
     # ---- correction summary figure ----
     _plot_corrections(log_entries, base_dir)
 
-    print("\n--- 完了 ---")
+    print("\n--- Done ---")
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 from figure_logger import save_figure
 
-# === データパス ===
+# === Data paths ===
 DATA_DIR = r"G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\2026-03-05\shift_visualize\shift_visualize_20260305T113225Z_cb7d7c"
 
 FILES = {
@@ -16,13 +16,13 @@ FILES = {
 }
 
 # %%
-# データ読み込み
+# Load data
 datasets = {}
 for label, path in FILES.items():
     data = np.loadtxt(path)
     datasets[label] = {"x": data[:, 0], "y": data[:, 1]}
 
-# 共通軸範囲を計算
+# Calculate common axis range
 all_x = np.concatenate([d["x"] for d in datasets.values()])
 all_y = np.concatenate([d["y"] for d in datasets.values()])
 x_margin = (all_x.max() - all_x.min()) * 0.03
@@ -42,7 +42,7 @@ params_base = {
 }
 
 # %%
-# 図1・2・3: 各 shift を個別に同一スケールで出力
+# Figures 1, 2, 3: Output each shift individually at the same scale
 for (label, d), color in zip(datasets.items(), colors):
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(d["x"], d["y"], color=color, marker="o", markersize=3, linewidth=1)

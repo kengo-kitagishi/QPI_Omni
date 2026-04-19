@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-フィルタリング済み条件の結果を個別にプロットするスクリプト
+Script to plot results of filtered conditions individually
 
-filtered_*px ディレクトリの結果を読み込んで、各条件ごとにプロット
+Read results from filtered_*px directories and plot for each condition
 """
 # %%
 import os
@@ -15,10 +15,10 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 
 def parse_condition_name(dirname):
-    """ディレクトリ名から条件を解析"""
+    """Parse condition from directory name"""
     # timeseries_density_output_ellipse_subpixel5_discrete_round_filtered_1.0px
     
-    # フィルタ情報を分離
+    # Separate filter information
     if '_filtered_' in dirname:
         main_part, filter_part = dirname.rsplit('_filtered_', 1)
         filter_threshold = filter_part.replace('px', '')
@@ -30,7 +30,7 @@ def parse_condition_name(dirname):
     
     result = {'filter_threshold': filter_threshold}
     
-    # interpolate処理されているか
+    # Check if interpolation was applied
     if 'interpolate' in parts:
         result['interpolate'] = True
         parts.remove('interpolate')
@@ -65,7 +65,7 @@ def parse_condition_name(dirname):
     return result
 
 def plot_single_condition(csv_file, output_base_dir='.'):
-    """1つの条件をプロット"""
+    """Plot a single condition"""
     dirname = os.path.basename(os.path.dirname(csv_file))
     condition = parse_condition_name(dirname)
     
@@ -74,24 +74,24 @@ def plot_single_condition(csv_file, output_base_dir='.'):
     try:
         df = pd.read_csv(csv_file)
         
-        # roi_str からフレーム番号を抽出（例: ROI_0000_Frame_2438 -> 2438）
+        # Extract frame number from roi_str (e.g., ROI_0000_Frame_2438 -> 2438)
         if 'roi_str' in df.columns:
             df['frame_number'] = df['roi_str'].str.extract(r'Frame_(\d+)').astype(int)
             df['roi_id'] = df['roi_str'].str.extract(r'(ROI_\d+)_')
         
-        # 時間を計算（frame_number / 12 = 時間[h]）
+        # Compute time (frame_number / 12 = time [h])
         df['time_h'] = df['frame_number'] / 12.0
         
         print(f"  Loaded {len(df)} data points")
         print(f"  Time range: {df['time_h'].min():.2f} - {df['time_h'].max():.2f} h")
         
-        # 出力ディレクトリ名を作成（timeseries_density_output_ を timeseries_plots_ に置換）
+        # Create output directory name (replace timeseries_density_output_ with timeseries_plots_)
         plot_dir = dirname.replace('timeseries_density_output_', 'timeseries_plots_')
         output_dir = os.path.join(output_base_dir, plot_dir)
         os.makedirs(output_dir, exist_ok=True)
         
-        # 時間ビンごとの統計を計算
-        time_bin_h = 1.0  # 1時間ごと
+        # Compute statistics per time bin
+        time_bin_h = 1.0  # Per hour
         time_bins = np.arange(
             np.floor(df['time_h'].min()),
             np.ceil(df['time_h'].max()) + time_bin_h,
@@ -132,7 +132,7 @@ def plot_single_condition(csv_file, output_base_dir='.'):
                     ri_means.append(np.nan)
                     ri_stds.append(np.nan)
         
-        # プロット作成
+        # Create plot
         fig, axes = plt.subplots(3, 1, figsize=(12, 14))
         
         # Volume
@@ -177,7 +177,7 @@ def plot_single_condition(csv_file, output_base_dir='.'):
         print(f"  Saved: {output_file}")
         plt.close()
         
-        # 統計サマリーをCSVに保存
+        # Save statistical summary to CSV
         summary_stats = {
             'condition_dir': dirname,
             'shape': condition['shape'],
@@ -211,33 +211,33 @@ def plot_single_condition(csv_file, output_base_dir='.'):
         return None
 
 def main():
-    """メイン実行"""
+    """Main execution"""
     parser = argparse.ArgumentParser(
-        description='フィルタリング済み条件の結果を個別にプロット',
+        description='Plot results of filtered conditions individually',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-使用例:
-  # 全てのフィルタリング済みデータを個別にプロット
+Examples:
+  # Plot all filtered data individually
   python 30_plot_filtered_conditions.py
-  
-  # 特定のフィルタ閾値のみ
+
+  # Only specific filter thresholds
   python 30_plot_filtered_conditions.py --filter-pattern "*filtered_1.0px"
-  
-  # 基準ディレクトリを指定
+
+  # Specify base directory
   python 30_plot_filtered_conditions.py -d G:\\test_dens_est
 """
     )
     
     parser.add_argument('-d', '--base-dir', type=str, default='.',
-                        help='基準ディレクトリ（デフォルト: カレントディレクトリ）')
+                        help='Base directory (default: current directory)')
     parser.add_argument('--filter-pattern', type=str, default='*filtered_*',
-                        help='フィルタディレクトリパターン（デフォルト: *filtered_*）')
+                        help='Filter directory pattern (default: *filtered_*)')
     parser.add_argument('-y', '--yes', action='store_true',
-                        help='確認なしで実行')
+                        help='Run without confirmation')
     
-    # Jupyter環境での実行に対応
+    # Support execution in Jupyter environment
     if 'ipykernel' in sys.modules:
-        # Jupyter環境の場合、sys.argvから--f引数を除外
+        # In Jupyter environment, exclude --f argument from sys.argv
         filtered_argv = [arg for arg in sys.argv if not arg.startswith('--f=') and not arg.startswith('-f=')]
         args = parser.parse_args(filtered_argv[1:] if len(filtered_argv) > 1 else [])
     else:
@@ -249,7 +249,7 @@ def main():
     print(f"\nBase directory: {os.path.abspath(args.base_dir)}")
     print(f"Filter pattern: {args.filter_pattern}")
     
-    # フィルタリング済みディレクトリを検索
+    # Search for filtered directories
     pattern = os.path.join(args.base_dir, f'timeseries_density_output_{args.filter_pattern}', 'filtering_summary.csv')
     csv_files = glob.glob(pattern)
     
@@ -260,20 +260,20 @@ def main():
         print(f"Search pattern: {pattern}")
         return
     
-    # リスト表示
+    # Display list
     print("\nConditions to plot:")
     for i, csv_file in enumerate(csv_files, 1):
         dirname = os.path.basename(os.path.dirname(csv_file))
         print(f"  {i}. {dirname}")
     
-    # 確認
+    # Confirmation
     if not args.yes:
         response = input(f"\nPlot all {len(csv_files)} conditions? [y/N]: ")
         if response.lower() != 'y':
             print("Cancelled")
             return
     
-    # 各条件をプロット
+    # Plot each condition
     all_stats = []
     
     for csv_file in csv_files:
@@ -281,7 +281,7 @@ def main():
         if stats is not None:
             all_stats.append(stats)
     
-    # 全条件のサマリーを結合
+    # Combine summaries from all conditions
     if len(all_stats) > 0:
         combined_summary = pd.DataFrame(all_stats)
         combined_csv = os.path.join(args.base_dir, 'all_filtered_conditions_summary.csv')
