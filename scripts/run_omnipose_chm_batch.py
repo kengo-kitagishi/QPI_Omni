@@ -32,7 +32,7 @@ from cellpose_omni.models import CellposeModel
 EVAL_PARAMS = dict(
     channels=None,
     channel_axis=None,
-    diameter=30,
+    diameter=15,
     normalize=True,
     tile=False,
     net_avg=True,

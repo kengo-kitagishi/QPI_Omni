@@ -405,6 +405,77 @@ def _json_dump(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _write_data_csv(data: dict, csv_path: Path) -> None:
+    """Save ``data`` as a CSV alongside the npz.
+
+    2つのレイアウトを試す：
+    1. multi-series (n_series + label_i / <var>_i のパターン) → long-format CSV
+    2. 全値が同じ長さの 1D 配列 → wide-format CSV
+
+    どちらでもない場合は黙って何もしない（CSV は作らない）。
+    """
+    import numpy as np  # 局所 import（既存コードに合わせる）
+    import pandas as pd
+
+    # --- 1) multi-series 形式 ---
+    if "n_series" in data:
+        try:
+            n = int(np.asarray(data["n_series"]).item())
+        except Exception:
+            n = -1
+        if n > 0:
+            frames: list[pd.DataFrame] = []
+            for i in range(n):
+                label_key = f"label_{i}"
+                if label_key not in data:
+                    continue
+                label_val = np.asarray(data[label_key])
+                label = str(label_val.ravel()[0]) if label_val.size else f"series_{i}"
+                # その i に属する他のキーを集める（suffix _i）
+                suffix = f"_{i}"
+                cols: dict[str, np.ndarray] = {}
+                for k, v in data.items():
+                    if k == label_key or k == "n_series":
+                        continue
+                    if k.endswith(suffix):
+                        arr = np.asarray(v)
+                        if arr.ndim == 1:
+                            cols[k[: -len(suffix)]] = arr
+                if not cols:
+                    continue
+                lengths = {len(a) for a in cols.values()}
+                if len(lengths) != 1:
+                    continue
+                df_i = pd.DataFrame(cols)
+                df_i.insert(0, "label", label)
+                frames.append(df_i)
+            if frames:
+                out = pd.concat(frames, ignore_index=True)
+                csv_path.parent.mkdir(parents=True, exist_ok=True)
+                out.to_csv(csv_path, index=False)
+                return
+
+    # --- 2) wide 形式（全配列が同じ長さの 1D） ---
+    cols2: dict[str, np.ndarray] = {}
+    for k, v in data.items():
+        arr = np.asarray(v)
+        if arr.ndim == 1:
+            cols2[k] = arr
+        elif arr.ndim == 0:
+            # スカラーは均一長に合わせられないのでスキップ
+            continue
+        else:
+            # 多次元はCSV化不可
+            return
+    if not cols2:
+        return
+    lengths = {len(a) for a in cols2.values()}
+    if len(lengths) != 1:
+        return
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(cols2).to_csv(csv_path, index=False)
+
+
 def _append_manifest(record: dict, manifest_path: Path) -> None:
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     with manifest_path.open("a", encoding="utf-8") as f:
@@ -906,12 +977,24 @@ def save_figure(
     fig.savefig(inbox_file, dpi=dpi, bbox_inches="tight")
 
     data_file = ""
+    csv_file = ""
     if data:
         import numpy as np
         npz_path = inbox_dir / f"{base}_data.npz"
         np.savez_compressed(npz_path, **data)
         data_file = str(npz_path.resolve())
         print(f"[figure_logger] data saved:  {npz_path}")
+
+        # CSV も保存する（可能な場合）
+        csv_path = inbox_dir / f"{base}_data.csv"
+        try:
+            _write_data_csv(data, csv_path)
+        except Exception as exc:
+            print(f"[figure_logger] CSV skip ({exc})")
+        else:
+            if csv_path.exists():
+                csv_file = str(csv_path.resolve())
+                print(f"[figure_logger] csv  saved:  {csv_path}")
 
     published_file = ""
     if publish:
@@ -973,6 +1056,7 @@ def save_figure(
         "published_file": published_file,
         "manifest_file": str(manifest_path.resolve()),
         "data_file": data_file,
+        "csv_file": csv_file,
         "data_keys": list(data.keys()) if data else [],
         "tif_copies": tif_copies,
         "data_info": {**_detect_data_info(), **(data_source or {})},

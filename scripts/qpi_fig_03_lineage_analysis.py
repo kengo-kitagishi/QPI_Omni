@@ -1,21 +1,22 @@
 """
 qpi_fig_03_lineage_analysis.py — Cell lineage / cell cycle analysis for QPI data
 
-Analyze cell size homeostasis, division interval, and RI homeostasis from ImageJ ROI Results.csv.
-Applies the workflow from 250416_kaiseki.pdf + Oldewurtel et al. (eLife 2021)
-to QPI (RI / dry mass) data.
+Supported CSV formats (auto-detect):
+  (A) ImageJ ROI Results: columns = Slice, Area, Mean (=RI)
+  (B) Physical units (via batch_volume_trace_overlay -> npz_to_lineage_csv):
+      columns = frame_index, volume_um3_rod, mean_ri, mass_pg
 
 Analysis contents:
-  1. Individual cell area and RI time series (with division event detection)
-  2. Population mean +/- SEM (area, RI)
+  1. Individual cell size and RI time series (with division event detection)
+  2. Population mean +/- SEM (size, RI)
   3. Birth size vs Added size (size homeostasis: sizer / adder / timer classification)
   4. Birth RI vs Added RI (dry mass homeostasis)
   5. Division interval histogram
   6. Division interval per generation
-  7. Cell cycle aligned trajectories (Area / RI / Dry mass)
+  7. Cell cycle aligned trajectories (Size / RI / Dry mass)
   8. Density (RI) distribution histogram (Gaussian fit)
   9. Density homeostasis (birth RI vs delta RI)
-  10. Growth rate analysis (dArea/dt, dMass/dt variation within cell cycle)
+  10. Growth rate analysis (dSize/dt, dMass/dt variation within cell cycle)
 
 References:
   - Oldewurtel et al. (2021) eLife 10:e64901
@@ -24,9 +25,11 @@ References:
 
 Usage:
   python qpi_fig_03_lineage_analysis.py
+  python qpi_fig_03_lineage_analysis.py --base-dir <dir> --mode physical
 """
 
 # %%
+import argparse
 import glob
 import os
 import sys
@@ -44,13 +47,26 @@ from figure_logger import save_figure
 # =============================================================================
 
 # --- Data directory (folder containing CSV files) ---
-BASE_DIR = "/Users/kitak/Desktop/251105_QPI_results/0.0055_Results"
+BASE_DIR = str(
+    (
+        __import__("pathlib").Path(__file__).resolve().parent
+        / "results"
+        / "lineage_csv"
+        / "test_eroded_volume_overlay__Volume_overlay_8ch_eroded_mask_-1px_thin__20260417T013807Z_6f4157__f002"
+    )
+)
 
 # --- CSV files to use (if empty list, use all *.csv in BASE_DIR) ---
 FILEPATHS = []
 
 # --- Cells to highlight (filename substring) ---
 HIGHLIGHT_SERIES = []
+
+# --- Data mode ("auto" / "imagej" / "physical") ---
+# "physical": columns=frame_index,volume_um3_rod,mean_ri,mass_pg
+# "imagej":   columns=Slice,Area,Mean
+# "auto":     Auto-detect from CSV columns
+DATA_MODE = "auto"
 
 # --- Physical constants ---
 PIXEL_AREA_TO_UM2 = (140 / 648) ** 2   # pixel^2 -> um^2 (magnification from ImageJ ROI analysis)
@@ -61,20 +77,25 @@ TIME_INTERVAL_H = 1 / FRAMES_PER_HOUR  # Frame interval [h]
 N_INTERP = 100                          # Number of interpolation points for cell cycle aligned trajectory
 
 # --- Media switch timing (frame number) ---
-MEDIA_SWITCHES = [
-    (0,    "wo_2"),     # 2% glucose
-    (1145, "wo_0"),     # 0% glucose (starvation)
-    (1435, "wo_0"),     # 0% glucose (continued)
-    (2014, "wo_2"),     # 2% glucose (recovery)
-]
-MEDIA_SWITCH_FRAMES = [s[0] for s in MEDIA_SWITCHES if s[0] > 0]
+# 260405 dataset: [575, 875, 1439] (matches vline_frames in test_eroded_volume_overlay.py)
+MEDIA_SWITCH_FRAMES = [575, 875, 1439]
+
+# --- Analysis range (frames beyond this are excluded from all analyses) ---
+# Use only the normal growth period before 1st media switch (frame 575). None for all frames.
+ANALYSIS_MAX_FRAME: int | None = 575
 
 # --- Division detection parameters ---
-DIV_AREA_DROP = 0.6     # Area drops below this ratio -> detected as division
-DIV_TIME_MAX_H = 100    # Only use divisions before this time (normal growth period before starvation)
+DIV_AREA_DROP = 0.6     # Size drops below this ratio -> detected as division
+# Use only the normal growth period before starvation. None for all frames.
+DIV_TIME_MAX_H = 575 / FRAMES_PER_HOUR
 
 # --- Output ---
 OUTPUT_DIR = "results/figures"
+
+# --- ラベル（DATA_MODE に応じて main() で上書きされる） ---
+SIZE_COL_LABEL = "Size"
+SIZE_COL_UNIT = "a.u."
+MASS_UNIT = "a.u."
 
 
 # =============================================================================
@@ -88,19 +109,55 @@ def load_filepaths(base_dir: str, filepaths: list[str]) -> list[str]:
     return sorted(glob.glob(os.path.join(base_dir, "*.csv")))
 
 
+def detect_data_mode(df: pd.DataFrame) -> str:
+    """CSVのカラムからデータモードを判定する。"""
+    if "volume_um3_rod" in df.columns and "mean_ri" in df.columns:
+        return "physical"
+    if "Slice" in df.columns and "Area" in df.columns:
+        return "imagej"
+    raise ValueError(
+        f"Unknown CSV format. Columns: {list(df.columns)}. "
+        "Expected either (Slice,Area,Mean) or (frame_index,volume_um3_rod,mean_ri,mass_pg)."
+    )
+
+
 def load_cell_data(filepath: str) -> pd.DataFrame:
-    """Load Results.csv and convert to physical units."""
+    """Load CSV and normalize to common columns (Time, Size, RI, Density, DryMass).
+
+    - "Size" refers to Area [um^2] in imagej mode and Volume [um^3] in physical mode
+      ("size" is a dimension-agnostic generic name).
+    - "DryMass" is a 2D proxy in imagej mode and direct mass_pg [pg] in physical mode.
+    """
     df = pd.read_csv(filepath)
-    df = df.sort_values(by="Slice").reset_index(drop=True)
-    df["Time"] = df["Slice"] / FRAMES_PER_HOUR          # [h]
-    df["Area_um2"] = df["Area"] * PIXEL_AREA_TO_UM2      # [µm²]
-    df["RI"] = df["Mean"]                                 # RI (correction done separately)
-    # Dry mass proxy: concentration x area
-    # C [mg/mL] = (RI - n_medium) / alpha_ri
-    # dry_mass [pg] proportional to C x Area (2D proxy; strictly requires 3D integration)
-    df["Density"] = (df["RI"] - N_MEDIUM) / ALPHA_RI     # [mg/mL]
-    df["DryMass"] = df["Density"] * df["Area_um2"]        # [pg·µm² / mL] proxy
+    mode = DATA_MODE if DATA_MODE in ("imagej", "physical") else detect_data_mode(df)
+
+    if mode == "imagej":
+        df = df.sort_values(by="Slice").reset_index(drop=True)
+        df["Time"] = df["Slice"] / FRAMES_PER_HOUR              # [h]
+        df["Size"] = df["Area"] * PIXEL_AREA_TO_UM2             # [um^2]
+        df["RI"] = df["Mean"]
+        df["Density"] = (df["RI"] - N_MEDIUM) / ALPHA_RI        # [mg/mL]
+        df["DryMass"] = df["Density"] * df["Size"]              # 2D proxy
+    elif mode == "physical":
+        df = df.sort_values(by="frame_index").reset_index(drop=True)
+        df["Time"] = df["frame_index"] / FRAMES_PER_HOUR        # [h]
+        df["Size"] = df["volume_um3_rod"]                       # [um^3]
+        df["RI"] = df["mean_ri"]
+        df["Density"] = (df["RI"] - N_MEDIUM) / ALPHA_RI        # [mg/mL]
+        df["DryMass"] = df["mass_pg"]                           # [pg] direct
+    else:
+        raise ValueError(f"Unsupported data mode: {mode}")
+
+    # Backward-compatible alias: Area_um2 = Size
+    df["Area_um2"] = df["Size"]
     df["_source"] = filepath
+    df["_mode"] = mode
+    # ANALYSIS_MAX_FRAME で解析範囲を制限
+    if ANALYSIS_MAX_FRAME is not None:
+        frame_col = df["frame_index"] if "frame_index" in df.columns else df["Slice"]
+        df = df[frame_col <= ANALYSIS_MAX_FRAME].reset_index(drop=True)
+    # 無効な行（NaN volume / RI）は落とす
+    df = df.dropna(subset=["Size", "RI"]).reset_index(drop=True)
     return df
 
 
@@ -163,10 +220,18 @@ def extract_cell_cycles(df: pd.DataFrame,
 def extract_cycle_traces(df: pd.DataFrame,
                          drop_ratio: float = DIV_AREA_DROP,
                          max_time_h: float | None = None,
-                         n_interp: int = N_INTERP) -> list[dict]:
+                         n_interp: int = N_INTERP,
+                         include_div_frame: bool = False) -> list[dict]:
     """Interpolate each cell cycle time series by relative progression (0->1).
 
     Corresponds to Oldewurtel et al. (2021) Fig 2B-D.
+
+    Args:
+        include_div_frame:
+            False (default): cycle = [birth, next_div - 1]（分裂フレームを含めない）。
+                rel_progress は半開区間 [0, 1) 上に正規化される。
+            True: cycle = [birth, next_div]（分裂フレームを含める）。
+                rel_progress は閉区間 [0, 1] 上に正規化される。
 
     Returns:
         list of dict with keys:
@@ -187,13 +252,24 @@ def extract_cycle_traces(df: pd.DataFrame,
     for i in range(len(div_indices) - 1):
         start = div_indices[i]
         end = div_indices[i + 1]
-        cycle = df.loc[start:end - 1]  # Exclude the next division frame
+        if include_div_frame:
+            cycle = df.loc[start:end]
+        else:
+            cycle = df.loc[start:end - 1]  # Exclude the next division frame
         if len(cycle) < 4:
             continue
 
         # Relative progression
         t = cycle["Time"].values
-        t_rel = (t - t[0]) / (t[-1] - t[0] + TIME_INTERVAL_H)
+        if include_div_frame:
+            # 分裂フレームが最終点。rel[-1] = 1 となる閉区間正規化。
+            denom = t[-1] - t[0]
+            interval = denom
+        else:
+            # 分裂フレームは含めない。+dt で "次の分裂までの時間" を反映。
+            denom = t[-1] - t[0] + TIME_INTERVAL_H
+            interval = denom
+        t_rel = (t - t[0]) / denom
 
         # Interpolation
         area_i = np.interp(rel, t_rel, cycle["Area_um2"].values)
@@ -206,7 +282,8 @@ def extract_cycle_traces(df: pd.DataFrame,
             "ri_interp": ri_i,
             "mass_interp": mass_i,
             "birth_time": t[0],
-            "interval": t[-1] - t[0] + TIME_INTERVAL_H,
+            "interval": interval,
+            "include_div_frame": include_div_frame,
         })
 
     return traces
@@ -214,6 +291,28 @@ def extract_cycle_traces(df: pd.DataFrame,
 
 def label_from_path(filepath: str) -> str:
     return os.path.basename(filepath).replace(".csv", "").replace("_Results", "")
+
+
+def size_label() -> str:
+    """E.g. 'Area [µm²]' or 'Volume [µm³]'."""
+    return rf"{SIZE_COL_LABEL} [{SIZE_COL_UNIT}]"
+
+
+def mass_label() -> str:
+    return f"Dry mass [{MASS_UNIT}]"
+
+
+def _apply_mode_labels(mode: str) -> None:
+    """モードに応じて module-level ラベルを更新する。"""
+    global SIZE_COL_LABEL, SIZE_COL_UNIT, MASS_UNIT
+    if mode == "imagej":
+        SIZE_COL_LABEL = "Area"
+        SIZE_COL_UNIT = r"$\mu$m$^2$"
+        MASS_UNIT = "a.u."
+    elif mode == "physical":
+        SIZE_COL_LABEL = "Volume"
+        SIZE_COL_UNIT = r"$\mu$m$^3$"
+        MASS_UNIT = "pg"
 
 
 # =============================================================================
@@ -266,7 +365,7 @@ def fig1_individual_traces(all_data: list[tuple[pd.DataFrame, str]]):
         ax1.axvline(t, color="0.6", ls="--", lw=0.5)
         ax2.axvline(t, color="0.6", ls="--", lw=0.5)
 
-    ax1.set_ylabel(r"Cell Area [$\mu$m$^2$]", fontsize=8)
+    ax1.set_ylabel(f"Cell {size_label()}", fontsize=8)
     ax2.set_ylabel("RI", fontsize=8)
     ax2.set_xlabel("Time [h]", fontsize=8)
     ax1.tick_params(labelsize=7)
@@ -275,8 +374,9 @@ def fig1_individual_traces(all_data: list[tuple[pd.DataFrame, str]]):
     fig.tight_layout()
     save_figure(fig,
                 params={"base_dir": BASE_DIR, "n_cells": len(all_data),
-                        "div_drop_ratio": DIV_AREA_DROP},
-                description="Individual cell area and RI traces with division events")
+                        "div_drop_ratio": DIV_AREA_DROP,
+                        "data_mode": all_data[0][0]["_mode"].iloc[0] if all_data else "?"},
+                description=f"Individual cell {SIZE_COL_LABEL.lower()} and RI traces with division events")
     return fig
 
 
@@ -298,13 +398,13 @@ def fig2_population_mean(all_data: list[tuple[pd.DataFrame, str]]):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(89/25.4, 100/25.4),
                                     sharex=True)
 
-    # Area
+    # Size (Area or Volume)
     ax1.plot(mean_area.index, mean_area.values, color=OI["blue"], lw=0.8,
-             label=r"Mean Area [$\mu$m$^2$]")
+             label=f"Mean {size_label()}")
     ax1.fill_between(mean_area.index,
                      mean_area - sem_area, mean_area + sem_area,
                      color=OI["blue"], alpha=0.25, label="±1 SEM")
-    ax1.set_ylabel(r"Area [$\mu$m$^2$]", fontsize=8)
+    ax1.set_ylabel(size_label(), fontsize=8)
     ax1.legend(fontsize=6, loc="upper left")
 
     # RI
@@ -349,9 +449,9 @@ def fig3_size_homeostasis(all_cycles: list[dict]):
     # Mean crosshairs
     ax1.axvline(df["birth_area"].mean(), color="0.6", ls="--", lw=0.5)
     ax1.axhline(df["added_area"].mean(), color="0.6", ls="--", lw=0.5)
-    ax1.set_xlabel(r"Birth size [$\mu$m$^2$]", fontsize=8)
-    ax1.set_ylabel(r"Added size [$\mu$m$^2$]", fontsize=8)
-    ax1.set_title(f"Area homeostasis (r={r_a:.2f}, p={p_a:.2e})", fontsize=8)
+    ax1.set_xlabel(f"Birth {size_label()}", fontsize=8)
+    ax1.set_ylabel(f"Added {size_label()}", fontsize=8)
+    ax1.set_title(f"{SIZE_COL_LABEL} homeostasis (r={r_a:.2f}, p={p_a:.2e})", fontsize=8)
 
     # --- RI homeostasis ---
     r_ri, p_ri = pearsonr(df["birth_ri"], df["added_ri"])
@@ -481,7 +581,7 @@ def fig6_divsize_vs_ri(all_cycles: list[dict]):
     fig, ax = plt.subplots(figsize=(89/25.4, 75/25.4))
     ax.scatter(df["div_area"], df["div_ri"],
                color=OI["purple"], alpha=0.6, s=15, edgecolors="none")
-    ax.set_xlabel(r"Division size (Area [$\mu$m$^2$])", fontsize=8)
+    ax.set_xlabel(f"Division {size_label()}", fontsize=8)
     ax.set_ylabel("RI at division", fontsize=8)
     ax.set_title(f"Division size vs RI (r={r:.2f}, p={p:.2e})", fontsize=8)
     ax.tick_params(labelsize=7)
@@ -512,9 +612,9 @@ def fig7_aligned_trajectories(all_traces: list[dict]):
     fig, axes = plt.subplots(3, 1, figsize=(89/25.4, 140/25.4), sharex=True)
 
     for ax, data, ylabel, color, label in [
-        (axes[0], areas, r"Area [$\mu$m$^2$]", OI["blue"], "Area"),
+        (axes[0], areas, size_label(), OI["blue"], SIZE_COL_LABEL),
         (axes[1], ris, "RI", OI["green"], "RI"),
-        (axes[2], masses, "Dry mass [a.u.]", OI["orange"], "Dry mass"),
+        (axes[2], masses, mass_label(), OI["orange"], "Dry mass"),
     ]:
         mean = np.mean(data, axis=0)
         std = np.std(data, axis=0)
@@ -540,6 +640,70 @@ def fig7_aligned_trajectories(all_traces: list[dict]):
                         "max_time_h": DIV_TIME_MAX_H},
                 description="Cell cycle aligned Area/RI/DryMass trajectories "
                             "(Oldewurtel et al. 2021 style)")
+    return fig
+
+
+def fig7b_ri_cycle_end_compare(traces_excl: list[dict],
+                                traces_incl: list[dict]):
+    """cycle 末端定義 2 種類で mean RI vs rel_progress を並べて比較。
+
+    左: cycle = [birth, next_div - 1]（分裂フレームを含めない、現行定義）
+    右: cycle = [birth, next_div]（分裂フレームを含める）
+    """
+    if len(traces_excl) < 3 or len(traces_incl) < 3:
+        print("  [fig7b] トレース不足。スキップ。")
+        return None
+
+    rel = traces_excl[0]["rel_progress"]
+    ri_excl = np.array([t["ri_interp"] for t in traces_excl])
+    ri_incl = np.array([t["ri_interp"] for t in traces_incl])
+
+    fig, axes = plt.subplots(1, 2, figsize=(183 / 25.4, 80 / 25.4),
+                             sharex=True, sharey=True)
+
+    for ax, data, title in [
+        (axes[0], ri_excl,
+         f"End = div frame − 1 (exclude)\nn={len(traces_excl)}"),
+        (axes[1], ri_incl,
+         f"End = div frame (include)\nn={len(traces_incl)}"),
+    ]:
+        mean = np.mean(data, axis=0)
+        std = np.std(data, axis=0)
+        for row in data:
+            ax.plot(rel, row, color=OI["green"], alpha=0.08, lw=0.3)
+        ax.plot(rel, mean, color=OI["green"], lw=1.4, label="Mean")
+        ax.fill_between(rel, mean - std, mean + std,
+                        color=OI["green"], alpha=0.2, label="±1 SD")
+        ax.set_xlabel("Relative cell cycle progression", fontsize=8)
+        ax.set_ylabel("RI", fontsize=8)
+        ax.set_title(title, fontsize=8)
+        ax.legend(fontsize=6, loc="upper left")
+        ax.tick_params(labelsize=7)
+
+    fig.suptitle("Mean RI vs relative cell cycle "
+                 "(cycle-end definition comparison)", fontsize=9)
+    fig.tight_layout()
+
+    # Save both mean curves to data
+    save_figure(fig,
+                params={
+                    "n_cycles_exclude_div": len(traces_excl),
+                    "n_cycles_include_div": len(traces_incl),
+                    "n_interp": N_INTERP,
+                    "ri_mean_end_excl": float(np.mean(ri_excl, axis=0)[-1]),
+                    "ri_mean_end_incl": float(np.mean(ri_incl, axis=0)[-1]),
+                    "ri_mean_start_excl": float(np.mean(ri_excl, axis=0)[0]),
+                    "ri_mean_start_incl": float(np.mean(ri_incl, axis=0)[0]),
+                },
+                data={
+                    "rel_progress": rel,
+                    "ri_mean_exclude_div": np.mean(ri_excl, axis=0),
+                    "ri_std_exclude_div": np.std(ri_excl, axis=0),
+                    "ri_mean_include_div": np.mean(ri_incl, axis=0),
+                    "ri_std_include_div": np.std(ri_incl, axis=0),
+                },
+                description="Mean RI vs relative cell cycle "
+                            "(compare cycle-end = div-1 vs cycle-end = div)")
     return fig
 
 
@@ -676,9 +840,10 @@ def fig10_growth_rate(all_traces: list[dict]):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(89/25.4, 110/25.4),
                                     sharex=True)
 
+    size_rate_label = r"$\frac{1}{V}\frac{dV}{d\tau}$" if SIZE_COL_LABEL == "Volume" else r"$\frac{1}{A}\frac{dA}{d\tau}$"
     for ax, data, ylabel, color, title in [
-        (ax1, area_rates, r"$\frac{1}{A}\frac{dA}{d\tau}$",
-         OI["blue"], "Area (volume) growth rate"),
+        (ax1, area_rates, size_rate_label,
+         OI["blue"], f"{SIZE_COL_LABEL} growth rate"),
         (ax2, mass_rates, r"$\frac{1}{M}\frac{dM}{d\tau}$",
          OI["orange"], "Dry mass growth rate"),
     ]:
@@ -706,10 +871,136 @@ def fig10_growth_rate(all_traces: list[dict]):
 
 
 # =============================================================================
+# === Figure 11: Generation time homeostasis (interval_n vs interval_{n+1} / delta interval) ===
+# =============================================================================
+
+def fig11_interval_homeostasis(per_cell_cycles: list[list[dict]]):
+    """Build consecutive-generation interval pairs within the same cell and plot two homeostasis views.
+
+    Panel A: Poincare return map (interval_n vs interval_{n+1})
+             slope~1: strong correlation (mother-daughter share similar generation time)
+             slope~0: reset (generations are independent)
+             slope<0: over-correction (homeostatic correction)
+
+    Panel B: interval_n vs delta_interval (= interval_{n+1} - interval_n)
+             Same format as Fig 3/9. Negative correlation indicates homeostasis.
+    """
+    pairs_n = []
+    pairs_np1 = []
+    for cycles in per_cell_cycles:
+        intervals = [c["interval"] for c in cycles]
+        for i in range(len(intervals) - 1):
+            pairs_n.append(intervals[i])
+            pairs_np1.append(intervals[i + 1])
+
+    if len(pairs_n) < 5:
+        print("  [fig11] Too few consecutive generation pairs (<5). Skipping.")
+        return None
+
+    pairs_n = np.array(pairs_n)
+    pairs_np1 = np.array(pairs_np1)
+    d_interval = pairs_np1 - pairs_n
+
+    r_ab, p_ab = pearsonr(pairs_n, pairs_np1)
+    r_dd, p_dd = pearsonr(pairs_n, d_interval)
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(183 / 25.4, 80 / 25.4))
+
+    # --- Panel A: Poincare return map ---
+    ax1.scatter(pairs_n, pairs_np1,
+                color=OI["blue"], alpha=0.6, s=15, edgecolors="none")
+    z = np.polyfit(pairs_n, pairs_np1, 1)
+    x_line = np.linspace(pairs_n.min(), pairs_n.max(), 50)
+    ax1.plot(x_line, np.polyval(z, x_line),
+             color=OI["vermilion"], lw=1, ls="--",
+             label=f"slope={z[0]:.2f}")
+    # y=x reference
+    lim = [min(pairs_n.min(), pairs_np1.min()), max(pairs_n.max(), pairs_np1.max())]
+    ax1.plot(lim, lim, color="0.6", ls=":", lw=0.5, label="y=x")
+    ax1.set_xlabel(r"Interval$_n$ [h]", fontsize=8)
+    ax1.set_ylabel(r"Interval$_{n+1}$ [h]", fontsize=8)
+    ax1.set_title(f"Return map (r={r_ab:.2f}, p={p_ab:.2e})", fontsize=8)
+    ax1.legend(fontsize=6)
+    ax1.tick_params(labelsize=7)
+
+    # --- Panel B: interval_n vs delta_interval ---
+    ax2.scatter(pairs_n, d_interval,
+                color=OI["purple"], alpha=0.6, s=15, edgecolors="none")
+    z2 = np.polyfit(pairs_n, d_interval, 1)
+    x_line2 = np.linspace(pairs_n.min(), pairs_n.max(), 50)
+    ax2.plot(x_line2, np.polyval(z2, x_line2),
+             color=OI["vermilion"], lw=1, ls="--",
+             label=f"slope={z2[0]:.2f}")
+    ax2.axhline(0, color="0.6", ls=":", lw=0.5)
+    ax2.set_xlabel(r"Interval$_n$ [h]", fontsize=8)
+    ax2.set_ylabel(r"$\Delta$Interval (= Interval$_{n+1}$ - Interval$_n$) [h]", fontsize=8)
+    ax2.set_title(f"Homeostasis (r={r_dd:.2f}, p={p_dd:.2e})", fontsize=8)
+    ax2.legend(fontsize=6)
+    ax2.tick_params(labelsize=7)
+
+    fig.tight_layout()
+    save_figure(
+        fig,
+        params={
+            "n_pairs": int(len(pairs_n)),
+            "return_slope": round(float(z[0]), 4),
+            "return_r": round(float(r_ab), 3),
+            "return_p": float(f"{p_ab:.3e}"),
+            "homeostasis_slope": round(float(z2[0]), 4),
+            "homeostasis_r": round(float(r_dd), 3),
+            "homeostasis_p": float(f"{p_dd:.3e}"),
+            "mean_interval_h": round(float(np.mean(pairs_n)), 3),
+        },
+        data={
+            "interval_n": pairs_n,
+            "interval_np1": pairs_np1,
+            "delta_interval": d_interval,
+        },
+        description="Generation time homeostasis (Poincare return map + birth-vs-delta)",
+    )
+    return fig
+
+
+# =============================================================================
 # === Main ===
 # =============================================================================
 
+def _parse_args():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--base-dir", type=str, default=None,
+                    help="CSVディレクトリ（省略時は BASE_DIR 定数）")
+    ap.add_argument("--mode", choices=["auto", "imagej", "physical"], default=None,
+                    help="データモード（省略時は DATA_MODE 定数）")
+    ap.add_argument("--div-time-max-h", type=float, default=None,
+                    help="この時刻以前の分裂のみ使用（省略時は DIV_TIME_MAX_H 定数）")
+    ap.add_argument("--max-frame", type=int, default=None,
+                    help="このフレーム以降を全解析から除外（省略時は ANALYSIS_MAX_FRAME 定数）")
+    ap.add_argument("--div-drop", type=float, default=None,
+                    help="分裂検出のサイズ低下比率（省略時は DIV_AREA_DROP 定数）")
+    ap.add_argument("--frames-per-hour", type=float, default=None,
+                    help="1時間あたりのフレーム数（省略時は FRAMES_PER_HOUR 定数）")
+    ap.add_argument("--min-valid-frames", type=int, default=100,
+                    help="有効フレーム数がこれ未満のチャネルは除外する")
+    return ap.parse_args()
+
+
 def main():
+    args = _parse_args()
+    global BASE_DIR, DATA_MODE, DIV_TIME_MAX_H, DIV_AREA_DROP, FRAMES_PER_HOUR, TIME_INTERVAL_H, ANALYSIS_MAX_FRAME
+    if args.base_dir:
+        BASE_DIR = args.base_dir
+    if args.mode:
+        DATA_MODE = args.mode
+    if args.div_time_max_h is not None:
+        DIV_TIME_MAX_H = args.div_time_max_h
+    if args.div_drop is not None:
+        DIV_AREA_DROP = args.div_drop
+    if args.frames_per_hour is not None:
+        FRAMES_PER_HOUR = args.frames_per_hour
+        TIME_INTERVAL_H = 1 / FRAMES_PER_HOUR
+    if args.max_frame is not None:
+        ANALYSIS_MAX_FRAME = args.max_frame
+
     filepaths = load_filepaths(BASE_DIR, FILEPATHS)
     if not filepaths:
         print(f"ERROR: No CSV files found in {BASE_DIR}")
@@ -723,26 +1014,50 @@ def main():
     all_data = []
     for fp in filepaths:
         df = load_cell_data(fp)
+        if len(df) < args.min_valid_frames:
+            print(f"  {label_from_path(fp)}: SKIP ({len(df)} valid frames < {args.min_valid_frames})")
+            continue
         all_data.append((df, fp))
         print(f"  {label_from_path(fp)}: {len(df)} frames, "
-              f"{df['Time'].max():.1f} h")
+              f"{df['Time'].max():.1f} h  (mode={df['_mode'].iloc[0]})")
+
+    if not all_data:
+        print("ERROR: No usable CSV after filtering.")
+        sys.exit(1)
+
+    # モードに応じたラベル適用
+    detected_mode = all_data[0][0]["_mode"].iloc[0]
+    _apply_mode_labels(detected_mode)
+    print(f"  Mode: {detected_mode}  ({SIZE_COL_LABEL} [{SIZE_COL_UNIT}], Dry mass [{MASS_UNIT}])")
+    if ANALYSIS_MAX_FRAME is not None:
+        print(f"  Analysis max frame: {ANALYSIS_MAX_FRAME} "
+              f"(= {ANALYSIS_MAX_FRAME / FRAMES_PER_HOUR:.1f} h)")
+    print(f"  Div time cutoff: {DIV_TIME_MAX_H:.1f} h")
 
     # --- Extract cell cycles ---
     all_cycles = []
+    per_cell_cycles = []  # Fig 11 用: 細胞ごとの連続サイクル
     for df, fp in all_data:
         cycles = extract_cell_cycles(df, max_time_h=DIV_TIME_MAX_H)
         all_cycles.extend(cycles)
+        per_cell_cycles.append(cycles)
         n_div = len(detect_divisions(df))
         print(f"    → {n_div} divisions, {len(cycles)} complete cycles")
 
     print(f"\n  Total cycles: {len(all_cycles)}")
 
     # --- Extract cell cycle aligned traces ---
-    all_traces = []
+    all_traces = []       # Exclude division frame (current definition: cycle = [birth, div-1])
+    all_traces_incl = []  # Include division frame (cycle = [birth, div])
     for df, fp in all_data:
-        traces = extract_cycle_traces(df, max_time_h=DIV_TIME_MAX_H)
+        traces = extract_cycle_traces(df, max_time_h=DIV_TIME_MAX_H,
+                                      include_div_frame=False)
         all_traces.extend(traces)
-    print(f"  Aligned traces: {len(all_traces)}")
+        traces_incl = extract_cycle_traces(df, max_time_h=DIV_TIME_MAX_H,
+                                           include_div_frame=True)
+        all_traces_incl.extend(traces_incl)
+    print(f"  Aligned traces (excl div): {len(all_traces)}")
+    print(f"  Aligned traces (incl div): {len(all_traces_incl)}")
 
     # --- Generate figures ---
     print("\n--- Generating figures ---")
@@ -768,14 +1083,20 @@ def main():
     print("  [7/10] Cell cycle aligned trajectories...")
     fig7_aligned_trajectories(all_traces)
 
+    print("  [7b] Cycle-end definition comparison (RI)...")
+    fig7b_ri_cycle_end_compare(all_traces, all_traces_incl)
+
     print("  [8/10] Density (RI) distribution...")
     fig8_density_distribution(all_data)
 
     print("  [9/10] Density homeostasis...")
     fig9_density_homeostasis(all_cycles)
 
-    print("  [10/10] Growth rate analysis...")
+    print("  [10/11] Growth rate analysis...")
     fig10_growth_rate(all_traces)
+
+    print("  [11/11] Generation time homeostasis...")
+    fig11_interval_homeostasis(per_cell_cycles)
 
     print("\nDone.")
     plt.show()
