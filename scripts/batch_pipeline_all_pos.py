@@ -113,7 +113,7 @@ def mark_done(prog, pos_label, step):
 
 
 def step_grid_0per_reconstruction(grid_dir: Path) -> bool:
-    """GRID_0PER_DIR 上で batch_reconstruction_grid を実行（correct_0pergluc の参照元）。"""
+    """Run batch_reconstruction_grid on GRID_0PER_DIR (reference for correct_0pergluc)."""
     script = _SCRIPT_DIR / "batch_reconstruction_grid.py"
     if not script.is_file():
         print(f"  [ERROR] Not found: {script}")

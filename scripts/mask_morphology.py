@@ -1,8 +1,8 @@
 """
 mask_morphology.py — Mask smoothing and axis extraction for QPI cell analysis
 
-セグメンテーションマスクの平滑化と、SuperSegger 方式の rotate-and-project
-アルゴリズムによる長軸・短軸・幅プロファイル抽出。
+Smoothing of segmentation masks and major/minor axis and width profile
+extraction using the SuperSegger-style rotate-and-project algorithm.
 
 Usage:
     from mask_morphology import extract_all_cells, morphology_to_dataframe

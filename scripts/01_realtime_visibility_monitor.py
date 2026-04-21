@@ -91,7 +91,7 @@ def update_plot(frame):
             ax_dc.clear()
             ax_hist.clear()
             
-            # Visibility (左上)
+            # Visibility (top-left)
             ax_vis.imshow(latest_visibility, cmap="viridis", vmin=VMIN, vmax=VMAX)
             ax_vis.set_title(f"Visibility\n{latest_filename}", fontsize=10)
             ax_vis.axis("off")

@@ -113,14 +113,15 @@ def to_uint8(img, vmin, vmax):
 # ECC alignment
 # ====================================================================
 
-def ecc_align(ref_u8, tl_u8):
+def ecc_align(ref_u8, tl_u8, max_iter=50000, epsilon=1e-8):
     """ECC translation alignment between two uint8 images.
 
     Returns ``(tx, ty, correlation)`` on success, or ``None`` if ECC fails
-    to converge.  Criteria: max_iter=100 000, epsilon=1e-8.
+    to converge.
     """
     warp_matrix = np.eye(2, 3, dtype=np.float32)
-    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100000, 1e-8)
+    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
+                max_iter, epsilon)
     try:
         corr, warp_matrix = cv2.findTransformECC(
             ref_u8, tl_u8, warp_matrix, cv2.MOTION_TRANSLATION, criteria,

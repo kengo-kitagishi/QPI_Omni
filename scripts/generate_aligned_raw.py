@@ -228,7 +228,7 @@ def main():
             max_frames=MAX_FRAMES,
         )
 
-    print("\n完了")
+    print("\nDone")
 
 
 if __name__ == "__main__":

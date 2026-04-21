@@ -23,7 +23,7 @@ from qpi import QPIParameters, get_field, set_backend, _HAS_CUPY
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 
 # ---------- config ----------
-GRID_DIR = Path(r"C:\260416\2per_gridgluc_2")
+GRID_DIR = Path(r"C:\260416\0per_gridgluc_1")
 CROP = (0, 2048, 400, 2448)
 N_TEST_POINTS = 8  # grid points to benchmark
 

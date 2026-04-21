@@ -57,7 +57,7 @@ BACKSUB_PNG_DPI      = 150
 # ============================================================
 # align_and_subtract_simple parameters (used only when STEP_ALIGN_SIMPLE=True)
 # ============================================================
-ALIGN_REFERENCE_FRAME  = 150     # 1始まり
+ALIGN_REFERENCE_FRAME  = 150     # 1-based
 ALIGN_METHOD           = 'ecc'
 ALIGN_SAVE_PNG         = True
 ALIGN_PNG_SAMPLE       = 5

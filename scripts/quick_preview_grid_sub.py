@@ -1,14 +1,14 @@
 """
-quick_preview_grid_sub.py — output_phase_grid_sub から N フレームを viridis で表示
+quick_preview_grid_sub.py — Display N frames from output_phase_grid_sub with viridis colormap
 """
 from pathlib import Path
 import numpy as np
 import tifffile
 import matplotlib.pyplot as plt
 
-# ── 設定 ──────────────────────────────────────────────
+# ── Settings ─────────────────────────────────────────
 OUT_DIR = Path(r"C:\ph_1\Pos1\output_phase_grid_sub")
-N_SHOW  = 9       # 表示するフレーム数（等間隔サンプリング）
+N_SHOW  = 9       # Number of frames to display (equally spaced sampling)
 VMIN    = -0.5
 VMAX    =  0.5
 # ──────────────────────────────────────────────────────

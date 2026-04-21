@@ -56,7 +56,7 @@ TIMELAPSE_POS = r"D:\AquisitionData\Kitagishi\260416\timelapse.pos"
 # For grid data (Pos1_x+0_y+0): CALIB_SUFFIX = "x+0_y+0"
 # For focus/timelapse data (Pos1): CALIB_SUFFIX = ""
 CALIB_SUFFIX   = ""
-CALIB_GRID_DIR = r"C:\260416\_for_lowper_gridgluc_1"
+CALIB_GRID_DIR = r"C:\260416\_for_focus_check_subtract_2"
 
 # Day-1 fixed reference grid folder
 # PosN_x+0_y+0/output_phase/*_phase.tif must be pre-reconstructed

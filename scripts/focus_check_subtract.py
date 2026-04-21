@@ -35,15 +35,15 @@ if str(_SCRIPT_DIR) not in sys.path:
 # ===========================================================================
 
 DO_RECONSTRUCTION = True
-GRID_DIR    = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"   # Parent directory containing Pos{N}_x+0_y+0
-FOCUS_DIR   = r"E:\Acuisition\kitagishi\260331\focus_check_6"  # Parent directory containing Pos0..PosN
+GRID_DIR    = r"C:\260416\2per_gridgluc_1"   # Parent directory containing Pos{N}_x+0_y+0
+FOCUS_DIR   = r"C:\260416\_for_focus_check_subtract_3"  # Parent directory containing Pos0..PosN
 GRID_SUFFIX = "x+0_y+0"           # Suffix for background reference grid position
 
 POS_LABELS  = None     # None=auto-detect, e.g.: ["Pos1", "Pos2"] (Pos0=BG auto-excluded)
-ALIGN_Z     = 10                   # z index used for ECC alignment (z=0 = index 10)
+ALIGN_Z     = 5                    # z index used for ECC alignment (z=0 = index 5, 260416)
 
 CROP_OUTPUT = False                # True=crop by channel ROI, False=full frame
-OUTPUT_DIR  = r"E:\Acuisition\kitagishi\260331\focus_check_subtracted_6"
+OUTPUT_DIR  = r"C:\260416\focus_check_subtracted_3"
 
 N_WORKERS   = 4                    # Number of parallel workers (only when DO_RECONSTRUCTION=True)
 
@@ -58,7 +58,7 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 #   Low Pos number (< POS_SPLIT) = right channel -> col 400:2448
 #   High Pos number (>= POS_SPLIT) = left channel -> col 0:2048
 # [!] Left/right may swap depending on dataset. Always verify with actual data.
-POS_SPLIT    = 33
+POS_SPLIT    = 31
 CROP_BEFORE  = (0, 2048, 400, 2448)   # pos < POS_SPLIT  -> right channel (col 400-2448)
 CROP_AFTER   = (0, 2048,   0, 2048)   # pos >= POS_SPLIT -> left channel (col 0-2048)
 
@@ -128,13 +128,15 @@ def _z_from_filename(fname: str):
     """Extract z index from filename.
 
     Examples:
-        img_000000000_ph_003_phase.tif -> 3
-        img_000000000_ph_003.tif       -> 3  (unreconstructed fallback)
+        img_000000000_ph_003_phase.tif  -> 3
+        img_000000000_ph_003.tif        -> 3  (unreconstructed fallback)
+        img_000000000_Default_003_phase.tif -> 3
+        img_000000000_Default_003.tif   -> 3
     """
-    m = re.search(r'_ph_(\d+)_phase\.tif$', fname, re.IGNORECASE)
+    m = re.search(r'_(?:ph|Default)_(\d+)_phase\.tif$', fname, re.IGNORECASE)
     if m:
         return int(m.group(1))
-    m = re.search(r'_ph_(\d+)\.tif$', fname, re.IGNORECASE)
+    m = re.search(r'_(?:ph|Default)_(\d+)\.tif$', fname, re.IGNORECASE)
     if m:
         return int(m.group(1))
     return None
@@ -231,13 +233,21 @@ def reconstruct_dir(raw_dir: Path, recon_params: dict, pos_number: int, n_worker
     out_dir = raw_dir / "output_phase"
     out_dir.mkdir(exist_ok=True)
 
+    # Check if output_phase or output_phase_raw already has reconstructed files
+    for existing in [out_dir, raw_dir / "output_phase_raw"]:
+        phase_files = sorted(existing.glob("*_phase.tif")) if existing.exists() else []
+        if phase_files:
+            print(f"  Already reconstructed: {existing} ({len(phase_files)} files)")
+            return
+
     raw_files = [
         f for f in sorted(raw_dir.glob("*.tif"))
         if not f.name.startswith("._") and "output" not in f.name.lower()
     ]
     if not raw_files:
-        print(f"  [!] No raw TIFFs found: {raw_dir}")
-        return
+        raise FileNotFoundError(
+            f"No raw TIFFs and no existing output_phase found: {raw_dir}"
+        )
 
     tasks = []
     for f in raw_files:
@@ -297,7 +307,12 @@ def process_pos(pos_label: str,
         return None
 
     focus_phase_dir = focus_pos_dir / "output_phase"
+    # Grid: prefer output_phase, fallback to output_phase_raw
     grid_phase_dir  = grid_pos_dir  / "output_phase"
+    if not grid_phase_dir.exists() or not list(grid_phase_dir.glob("*_phase.tif")):
+        alt = grid_pos_dir / "output_phase_raw"
+        if alt.exists() and list(alt.glob("*_phase.tif")):
+            grid_phase_dir = alt
 
     if not focus_phase_dir.exists():
         print(f"  [!] output_phase not found: {focus_phase_dir}")
@@ -331,7 +346,7 @@ def process_pos(pos_label: str,
 
     # Load channel_rois.json (shared for ECC + output crop)
     # Located in grid's output_phase/channels/ (not on the focus_test side)
-    ecc_rois_path = grid_pos_dir / "output_phase" / "channels" / "channel_rois.json"
+    ecc_rois_path = grid_phase_dir / "channels" / "channel_rois.json"
     if ecc_rois_path.exists():
         with open(ecc_rois_path) as fp:
             rois = json.load(fp)
@@ -414,13 +429,24 @@ def process_pos(pos_label: str,
         # Save full frame
         tifffile.imwrite(str(pos_out_dir / f"z{z:03d}.tif"), diff.astype(np.float32))
 
-        # Save channel ROI crops (tilt-corrected crop_w x TILT_CROP_H = 40 x 270)
+        # Save tilt-corrected channel ROI crops for ALL detected channels
         if rois_for_focus:
+            from channel_crop import extract_rect_roi
             for ch_idx, roi_info in enumerate(rois_for_focus):
                 cy     = roi_info["cy"]
                 cx     = roi_info["cx"]
                 crop_w = roi_info.get("crop_w", 256)
-                cropped = _tilt_correct(diff.astype(np.float64), cy, cx, crop_w, TILT_CROP_H, fit_right)
+                # Tilt correction (same as ecc_utils.tilt_fit_crop but no OOB rejection)
+                big = extract_rect_roi(diff.astype(np.float64), cy, cx,
+                                       crop_w, TILT_CROP_H).astype(np.float64)
+                xv = np.arange(TILT_CROP_H, dtype=np.float64)
+                prof = big.mean(axis=0)
+                fit_n = max(1, TILT_CROP_H // 3)
+                if fit_right:
+                    a, b = np.polyfit(xv[-fit_n:], prof[-fit_n:], 1)
+                else:
+                    a, b = np.polyfit(xv[:fit_n], prof[:fit_n], 1)
+                cropped = big - (a * xv + b)[np.newaxis, :]
                 ch_dir = pos_out_dir / f"ch{ch_idx:02d}"
                 ch_dir.mkdir(exist_ok=True)
                 tifffile.imwrite(str(ch_dir / f"z{z:03d}.tif"), cropped.astype(np.float32))
@@ -515,10 +541,13 @@ def find_best_focus_z(z_list: list, diff_frames: list, pos_label: str,
             cy     = roi_info["cy"]
             cx     = roi_info["cx"]
             crop_w = roi_info.get("crop_w", 256)
-            channels[f"ch{ch_idx}"] = [
+            crops = [
                 _tilt_fit(f.astype(np.float64), cy, cx, crop_w, ECC_CROP_H, TILT_CROP_H, fit_right=fit_right)
                 for f in diff_frames
             ]
+            if any(c is None for c in crops):
+                continue
+            channels[f"ch{ch_idx}"] = crops
     else:
         channels = {"full": diff_frames}
 

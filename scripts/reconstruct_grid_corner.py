@@ -115,10 +115,18 @@ def reconstruct_one_point(
         if skip_if_exists and out_path.exists():
             n_skip += 1
             continue
-        if z_idx not in z_bg:
-            print(f"  [SKIP z={z_idx}] BG に同じ z が無い")
+        # Get BG phase (pre-reconstructed raw first, reconstruct as fallback)
+        phase_bg = None
+        bg_raw_subdir = "output_phase_raw" if pos_num < POS_SPLIT else "output_phase_raw_crop_after"
+        bg_raw_path = bg_dir / bg_raw_subdir / (tgt_path.stem + "_phase.tif")
+        if bg_raw_path.exists():
+            phase_bg = tifffile.imread(str(bg_raw_path)).astype(np.float64)
+        elif z_idx in z_bg:
+            phase_bg = _reconstruct(z_bg[z_idx], qpi, crop)
+        if phase_bg is None:
+            print(f"  [SKIP z={z_idx}] BG hologram and pre-reconstructed raw both missing")
             continue
-        phase = _reconstruct(tgt_path, qpi, crop) - _reconstruct(z_bg[z_idx], qpi, crop)
+        phase = _reconstruct(tgt_path, qpi, crop) - phase_bg
         h, w = phase.shape
         if pos_num < POS_SPLIT:
             region = phase[1 : h - 1, 1 : w // 2]

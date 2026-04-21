@@ -1,6 +1,6 @@
 """
 sync_claude_logs.py
-Claude会話ログ（.jsonl）をGoogle Driveに毎日同期する
+Sync Claude conversation logs (.jsonl) to Google Drive daily
 """
 import shutil
 import datetime
@@ -25,7 +25,7 @@ def main():
     skipped = 0
     for src_file in SRC.glob("*.jsonl"):
         dst_file = DST / src_file.name
-        # タイムスタンプで差分コピー（新しいものだけ上書き）
+        # Differential copy by timestamp (overwrite only if newer)
         if not dst_file.exists() or src_file.stat().st_mtime > dst_file.stat().st_mtime:
             shutil.copy2(src_file, dst_file)
             copied += 1

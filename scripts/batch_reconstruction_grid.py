@@ -54,7 +54,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 # Configuration parameters
 # ============================================================
 # Must match GRID_DIR in pipeline_full.py
-GRID_DIR = r"C:\260416\2per_gridgluc_2"
+GRID_DIR = r"C:\260416\0per_gridgluc_1"
 
 # Base label used as BG (pipeline_full: GRID_BG_BASE_LABEL)
 BG_BASE_LABEL = "Pos0"
@@ -66,6 +66,10 @@ TARGET_BASE_LABELS = None
 # Filter target (xi, yi) coordinates (None = process all)
 # e.g.: TARGET_COORDS = [(0, 0)]  -> center point only
 TARGET_COORDS = None
+
+# Filter z indices (None = process all, list = only those indices)
+# e.g.: Z_INDICES = [5]  -> only z=5
+Z_INDICES = None
 
 # QPI optical parameters
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
@@ -90,7 +94,7 @@ PNG_DPI  = 150
 PNG_VMIN = -2.0
 PNG_VMAX =  2.0
 # Parallel processing worker count (same as pipeline_full: N_WORKERS_GRID)
-N_WORKERS = 4
+N_WORKERS = 1
 # ============================================================
 
 # QPI import
@@ -101,8 +105,9 @@ except ImportError:
     sys.exit(1)
 
 # GPU acceleration (get_field uses CuPy FFT, unwrap_phase is CPU-only)
+_FORCE_CPU = False  # Set True for CPU benchmark
 _USE_GPU = False
-if _HAS_CUPY:
+if _HAS_CUPY and not _FORCE_CPU:
     try:
         import cupy as cp
         cp.array([1.0]) * 2  # smoke test
@@ -113,9 +118,8 @@ if _HAS_CUPY:
         print(f"GPU init failed, using CPU: {e}")
         set_backend("numpy")
 
-# GPU uses single process (CuPy context init overhead makes multiprocess slower)
-if _USE_GPU:
-    N_WORKERS = 1
+# CuPy works in ProcessPoolExecutor: each worker inits its own CUDA context once.
+# 4 workers balances GPU utilization vs context overhead (benchmark confirmed).
 
 
 def scan_grid_folders(grid_dir: Path):
@@ -200,7 +204,7 @@ def _reconstruct_grid_point(args):
     """
     xi, yi, target_dir_str, bg_dir_str, crop, pos_number = args
     # Re-init CuPy in spawned worker (Windows spawn resets qpi.xp to numpy)
-    if _HAS_CUPY:
+    if _HAS_CUPY and not _FORCE_CPU:
         try:
             set_backend("cupy")
         except Exception:
@@ -226,30 +230,48 @@ def _reconstruct_grid_point(args):
 
     folder_ok = True
     for z_idx, tgt_path in sorted(z_files_target.items()):
+        if Z_INDICES is not None and z_idx not in Z_INDICES:
+            continue
         out_path     = out_dir     / (tgt_path.stem + "_phase.tif")
         raw_out_path = raw_out_dir / (tgt_path.stem + "_phase.tif")
         if SKIP_IF_EXISTS and out_path.exists() and raw_out_path.exists():
             continue
-        if z_idx not in z_files_bg:
-            folder_ok = False
-            continue
         try:
-            phase_target = reconstruct_image(tgt_path, qpi_params, crop)
+            phase_target = None
 
-            # Save raw phase (no BG subtraction) for grid_subtract / correct_0pergluc
+            # Save raw phase (no BG subtraction)
             if not raw_out_path.exists():
+                phase_target = reconstruct_image(tgt_path, qpi_params, crop)
                 tifffile.imwrite(str(raw_out_path), phase_target.astype(np.float32))
 
-            phase_bg     = reconstruct_image(z_files_bg[z_idx], qpi_params, crop)
-            phase_diff   = phase_target - phase_bg
-            h, w = phase_diff.shape
-            if pos_number < POS_SPLIT:
-                region = phase_diff[1:h-1, 1:w//2]
-            else:
-                region = phase_diff[1:h-1, w//2:w-1]
-            if region.size > 0:
-                phase_diff -= np.mean(region)
-            tifffile.imwrite(str(out_path), phase_diff.astype(np.float32))
+            # BG subtraction for output_phase
+            if not out_path.exists():
+                # Get target phase (reconstruct or load from saved raw)
+                if phase_target is None:
+                    phase_target = tifffile.imread(str(raw_out_path)).astype(np.float64)
+
+                # Get BG phase (pre-reconstructed raw first, reconstruct as fallback)
+                phase_bg = None
+                bg_raw_subdir = "output_phase_raw" if pos_number < POS_SPLIT else "output_phase_raw_crop_after"
+                bg_raw_path = bg_dir / bg_raw_subdir / (tgt_path.stem + "_phase.tif")
+                if bg_raw_path.exists():
+                    phase_bg = tifffile.imread(str(bg_raw_path)).astype(np.float64)
+                elif z_idx in z_files_bg:
+                    phase_bg = reconstruct_image(z_files_bg[z_idx], qpi_params, crop)
+
+                if phase_bg is None:
+                    folder_ok = False
+                    continue
+
+                phase_diff = phase_target - phase_bg
+                h, w = phase_diff.shape
+                if pos_number < POS_SPLIT:
+                    region = phase_diff[1:h-1, 1:w//2]
+                else:
+                    region = phase_diff[1:h-1, w//2:w-1]
+                if region.size > 0:
+                    phase_diff -= np.mean(region)
+                tifffile.imwrite(str(out_path), phase_diff.astype(np.float32))
             if SAVE_PNG:
                 import matplotlib.pyplot as plt
                 png_path = out_dir / (tgt_path.stem + ".png")
@@ -273,7 +295,7 @@ def _reconstruct_bg_raw(args):
     """
     xi, yi, bg_dir_str = args
     # Re-init CuPy in spawned worker (Windows spawn resets qpi.xp to numpy)
-    if _HAS_CUPY:
+    if _HAS_CUPY and not _FORCE_CPU:
         try:
             set_backend("cupy")
         except Exception:
@@ -292,6 +314,8 @@ def _reconstruct_bg_raw(args):
         except Exception as e:
             return xi, yi, False, f"QPIParams ({crop_name}): {e}"
         for z_idx, path in sorted(z_files.items()):
+            if Z_INDICES is not None and z_idx not in Z_INDICES:
+                continue
             out_path = raw_out_dir / (path.stem + "_phase.tif")
             if out_path.exists():
                 continue
@@ -326,10 +350,19 @@ def _parse_cli():
         metavar="LABEL",
         help='Base labels to reconstruct (e.g., Pos6). If omitted, uses TARGET_BASE_LABELS / all Pos (except BG)',
     )
+    p.add_argument(
+        "--z-indices",
+        nargs="+",
+        type=int,
+        default=None,
+        metavar="Z",
+        help="Only reconstruct these z indices (e.g., --z-indices 5). Default: all z slices.",
+    )
     return p.parse_args()
 
 
 def main():
+    global Z_INDICES
     args = _parse_cli()
     grid_dir = Path(args.grid_dir or GRID_DIR)
     bg_label = args.bg_label or BG_BASE_LABEL
@@ -337,6 +370,9 @@ def main():
         target_labels_override = args.targets if args.targets else None
     else:
         target_labels_override = TARGET_BASE_LABELS
+    if args.z_indices is not None:
+        Z_INDICES = args.z_indices
+        print(f"Z-index filter: {Z_INDICES}")
 
     if not grid_dir.exists():
         print(f"ERROR: GRID_DIR not found: {grid_dir}")

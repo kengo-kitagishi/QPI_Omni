@@ -32,26 +32,26 @@ sys.path.insert(0, str(_script_dir))
 # ============================================================
 
 # .pos file consumed by Micro-Manager (the actual time-lapse position list)
-POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\260331\_focus_check6_ecc_corrected.pos"
+POSITIONS_FILE   = r"C:\260416\_per_pos_ecc_corrected.pos"
 
 # Grid acquisition directory (small grid is fine)
-GRID_DIR         = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
-GRID_Z_INDEX     = 18       # z-slice of the grid TIFFs to use as reference
+GRID_DIR         = r"C:\260416\2per_gridgluc_1"
+GRID_Z_INDEX     = 9        # z-slice of the grid TIFFs to use as reference
 
 # channel_rois.json (built beforehand by pipeline_full.py / channel_crop.py)
-CHANNEL_ROIS_JSON = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
+CHANNEL_ROIS_JSON = r"C:\260416\2per_gridgluc_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
 
 # Session working directory (config + state files land here)
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"D:\AquisitionData\Kitagishi\260405\ph_260405"
+SAVE_DIR         = r"D:\AquisitionData\Kitagishi\260416\ph_1"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
 
 # Micro-Manager acquisition parameters
-N_TIMEPOINTS     = 2592
+N_TIMEPOINTS     = 3168
 INTERVAL_SEC     = 300        # Time-lapse interval [s]
 EXPOSURE_MS      = 60.0
 SETTLE_MS        = 150        # Stage settle time after move [ms]
@@ -82,9 +82,9 @@ KF_R_TX_NM2          = 274.0
 
 # Per-position scheduling and ECC controls (consumed by compute_drift_online.py)
 DRIFT_SAMPLE_INTERVAL = 1      # 1 = every position; N = every Nth (group leader)
-MAX_DRIFT_WORKERS     = 0      # 0 = auto (cpu_count - 4)
+MAX_DRIFT_WORKERS     = 8      # 0 = auto (cpu_count - 4)
 ENABLE_THIRD_PASS     = True   # Run pass 3 (re-select grid after pass 2)
-ECC_MIN_CORR          = 0.0    # ECC correlation threshold (0 disables filter)
+ECC_MIN_CORR          = 0.97   # ECC correlation threshold (0 disables filter)
 
 # Optical parameters
 SENSOR_PIXEL_SIZE    = 3.45e-6
@@ -93,7 +93,7 @@ ORIGINAL_DIM         = 2048
 RECONSTRUCTED_DIM    = 511
 
 # Position-dependent crop (matches pipeline_full.py)
-POS_SPLIT    = 33
+POS_SPLIT    = 31
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 
@@ -122,10 +122,10 @@ ECC_CROP_H  = 80
 RAW_TL_Z_INDEX        = 0
 CROP_SUB_X_STEP_UM    = 0.1
 CROP_SUB_Y_STEP_UM    = 0.1
-ENABLE_CROP_SUB_SAVE  = False
-CROP_SUB_ROOT         = r"E:\Acuisition\kitagishi\260405\online_crop_sub"
-CROP_SUB_MAX_SECONDS  = 200.0
-CROP_SUB_MAX_WORKERS  = 0
+ENABLE_CROP_SUB_SAVE  = True
+CROP_SUB_ROOT         = r"C:\260416\online_crop_sub"
+CROP_SUB_MAX_SECONDS  = 60.0
+CROP_SUB_MAX_WORKERS  = 4
 CROP_SUB_MIN_FREE_GB  = 2.0
 
 # ============================================================
