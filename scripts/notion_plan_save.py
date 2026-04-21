@@ -1,11 +1,12 @@
 """
-プランファイルを Notion QPI Research Notes に保存する。
+Save a plan file to Notion QPI Research Notes.
 
-使い方:
+Usage:
     python scripts/notion_plan_save.py <plan_file_path>
     python scripts/notion_plan_save.py "C:\\Users\\QPI\\.cursor\\plans\\プランnotion保存とカレンダー表示_99503eb8.plan.md"
 
-Type プロパティがなければ notion_setup_type.py で自動作成し、保存時に Type=プラン を自動設定する。
+If the Type property is missing, notion_setup_type.py creates it automatically, and
+Type=プラン is set automatically when saving.
 """
 import json
 import re
@@ -34,7 +35,7 @@ def _load_headers():
 
 
 def _parse_plan(path: Path) -> tuple[str, str, str]:
-    """plan.md をパースして (title, date_str, body_md) を返す。"""
+    """Parse plan.md and return (title, date_str, body_md)."""
     text = path.read_text(encoding="utf-8")
     match = re.match(r"^---\n(.*?)\n---\n(.*)$", text, re.DOTALL)
     if match:
@@ -55,7 +56,7 @@ def _parse_plan(path: Path) -> tuple[str, str, str]:
 
 
 def _md_to_blocks(md: str) -> list[dict]:
-    """Markdown を Notion blocks に変換（簡易版）。"""
+    """Convert Markdown to Notion blocks (simplified)."""
     blocks = []
     for line in md.split("\n"):
         line = line.rstrip()
@@ -84,7 +85,7 @@ def _md_to_blocks(md: str) -> list[dict]:
 
 
 def _find_existing_plan_page(headers: dict, full_title: str) -> str | None:
-    """同じタイトルのプランページが既に存在するか検索。見つかれば page_id を返す。"""
+    """Search for an existing plan page with the same title. Return page_id if found."""
     try:
         resp = requests.post(
             f"https://api.notion.com/v1/databases/{DB_ID}/query",
@@ -107,12 +108,12 @@ def _find_existing_plan_page(headers: dict, full_title: str) -> str | None:
 
 
 def save_plan_to_notion(plan_path: Path) -> str | None:
-    """プランを Notion に保存。同名ページが既存の場合はスキップ。成功時は URL を返す。"""
+    """Save a plan to Notion. Skip if a page with the same name already exists. Return URL on success."""
     if not plan_path.exists():
-        print(f"ERROR: ファイルが見つかりません: {plan_path}")
+        print(f"ERROR: File not found: {plan_path}")
         return None
 
-    # Type プロパティがなければ追加
+    # Add the Type property if it does not exist
     _scripts = _REPO_ROOT / "scripts"
     if str(_scripts) not in sys.path:
         sys.path.insert(0, str(_scripts))
@@ -120,24 +121,24 @@ def save_plan_to_notion(plan_path: Path) -> str | None:
     ensure_type_property()
 
     title, date_str, body = _parse_plan(plan_path)
-    full_title = f"[プラン] {title}"
+    full_title = f"[プラン] {title}"  # TODO-JP: Notion property
     headers = _load_headers()
 
-    # 重複チェック
+    # Duplicate check
     existing_id = _find_existing_plan_page(headers, full_title)
     if existing_id:
         existing_url = f"https://www.notion.so/{existing_id.replace('-', '')}"
-        print(f"SKIP: 既に存在します → {existing_url}")
+        print(f"SKIP: already exists -> {existing_url}")
         return existing_url
 
     blocks = _md_to_blocks(body)
     if not blocks:
-        blocks = [{"object": "block", "type": "paragraph", "paragraph": {"rich_text": [{"type": "text", "text": {"content": "(内容なし)"}}]}}]
+        blocks = [{"object": "block", "type": "paragraph", "paragraph": {"rich_text": [{"type": "text", "text": {"content": "(empty)"}}]}}]
 
     properties = {
         "Name": {"title": [{"type": "text", "text": {"content": full_title}}]},
         "Date": {"date": {"start": date_str}},
-        "Type": {"select": {"name": "プラン"}},
+        "Type": {"select": {"name": "プラン"}},  # TODO-JP: Notion property
     }
     payload = {
         "parent": {"database_id": DB_ID},
@@ -159,7 +160,7 @@ def save_plan_to_notion(plan_path: Path) -> str | None:
 
 
 def _resolve_plan_path(path_arg: str) -> Path | None:
-    """コマンドライン引数からプランファイルのPathを解決。日本語パス・エンコーディング問題に対応。"""
+    """Resolve the plan file Path from a command line argument. Handles Japanese paths and encoding issues."""
     path_arg = path_arg.strip()
     candidates = [
         Path(path_arg),
@@ -170,9 +171,9 @@ def _resolve_plan_path(path_arg: str) -> Path | None:
         if p.exists():
             return p
 
-    # パスが存在しない場合: ハッシュ部分で docs/plans を検索
-    # - "docs\plans\xxx_99503eb8.plan.md" の文字化け時
-    # - "99503eb8" のみ指定した場合
+    # If the path does not exist: search docs/plans by the hash portion
+    # - When "docs\plans\xxx_99503eb8.plan.md" is mojibake
+    # - When only "99503eb8" is specified
     hash_match = re.search(r"([a-f0-9]{8})", path_arg, re.I)
     if hash_match:
         hash_part = hash_match.group(1)
@@ -180,7 +181,7 @@ def _resolve_plan_path(path_arg: str) -> Path | None:
         if len(matches) == 1:
             return matches[0]
         if len(matches) > 1:
-            return matches[0]  # 複数あれば最初の1つ
+            return matches[0]  # If multiple, return the first one
 
     return None
 
@@ -193,8 +194,8 @@ def main():
 
     plan_file = _resolve_plan_path(sys.argv[1])
     if plan_file is None:
-        print(f"ERROR: ファイルが見つかりません: {sys.argv[1]}")
-        print("  (docs/plans/ 内の .plan.md を確認してください)")
+        print(f"ERROR: File not found: {sys.argv[1]}")
+        print("  (Please check .plan.md under docs/plans/)")
         sys.exit(1)
 
     save_plan_to_notion(plan_file)

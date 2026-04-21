@@ -336,7 +336,7 @@ def create_notion_page(title: str, date_str: str, description: str, blocks: list
                 "rich_text": [{"type": "text", "text": {"content": description[:2000]}}]
             },
             "Type": {
-                "select": {"name": "作業ログ"}
+                "select": {"name": "作業ログ"}  # TODO-JP: Notion property
             },
         },
         # Notion API allows up to 100 blocks per request

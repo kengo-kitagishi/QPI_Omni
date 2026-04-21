@@ -1,8 +1,9 @@
 """
 quick_compare_v1v2.py
 ---------------------
-drift_log.json (v1) と 2-pass ECC (v2ロジック) を 20 タイムポイントで比較する。
-再構成済み位相（output_phase/）を直接読むので再構成不要・高速。
+Compare drift_log.json (v1) against 2-pass ECC (v2 logic) over 20 timepoints.
+Reads the already-reconstructed phase (output_phase/) directly, so no
+reconstruction is required and it runs fast.
 """
 import sys, json, re, threading, numpy as np, tifffile, cv2
 from pathlib import Path
@@ -13,11 +14,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 from figure_logger import save_figure
 import matplotlib.pyplot as plt
 
-# ---- 設定 ----
+# ---- Settings ----
 CONFIG       = Path(r"C:\Users\QPI\Documents\QPI_Omni\drift_session\drift_config_test.json")
 LOG_JSON     = Path(r"C:\Users\QPI\Documents\QPI_Omni\drift_session\drift_log.json")
 PHASE_DIR    = Path(r"C:\ph_1\Pos1\output_phase")
-N_PICK       = None  # None = 全フレーム
+N_PICK       = None  # None = all frames
 
 cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
 log = json.loads(LOG_JSON.read_text(encoding="utf-8"))
@@ -41,7 +42,7 @@ ref_crops = tifffile.imread(cfg["grid_ref_crops_tif"]).astype(np.float64)
 if ref_crops.ndim == 2:
     ref_crops = ref_crops[np.newaxis, ...]
 
-# ---- 共通関数 ----
+# ---- Common functions ----
 
 def extract_rect_roi(img, cy, cx, crop_w, crop_h):
     h, w = img.shape
@@ -122,7 +123,7 @@ def average_with_mad(tx_list, ty_list, corr_list):
             float(np.mean(np.array(corr_list)[idx])),
             int(mask.sum()))
 
-# ---- グリッドポジション ----
+# ---- Grid positions ----
 pattern = re.compile(rf"^{re.escape(grid_base_label)}_x([+-]?\d+)_y([+-]?\d+)$")
 pos_map = {}
 for d in Path(grid_dir).iterdir():
@@ -168,7 +169,7 @@ def load_half(xi, yi):
         grid_half_cache[(xi,yi)] = crops
     return crops
 
-# ---- タイムポイント選択 ----
+# ---- Timepoint selection ----
 valid_ts = sorted(set(e["timepoint"] for e in log))
 if N_PICK is None:
     pick_ts = valid_ts
@@ -178,7 +179,7 @@ else:
 log_dict = {e["timepoint"]: e for e in log}
 print(f"Comparing {len(pick_ts)} timepoints (T={pick_ts[0]}..{pick_ts[-1]})")
 
-# ---- フレーム処理関数（並列化用）----
+# ---- Per-frame processing (for parallelization) ----
 import concurrent.futures as cf
 
 ref_u8_list = [to_u8(ref_crops[ch] if ch < len(ref_crops) else ref_crops[-1])
@@ -264,7 +265,7 @@ with cf.ThreadPoolExecutor(max_workers=4) as ex:
 results.sort(key=lambda r: r["t"])
 print(f"\nDone: {len(results)} timepoints")
 
-# ---- 可視化 ----
+# ---- Visualization ----
 ts  = np.array([r["t"] for r in results])
 # Stage correction
 v1cx = np.array([r["v1_cx"] for r in results])
@@ -281,20 +282,20 @@ fig.suptitle(f"v1 vs v2: {len(results)} timepoints", fontsize=12)
 
 kw = dict(marker='o', markersize=4, lw=1.0)
 
-# stage X correction (画像縦)
+# stage X correction (image vertical)
 ax = axes[0, 0]
 ax.plot(ts, v1cx, label='v1', color='tab:blue', **kw)
 ax.plot(ts, v2cx, label='v2 (2-pass)', color='tab:orange', **kw)
 ax.axhline(0, color='k', lw=0.5, ls='--')
-ax.set_title('Stage X correction [um]  (画像 Y / 縦方向由来)')
+ax.set_title('Stage X correction [um]  (from image Y / vertical)')
 ax.set_ylabel('[um]'); ax.legend(fontsize=8)
 
-# stage Y correction (画像横)
+# stage Y correction (image horizontal)
 ax = axes[0, 1]
 ax.plot(ts, v1cy, label='v1', color='tab:blue', **kw)
 ax.plot(ts, v2cy, label='v2 (2-pass)', color='tab:orange', **kw)
 ax.axhline(0, color='k', lw=0.5, ls='--')
-ax.set_title('Stage Y correction [um]  (画像 X / 横方向由来)')
+ax.set_title('Stage Y correction [um]  (from image X / horizontal)')
 ax.set_ylabel('[um]'); ax.legend(fontsize=8)
 
 # diff stage X
@@ -318,13 +319,13 @@ ax.plot(ts, v2cr, label='v2', color='tab:orange', **kw)
 ax.set_title(f'ECC corr  v1 mean={v1cr.mean():.4f}  v2 mean={v2cr.mean():.4f}')
 ax.set_ylabel('corr'); ax.legend(fontsize=8); ax.set_xlabel('timepoint')
 
-# scatter v1 vs v2 stage_y (主要方向)
+# scatter v1 vs v2 stage_y (primary direction)
 ax = axes[2, 1]
 lim = max(np.abs(v1cy).max(), np.abs(v2cy).max()) * 1.1
 ax.scatter(v1cy, v2cy, s=20, color='tab:purple', alpha=0.8)
 ax.plot([-lim, lim], [-lim, lim], 'k--', lw=0.8, label='y=x')
 ax.set_xlabel('v1 stage Y [um]'); ax.set_ylabel('v2 stage Y [um]')
-ax.set_title('v1 vs v2 stage Y (横方向)')
+ax.set_title('v1 vs v2 stage Y (horizontal)')
 ax.legend(fontsize=8); ax.set_xlim(-lim, lim); ax.set_ylim(-lim, lim)
 
 plt.tight_layout()

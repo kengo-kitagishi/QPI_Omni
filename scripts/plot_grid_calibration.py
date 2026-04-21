@@ -54,9 +54,9 @@ def to_grid(xi_arr, yi_arr, values, xi_u, yi_u):
 
 def main():
     d = load_json(CALIB_JSON)
-    psc      = d["pixel_scale_um"]     # μm/px
-    x_step   = d["x_step_um"]          # 0.1 μm
-    y_step   = d["y_step_um"]          # 0.1 μm
+    psc      = d["pixel_scale_um"]     # um/px
+    x_step   = d["x_step_um"]          # 0.1 um
+    y_step   = d["y_step_um"]          # 0.1 um
     positions = d["positions"]
 
     xi_arr   = np.array([p["xi"]           for p in positions])
@@ -102,18 +102,18 @@ def main():
     sym_err = max(np.nanmax(np.abs(g_errX)), np.nanmax(np.abs(g_errY)), 0.01)
 
     # ----------------------------------------------------------------
-    print(f"N={len(xi_arr)}  pixel_scale={psc:.4f} μm/px")
-    print(f"err_stageX [μm]: mean={err_stageX.mean():+.4f}  std={err_stageX.std():.4f}  max_abs={np.abs(err_stageX).max():.4f}")
-    print(f"err_stageY [μm]: mean={err_stageY.mean():+.4f}  std={err_stageY.std():.4f}  max_abs={np.abs(err_stageY).max():.4f}")
-    print(f"residual [μm]: mean={res.mean():.4f}  max={res.max():.4f}")
+    print(f"N={len(xi_arr)}  pixel_scale={psc:.4f} um/px")
+    print(f"err_stageX [um]: mean={err_stageX.mean():+.4f}  std={err_stageX.std():.4f}  max_abs={np.abs(err_stageX).max():.4f}")
+    print(f"err_stageY [um]: mean={err_stageY.mean():+.4f}  std={err_stageY.std():.4f}  max_abs={np.abs(err_stageY).max():.4f}")
+    print(f"residual [um]: mean={res.mean():.4f}  max={res.max():.4f}")
     print(f"ECC corr: mean={np.nanmean(corr):.4f}  min={np.nanmin(corr):.4f}")
     # ----------------------------------------------------------------
 
     fig, axes = plt.subplots(1, 4, figsize=(20, 5))
     fig.suptitle(
-        f"Grid calibration — {POS_LABEL}  |  pixel_scale={psc:.4f} μm/px\n"
-        f"err_stageX: mean={err_stageX.mean():+.4f} μm  std={err_stageX.std():.4f} μm  |  "
-        f"err_stageY: mean={err_stageY.mean():+.4f} μm  std={err_stageY.std():.4f} μm",
+        f"Grid calibration - {POS_LABEL}  |  pixel_scale={psc:.4f} um/px\n"
+        f"err_stageX: mean={err_stageX.mean():+.4f} um  std={err_stageX.std():.4f} um  |  "
+        f"err_stageY: mean={err_stageY.mean():+.4f} um  std={err_stageY.std():.4f} um",
         fontsize=10,
     )
 
@@ -121,15 +121,15 @@ def main():
     extent_st = [xi_min_um - half_x, xi_max_um + half_x,
                  yi_min_um - half_y, yi_max_um + half_y]
 
-    # ── Panel 1: Nominal vs Actual scatter ──────────────────────────
+    # -- Panel 1: Nominal vs Actual scatter --------------------------
     ax = axes[0]
     ax.scatter(nom_stageX, nom_stageY, s=50, facecolors="none",
                edgecolors="#999", linewidths=1.0, zorder=2, label="Nominal")
     sc = ax.scatter(act_stageX, act_stageY, s=20, c=res, cmap="hot_r",
                     vmin=0, vmax=np.percentile(res, 95), zorder=3, label="Actual")
-    plt.colorbar(sc, ax=ax, label="Residual (μm)")
-    ax.set_xlabel("Stage X (μm)")
-    ax.set_ylabel("Stage Y (μm)")
+    plt.colorbar(sc, ax=ax, label="Residual (um)")
+    ax.set_xlabel("Stage X (um)")
+    ax.set_ylabel("Stage Y (um)")
     ax.set_title("Nominal (○) vs Actual (●)")
     ax.set_aspect("equal")
     ax.legend(fontsize=7, loc="upper left")
@@ -137,7 +137,7 @@ def main():
     ax.xaxis.set_major_formatter(mticker.FormatStrFormatter("%.1f"))
     ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.1f"))
 
-    # ── Panel 2: Error quiver ────────────────────────────────────────
+    # -- Panel 2: Error quiver ---------------------------------------
     ax2 = axes[1]
     quiv = ax2.quiver(
         nom_stageX, nom_stageY,
@@ -148,16 +148,16 @@ def main():
         angles="xy", scale_units="xy", scale=1,
         width=0.003,
     )
-    plt.colorbar(quiv, ax=ax2, label="Residual (μm)")
-    ax2.set_xlabel("Nominal stage X (μm)")
-    ax2.set_ylabel("Nominal stage Y (μm)")
+    plt.colorbar(quiv, ax=ax2, label="Residual (um)")
+    ax2.set_xlabel("Nominal stage X (um)")
+    ax2.set_ylabel("Nominal stage Y (um)")
     ax2.set_title(f"Error vectors  ({'actual scale' if QUIVER_SCALE == 1 else f'×{QUIVER_SCALE}'})")
     ax2.set_aspect("equal")
     ax2.grid(True, linewidth=0.3, alpha=0.4)
     ax2.xaxis.set_major_formatter(mticker.FormatStrFormatter("%.1f"))
     ax2.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.1f"))
 
-    # ── Panel 3: stage Y error heatmap ──────────────────────────────
+    # -- Panel 3: stage Y error heatmap ------------------------------
     # g_errY[xi_idx, yi_idx] → .T → [yi_idx, xi_idx]
     # origin="lower": row=yi_idx -> Y-axis=stage Y, col=xi_idx -> X-axis=stage X
     ax3 = axes[2]
@@ -166,9 +166,9 @@ def main():
         cmap="RdBu_r", vmin=-sym_err, vmax=sym_err,
         aspect="equal",
     )
-    plt.colorbar(im3, ax=ax3, label="Δ stage Y  (μm)")
-    ax3.set_xlabel("Stage X (μm)")
-    ax3.set_ylabel("Stage Y (μm)")
+    plt.colorbar(im3, ax=ax3, label="delta stage Y  (um)")
+    ax3.set_xlabel("Stage X (um)")
+    ax3.set_ylabel("Stage Y (um)")
     ax3.set_title("Stage Y positioning error")
     for i, xv in enumerate(xi_u):
         for j, yv in enumerate(yi_u):
@@ -181,7 +181,7 @@ def main():
     ax3.xaxis.set_major_formatter(mticker.FormatStrFormatter("%.1f"))
     ax3.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.1f"))
 
-    # ── Panel 4: ECC correlation heatmap ────────────────────────────
+    # -- Panel 4: ECC correlation heatmap ----------------------------
     ax4 = axes[3]
     im4 = ax4.imshow(
         g_corr.T, origin="lower", extent=extent_st,
@@ -189,8 +189,8 @@ def main():
         aspect="equal",
     )
     plt.colorbar(im4, ax=ax4, label="ECC correlation")
-    ax4.set_xlabel("Stage X (μm)")
-    ax4.set_ylabel("Stage Y (μm)")
+    ax4.set_xlabel("Stage X (um)")
+    ax4.set_ylabel("Stage Y (um)")
     ax4.set_title("ECC correlation")
     for i, xv in enumerate(xi_u):
         for j, yv in enumerate(yi_u):
@@ -215,9 +215,9 @@ def main():
         },
         description=(
             f"Grid calibration {POS_LABEL}: 4-panel (scatter, quiver, stageY-error, ECC-corr). "
-            f"All axes in μm (sign-corrected). "
-            f"err_stageX mean={err_stageX.mean():+.4f} μm std={err_stageX.std():.4f} μm. "
-            f"err_stageY mean={err_stageY.mean():+.4f} μm std={err_stageY.std():.4f} μm."
+            f"All axes in um (sign-corrected). "
+            f"err_stageX mean={err_stageX.mean():+.4f} um std={err_stageX.std():.4f} um. "
+            f"err_stageY mean={err_stageY.mean():+.4f} um std={err_stageY.std():.4f} um."
         ),
         data={
             "xi": xi_arr, "yi": yi_arr,

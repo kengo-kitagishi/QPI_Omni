@@ -1,11 +1,14 @@
 """
-グリッドの 1 点（既定: Pos1_x+0_y+0）だけ QPI 再構成し、任意で channel_rois.json まで作る。
+QPI-reconstruct only a single grid point (default: Pos1_x+0_y+0), and optionally
+create channel_rois.json.
 
-前提:
-  - 同じ (xi,yi) に Pos0_* / Pos1_* の生データ img_*_ph_*.tif があること（pipeline_full Step0 と同じ）
-  - 全グリッド再構成を待たずに、prepare_drift_session / drift 用の最小セットを用意する用途
+Prerequisites:
+  - Raw data img_*_ph_*.tif for Pos0_* / Pos1_* must exist at the same (xi, yi)
+    (same as pipeline_full Step0)
+  - Intended to prepare the minimum set for prepare_drift_session / drift without
+    waiting for full-grid reconstruction
 
-例:
+Examples:
   python reconstruct_grid_corner.py
   python reconstruct_grid_corner.py --grid-dir "E:\\...\\grid_2pergluc_60ms_1" --rois-only
 """
@@ -26,7 +29,7 @@ sys.path.insert(0, str(_script_dir))
 
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 
-# pipeline_full.py と同じ（Pos1 は通常 POS_SPLIT 未満）
+# Same as pipeline_full.py (Pos1 is normally below POS_SPLIT)
 POS_SPLIT = 33
 CROP_BEFORE = (0, 2048, 400, 2448)
 CROP_AFTER = (0, 2048, 0, 2048)
@@ -87,16 +90,16 @@ def reconstruct_one_point(
     yi: int,
     skip_if_exists: bool,
 ) -> Path:
-    """Pos{target}_x{xi}_y{yi} を BG 差し引き再構成。output_phase を返す。"""
+    """BG-subtracted reconstruction of Pos{target}_x{xi}_y{yi}. Returns output_phase."""
     bg_dir = grid_dir / f"{bg_label}_x{xi:+d}_y{yi:+d}"
     tgt_dir = grid_dir / f"{target_label}_x{xi:+d}_y{yi:+d}"
     out_dir = tgt_dir / "output_phase"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if not bg_dir.is_dir():
-        raise FileNotFoundError(f"BG フォルダがありません: {bg_dir}")
+        raise FileNotFoundError(f"BG folder not found: {bg_dir}")
     if not tgt_dir.is_dir():
-        raise FileNotFoundError(f"ターゲットフォルダがありません: {tgt_dir}")
+        raise FileNotFoundError(f"Target folder not found: {tgt_dir}")
 
     pos_num = _pos_number_from_label(target_label)
     crop = _get_crop(pos_num)
@@ -104,7 +107,7 @@ def reconstruct_one_point(
     z_tgt = {_get_z_index(p): p for p in sorted(tgt_dir.glob("img_*_ph_*.tif"))}
     z_bg = {_get_z_index(p): p for p in sorted(bg_dir.glob("img_*_ph_*.tif"))}
     if not z_tgt:
-        raise FileNotFoundError(f"生画像がありません: {tgt_dir}/img_*_ph_*.tif")
+        raise FileNotFoundError(f"Raw images not found: {tgt_dir}/img_*_ph_*.tif")
 
     sample = next(iter(z_tgt.values()))
     qpi = _make_qpi_params(sample, crop)
@@ -138,12 +141,12 @@ def reconstruct_one_point(
         n_ok += 1
         print(f"  wrote {out_path.name}")
 
-    print(f"再構成: 新規 {n_ok} 枚, スキップ {n_skip} 枚 → {out_dir}")
+    print(f"Reconstruction: new {n_ok} frames, skipped {n_skip} frames -> {out_dir}")
     return out_dir
 
 
 def run_channel_detect(phase_dir: Path, python_exe: str) -> None:
-    """channel_rois.json を作成（detect のみ。チャネル TIFF は不要なら --detect で十分）。"""
+    """Create channel_rois.json (detect only; --detect is sufficient if channel TIFFs are not needed)."""
     cmd = [
         python_exe,
         str(_script_dir / "channel_crop.py"),
@@ -153,24 +156,24 @@ def run_channel_detect(phase_dir: Path, python_exe: str) -> None:
         "*_phase.tif",
         "--detect",
     ]
-    print("実行:", " ".join(cmd))
+    print("Running:", " ".join(cmd))
     subprocess.check_call(cmd)
 
 
 def main():
-    ap = argparse.ArgumentParser(description="グリッド角 1 点の再構成 + 任意で channel_rois 検出")
-    ap.add_argument("--grid-dir", default=DEFAULT_GRID_DIR, help="GRID_DIR（Pos0_x+0_y+0 等の親）")
+    ap = argparse.ArgumentParser(description="Reconstruct a single grid corner + optionally detect channel_rois")
+    ap.add_argument("--grid-dir", default=DEFAULT_GRID_DIR, help="GRID_DIR (parent of Pos0_x+0_y+0 etc.)")
     ap.add_argument("--bg-label", default=BG_LABEL)
     ap.add_argument("--target-label", default=TARGET_LABEL)
     ap.add_argument("--xi", type=int, default=XI)
     ap.add_argument("--yi", type=int, default=YI)
-    ap.add_argument("--no-skip", action="store_true", help="既存 *_phase.tif も上書き再計算")
-    ap.add_argument("--recon-only", action="store_true", help="再構成のみ（channel_rois は作らない）")
-    ap.add_argument("--rois-only", action="store_true", help="既存 output_phase から channel_rois のみ")
+    ap.add_argument("--no-skip", action="store_true", help="Overwrite and recompute even existing *_phase.tif")
+    ap.add_argument("--recon-only", action="store_true", help="Reconstruction only (do not create channel_rois)")
+    ap.add_argument("--rois-only", action="store_true", help="Only create channel_rois from existing output_phase")
     ap.add_argument(
         "--python",
         default=sys.executable,
-        help="channel_crop 起動に使う Python（既定: 現在のインタプリタ）",
+        help="Python used to launch channel_crop (default: current interpreter)",
     )
     args = ap.parse_args()
     grid_dir = Path(args.grid_dir)
@@ -179,8 +182,8 @@ def main():
 
     if args.rois_only:
         if not phase_dir.is_dir() or not any(phase_dir.glob("*_phase.tif")):
-            print(f"ERROR: *_phase.tif がありません: {phase_dir}")
-            print("先に --rois-only を外して再構成するか、pipeline_full Step0 を完了してください。")
+            print(f"ERROR: no *_phase.tif found: {phase_dir}")
+            print("Run reconstruction first without --rois-only, or complete pipeline_full Step0.")
             sys.exit(1)
     else:
         reconstruct_one_point(

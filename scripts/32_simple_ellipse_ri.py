@@ -22,9 +22,9 @@ IMAGE_DIR = r"C:\Users\QPI\Documents\QPI_omni\data\align_demo\from_outputphase\b
 OUTPUT_FILE = "simple_mean_ri.png"
 
 PIXEL_SIZE_UM = 0.348
-WAVELENGTH_NM = 663
+WAVELENGTH_NM = 658
 N_MEDIUM = 1.333
-ALPHA_RI = 0.00018
+ALPHA_RI = 0.00018  # [mL/mg] specific refractive increment (= 0.18 mL/g)
 
 # =============================================================================
 # Function definitions
@@ -131,7 +131,7 @@ for idx, row in df.iterrows():
     
     # Mass calculation
     mean_conc = (mean_ri - N_MEDIUM) / ALPHA_RI
-    total_mass = mean_conc * volume_um3
+    total_mass = mean_conc * volume_um3 * 1e-3  # [mg/mL] × [µm³] × 1e-3 → [pg]
     
     results.append({
         'frame': frame_num,

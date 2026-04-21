@@ -36,6 +36,7 @@ import session_db
 INBOX_ROOT = Path(
     "/Users/kitak/Library/CloudStorage/"
     "GoogleDrive-kengo_kitagishi@cell.c.u-tokyo.ac.jp/"
+    # TODO-JP: 共有ドライブ is the literal Google Drive folder name on disk; must remain as-is.
     "共有ドライブ/wakamotolab_meeting/kitagishi/figure-hub/inbox"
 )
 

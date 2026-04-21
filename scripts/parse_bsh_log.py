@@ -1,5 +1,5 @@
-"""parse_bsh_log.py — BeanShell Script Panel ログから per-channel ECC データを抽出し
-drift_log.json に channel_details として遡及 merge する。
+"""parse_bsh_log.py - Extract per-channel ECC data from BeanShell Script Panel logs
+and merge it retroactively into drift_log.json as channel_details.
 
 Usage:
     python scripts/parse_bsh_log.py
@@ -13,16 +13,16 @@ from pathlib import Path
 BSH_LOG   = Path(r"C:\Users\QPI\Documents\QPI_Omni\scripts\260326_timelapse_drift.txt")
 DRIFT_LOG = Path(r"C:\Users\QPI\Documents\QPI_Omni\drift_session\drift_log.json")
 
-# ---- 正規表現 ----
+# ---- Regex ----
 RE_TP   = re.compile(r"-- Timepoint (\d+) /")
 RE_CH   = re.compile(
     r"ch(\d+): pass1=\(([+-]?\d+\.\d+),([+-]?\d+\.\d+)\)px corr1=(\d+\.\d+)"
     r"\s+grid=\(([+-]?\d+),([+-]?\d+)\)"
     r"\s+pass2=\(([+-]?\d+\.\d+),([+-]?\d+\.\d+)\)px corr2=(\d+\.\d+)"
 )
-RE_EXCL = re.compile(r"idx=(\[[^\]]+\])")   # idx=[0, 1, 3] など
+RE_EXCL = re.compile(r"idx=(\[[^\]]+\])")   # e.g. idx=[0, 1, 3]
 
-# ---- ログ解析 ----
+# ---- Log parsing ----
 txt = BSH_LOG.read_text(encoding="utf-8", errors="replace")
 lines = txt.splitlines()
 
@@ -58,7 +58,7 @@ for line in lines:
             "tx1": tx1, "ty1": ty1, "corr1": corr1,
             "xi": xi, "yi": yi,
             "tx2": tx2, "ty2": ty2, "corr2": corr2,
-            "outlier": False,   # 後で更新
+            "outlier": False,   # updated later
             "status": "pass2_ok",
         })
         continue
@@ -68,7 +68,7 @@ for line in lines:
         try:
             excl_list = json.loads(m_excl.group(1))
             outlier_idx = set(excl_list)
-            # 除外インデックスはチャネルリスト内の順番（parsed 末尾から）
+            # Excluded indices refer to positions within the channel list (from the end of parsed)
             chs = parsed.get(current_tp, [])
             n = len(chs)
             for idx in outlier_idx:
@@ -82,7 +82,7 @@ ch_counts = [len(v) for v in parsed.values()]
 print(f"Channels per TP: min={min(ch_counts)}, max={max(ch_counts)}, "
       f"median={sorted(ch_counts)[len(ch_counts)//2]}")
 
-# ---- drift_log.json に merge ----
+# ---- Merge into drift_log.json ----
 records = json.loads(DRIFT_LOG.read_text(encoding="utf-8"))
 
 updated = 0
@@ -94,13 +94,13 @@ for rec in records:
     if tp not in parsed:
         skipped += 1
         continue
-    # 既存の channel_details は上書き（ログの方が正確）
+    # Overwrite existing channel_details (log data is more accurate)
     rec["channel_details"] = parsed[tp]
     updated += 1
 
 print(f"\nMerge result: updated={updated}, skipped(no log data)={skipped}")
 
-# ---- バックアップ → 書き込み ----
+# ---- Backup then write ----
 backup = DRIFT_LOG.with_suffix(".json.bak")
 backup.write_text(DRIFT_LOG.read_text(encoding="utf-8"), encoding="utf-8")
 print(f"Backup: {backup}")
@@ -108,7 +108,7 @@ print(f"Backup: {backup}")
 DRIFT_LOG.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
 print(f"Written: {DRIFT_LOG}")
 
-# ---- 検証 ----
+# ---- Verification ----
 verify = json.loads(DRIFT_LOG.read_text(encoding="utf-8"))
 with_cd = [r for r in verify if r.get("channel_details")]
 print(f"\nVerify: {len(with_cd)} / {len(verify)} TPs have channel_details")

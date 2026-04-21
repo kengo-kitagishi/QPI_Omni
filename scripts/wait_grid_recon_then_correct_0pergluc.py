@@ -1,10 +1,10 @@
 # %%
 """
-batch_reconstruction_grid.py などで grid_0per を再構成している間、
-指定ベースラベル（例: Pos6）の全グリッド点に img_*_ph_ZZZ_phase.tif が揃うまで待機し、
-揃ったら correct_0pergluc.py を実行する。
+While batch_reconstruction_grid.py (or similar) is reconstructing grid_0per,
+wait until img_*_ph_ZZZ_phase.tif exists at every grid point for the
+specified base label (e.g. Pos6), then run correct_0pergluc.py.
 
-例:
+Examples:
   python scripts/wait_grid_recon_then_correct_0pergluc.py
   python scripts/wait_grid_recon_then_correct_0pergluc.py --interval-sec 120 --dry-run
 """
@@ -28,39 +28,39 @@ from grid_subtract import scan_grid_positions
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="grid_0per 再構成完了を待ち、correct_0pergluc.py を実行する。",
+        description="Wait for grid_0per reconstruction to complete, then run correct_0pergluc.py.",
     )
     p.add_argument(
         "--grid-0per-dir",
         default=r"C:\grid_0pergluc_60ms_1",
-        help="GRID_0PER_DIR（correct_0pergluc と同じ）",
+        help="GRID_0PER_DIR (same as in correct_0pergluc)",
     )
     p.add_argument(
         "--recon-base-label",
         default="Pos6",
-        help="再構成対象のフォルダ接頭辞（Pos6_x*_y*）",
+        help="Folder prefix of the reconstruction target (Pos6_x*_y*)",
     )
     p.add_argument(
         "--z-index",
         type=int,
         default=None,
-        help="確認する z（未指定時は --grid-sub-log の grid_z_index、なければ 18）",
+        help="z index to check (defaults to grid_z_index from --grid-sub-log, or 18 if unavailable)",
     )
     p.add_argument(
         "--grid-sub-log",
         default=r"D:\AquisitionData\Kitagishi\260405\ph_260405\Pos6\output_phase\channels\grid_subtract_log.json",
-        help="grid_z_index を読むための grid_subtract_log.json",
+        help="grid_subtract_log.json from which grid_z_index is read",
     )
     p.add_argument(
         "--interval-sec",
         type=float,
         default=60.0,
-        help="再チェック間隔（秒）",
+        help="Re-check interval (seconds)",
     )
     p.add_argument(
         "--dry-run",
         action="store_true",
-        help="待機後に correct_0pergluc.py は起動しない",
+        help="Do not launch correct_0pergluc.py after waiting",
     )
     return p.parse_args()
 
@@ -102,27 +102,27 @@ def main() -> None:
     while True:
         missing, n_total = _missing_phase_tifs(grid_dir, args.recon_base_label, z)
         if n_total == 0:
-            print("[wait] エラー: グリッドフォルダが見つかりません。")
+            print("[wait] error: grid folders not found.")
             sys.exit(1)
 
         n_miss = len(missing)
         if n_miss == 0:
-            print(f"[wait] 完了: {n_total} 点すべてに ph_{z:03d}_phase.tif があります。")
+            print(f"[wait] complete: all {n_total} points have ph_{z:03d}_phase.tif.")
             break
 
-        print(f"[wait] 未完了: {n_miss}/{n_total} 不足。{args.interval_sec}s 後に再チェック。")
+        print(f"[wait] incomplete: {n_miss}/{n_total} missing. Re-checking in {args.interval_sec}s.")
         show = missing[:8]
         for m in show:
             print(f"  - {m}")
         if len(missing) > len(show):
-            print(f"  ... 他 {len(missing) - len(show)} 件")
+            print(f"  ... and {len(missing) - len(show)} more")
 
         time.sleep(args.interval_sec)
 
     cmd = [sys.executable, str(_SCRIPT_DIR / "correct_0pergluc.py")]
     print(f"[run] {' '.join(cmd)}")
     if args.dry_run:
-        print("[run] --dry-run のためスキップしました。")
+        print("[run] skipped because of --dry-run.")
         return
 
     result = subprocess.run(cmd, cwd=str(_REPO_ROOT))

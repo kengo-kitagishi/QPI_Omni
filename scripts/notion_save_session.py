@@ -1,9 +1,9 @@
 """
-現在の会話セッションをNotionに保存する（1回限り実行）
+Save the current conversation session to Notion (one-shot execution)
 
-使い方:
+Usage:
     python scripts/notion_save_session.py
-    python scripts/notion_save_session.py <jsonl_path>   # 指定ファイルを保存
+    python scripts/notion_save_session.py <jsonl_path>   # save the specified file
 """
 
 import json
@@ -25,11 +25,11 @@ def _load_notion_token() -> str:
         headers = json.loads(headers_str)
         auth = headers.get("Authorization", "")
         return auth.replace("Bearer ", "").strip()
-    raise RuntimeError(".cursor/mcp.json が見つかりません。Notion APIトークンを設定してください。")
+    raise RuntimeError(".cursor/mcp.json not found. Please set the Notion API token.")
 
 
 def parse_jsonl(jsonl_path: Path) -> dict:
-    """chat_loggerと同じ解析ロジック"""
+    """Same parsing logic as chat_logger"""
     import re
     messages = []
     try:
@@ -51,10 +51,10 @@ def parse_jsonl(jsonl_path: Path) -> dict:
                 except json.JSONDecodeError:
                     continue
     except Exception as e:
-        return {"title": "（解析エラー）", "first_user": str(e), "summary": "", "n_turns": 0, "files_touched": []}
+        return {"title": "(parse error)", "first_user": str(e), "summary": "", "n_turns": 0, "files_touched": []}
 
     if not messages:
-        return {"title": "（空の会話）", "first_user": "", "summary": "", "n_turns": 0, "files_touched": []}
+        return {"title": "(empty conversation)", "first_user": "", "summary": "", "n_turns": 0, "files_touched": []}
 
     first_user = next((m["text"] for m in messages if m["role"] == "user"), "")
     if "<user_query>" in first_user:
@@ -72,7 +72,7 @@ def parse_jsonl(jsonl_path: Path) -> dict:
     n_turns = sum(1 for m in messages if m["role"] == "user")
 
     return {
-        "title": title or "（タイトルなし）",
+        "title": title or "(no title)",
         "first_user": first_user[:300],
         "summary": summary,
         "n_turns": n_turns,
@@ -86,27 +86,27 @@ def post_to_notion(info: dict, date_str: str, token: str) -> str:
     def rt(s):
         return [{"type": "text", "text": {"content": str(s)[:2000]}}]
 
-    files_str = ", ".join(f"`{f}`" for f in info["files_touched"]) if info["files_touched"] else "なし"
+    files_str = ", ".join(f"`{f}`" for f in info["files_touched"]) if info["files_touched"] else "None"
 
     children = [
-        {"object": "block", "type": "heading_2", "heading_2": {"rich_text": rt("会話の概要")}},
-        {"object": "block", "type": "quote", "quote": {"rich_text": rt(info["first_user"][:1000] or "（取得できませんでした）")}},
-        {"object": "block", "type": "heading_2", "heading_2": {"rich_text": rt("最後のAI応答")}},
-        {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(info["summary"] or "（取得できませんでした）")}},
-        {"object": "block", "type": "heading_2", "heading_2": {"rich_text": rt("操作されたファイル")}},
+        {"object": "block", "type": "heading_2", "heading_2": {"rich_text": rt("Conversation summary")}},
+        {"object": "block", "type": "quote", "quote": {"rich_text": rt(info["first_user"][:1000] or "(could not retrieve)")}},
+        {"object": "block", "type": "heading_2", "heading_2": {"rich_text": rt("Last AI response")}},
+        {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(info["summary"] or "(could not retrieve)")}},
+        {"object": "block", "type": "heading_2", "heading_2": {"rich_text": rt("Files touched")}},
         {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rt(files_str)}},
     ]
 
     payload = {
         "parent": {"database_id": NOTION_DB_ID},
         "properties": {
-            "Name": {"title": rt(f"[会話] {info['title']}")},
+            "Name": {"title": rt(f"[Conversation] {info['title']}")},
             "Date": {"date": {"start": date_str}},
-            "Script": {"rich_text": rt(f"会話ログ ({info['n_turns']}ターン)")},
+            "Script": {"rich_text": rt(f"Conversation log ({info['n_turns']} turns)")},
             "Description": {"rich_text": rt(info["summary"][:500])},
             "Parameters": {"rich_text": rt("N/A")},
-            "Changed": {"rich_text": rt(", ".join(info["files_touched"]) or "なし")},
-            "Figure": {"rich_text": rt("なし")},
+            "Changed": {"rich_text": rt(", ".join(info["files_touched"]) or "None")},
+            "Figure": {"rich_text": rt("None")},
         },
         "children": children,
     }
@@ -133,19 +133,19 @@ def main():
     else:
         jsonl_files = list(TRANSCRIPTS_DIR.glob("*/*.jsonl"))
         if not jsonl_files:
-            print("[notion_save_session] agent-transcripts内に.jsonlがありません")
+            print("[notion_save_session] no .jsonl found inside agent-transcripts")
             sys.exit(1)
         jsonl_path = max(jsonl_files, key=lambda p: p.stat().st_mtime)
 
-    print(f"[notion_save_session] 対象: {jsonl_path}")
+    print(f"[notion_save_session] target: {jsonl_path}")
 
     token = _load_notion_token()
     info = parse_jsonl(jsonl_path)
     date_str = datetime.now().strftime("%Y-%m-%d")
 
     url = post_to_notion(info, date_str, token)
-    print(f"[notion_save_session] Notionに保存しました")
-    print(f"  → {url}")
+    print(f"[notion_save_session] Saved to Notion")
+    print(f"  -> {url}")
 
 
 if __name__ == "__main__":

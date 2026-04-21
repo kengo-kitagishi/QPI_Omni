@@ -37,7 +37,7 @@ import traceback
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-# session_db を同じディレクトリから import
+# Import session_db from the same directory
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import session_db
 
@@ -49,6 +49,7 @@ SESSION_DIR = Path.home() / ".claude/projects/-Users-kitak-QPI-Omni"
 SHARED_SESSION_DIR = Path(
     "/Users/kitak/Library/CloudStorage/"
     "GoogleDrive-kengo_kitagishi@cell.c.u-tokyo.ac.jp/"
+    # TODO-JP: 共有ドライブ is the literal Google Drive folder name on disk; must remain as-is.
     "共有ドライブ/wakamotolab_meeting/kitagishi/claude_logs/QPI_Omni"
 )
 DEFAULT_SESSION_DIRS = [SESSION_DIR, SHARED_SESSION_DIR]
@@ -175,7 +176,7 @@ def _tool_result_content(result_block: dict) -> str:
 
 
 def parse_timeline(entries: list) -> list:
-    # tool_result を tool_use_id でインデックス化
+    # Index tool_result by tool_use_id
     tool_results: dict[str, dict] = {}
     for e in entries:
         if e.get("type") != "user":
@@ -414,7 +415,7 @@ def write_session_to_db(
 
 
 # ────────────────────────────────────────────
-# Markdown レンダリング — ヘルパーセクション
+# Markdown rendering — helper sections
 # ────────────────────────────────────────────
 
 def _render_tool_input(name: str, inp: dict) -> str:
@@ -433,7 +434,7 @@ def _render_tool_input(name: str, inp: dict) -> str:
             return f"`{fp}`\n  `{old}` → `{new}`"
         else:
             content_preview = inp.get("content", "")[:100].replace("\n", "↵")
-            return f"`{fp}` (新規/上書き)\n  `{content_preview}...`"
+            return f"`{fp}` (new/overwrite)\n  `{content_preview}...`"
 
     elif name == "Read":
         fp = inp.get("file_path", "")
@@ -462,26 +463,26 @@ def _render_tool_input(name: str, inp: dict) -> str:
 
 
 def _render_session_summary_section(db_data: dict) -> list[str]:
-    """セッションサマリ（metrics table）セクションを生成する。"""
+    """Generate the session summary (metrics table) section."""
     meta = db_data["session_meta"]
     lines = [
-        "## セッションサマリ",
+        "## Session Summary",
         "",
-        "| 指標 | 値 |",
+        "| Metric | Value |",
         "|------|-----|",
-        f"| 変更ファイル数 | {len(set(f['file_path'] for f in db_data['files'] if f['operation'] in ('Edit','Write')))} |",
-        f"| Bash コマンド数 | {meta['bash_command_count']} |",
-        f"| エラー発生数 | {meta['error_count']} |",
-        f"| AI 推論ブロック数 | {meta['thinking_blocks']} |",
-        f"| 全ツール呼び出し数 | {meta['tool_call_count']} |",
-        f"| ユーザー発言数 | {meta['user_message_count']} |",
+        f"| Changed file count | {len(set(f['file_path'] for f in db_data['files'] if f['operation'] in ('Edit','Write')))} |",
+        f"| Bash command count | {meta['bash_command_count']} |",
+        f"| Error count | {meta['error_count']} |",
+        f"| AI thinking block count | {meta['thinking_blocks']} |",
+        f"| Total tool call count | {meta['tool_call_count']} |",
+        f"| User message count | {meta['user_message_count']} |",
         "",
     ]
     return lines
 
 
 def _render_design_notes_section(timeline: list) -> list[str]:
-    """thinking ブロックから設計ノートを抽出するセクションを生成する。"""
+    """Generate a section that extracts design notes from thinking blocks."""
     excerpts = []
     for event in timeline:
         if event["role"] != "assistant":
@@ -494,14 +495,14 @@ def _render_design_notes_section(timeline: list) -> list[str]:
         return []
 
     lines = [
-        "## 設計ノート（AI 推論ブロック抜粋）",
+        "## Design Notes (AI thinking block excerpts)",
         "",
-        "> 実装設計・数式・アルゴリズムの根拠が含まれる推論ブロック",
+        "> Thinking blocks containing implementation design, equations, and algorithmic rationale",
         "",
     ]
     for i, (ts, tb) in enumerate(excerpts, 1):
         ts_str = _fmt_ts(ts)
-        # 数式っぽい行を含む場合はマーク
+        # Mark lines that look like they contain equations
         has_math = bool(re.search(r"[\\$∑∫≈×÷±∂π]|\\frac|\\sum|\\int|np\.|[a-z]\s*=\s*[\d\(]", tb))
         math_mark = " 🔢" if has_math else ""
         lines.append(f"### [{i}] {ts_str}{math_mark}")
@@ -514,26 +515,26 @@ def _render_design_notes_section(timeline: list) -> list[str]:
 
 
 def _render_bash_section(bash_cmds: list[dict]) -> list[str]:
-    """再現コマンド一覧セクションを生成する（コピペ可能な形式）。"""
+    """Generate the reproduction commands section (copy-pasteable format)."""
     if not bash_cmds:
         return []
 
     lines = [
-        "## 再現コマンド一覧",
+        "## Reproduction Commands",
         "",
-        "> このセッションで実行された Bash コマンド（実行順・コピペ可能）",
+        "> Bash commands executed in this session (in order, copy-pasteable)",
         "",
     ]
 
-    # エラー概要テーブル
+    # Error summary table
     errors = [bc for bc in bash_cmds if bc["is_error"]]
     ok_count = len(bash_cmds) - len(errors)
-    lines.append(f"| 合計 | 成功 | エラー |")
+    lines.append(f"| Total | Success | Error |")
     lines.append(f"|------|------|--------|")
     lines.append(f"| {len(bash_cmds)} | {ok_count} | {len(errors)} |")
     lines.append("")
 
-    # コマンドブロック（コピペ用）
+    # Command block (for copy-paste)
     lines.append("```bash")
     for bc in bash_cmds:
         n = bc.get("event_order", "?")
@@ -554,7 +555,7 @@ def _render_bash_section(bash_cmds: list[dict]) -> list[str]:
 
 
 def _render_code_changes_section(timeline: list) -> list[str]:
-    """コード変更詳細セクションを生成する（実際の old→new を表示）。"""
+    """Generate the code change detail section (showing actual old→new)."""
     changes = []
     event_order = 0
     for event in timeline:
@@ -599,12 +600,12 @@ def _render_code_changes_section(timeline: list) -> list[str]:
     if not changes:
         return []
 
-    # ファイルごとにグルーピング（同ファイルへの複数 Edit は折りたたむ）
+    # Group by file (collapse multiple Edits to the same file)
     seen_files: dict[str, int] = {}
     lines = [
-        "## コード変更詳細",
+        "## Code Change Details",
         "",
-        "> このセッションでの全 Edit/Write 操作（実際のコード内容）",
+        "> All Edit/Write operations in this session (actual code content)",
         "",
     ]
 
@@ -613,33 +614,33 @@ def _render_code_changes_section(timeline: list) -> list[str]:
         seen_files[fp] = seen_files.get(fp, 0) + 1
         count = seen_files[fp]
 
-        # ファイル名を短くする（/Users/kitak/ を省略）
+        # Shorten file name (omit /Users/kitak/)
         short_fp = fp.replace("/Users/kitak/QPI_Omni/", "").replace("/Users/kitak/", "~/")
         header = f"### `{short_fp}` — {ch['op']} [{ch['ts']}]"
         if count > 1:
-            header += f" (この操作 #{count})"
+            header += f" (operation #{count})"
         lines.append(header)
         lines.append("")
 
-        # 拡張子からコードブロック言語を推定
+        # Infer code block language from extension
         ext = Path(fp).suffix.lower()
         lang = {"py": "python", "js": "javascript", "ts": "typescript",
                 "json": "json", "md": "markdown", "sh": "bash",
                 "yaml": "yaml", "yml": "yaml"}.get(ext.lstrip("."), "")
 
         if ch["op"] == "Edit" and ch.get("old") is not None:
-            lines.append("**変更前:**")
+            lines.append("**Before:**")
             lines.append(f"```{lang}")
             lines.append(ch["old"])
             if ch.get("old_truncated"):
-                lines.append("... (省略)")
+                lines.append("... (truncated)")
             lines.append("```")
             lines.append("")
-            lines.append("**変更後:**")
+            lines.append("**After:**")
             lines.append(f"```{lang}")
             lines.append(ch["new"])
             if ch.get("new_truncated"):
-                lines.append("... (省略)")
+                lines.append("... (truncated)")
             lines.append("```")
         elif ch["op"] == "Write":
             lines.append(f"```{lang}")
@@ -654,7 +655,7 @@ def _render_code_changes_section(timeline: list) -> list[str]:
 
 
 def _render_error_section(timeline: list) -> list[str]:
-    """エラーログセクションを生成する（エラーがある場合のみ）。"""
+    """Generate the error log section (only when errors exist)."""
     errors = []
     event_order = 0
     for event in timeline:
@@ -675,7 +676,7 @@ def _render_error_section(timeline: list) -> list[str]:
         return []
 
     lines = [
-        f"## エラーログ（{len(errors)} 件）",
+        f"## Error Log ({len(errors)} entries)",
         "",
     ]
     for err in errors:
@@ -685,10 +686,10 @@ def _render_error_section(timeline: list) -> list[str]:
         inp_str = _render_tool_input(name, err["input"])
         lines.append(f"### ⚠️ [{n}] {ts} | `{name}`")
         lines.append("")
-        lines.append(f"**操作:** {inp_str}")
+        lines.append(f"**Operation:** {inp_str}")
         lines.append("")
         if err["result"]:
-            lines.append("**エラー出力:**")
+            lines.append("**Error output:**")
             lines.append("```")
             lines.append(err["result"][:500])
             lines.append("```")
@@ -698,7 +699,7 @@ def _render_error_section(timeline: list) -> list[str]:
 
 
 # ────────────────────────────────────────────
-# Markdown レンダリング — メイン
+# Markdown rendering — main
 # ────────────────────────────────────────────
 
 def render_session_md(
@@ -708,24 +709,24 @@ def render_session_md(
     timeline: list,
     continuation_info: dict | None = None,
 ) -> str:
-    """タイムラインを Obsidian Markdown に変換する。
+    """Convert the timeline to Obsidian Markdown.
 
-    continuation_info: 日付分割セッション用。キー:
-        parent_session_id: 元の session_id
-        date_part: 何日目か (1, 2, ...)
-        prev_date: 前日の日付文字列 (or None)
-        next_date: 翌日の日付文字列 (or None)
+    continuation_info: for date-split sessions. Keys:
+        parent_session_id: original session_id
+        date_part: which day (1, 2, ...)
+        prev_date: previous day's date string (or None)
+        next_date: next day's date string (or None)
     """
     db_data = extract_db_data(timeline)
     meta = db_data["session_meta"]
 
-    # フロントマター用: 編集ファイル一覧
+    # For frontmatter: list of edited files
     edited_files = list({f["file_path"] for f in db_data["files"]
                          if f["operation"] in ("Edit", "Write")})
 
     lines = []
 
-    # ── フロントマター ──
+    # ── Frontmatter ──
     lines.extend([
         "---",
         "source: claude-code-session",
@@ -746,52 +747,52 @@ def render_session_md(
     lines.append("---")
     lines.append("")
 
-    # ── タイトル ──
+    # ── Title ──
     sid_short = (continuation_info or {}).get("parent_session_id", session_id)[:8]
-    lines.append(f"# セッション {date_str} | {sid_short}")
+    lines.append(f"# Session {date_str} | {sid_short}")
     lines.append("")
 
-    # ── 継続リンク（冒頭） ──
+    # ── Continuation link (header) ──
     if continuation_info:
         prev_d = continuation_info.get("prev_date")
         if prev_d:
-            lines.append(f"> 前日からの継続: [[{prev_d}_{sid_short}]]")
+            lines.append(f"> Continued from previous day: [[{prev_d}_{sid_short}]]")
             lines.append("")
 
-    # ── 変更ファイルサマリ ──
+    # ── Changed files summary ──
     if edited_files:
-        lines.append("## 変更ファイル")
+        lines.append("## Changed Files")
         for f in edited_files:
             short = f.replace("/Users/kitak/QPI_Omni/", "").replace("/Users/kitak/", "~/")
             lines.append(f"- `{short}`")
         lines.append("")
 
-    # ── セッションサマリ ──
+    # ── Session summary ──
     lines.extend(_render_session_summary_section(db_data))
 
-    # ── 設計ノート（thinking 抜粋） ──
+    # ── Design notes (thinking excerpts) ──
     lines.extend(_render_design_notes_section(timeline))
 
-    # ── 再現コマンド一覧 ──
+    # ── Reproduction commands ──
     lines.extend(_render_bash_section(db_data["bash_commands"]))
 
-    # ── コード変更詳細 ──
+    # ── Code change details ──
     lines.extend(_render_code_changes_section(timeline))
 
-    # ── エラーログ ──
+    # ── Error log ──
     lines.extend(_render_error_section(timeline))
 
-    # ── タイムライン（全会話） ──
+    # ── Timeline (full conversation) ──
     lines.append("---")
     lines.append("")
-    lines.append("## タイムライン（全会話・ツール実行）")
+    lines.append("## Timeline (full conversation and tool executions)")
     lines.append("")
 
     for event in timeline:
         ts_str = _fmt_ts(event["ts"])
 
         if event["role"] == "user":
-            lines.append(f"### {ts_str} | ユーザー")
+            lines.append(f"### {ts_str} | User")
             lines.append("")
             lines.append(event["text"])
             lines.append("")
@@ -800,7 +801,7 @@ def render_session_md(
             lines.append(f"### {ts_str} | AI")
             lines.append("")
 
-            # Thinking ブロック
+            # Thinking block
             for thinking in event.get("thinking", []):
                 lines.append("> [!quote] AI Internal Reasoning")
                 for tline in thinking.splitlines():
@@ -808,15 +809,15 @@ def render_session_md(
                 lines.append(">")
                 lines.append("")
 
-            # テキスト返答
+            # Text response
             for text in event.get("text", []):
                 lines.append(text)
                 lines.append("")
 
-            # ツール実行
+            # Tool executions
             tools = event.get("tools", [])
             if tools:
-                lines.append("**ツール実行:**")
+                lines.append("**Tool executions:**")
                 for tc in tools:
                     name = tc["name"]
                     inp_str = _render_tool_input(name, tc["input"])
@@ -832,20 +833,20 @@ def render_session_md(
                                 lines.append(f"  > {rline}")
                 lines.append("")
 
-    # ── 継続リンク（末尾） ──
+    # ── Continuation link (footer) ──
     if continuation_info:
         next_d = continuation_info.get("next_date")
         if next_d:
             sid_short_tail = (continuation_info or {}).get("parent_session_id", session_id)[:8]
             lines.append("")
-            lines.append(f"> 翌日に継続: [[{next_d}_{sid_short_tail}]]")
+            lines.append(f"> Continues next day: [[{next_d}_{sid_short_tail}]]")
             lines.append("")
 
     return "\n".join(lines)
 
 
 # ────────────────────────────────────────────
-# メイン処理
+# Main processing
 # ────────────────────────────────────────────
 
 def _process_single_date(
@@ -853,7 +854,7 @@ def _process_single_date(
     timeline: list, mtime: float, dry_run: bool,
     continuation_info: dict | None = None,
 ) -> dict | None:
-    """1つの日付分の .md を生成する内部ヘルパー。"""
+    """Internal helper to generate the .md for a single date."""
     sid_for_file = session_id[:8]
     if continuation_info:
         parent_sid = continuation_info.get("parent_session_id", session_id)
@@ -887,19 +888,19 @@ def _process_single_date(
 
 
 def process_session(jsonl_path: Path, dry_run: bool) -> list[dict] | None:
-    """1つのセッションを処理して .md ファイルを出力する。
+    """Process one session and output a .md file.
 
-    日付をまたぐセッションは日付ごとに分割して複数の .md を生成する。
+    Sessions spanning multiple dates are split by date into multiple .md files.
 
     Returns:
-        list[dict]  各日付分の結果 (成功時、単一日でも要素1のリスト)
-        None  (スキップ時)
+        list[dict]  results per date (on success; even for a single day a 1-element list)
+        None  (on skip)
     """
     entries = load_entries(jsonl_path)
     if not entries:
         return None
 
-    # アクティブセッションチェック
+    # Active session check
     last_dt = get_last_entry_time(entries)
     if last_dt:
         now_jst = datetime.now(JST)
@@ -922,21 +923,21 @@ def process_session(jsonl_path: Path, dry_run: bool) -> list[dict] | None:
     date_groups = group_timeline_by_date(timeline)
     sorted_dates = sorted(date_groups.keys())
 
-    # ── 単一日セッション（大多数）: 既存と同じ処理 ──
+    # ── Single-day session (majority): same as existing processing ──
     if len(sorted_dates) == 1:
         date_str = sorted_dates[0]
         result = _process_single_date(
             session_id, date_str, jsonl_path, timeline, mtime, dry_run)
         return [result] if result else None
 
-    # ── 複数日セッション: 日付ごとに分割 ──
-    print(f"  日付分割: {len(sorted_dates)} 日にまたがるセッション ({' → '.join(sorted_dates)})")
+    # ── Multi-day session: split by date ──
+    print(f"  date split: session spanning {len(sorted_dates)} days ({' → '.join(sorted_dates)})")
     results = []
     for i, date_str in enumerate(sorted_dates):
         part = i + 1
         day_timeline = date_groups[date_str]
 
-        # 合成 session_id: 1日目は元のまま、2日目以降は __dYYYYMMDD を付加
+        # Composite session_id: day 1 keeps the original; day 2+ appends __dYYYYMMDD
         sid = session_id if part == 1 else f"{session_id}__d{date_str.replace('-', '')}"
 
         cont_info = {
@@ -957,7 +958,7 @@ def process_session(jsonl_path: Path, dry_run: bool) -> list[dict] | None:
 
 
 def _collect_jsonl_targets(session_dirs: list[Path] | None) -> list[Path]:
-    """複数ディレクトリから JSONL を収集。同一 session_id は mtime が新しい方を優先。"""
+    """Collect JSONL files from multiple directories. For duplicate session_ids, prefer the one with the newer mtime."""
     dirs = session_dirs if session_dirs else DEFAULT_SESSION_DIRS
     by_id: dict[str, tuple[Path, float]] = {}
 
@@ -981,7 +982,7 @@ def run(args: argparse.Namespace) -> int:
     conn = session_db.open_db()
     run_id = session_db.start_processing_run(conn, "jsonl_to_obsidian")
 
-    # 処理対象ファイルの収集
+    # Collect target files
     if args.session:
         targets = [Path(args.session)]
     else:
@@ -1002,7 +1003,7 @@ def run(args: argparse.Namespace) -> int:
 
             session_id = jsonl_path.stem
 
-            # 処理済みチェック（DB）
+            # Already-processed check (DB)
             if not args.all and not args.session:
                 db_mtime = session_db.get_session_mtime(conn, session_id)
                 if db_mtime is not None and mtime <= db_mtime:
@@ -1013,7 +1014,7 @@ def run(args: argparse.Namespace) -> int:
             try:
                 result = process_session(jsonl_path, args.dry_run)
             except Exception as e:
-                print(f"  ERROR: {jsonl_path.name} の処理で例外: {type(e).__name__}: {e}",
+                print(f"  ERROR: exception while processing {jsonl_path.name}: {type(e).__name__}: {e}",
                       file=sys.stderr)
                 traceback.print_exc()
                 skipped += 1
@@ -1022,7 +1023,7 @@ def run(args: argparse.Namespace) -> int:
             if result is not None:
                 processed += 1
                 if not args.dry_run:
-                    # 再処理時: 古い日付分割部分を先に削除
+                    # On reprocess: delete old date-split parts first
                     session_db.delete_session_parts(conn, session_id)
 
                     for part_result in result:
@@ -1036,24 +1037,24 @@ def run(args: argparse.Namespace) -> int:
                             timeline=part_result["timeline"],
                             mtime=part_result["mtime"],
                         )
-                    # 共有フォルダ由来の JSONL は処理成功後に削除
+                    # JSONL originating from shared folder is deleted after successful processing
                     if (not getattr(args, "no_delete_shared", False)
                         and str(jsonl_path.resolve()).startswith(
                             str(SHARED_SESSION_DIR.resolve())
                         )):
                         try:
                             jsonl_path.unlink()
-                            print(f"  → 削除: {jsonl_path.name}")
+                            print(f"  → deleted: {jsonl_path.name}")
                         except OSError as e:
-                            print(f"  → 削除失敗: {e}")
+                            print(f"  → delete failed: {e}")
             else:
                 skipped += 1
-                # empty-timeline / active セッションを DB に記録して次回から黙ってスキップ
+                # Record empty-timeline / active sessions in DB to silently skip next time
                 if not args.dry_run:
                     now_iso = datetime.now(JST).isoformat()
                     date_str = get_session_date(load_entries(jsonl_path))
                     if date_str is None:
-                        # タイムスタンプが取得できない（GDrive同期途中等）→ DB登録をスキップ
+                        # Cannot obtain a timestamp (e.g. mid-way through GDrive sync) → skip DB registration
                         print(f"  SKIP (no timestamp): {jsonl_path.name}")
                         continue
                     session_db.upsert_session(conn, {
@@ -1098,23 +1099,23 @@ def run(args: argparse.Namespace) -> int:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="JSONL → Obsidian .md 変換（thinking ブロック・設計ノート・再現コマンド含む）"
+        description="JSONL → Obsidian .md conversion (includes thinking blocks, design notes, reproduction commands)"
     )
-    parser.add_argument("--session", help="特定の JSONL ファイルのみ処理")
+    parser.add_argument("--session", help="Process only the specified JSONL file")
     parser.add_argument("--dry-run", action="store_true",
-                        help="ファイル書き出しなしで確認")
+                        help="Preview without writing files")
     parser.add_argument("--all", action="store_true",
-                        help="処理済み含め全セッションを再変換")
+                        help="Re-convert all sessions including already processed")
     parser.add_argument(
         "--session-dir",
         action="append",
         dest="session_dirs",
-        help="JSONL ディレクトリ（複数指定可。未指定時はローカル+共有フォルダ）",
+        help="JSONL directory (can be specified multiple times; defaults to local + shared folder)",
     )
     parser.add_argument(
         "--no-delete-shared",
         action="store_true",
-        help="共有フォルダの JSONL を処理後も削除しない（デフォルトは削除する）",
+        help="Do not delete shared-folder JSONL after processing (default: delete)",
     )
     return parser.parse_args()
 

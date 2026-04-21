@@ -1,4 +1,4 @@
-"""Windows PATH 環境変数の setx トラブルメモを Notion に保存"""
+"""Save a memo about the Windows PATH setx truncation issue to Notion"""
 import json
 import sys
 from datetime import datetime
@@ -42,42 +42,42 @@ def p(s):
 
 def main():
     today = datetime.now().strftime("%Y-%m-%d")
-    title = "Windows PATH setx 1024文字切り捨てトラブル"
+    title = "Windows PATH setx 1024-character truncation issue"
 
     blocks = [
-        h2("何が起きたか"),
-        p("setx PATH で PATH を 1024 文字で打ち切り、それより後ろが全部消えた。"),
-        p("QPI アカウントでは「C:\\Program Fil」と途中で切れたエントリが残っている。"),
-        h2("切れた元のパス"),
-        bl("C:\\Program Fil → 元は C:\\Program Files\\Git\\cmd"),
-        bl("「es\\Git\\cmd」が消えた"),
-        h2("それ以外が切れている可能性"),
-        p("1024 文字より後ろにあったパスは丸ごと消えている可能性がある。"),
-        bl("C:\\Program Files\\Git\\cmd（Git）"),
-        bl("C:\\Users\\QPI\\.local\\bin（Claude Code）"),
-        bl("Anaconda / Miniconda 関連（Python）"),
-        bl("その他 PATH の後ろの方にあったもの"),
-        h2("直し方"),
-        bl("kitagishi-kengo の Path を参考にするのが確実"),
-        bl("1. kitagishi-kengo で環境変数 → Path を開く"),
-        bl("2. 一覧を全部コピーしてメモ"),
-        bl("3. QPI の Path と比較"),
-        bl("4. QPI に足りないパスを追加"),
-        bl("5. 「C:\\Program Fil」など壊れたエントリを削除し、正しいフルパスを追加"),
-        p("または kitagishi-kengo の Path を丸ごとコピーして QPI に貼り付け、QPI 用に必要なパスだけ足す。"),
-        h2("追加すべきパス（最低限）"),
-        bl("C:\\Program Files\\Git\\cmd（Git）"),
-        bl("C:\\Users\\QPI\\.local\\bin（Claude Code）"),
-        h2("注意"),
-        p("setx PATH は使わない。GUI で追加する方が安全。"),
+        h2("What happened"),
+        p("setx PATH truncated PATH at 1024 characters and everything beyond that was lost."),
+        p("On the QPI account, a truncated entry 'C:\\Program Fil' remains."),
+        h2("Original paths that were cut off"),
+        bl("C:\\Program Fil -> originally C:\\Program Files\\Git\\cmd"),
+        bl("'es\\Git\\cmd' was lost"),
+        h2("Other paths that may have been cut off"),
+        p("Any paths beyond 1024 characters may have been entirely removed."),
+        bl("C:\\Program Files\\Git\\cmd (Git)"),
+        bl("C:\\Users\\QPI\\.local\\bin (Claude Code)"),
+        bl("Anaconda / Miniconda related (Python)"),
+        bl("Other entries that were near the end of PATH"),
+        h2("How to fix"),
+        bl("The most reliable approach is to reference the PATH from the kitagishi-kengo account"),
+        bl("1. On kitagishi-kengo, open Environment Variables -> Path"),
+        bl("2. Copy the full list and take notes"),
+        bl("3. Compare with the PATH on QPI"),
+        bl("4. Add the missing paths to QPI"),
+        bl("5. Delete corrupted entries like 'C:\\Program Fil' and add the correct full paths"),
+        p("Alternatively, copy the entire Path from kitagishi-kengo and paste it into QPI, then add only the paths needed for QPI."),
+        h2("Paths that must be added (minimum set)"),
+        bl("C:\\Program Files\\Git\\cmd (Git)"),
+        bl("C:\\Users\\QPI\\.local\\bin (Claude Code)"),
+        h2("Caution"),
+        p("Do not use setx PATH. Adding via the GUI is safer."),
     ]
 
     properties = {
         "Name": {"title": [{"type": "text", "text": {"content": title}}]},
         "Date": {"date": {"start": today}},
-        "Type": {"select": {"name": "作業ログ"}},
+        "Type": {"select": {"name": "作業ログ"}},  # TODO-JP: Notion property name — confirm before translating
         "Script": {"rich_text": [{"type": "text", "text": {"content": "scripts/_notion_save_path_memo.py"}}]},
-        "Description": {"rich_text": [{"type": "text", "text": {"content": "Windows PATH setx 1024文字切り捨ての原因と対処法"}}]},
+        "Description": {"rich_text": [{"type": "text", "text": {"content": "Cause and workaround for the Windows PATH setx 1024-character truncation"}}]},
     }
 
     headers = _load_headers()

@@ -20,9 +20,9 @@ RESULTS_CSV = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtrac
 OUTPUT_FILE = "simplest_mean_ri.png"
 
 PIXEL_SIZE_UM = 0.348
-WAVELENGTH_NM = 663
+WAVELENGTH_NM = 658
 N_MEDIUM = 1.333
-ALPHA_RI = 0.00018
+ALPHA_RI = 0.00018  # [mL/mg] specific refractive increment (= 0.18 mL/g)
 
 # =============================================================================
 # Calculation
@@ -93,7 +93,7 @@ df['mean_ri'] = N_MEDIUM + (df['total_phase'] * wavelength_um * pixel_area_um2) 
 
 # Mass calculation
 df['mean_conc'] = (df['mean_ri'] - N_MEDIUM) / ALPHA_RI
-df['mass_pg'] = df['mean_conc'] * df['volume_um3']
+df['mass_pg'] = df['mean_conc'] * df['volume_um3'] * 1e-3  # [mg/mL] × [µm³] × 1e-3 → [pg]
 
 # Display results
 print(f"\nResults:")

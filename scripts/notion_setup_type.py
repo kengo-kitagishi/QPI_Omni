@@ -1,11 +1,11 @@
 """
-QPI Research Notes データベースに Type プロパティ（Select）を追加する。
+Add the Type property (Select) to the QPI Research Notes database.
 
-使い方:
+Usage:
     python scripts/notion_setup_type.py
 
-Type が既に存在する場合は何もしない。
-選択肢: 思考 / 作業ログ / 図 / プラン
+Does nothing if Type already exists.
+Options: 思考 / 作業ログ / 図 / プラン
 """
 import json
 from pathlib import Path
@@ -16,6 +16,7 @@ _REPO_ROOT = Path(__file__).parent.parent
 DB_ID = "312eda96-228e-8165-9726-cd75b221357a"
 
 TYPE_OPTIONS = [
+    # TODO-JP: Notion property option names (kept as-is to match the existing DB)
     {"name": "思考", "color": "gray"},
     {"name": "作業ログ", "color": "gray"},
     {"name": "図", "color": "gray"},
@@ -38,23 +39,23 @@ def _load_headers():
 
 
 def ensure_type_property() -> bool:
-    """Type プロパティがなければ追加。成功時 True。"""
+    """Add the Type property if missing. Returns True on success."""
     headers = _load_headers()
 
-    # 現在のスキーマを取得
+    # Fetch the current schema
     resp = requests.get(f"https://api.notion.com/v1/databases/{DB_ID}", headers=headers)
     if resp.status_code != 200:
-        print(f"ERROR: データベース取得失敗 {resp.status_code}: {resp.text}")
+        print(f"ERROR: failed to fetch database {resp.status_code}: {resp.text}")
         return False
 
     data = resp.json()
     props = data.get("properties", {})
 
     if "Type" in props:
-        print("Type プロパティは既に存在します。スキップしました。")
+        print("Type property already exists. Skipped.")
         return True
 
-    # Type プロパティを追加
+    # Add the Type property
     payload = {
         "properties": {
             "Type": {
@@ -66,10 +67,10 @@ def ensure_type_property() -> bool:
     }
     resp = requests.patch(f"https://api.notion.com/v1/databases/{DB_ID}", headers=headers, json=payload)
     if resp.status_code != 200:
-        print(f"ERROR: プロパティ追加失敗 {resp.status_code}: {json.dumps(resp.json(), ensure_ascii=False, indent=2)}")
+        print(f"ERROR: failed to add property {resp.status_code}: {json.dumps(resp.json(), ensure_ascii=False, indent=2)}")
         return False
 
-    print("SUCCESS: Type プロパティを追加しました（選択肢: 思考 / 作業ログ / 図 / プラン）")
+    print("SUCCESS: Type property added (options: 思考 / 作業ログ / 図 / プラン)")
     return True
 
 

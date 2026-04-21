@@ -90,7 +90,7 @@ def _ensure_no_cell_pixels_handler() -> _NoCellPixelsLogHandler:
 
 
 def list_ch_dirs(crop_sub_rawraw: str) -> list[str]:
-    """crop_sub_rawraw 直下で名前が ch + 数字だけのディレクトリをソートして返す。"""
+    """Return sorted directories directly under crop_sub_rawraw whose names match 'ch' + digits."""
     if not os.path.isdir(crop_sub_rawraw):
         return []
     names = []
@@ -100,7 +100,7 @@ def list_ch_dirs(crop_sub_rawraw: str) -> list[str]:
             names.append(name)
 
     def sort_key(n: str) -> tuple[int, str]:
-        # ch の後ろを数値として比較（ch2 と ch10 の順など）
+        # Compare the numeric portion after 'ch' (so ch2 comes before ch10, etc.)
         num = int(n[2:])
         return (num, n)
 
@@ -108,7 +108,7 @@ def list_ch_dirs(crop_sub_rawraw: str) -> list[str]:
 
 
 def _masks_effectively_empty(masks) -> bool:
-    """eval の戻りで細胞ラベルが無い（全 0 または None）か。"""
+    """Return True if the eval output has no cell labels (all zeros or None)."""
     if masks is None:
         return True
     if isinstance(masks, (list, tuple)):
@@ -127,7 +127,7 @@ def run_one_indir(
     *,
     no_cell_pixel_streak_max: int = 100,
 ) -> None:
-    """07_segmentation.py（251105）と同一の推論・保存ブロック。"""
+    """Inference and save block identical to 07_segmentation.py (251105)."""
     os.makedirs(outdir, exist_ok=True)
     logcap = _ensure_no_cell_pixels_handler()
     no_cell_streak = 0
@@ -169,8 +169,9 @@ def run_one_indir(
         try:
             logcap.saw_no_cell_pixels = False
             masks, flows, _ = model.eval([img], **EVAL_PARAMS)
-            # ログが届かない環境があるため、dynamics の INFO に加え
-            # 「マスクが空（細胞ピクセルなし）」でも 1 連続と数える。
+            # In some environments the log messages do not propagate, so in
+            # addition to the dynamics INFO log, an empty mask (no cell pixels)
+            # is also counted as one consecutive hit.
             if _masks_effectively_empty(masks) or logcap.saw_no_cell_pixels:
                 no_cell_streak += 1
             else:
@@ -210,9 +211,9 @@ def run_one_indir(
             and no_cell_streak >= no_cell_pixel_streak_max
         ):
             print(
-                f"  → [skip ch] 細胞なしが {no_cell_streak} 連続 "
-                f"(空マスク / [INFO] No cell pixels) → "
-                "no-cell channel とみなし、この ch の残りフレームは未処理です。"
+                f"  -> [skip ch] No cells for {no_cell_streak} consecutive frames "
+                f"(empty mask / [INFO] No cell pixels) -> "
+                "treated as a no-cell channel; remaining frames of this ch are unprocessed."
             )
             empty_mask = np.zeros_like(img, dtype=np.uint16)
             tifffile.imwrite(
@@ -278,7 +279,7 @@ def run_one_indir(
     print(f"Errors      : {error_count}")
     if aborted_no_cell_channel:
         print(
-            f"Note        : 細胞なしが {no_cell_pixel_streak_max} 連続 → ch 打ち切り（残フレーム未処理）"
+            f"Note        : No cells for {no_cell_pixel_streak_max} consecutive frames -> ch aborted (remaining frames unprocessed)"
         )
     print("Saved results to:", outdir)
 
@@ -306,7 +307,7 @@ def main() -> int:
         print("crop_sub_rawraw:", crop_base)
 
         if not os.path.isdir(crop_base):
-            print("  [skip] crop_sub_rawraw が存在しません")
+            print("  [skip] crop_sub_rawraw does not exist")
             continue
 
         if CH_ONLY is not None:
@@ -315,7 +316,7 @@ def main() -> int:
             ch_dirs = list_ch_dirs(crop_base)
 
         if not ch_dirs:
-            print("  [skip] 対象の ch フォルダがありません")
+            print("  [skip] no target ch folders")
             continue
 
         print("  ch dirs:", ", ".join(ch_dirs))
@@ -329,7 +330,7 @@ def main() -> int:
             print("  outdir:", outdir)
 
             if not os.path.isdir(indir):
-                print("  [skip] indir が存在しません")
+                print("  [skip] indir does not exist")
                 continue
 
             run_one_indir(

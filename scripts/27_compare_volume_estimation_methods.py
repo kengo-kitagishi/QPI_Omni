@@ -208,7 +208,7 @@ if __name__ == "__main__":
     
     IMAGE_DIRECTORY = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted"
     
-    WAVELENGTH_NM = 663
+    WAVELENGTH_NM = 658
     N_MEDIUM = 1.333
     PIXEL_SIZE_UM = 0.348
     ALPHA_RI = 0.00018

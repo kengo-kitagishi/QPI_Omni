@@ -912,7 +912,7 @@ if __name__ == "__main__":
     IMAGE_DIRECTORY = r"C:\Users\QPI\Desktop\align_demo\from_outputphase\bg_corr\subtracted" if 'IMAGE_DIRECTORY' not in globals() else globals()['IMAGE_DIRECTORY']
     
     # QPI experiment parameters (same values as 01_QPI_analysis.py)
-    WAVELENGTH_NM = 663 if 'WAVELENGTH_NM' not in globals() else globals()['WAVELENGTH_NM']
+    WAVELENGTH_NM = 658 if 'WAVELENGTH_NM' not in globals() else globals()['WAVELENGTH_NM']
                                  # Laser wavelength (nanometers)
                                  # Experimental value: 663nm (red laser)
     N_MEDIUM = 1.333 if 'N_MEDIUM' not in globals() else globals()['N_MEDIUM']

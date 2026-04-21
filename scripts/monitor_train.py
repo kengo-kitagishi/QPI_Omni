@@ -1,14 +1,14 @@
 """
-リアルタイム学習曲線モニター
-使い方: conda run -n omnipose python scripts/monitor_train.py
-08_train.py が出力する train_loss.log を 5秒ごとに読んでプロットする。
+Real-time training curve monitor.
+Usage: conda run -n omnipose python scripts/monitor_train.py
+Reads the train_loss.log written by 08_train.py every 5 seconds and plots it.
 """
 import re
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 LOG_PATH = r"C:\Users\QPI\Desktop\train\train_loss.log"
-INTERVAL_MS = 5000  # ポーリング間隔（5秒）
+INTERVAL_MS = 5000  # polling interval (5 seconds)
 
 _pattern = re.compile(
     r"Train epoch:\s*(\d+).*?<Batch Loss>:\s*([\d.]+).*?<Epoch Loss>:\s*([\d.]+)"
@@ -47,7 +47,7 @@ def _update(frame):
         ax.autoscale_view()
         status_text.set_text(f"epoch {epochs[-1]}  |  loss {epoch_losses[-1]:.4f}")
     else:
-        status_text.set_text("ログ待機中...")
+        status_text.set_text("waiting for log...")
     return line_epoch, line_batch, status_text
 
 from matplotlib.ticker import MaxNLocator

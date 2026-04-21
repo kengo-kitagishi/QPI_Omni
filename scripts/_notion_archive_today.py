@@ -55,7 +55,7 @@ def api(method, path, data=None):
     except Exception as e:
         return {"error": str(e)}, 0
 
-# 莉頑律縺ｮ譌｢蟄倥・繝ｼ繧ｸ繧呈､懃ｴ｢
+# search today's existing pages
 data, status = api("POST", "/search", {"query": TODAY, "filter": {"value":"page","property":"object"}})
 found = []
 if status == 200:
@@ -92,7 +92,7 @@ else:
     else:
         print("ERROR create", st2, json.dumps(r2, ensure_ascii=False)[:300])
 
-# 髢｢騾｣繝壹・繧ｸ讀懃ｴ｢
+# search related pages
 print("\n--- related pages ---")
 found2 = {}
 for kw in ["archive", "\u30a2\u30e9\u30a4\u30e1\u30f3\u30c8", "\u30b9\u30af\u30ea\u30d7\u30c8"]:

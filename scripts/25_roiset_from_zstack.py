@@ -386,8 +386,8 @@ if __name__ == "__main__":
     THRESHOLD = 0  # Zstack value threshold (values above this are treated as mask)
 
     # QPI experiment parameters (same values as 01_QPI_analysis.py)
-    WAVELENGTH_NM = 663      # Laser wavelength (nanometers)
-                             # Experimental value: 663nm (red laser)
+    WAVELENGTH_NM = 658      # Laser wavelength (nanometers)
+                             # Experimental value: 658nm (red laser)
     N_MEDIUM = 1.333         # Medium refractive index
                              # Water: 1.333, PBS: 1.334, DMEM: ~1.335
     PIXEL_SIZE_UM = 0.348    # Pixel size (micrometers)

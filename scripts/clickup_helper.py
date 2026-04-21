@@ -49,6 +49,7 @@ TIME_PRESETS = {
     "default": (12, 14),
 }
 
+# TODO-JP: keyword patterns matched against user-supplied Japanese task names — confirm before translating
 DEFAULT_FIXED_KEYWORDS = [
     "meeting",
     "会議",
@@ -62,6 +63,7 @@ DEFAULT_FIXED_KEYWORDS = [
     "病院",
 ]
 
+# TODO-JP: keyword patterns matched against user-supplied Japanese task names — confirm before translating
 DEFAULT_DEADLINE_KEYWORDS = [
     "feedback",
     "フィードバック",
@@ -73,6 +75,7 @@ DEFAULT_DEADLINE_KEYWORDS = [
     "締め切り",
 ]
 
+# TODO-JP: keyword patterns matched against user-supplied Japanese task names — confirm before translating
 DEFAULT_NO_SCHEDULE_DAY_KEYWORDS = [
     "大会",
 ]
@@ -97,6 +100,7 @@ DEFAULT_CATEGORY_ORDER = [
 
 
 def _default_category_keyword_rules() -> Dict[str, List[str]]:
+    # TODO-JP: keyword patterns matched against user-supplied Japanese task names — confirm before translating
     return {
         "admin": [
             "授業",
@@ -204,6 +208,7 @@ def _default_workflow_groups() -> Dict[str, List[str]]:
 
 
 def _default_workflow_stage_rules() -> List[Dict[str, object]]:
+    # TODO-JP: keyword patterns matched against user-supplied Japanese task names — confirm before translating
     return [
         {
             "group": "exp_code",
@@ -264,6 +269,7 @@ def _default_workflow_stage_rules() -> List[Dict[str, object]]:
 
 
 def _default_medium_flow_steps() -> List[Dict[str, object]]:
+    # TODO-JP: keyword patterns matched against user-supplied Japanese task names — confirm before translating
     return [
         {
             "id": "on_culture",
@@ -381,6 +387,7 @@ def _default_medium_flow_t0_offset_map() -> Dict[int, str]:
 
 
 def _default_split_task_rules() -> List[Dict[str, object]]:
+    # TODO-JP: keyword patterns matched against user-supplied Japanese task names — confirm before translating
     return [
         {
             "id": "glucose_prepare_collect",
@@ -503,6 +510,7 @@ class HelperConfig:
     deadline_warn_days: int = 3
     fixed_list_keys: List[str] = field(default_factory=lambda: ["meeting", "competition"])
     fixed_keyword_patterns: List[str] = field(default_factory=lambda: list(DEFAULT_FIXED_KEYWORDS))
+    # TODO-JP: keyword patterns matched against user-supplied Japanese task names — confirm before translating
     jog_keyword_patterns: List[str] = field(default_factory=lambda: ["jog", "ジョグ"])
     wait_task_use_jog_windows: bool = True
     wait_task_jog_window_minutes: int = 180
@@ -1166,6 +1174,7 @@ def _normalize_key_text(value: str) -> str:
 
 
 def infer_known_list_key(list_name: str, folder_name: str) -> Optional[str]:
+    # TODO-JP: ClickUp list/folder labels — confirm before translating
     name_raw = (list_name or "").lower()
     name_norm = _normalize_key_text(list_name or "")
     folder_raw = (folder_name or "").lower()
@@ -1631,6 +1640,7 @@ def infer_wait_task_like(text: str, split_rule: Optional[Dict[str, object]]) -> 
     if split_rule_has_wait_gap(split_rule):
         return True
     normalized = (text or "").lower()
+    # TODO-JP: keyword patterns matched against user-supplied Japanese task names — confirm before translating
     wait_keywords = [
         "待",
         "wait",
@@ -1735,6 +1745,8 @@ def compute_wait_task_jog_bonus(
 
 
 def derive_split_segment_name(base_name: str, label: str) -> str:
+    # TODO-JP: these Japanese literals are matched in user-supplied task names and also produce
+    # the created ClickUp task's name — confirm before translating
     label = (label or "").strip().lower()
     if label == "prepare":
         return base_name
@@ -2029,6 +2041,7 @@ def parse_duration_from_text(text: str) -> Optional[int]:
 
 
 def parse_priority(value: str) -> str:
+    # TODO-JP: Japanese priority synonyms matched against user input — confirm before translating
     v = (value or "").strip().lower()
     if v in {"urgent", "high", "normal", "low", "auto"}:
         return v

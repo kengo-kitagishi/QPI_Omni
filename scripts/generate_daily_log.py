@@ -58,6 +58,7 @@ JST = timezone(timedelta(hours=9))
 # System prompt (multi-file output mode)
 # ────────────────────────────────────────────
 
+# TODO-JP: daily-log template — user-facing Japanese output
 SYSTEM_PROMPT_MULTI = """\
 あなたは研究者のアシスタントです。
 与えられた「日次索引」（その日のClaude作業セッション・生成図・Notionメモの全記録）を読み、
@@ -115,6 +116,7 @@ SYSTEM_PROMPT_MULTI = """\
 # System prompt (single file mode, backward compatibility)
 # ────────────────────────────────────────────
 
+# TODO-JP: daily-log template — user-facing Japanese output
 SYSTEM_PROMPT_SINGLE = """\
 あなたは研究者のアシスタントです。
 与えられた「日次索引」（その日のClaude作業セッション・生成図・Notionメモの全記録）を読み、
@@ -138,6 +140,7 @@ SYSTEM_PROMPT_SINGLE = """\
 # ────────────────────────────────────────────
 
 def build_user_prompt(target_date: str, style_text: str, index_text: str) -> str:
+    # TODO-JP: daily-log template — user-facing Japanese output
     return f"""\
 # 対象日: {target_date}
 
