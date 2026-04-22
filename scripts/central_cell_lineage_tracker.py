@@ -1,0 +1,982 @@
+"""
+central_cell_lineage_tracker.py — Mother Machine 1D lineage tracker.
+
+Builds a lineage tree rooted at the central (mother) cell by ranking all masks
+in each frame by their distance from the image x-center, then propagating IDs
+frame-by-frame with a two-pointer rank iteration:
+
+  - continuation      : area ratio > DIV_AREA_RATIO_MIN       -> same ID
+  - division          : curr[r] + curr[r+1] ~= prev[r_prev]   -> inner=parent, outer=new daughter
+  - outlier           : neither holds                         -> continuation + is_outlier flag
+
+Only mother's descendants are kept in the tree; cells present at frame 0 at
+rank >= 2 (unknown lineage) are tracked for bookkeeping but excluded from the
+tree figure.
+
+Input:
+    channel_dir/                         raw phase tifs (*.tif)
+      inference_out/*_masks.tif          segmentation masks
+
+Output (under <channel_dir>/inference_out/lineage_out/):
+    lineage_table.csv                    per-frame per-cell metrics
+    lineage_cells.json                   per-cell birth/death/parent summary
+    + PDF/PNG figures via figure_logger (tree + volume/RI timeseries)
+
+Example:
+    python3 central_cell_lineage_tracker.py \\
+        --indir /Volumes/2604/260405/ph_260405/Pos9/output_phase/channels/crop_sub_rawraw/ch00 \\
+        --pixel-size-um 0.348 --time-interval-min 5
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import re
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import tifffile
+from skimage import measure
+
+from figure_logger import save_figure
+
+# ----- Okabe-Ito palette (colorblind-safe) -----
+OKABE_ITO = [
+    "#000000",  # black (mother)
+    "#E69F00",
+    "#56B4E9",
+    "#009E73",
+    "#F0E442",
+    "#0072B2",
+    "#D55E00",
+    "#CC79A7",
+]
+
+# Division / tracking thresholds
+DIV_AREA_RATIO_MIN = 0.65     # continuation if curr/prev > this
+DIV_SUM_TOL = 0.30            # |(a+b) - prev| / prev < this -> division confirmed
+
+# 3-frame outlier rule (checked on volume and area independently; OR):
+#   outlier if any of:
+#     curr/prev < OUT_PREV_LOW
+#     curr/prev > OUT_PREV_HIGH
+#     curr/next < OUT_NEXT_LOW   (curr is less than next/1.8; i.e. next is >=1.8x curr)
+OUT_PREV_LOW = 0.30
+OUT_PREV_HIGH = 1.50
+OUT_NEXT_LOW = 1.0 / 1.8
+
+# Fixed y-axis ranges for per-lineage timeseries so channels can be compared.
+# Derived from ch01 distribution (1-99 percentile) with margin.
+VOLUME_YLIM = (50.0, 400.0)     # µm³
+MEAN_RI_YLIM = (1.345, 1.370)
+
+
+# =============================================================================
+# Data structures
+# =============================================================================
+@dataclass
+class FrameData:
+    frame: int
+    rank: int
+    area_px: int
+    centroid_x: float
+    centroid_y: float
+    major_axis_px: float
+    minor_axis_px: float
+    total_phase: float
+    touches_border: bool = False
+    volume_um3_rod: float = np.nan
+    mean_ri: float = np.nan
+    mass_pg: float = np.nan
+    is_outlier: bool = False
+
+
+@dataclass
+class CellInfo:
+    cell_id: int
+    parent_id: Optional[int]
+    birth_frame: Optional[int]
+    death_frame: Optional[int] = None
+    in_tree: bool = False   # True if a descendant of mother
+    frames: list[FrameData] = field(default_factory=list)
+
+
+# =============================================================================
+# I/O helpers (adapted from central_cell_track_figures.py)
+# =============================================================================
+def natural_key(text: str) -> list[object]:
+    return [int(tok) if tok.isdigit() else tok.lower() for tok in re.split(r"(\d+)", text)]
+
+
+def strip_mask_suffix(stem: str) -> str:
+    return stem[: -len("_masks")] if stem.endswith("_masks") else stem
+
+
+def is_binary_mask(mask: np.ndarray) -> bool:
+    if mask.dtype == bool:
+        return True
+    vals = np.unique(mask)
+    return vals.size <= 2 and set(vals.tolist()).issubset({0, 1})
+
+
+def load_label_image(path: Path) -> np.ndarray:
+    arr = np.squeeze(np.asarray(tifffile.imread(path)))
+    if arr.ndim != 2:
+        raise ValueError(f"Expected 2D mask, got {arr.shape} at {path}")
+    if is_binary_mask(arr):
+        arr = measure.label(arr > 0, connectivity=1)
+    return arr.astype(np.int32, copy=False)
+
+
+def load_phase_image(path: Path) -> Optional[np.ndarray]:
+    """Load phase tif. Returns None if the file is corrupt/empty (not a valid TIFF)."""
+    try:
+        arr = np.squeeze(np.asarray(tifffile.imread(path)))
+    except Exception as e:
+        print(f"[warn] failed to read phase tif {path.name}: {e}", file=sys.stderr)
+        return None
+    if arr.ndim != 2:
+        print(f"[warn] unexpected phase shape {arr.shape} at {path.name}", file=sys.stderr)
+        return None
+    return arr.astype(np.float32, copy=False)
+
+
+def collect_frame_pairs(channel_dir: Path) -> list[tuple[int, Path, Optional[Path]]]:
+    inference_dir = channel_dir / "inference_out"
+    mask_paths = sorted(inference_dir.glob("*_masks.tif"), key=lambda p: natural_key(p.name))
+    raw_paths = [
+        p for p in sorted(channel_dir.glob("*.tif"), key=lambda p: natural_key(p.name))
+        if not p.stem.endswith(("_masks", "_binary"))
+    ]
+    raw_map = {p.stem: p for p in raw_paths}
+    pairs: list[tuple[int, Path, Optional[Path]]] = []
+    for idx, mpath in enumerate(mask_paths):
+        stem = strip_mask_suffix(mpath.stem)
+        pairs.append((idx, mpath, raw_map.get(stem)))
+    return pairs
+
+
+# =============================================================================
+# Physics: rod volume, RI, mass  (eqs. taken from central_cell_track_figures.py)
+# =============================================================================
+def calc_rod_volume_um3(major_px: float, minor_px: float, pixel_size_um: float) -> float:
+    L = float(major_px) * pixel_size_um
+    w = float(minor_px) * pixel_size_um
+    r = w / 2.0
+    h = L - 2.0 * r
+    if h < 0:
+        return float((4.0 / 3.0) * np.pi * r**3)
+    return float((4.0 / 3.0) * np.pi * r**3 + np.pi * r**2 * h)
+
+
+def calc_optical_metrics(
+    total_phase: float, volume_um3: float, pixel_size_um: float,
+    wavelength_nm: float, n_medium: float, alpha_ri: float,
+) -> tuple[float, float, float]:
+    if not (np.isfinite(total_phase) and np.isfinite(volume_um3) and volume_um3 > 0 and pixel_size_um > 0):
+        return np.nan, np.nan, np.nan
+    wl_um = wavelength_nm * 1e-3
+    px_area = pixel_size_um**2
+    mean_ri = n_medium + (total_phase * wl_um * px_area) / (2.0 * np.pi * volume_um3)
+    if not np.isfinite(mean_ri):
+        return np.nan, np.nan, np.nan
+    conc = (mean_ri - n_medium) / alpha_ri if alpha_ri > 0 else np.nan
+    mass = conc * volume_um3 * 1e-3 if np.isfinite(conc) else np.nan
+    return float(mean_ri), float(conc), float(mass)
+
+
+# =============================================================================
+# Per-frame cell extraction
+# =============================================================================
+def extract_cells_from_frame(
+    mask_label: np.ndarray,
+    phase: Optional[np.ndarray],
+    min_area: int,
+) -> pd.DataFrame:
+    h, w = mask_label.shape
+    props = measure.regionprops(mask_label, intensity_image=phase)
+    rows = []
+    x_center = w / 2.0
+    for p in props:
+        if p.area < min_area:
+            continue
+        cy, cx = float(p.centroid[0]), float(p.centroid[1])
+        total_phase = float(np.sum(phase[mask_label == p.label])) if phase is not None else np.nan
+        minr, minc, maxr, maxc = p.bbox
+        touches = (minr <= 0) or (minc <= 0) or (maxr >= h) or (maxc >= w)
+        rows.append({
+            "label": int(p.label),
+            "area_px": int(p.area),
+            "centroid_y": cy,
+            "centroid_x": cx,
+            "major_axis_px": float(getattr(p, "major_axis_length", np.nan)),
+            "minor_axis_px": float(getattr(p, "minor_axis_length", np.nan)),
+            "total_phase": total_phase,
+            "dist_x": abs(cx - x_center),
+            "touches_border": bool(touches),
+        })
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    # drop cells touching the image border: treat as exited
+    df = df[~df["touches_border"]].reset_index(drop=True)
+    if df.empty:
+        return df
+    # rank 1, 2, 3, ... by x distance from center
+    df = df.sort_values("dist_x").reset_index(drop=True)
+    df["rank"] = np.arange(1, len(df) + 1)
+    return df
+
+
+# =============================================================================
+# Core: rank-pointer iteration for ID propagation
+# =============================================================================
+class LineageState:
+    def __init__(self) -> None:
+        self._next_id = 0
+        self.cells: dict[int, CellInfo] = {}
+
+    def new_id(self, parent: Optional[int], birth: Optional[int], in_tree: bool) -> int:
+        cid = self._next_id
+        self._next_id += 1
+        self.cells[cid] = CellInfo(cell_id=cid, parent_id=parent,
+                                    birth_frame=birth, in_tree=in_tree)
+        return cid
+
+    def append(self, cid: int, fd: FrameData) -> None:
+        self.cells[cid].frames.append(fd)
+
+
+def _make_frame_data(row: pd.Series, frame: int, rank: int, is_outlier: bool = False) -> FrameData:
+    return FrameData(
+        frame=frame, rank=rank,
+        area_px=int(row["area_px"]),
+        centroid_x=float(row["centroid_x"]),
+        centroid_y=float(row["centroid_y"]),
+        major_axis_px=float(row["major_axis_px"]),
+        minor_axis_px=float(row["minor_axis_px"]),
+        total_phase=float(row["total_phase"]),
+        touches_border=bool(row.get("touches_border", False)),
+        is_outlier=is_outlier,
+    )
+
+
+def update_rank_to_id(
+    state: LineageState,
+    prev_ids: list[int],
+    prev_areas: list[int],
+    curr_df: pd.DataFrame,
+    t: int,
+) -> list[int]:
+    """Two-pointer rank iteration. Returns rank_to_id for frame t."""
+    N_prev = len(prev_ids)
+    N_curr = len(curr_df)
+    result: list[Optional[int]] = [None] * N_curr
+
+    r_prev = 0
+    r_curr = 0
+    while r_curr < N_curr and r_prev < N_prev:
+        prev_A = prev_areas[r_prev]
+        curr_A = int(curr_df.iloc[r_curr]["area_px"])
+        ratio = curr_A / prev_A if prev_A > 0 else 0.0
+
+        if ratio > DIV_AREA_RATIO_MIN:
+            # continuation: same ID at this rank
+            cid = prev_ids[r_prev]
+            result[r_curr] = cid
+            state.append(cid, _make_frame_data(curr_df.iloc[r_curr], t, r_curr + 1))
+            r_curr += 1
+            r_prev += 1
+        elif r_curr + 1 < N_curr and _is_division(prev_A, curr_A, int(curr_df.iloc[r_curr + 1]["area_px"])):
+            parent = prev_ids[r_prev]
+            # inner product keeps parent ID
+            result[r_curr] = parent
+            state.append(parent, _make_frame_data(curr_df.iloc[r_curr], t, r_curr + 1))
+            # outer product is new daughter; in_tree iff parent is in tree
+            in_tree = state.cells[parent].in_tree
+            new_id = state.new_id(parent=parent, birth=t, in_tree=in_tree)
+            result[r_curr + 1] = new_id
+            state.append(new_id, _make_frame_data(curr_df.iloc[r_curr + 1], t, r_curr + 2))
+            r_curr += 2
+            r_prev += 1
+        else:
+            # unexpected: area dropped but not a clean division. treat as continuation + outlier.
+            cid = prev_ids[r_prev]
+            result[r_curr] = cid
+            state.append(cid, _make_frame_data(curr_df.iloc[r_curr], t, r_curr + 1, is_outlier=True))
+            r_curr += 1
+            r_prev += 1
+
+    # remaining current cells (r_curr < N_curr, r_prev exhausted): new cells entered from outside
+    # in Mother Machine's open end this can happen if a cell re-appears or segmentation split.
+    # treat as new unknown-lineage cells (not in tree).
+    while r_curr < N_curr:
+        new_id = state.new_id(parent=None, birth=t, in_tree=False)
+        result[r_curr] = new_id
+        state.append(new_id, _make_frame_data(curr_df.iloc[r_curr], t, r_curr + 1))
+        r_curr += 1
+
+    # remaining previous cells: exited the frame
+    for r in range(r_prev, N_prev):
+        cid = prev_ids[r]
+        if state.cells[cid].death_frame is None:
+            state.cells[cid].death_frame = t - 1
+
+    return [c for c in result if c is not None]  # type: ignore[return-value]
+
+
+def _is_division(prev_A: int, curr_A: int, next_A: int) -> bool:
+    """True if curr+next ~ prev (within DIV_SUM_TOL)."""
+    if prev_A <= 0:
+        return False
+    return abs((curr_A + next_A) - prev_A) / prev_A < DIV_SUM_TOL
+
+
+# =============================================================================
+# Outlier detection: 3-frame rule (prev/next ratio on volume AND area)
+# =============================================================================
+def _three_frame_outlier(curr: float, prev: float, nxt: float) -> bool:
+    """OR-condition outlier rule:
+    - curr/prev < 0.3  OR  curr/prev > 1.5  OR  curr/next < 0.5 (curr < next/2)
+    """
+    if not (np.isfinite(curr) and np.isfinite(prev) and np.isfinite(nxt)):
+        return False
+    if prev <= 0 or nxt <= 0:
+        return False
+    r_prev = curr / prev
+    r_next = curr / nxt
+    return (r_prev < OUT_PREV_LOW) or (r_prev > OUT_PREV_HIGH) or (r_next < OUT_NEXT_LOW)
+
+
+def apply_outlier_detection(state: LineageState) -> None:
+    """Flag frame as outlier if both (curr vs prev) and (curr vs next) ratios are out-of-range,
+    for either volume or area. Division ±1 frames (birth boundary) are excluded.
+    """
+    for cid, cell in state.cells.items():
+        if len(cell.frames) < 3:
+            continue
+        cell.frames.sort(key=lambda f: f.frame)
+        volumes = np.array([f.volume_um3_rod for f in cell.frames], dtype=float)
+        areas = np.array([float(f.area_px) for f in cell.frames], dtype=float)
+        n = len(cell.frames)
+        birth = cell.birth_frame
+        for i in range(1, n - 1):
+            f = cell.frames[i]
+            # skip divisiosn boundary
+            if birth is not None and abs(f.frame - birth) <= 1:
+                continue
+            if _three_frame_outlier(volumes[i], volumes[i - 1], volumes[i + 1]) or \
+               _three_frame_outlier(areas[i], areas[i - 1], areas[i + 1]):
+                f.is_outlier = True
+
+
+# =============================================================================
+# Metric computation (after tracking)
+# =============================================================================
+def compute_metrics_for_all(
+    state: LineageState,
+    pixel_size_um: float, wavelength_nm: float, n_medium: float, alpha_ri: float,
+) -> None:
+    for cell in state.cells.values():
+        for f in cell.frames:
+            f.volume_um3_rod = calc_rod_volume_um3(f.major_axis_px, f.minor_axis_px, pixel_size_um)
+            ri, _conc, mass = calc_optical_metrics(
+                f.total_phase, f.volume_um3_rod, pixel_size_um, wavelength_nm, n_medium, alpha_ri,
+            )
+            f.mean_ri = ri
+            f.mass_pg = mass
+
+
+# =============================================================================
+# Output: CSV / JSON
+# =============================================================================
+def build_long_table(
+    state: LineageState,
+    time_interval_min: Optional[float],
+    pixel_size_um: float,
+) -> pd.DataFrame:
+    """Per-frame long table (data3D style). Outlier frames mask out volume/RI/mass to NaN."""
+    rows = []
+    for cid, cell in state.cells.items():
+        for f in cell.frames:
+            t_h = f.frame * (time_interval_min / 60.0) if time_interval_min else np.nan
+            hide = f.is_outlier or f.touches_border
+            v = np.nan if hide else f.volume_um3_rod
+            ri = np.nan if hide else f.mean_ri
+            mass = np.nan if hide else f.mass_pg
+            rows.append({
+                "cell_id": cid,
+                "parent_id": cell.parent_id if cell.parent_id is not None else -1,
+                "in_tree": cell.in_tree,
+                "birth_frame": cell.birth_frame if cell.birth_frame is not None else -1,
+                "death_frame": cell.death_frame if cell.death_frame is not None else -1,
+                "frame": f.frame,
+                "time_h": t_h,
+                "rank": f.rank,
+                "area_px": f.area_px,
+                "area_um2": f.area_px * (pixel_size_um ** 2),
+                "long_axis_um": f.major_axis_px * pixel_size_um,
+                "short_axis_um": f.minor_axis_px * pixel_size_um,
+                "centroid_x_px": f.centroid_x,
+                "centroid_y_px": f.centroid_y,
+                "total_phase": f.total_phase,
+                "volume_um3_rod": v,
+                "mean_ri": ri,
+                "mass_pg": mass,
+                "is_outlier": f.is_outlier,
+                "touches_border": f.touches_border,
+            })
+    return pd.DataFrame(rows).sort_values(["cell_id", "frame"]).reset_index(drop=True)
+
+
+def _children_of(state: LineageState, parent_id: int) -> list[int]:
+    return sorted(
+        (cid for cid, c in state.cells.items() if c.parent_id == parent_id),
+        key=lambda cid: state.cells[cid].birth_frame or 0,
+    )
+
+
+def _generation(state: LineageState, cell: CellInfo) -> int:
+    g = 0
+    cur = cell
+    while cur.parent_id is not None:
+        parent = state.cells.get(cur.parent_id)
+        if parent is None:
+            break
+        g += 1
+        cur = parent
+    return g
+
+
+def _dist_to_edge(f: FrameData, image_width_px: int, image_height_px: int) -> float:
+    return float(min(f.centroid_x, image_width_px - f.centroid_x,
+                     f.centroid_y, image_height_px - f.centroid_y))
+
+
+def build_clist_table(
+    state: LineageState,
+    image_width_px: int,
+    image_height_px: int,
+    pixel_size_um: float,
+    time_interval_min: Optional[float],
+) -> pd.DataFrame:
+    """Per-cell summary table (SuperSegger clist style).
+
+    Captures birth/death values, mother/daughter IDs, generation, growth metrics,
+    adapted for QPI (adds RI, mass, volume).
+    """
+    rows = []
+    for cid, cell in state.cells.items():
+        if not cell.frames:
+            continue
+        f_birth = cell.frames[0]
+        f_death = cell.frames[-1]
+        valid = [x for x in cell.frames if not x.is_outlier]
+        daughters = _children_of(state, cid)
+        d1 = daughters[0] if len(daughters) >= 1 else -1
+        d2 = daughters[1] if len(daughters) >= 2 else -1
+
+        # growth: dL per-frame, length ratio death/birth
+        L_series = np.array([x.major_axis_px for x in cell.frames]) * pixel_size_um
+        if len(L_series) >= 2:
+            dL = np.diff(L_series)
+            dL_max = float(np.nanmax(dL))
+            dL_min = float(np.nanmin(dL))
+        else:
+            dL_max = dL_min = np.nan
+        L_ratio = float(L_series[-1] / L_series[0]) if L_series[0] > 0 else np.nan
+
+        # volume/RI/mass at birth and death
+        def _mass_of(fr: FrameData) -> float:
+            return np.nan if fr.is_outlier else fr.mass_pg
+        def _ri_of(fr: FrameData) -> float:
+            return np.nan if fr.is_outlier else fr.mean_ri
+        def _vol_of(fr: FrameData) -> float:
+            return np.nan if fr.is_outlier else fr.volume_um3_rod
+
+        rows.append({
+            "cell_id": cid,
+            "mother_id": cell.parent_id if cell.parent_id is not None else -1,
+            "daughter1_id": d1,
+            "daughter2_id": d2,
+            "generation": _generation(state, cell),
+            "in_tree": cell.in_tree,
+            "n_frames": len(cell.frames),
+            "n_outliers": sum(1 for x in cell.frames if x.is_outlier),
+
+            "birth_frame": cell.birth_frame if cell.birth_frame is not None else f_birth.frame,
+            "death_frame": cell.death_frame if cell.death_frame is not None else f_death.frame,
+            "age_frames": f_death.frame - f_birth.frame,
+            "birth_time_h": (f_birth.frame * time_interval_min / 60.0) if time_interval_min else np.nan,
+            "death_time_h": (f_death.frame * time_interval_min / 60.0) if time_interval_min else np.nan,
+            "age_h": ((f_death.frame - f_birth.frame) * time_interval_min / 60.0) if time_interval_min else np.nan,
+
+            "long_axis_birth_um": f_birth.major_axis_px * pixel_size_um,
+            "long_axis_death_um": f_death.major_axis_px * pixel_size_um,
+            "short_axis_birth_um": f_birth.minor_axis_px * pixel_size_um,
+            "short_axis_death_um": f_death.minor_axis_px * pixel_size_um,
+            "area_birth_um2": f_birth.area_px * (pixel_size_um ** 2),
+            "area_death_um2": f_death.area_px * (pixel_size_um ** 2),
+            "volume_birth_um3": _vol_of(f_birth),
+            "volume_death_um3": _vol_of(f_death),
+
+            "mean_ri_birth": _ri_of(f_birth),
+            "mean_ri_death": _ri_of(f_death),
+            "mass_birth_pg": _mass_of(f_birth),
+            "mass_death_pg": _mass_of(f_death),
+
+            "x_pos_birth_px": f_birth.centroid_x,
+            "y_pos_birth_px": f_birth.centroid_y,
+            "x_pos_death_px": f_death.centroid_x,
+            "y_pos_death_px": f_death.centroid_y,
+            "dist_to_edge_birth_px": _dist_to_edge(f_birth, image_width_px, image_height_px),
+
+            "dL_max_um_per_frame": dL_max,
+            "dL_min_um_per_frame": dL_min,
+            "L_death_over_birth": L_ratio,
+
+            "rank_birth": f_birth.rank,
+            "rank_death": f_death.rank,
+
+            "mean_volume_um3": float(np.nanmean([_vol_of(x) for x in valid])) if valid else np.nan,
+            "mean_ri_over_life": float(np.nanmean([_ri_of(x) for x in valid])) if valid else np.nan,
+            "mean_mass_pg": float(np.nanmean([_mass_of(x) for x in valid])) if valid else np.nan,
+        })
+    return pd.DataFrame(rows).sort_values("cell_id").reset_index(drop=True)
+
+
+def cells_summary_json(state: LineageState) -> list[dict]:
+    out = []
+    for cid, cell in state.cells.items():
+        out.append({
+            "cell_id": cid,
+            "parent_id": cell.parent_id,
+            "daughter_ids": _children_of(state, cid),
+            "generation": _generation(state, cell),
+            "in_tree": cell.in_tree,
+            "birth_frame": cell.birth_frame,
+            "death_frame": cell.death_frame,
+            "n_frames": len(cell.frames),
+        })
+    return out
+
+
+# =============================================================================
+# Visualization
+# =============================================================================
+def _assign_tree_x(state: LineageState) -> dict[int, float]:
+    """Dendrogram layout. Mother always at x=0. Daughters branch strictly to the right.
+
+    Each cell keeps its own column for its whole life. When a daughter is born,
+    it opens a new column to the right of its parent's subtree. Grand-daughters
+    are placed further right still. Branches never cross or reverse direction.
+    """
+    mother_id = None
+    for cid, cell in state.cells.items():
+        if cell.in_tree and cell.parent_id is None:
+            mother_id = cid
+            break
+    if mother_id is None:
+        return {}
+
+    children_map: dict[int, list[int]] = {}
+    for cid, cell in state.cells.items():
+        if cell.parent_id is not None and cell.in_tree:
+            children_map.setdefault(cell.parent_id, []).append(cid)
+    # Mother Machine physical order: when a parent divides, the new daughter
+    # appears just outside the parent and older daughters get pushed further
+    # out. So later-born daughters are closer to the channel center (mother).
+    # Sort children by birth_frame descending so the most recently born
+    # daughter sits immediately to the right of the parent.
+    for v in children_map.values():
+        v.sort(key=lambda c: state.cells[c].birth_frame or 0, reverse=True)
+
+    positions: dict[int, float] = {}
+
+    def assign(cid: int, x: float) -> float:
+        """Put cid at column x. Recursively place descendants to the right.
+        Returns the next free column after cid's whole subtree."""
+        positions[cid] = x
+        next_x = x + 1.0
+        for child in children_map.get(cid, []):
+            next_x = assign(child, next_x)
+        return next_x
+
+    assign(mother_id, 0.0)
+    return positions
+
+
+def plot_lineage_tree(state: LineageState, time_interval_min: Optional[float]) -> plt.Figure:
+    positions = _assign_tree_x(state)
+    n_cols = max(1, int(max(positions.values())) + 1) if positions else 1
+    # width scales with number of columns but stays within ~two-column figure
+    width_in = max(4.0, min(9.0, 0.045 * n_cols + 3.0))
+    fig, ax = plt.subplots(figsize=(width_in, 5.2), constrained_layout=True)
+
+    to_hours = (lambda f: f * (time_interval_min / 60.0)) if time_interval_min else (lambda f: float(f))
+
+    ordered = sorted(
+        (cid for cid, cell in state.cells.items() if cell.in_tree and cid in positions),
+        key=lambda c: positions[c],
+    )
+
+    # A cell's line is split into segments by its own division events. Each
+    # segment is colored by whether the cell is on the higher or lower
+    # mean_ri side at the event that starts the segment:
+    #   - segment 0 (birth .. first own division): compare self vs parent at birth
+    #   - segment i >= 1 (division i .. next event): compare self vs newborn
+    #     daughter at that division frame
+    # Mother's first segment uses a dedicated "mother" color.
+    TREE_MOTHER = "#D55E00"
+    TREE_HIGHER = "#E69F00"   # orange (higher mean RI side)
+    TREE_LOWER  = "#0072B2"   # blue (lower mean RI side)
+    TREE_UNDET  = "#999999"   # gray (outlier or missing frame)
+
+    def _color_from_compare(self_f, other_f):
+        if self_f is None or other_f is None:
+            return TREE_UNDET
+        if self_f.is_outlier or other_f.is_outlier:
+            return TREE_UNDET
+        if self_f.touches_border or other_f.touches_border:
+            return TREE_UNDET
+        if not (np.isfinite(self_f.mean_ri) and np.isfinite(other_f.mean_ri)):
+            return TREE_UNDET
+        return TREE_HIGHER if self_f.mean_ri >= other_f.mean_ri else TREE_LOWER
+
+    children_map: dict[int, list[int]] = {}
+    for cid_ in state.cells:
+        p = state.cells[cid_].parent_id
+        if p is not None and state.cells[cid_].in_tree:
+            children_map.setdefault(p, []).append(cid_)
+
+    # horizontal connectors first so the cell lines sit on top
+    for cid in ordered:
+        cell = state.cells[cid]
+        if cell.parent_id is None:
+            continue
+        parent = cell.parent_id
+        if parent not in positions:
+            continue
+        y = to_hours(cell.birth_frame or 0)
+        ax.plot([positions[parent], positions[cid]], [y, y],
+                color="#888888", linewidth=0.3, alpha=0.6)
+
+    # vertical cell lines, split by division events, colored per segment
+    seg_color_counter = {TREE_HIGHER: 0, TREE_LOWER: 0, TREE_UNDET: 0, TREE_MOTHER: 0}
+    for cid in ordered:
+        cell = state.cells[cid]
+        x = positions[cid]
+        birth = cell.birth_frame if cell.birth_frame is not None else (cell.frames[0].frame if cell.frames else 0)
+        death = cell.death_frame if cell.death_frame is not None else (cell.frames[-1].frame if cell.frames else birth)
+        lw = 1.2 if cell.parent_id is None else 0.7
+
+        own_div_frames = sorted(
+            state.cells[c].birth_frame for c in children_map.get(cid, [])
+            if state.cells[c].birth_frame is not None and birth <= state.cells[c].birth_frame <= death
+        )
+        boundaries = [birth] + own_div_frames + [death]
+
+        cell_frames_by_num = {f.frame: f for f in cell.frames}
+        parent_frames_by_num = (
+            {f.frame: f for f in state.cells[cell.parent_id].frames}
+            if cell.parent_id is not None and cell.parent_id in state.cells else {}
+        )
+
+        for seg_idx in range(len(boundaries) - 1):
+            seg_start = boundaries[seg_idx]
+            seg_end = boundaries[seg_idx + 1]
+            if seg_end <= seg_start:
+                continue
+            event_frame = boundaries[seg_idx]
+            if seg_idx == 0:
+                # segment 0: birth comparison
+                if cell.parent_id is None:
+                    col = TREE_MOTHER
+                else:
+                    col = _color_from_compare(
+                        cell_frames_by_num.get(event_frame),
+                        parent_frames_by_num.get(event_frame),
+                    )
+            else:
+                # segment i>=1: division at event_frame vs the daughter born then
+                daughter_id = next(
+                    (c for c in children_map.get(cid, [])
+                     if state.cells[c].birth_frame == event_frame),
+                    None,
+                )
+                if daughter_id is None:
+                    col = TREE_UNDET
+                else:
+                    daughter_frames_by_num = {f.frame: f for f in state.cells[daughter_id].frames}
+                    col = _color_from_compare(
+                        cell_frames_by_num.get(event_frame),
+                        daughter_frames_by_num.get(event_frame),
+                    )
+            seg_color_counter[col] = seg_color_counter.get(col, 0) + 1
+            ax.plot([x, x], [to_hours(seg_start), to_hours(seg_end)],
+                    color=col, linewidth=lw, solid_capstyle="butt")
+
+    n_higher = seg_color_counter[TREE_HIGHER]
+    n_lower = seg_color_counter[TREE_LOWER]
+    n_undet = seg_color_counter[TREE_UNDET]
+
+    # mother label
+    mother_id = next((cid for cid, cell in state.cells.items()
+                      if cell.in_tree and cell.parent_id is None), None)
+    if mother_id is not None and mother_id in positions:
+        ax.text(positions[mother_id], to_hours(state.cells[mother_id].frames[0].frame) - 0.3,
+                "M", ha="center", va="bottom", fontsize=7, fontweight="bold")
+
+    ax.invert_yaxis()
+    ax.set_xlabel("lineage (M = mother, branches to the right)")
+    ax.set_ylabel("time [h]" if time_interval_min else "frame")
+    ax.set_title("Central cell lineage tree", fontsize=9)
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
+    ax.set_xticks([])
+    # give a tiny margin so the leftmost column (mother) is not on the spine
+    ax.set_xlim(-0.5, n_cols - 0.5)
+    handles = [
+        plt.Line2D([0], [0], color=TREE_MOTHER, lw=1.2, label="mother"),
+        plt.Line2D([0], [0], color=TREE_HIGHER, lw=0.9,
+                   label=f"higher mean RI at birth (n={n_higher})"),
+        plt.Line2D([0], [0], color=TREE_LOWER, lw=0.9,
+                   label=f"lower mean RI at birth (n={n_lower})"),
+    ]
+    if n_undet:
+        handles.append(
+            plt.Line2D([0], [0], color=TREE_UNDET, lw=0.9,
+                       label=f"undetermined (n={n_undet})")
+        )
+    ax.legend(handles=handles, fontsize=6, frameon=False, loc="upper right")
+    return fig
+
+
+def plot_timeseries_by_lineage(state: LineageState, time_interval_min: Optional[float]) -> plt.Figure:
+    fig, axes = plt.subplots(2, 1, figsize=(7.2, 4.5), sharex=True)  # two-column ~183mm
+    to_hours = (lambda f: f * (time_interval_min / 60.0)) if time_interval_min else (lambda f: float(f))
+
+    color_idx = 0
+    for cid, cell in state.cells.items():
+        if not cell.in_tree or not cell.frames:
+            continue
+        t = np.array([to_hours(f.frame) for f in cell.frames])
+        v = np.array([np.nan if (f.is_outlier or f.touches_border) else f.volume_um3_rod for f in cell.frames])
+        ri = np.array([np.nan if (f.is_outlier or f.touches_border) else f.mean_ri for f in cell.frames])
+        is_mother = cell.parent_id is None
+        if is_mother:
+            color = "#D55E00"  # vermillion, reserved for mother
+            lw = 1.0
+            zorder = 3
+        else:
+            color = OKABE_ITO[color_idx % len(OKABE_ITO)]
+            color_idx += 1
+            lw = 0.35
+            zorder = 2
+        axes[0].plot(t, v, color=color, linewidth=lw, zorder=zorder,
+                      label="mother (cid=0)" if is_mother else None)
+        axes[1].plot(t, ri, color=color, linewidth=lw, zorder=zorder,
+                      label="mother (cid=0)" if is_mother else None)
+
+    # count daughters for a one-line annotation instead of a crowded legend
+    n_daughters = sum(1 for c in state.cells.values()
+                      if c.in_tree and c.parent_id is not None)
+
+    axes[0].set_ylabel(r"volume [µm$^3$]")
+    axes[1].set_ylabel("mean RI")
+    axes[1].set_xlabel("time [h]" if time_interval_min else "frame")
+    # fixed y-range so channels can be compared side by side
+    axes[0].set_ylim(VOLUME_YLIM)
+    axes[1].set_ylim(MEAN_RI_YLIM)
+    for ax in axes:
+        ax.spines["right"].set_visible(False)
+        ax.spines["top"].set_visible(False)
+    axes[0].legend(
+        [plt.Line2D([0], [0], color="#D55E00", lw=1.0),
+         plt.Line2D([0], [0], color="#888888", lw=0.35)],
+        ["mother (cid=0)", f"daughter lineages (n={n_daughters})"],
+        fontsize=7, frameon=False, loc="upper right",
+    )
+    fig.tight_layout()
+    return fig
+
+
+# =============================================================================
+# Main pipeline
+# =============================================================================
+def run(
+    channel_dir: Path,
+    pixel_size_um: float,
+    time_interval_min: Optional[float],
+    wavelength_nm: float,
+    n_medium: float,
+    alpha_ri: float,
+    min_area: int,
+    max_frames: Optional[int],
+) -> None:
+    pairs = collect_frame_pairs(channel_dir)
+    if max_frames is not None:
+        pairs = pairs[:max_frames]
+    if not pairs:
+        raise RuntimeError(f"No mask files found in {channel_dir}/inference_out")
+    print(f"[info] {len(pairs)} frames to process", file=sys.stderr)
+
+    state = LineageState()
+    rank_to_id_prev: list[int] = []
+    prev_areas: list[int] = []
+
+    expected_shape: Optional[tuple[int, int]] = None
+    skipped_frames: list[int] = []
+
+    for t, mask_path, raw_path in pairs:
+        mask = load_label_image(mask_path)
+        if expected_shape is None and mask.size > 0 and mask.max() > 0:
+            expected_shape = mask.shape
+        # skip frames with unexpected shape (segmentation placeholder) or no cells after init
+        if expected_shape is not None and mask.shape != expected_shape:
+            skipped_frames.append(t)
+            continue
+        if t > 0 and (mask.size == 0 or mask.max() == 0):
+            skipped_frames.append(t)
+            continue
+
+        phase = load_phase_image(raw_path) if raw_path and raw_path.exists() else None
+        df = extract_cells_from_frame(mask, phase, min_area)
+
+        if t == 0:
+            # initialization: rank 1 = mother (in_tree), others = unknown-lineage
+            rank_to_id_prev = []
+            prev_areas = []
+            for idx, row in df.iterrows():
+                in_tree = (idx == 0)
+                birth = None  # already present at t=0
+                new_id = state.new_id(parent=None, birth=birth, in_tree=in_tree)
+                rank_to_id_prev.append(new_id)
+                prev_areas.append(int(row["area_px"]))
+                state.append(new_id, _make_frame_data(row, t, int(row["rank"])))
+            continue
+
+        rank_to_id_prev = update_rank_to_id(state, rank_to_id_prev, prev_areas, df, t)
+        prev_areas = [int(df.iloc[i]["area_px"]) for i in range(len(df))][: len(rank_to_id_prev)]
+
+        if (t + 1) % 200 == 0:
+            print(f"[info] processed {t+1}/{len(pairs)} frames, {len(state.cells)} lineages so far", file=sys.stderr)
+
+    if skipped_frames:
+        print(f"[info] skipped {len(skipped_frames)} bad/empty mask frames (e.g. {skipped_frames[:5]})",
+              file=sys.stderr)
+
+    # finalize: cells still alive get death=last frame
+    last_frame = pairs[-1][0]
+    for cell in state.cells.values():
+        if cell.death_frame is None and cell.frames:
+            cell.death_frame = cell.frames[-1].frame
+
+    compute_metrics_for_all(state, pixel_size_um, wavelength_nm, n_medium, alpha_ri)
+    apply_outlier_detection(state)
+
+    # === outputs ===
+    out_dir = channel_dir / "inference_out" / "lineage_out"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # image size (from the last mask loaded)
+    last_mask = load_label_image(pairs[-1][1])
+    img_h, img_w = last_mask.shape
+
+    df_long = build_long_table(state, time_interval_min, pixel_size_um)
+    long_path = out_dir / "lineage_data3D.csv"
+    df_long.to_csv(long_path, index=False)
+    print(f"[ok] wrote {long_path}  ({len(df_long)} rows)", file=sys.stderr)
+
+    df_clist = build_clist_table(state, img_w, img_h, pixel_size_um, time_interval_min)
+    clist_path = out_dir / "clist.csv"
+    df_clist.to_csv(clist_path, index=False)
+    print(f"[ok] wrote {clist_path}  ({len(df_clist)} cells)", file=sys.stderr)
+
+    json_path = out_dir / "lineage_cells.json"
+    with open(json_path, "w") as f:
+        json.dump(cells_summary_json(state), f, indent=2)
+    print(f"[ok] wrote {json_path}", file=sys.stderr)
+
+    n_tree = sum(1 for c in state.cells.values() if c.in_tree)
+    n_div = sum(1 for c in state.cells.values() if c.in_tree and c.parent_id is not None)
+    n_outlier = int(df_long["is_outlier"].sum())
+    print(f"[info] in-tree cells={n_tree}, divisions detected={n_div}, outlier frames={n_outlier}",
+          file=sys.stderr)
+
+    params = {
+        "channel_dir": str(channel_dir),
+        "n_frames": len(pairs),
+        "pixel_size_um": pixel_size_um,
+        "time_interval_min": time_interval_min,
+        "wavelength_nm": wavelength_nm,
+        "n_medium": n_medium,
+        "alpha_ri": alpha_ri,
+        "min_area": min_area,
+        "div_area_ratio_min": DIV_AREA_RATIO_MIN,
+        "div_sum_tol": DIV_SUM_TOL,
+        "out_prev_low": OUT_PREV_LOW,
+        "out_prev_high": OUT_PREV_HIGH,
+        "out_next_low": OUT_NEXT_LOW,
+        "n_tree_cells": n_tree,
+        "n_divisions": n_div,
+        "n_outlier_frames": n_outlier,
+    }
+
+    fig_tree = plot_lineage_tree(state, time_interval_min)
+    save_figure(fig_tree, params=params,
+                description="lineage tree rooted at mother (Mother Machine 1D rank model)",
+                fmt="pdf")
+    plt.close(fig_tree)
+
+    fig_ts = plot_timeseries_by_lineage(state, time_interval_min)
+    save_figure(fig_ts, params=params,
+                description="per-lineage volume/mean-RI timeseries",
+                fmt="pdf")
+    plt.close(fig_ts)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--indir", type=Path, required=True,
+                   help="Channel directory containing phase TIFs and inference_out/*_masks.tif")
+    p.add_argument("--pixel-size-um", type=float, default=0.348)
+    p.add_argument("--time-interval-min", type=float, default=5.0,
+                   help="Minutes per frame (set to 0 or negative to disable time axis)")
+    p.add_argument("--wavelength-nm", type=float, default=658.0)
+    p.add_argument("--n-medium", type=float, default=1.333)
+    p.add_argument("--alpha-ri", type=float, default=0.00018)
+    p.add_argument("--min-area", type=int, default=20)
+    p.add_argument("--max-frames", type=int, default=None,
+                   help="Limit to first N frames (for quick testing)")
+    return p
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+    tim = args.time_interval_min if args.time_interval_min and args.time_interval_min > 0 else None
+    run(
+        channel_dir=args.indir,
+        pixel_size_um=args.pixel_size_um,
+        time_interval_min=tim,
+        wavelength_nm=args.wavelength_nm,
+        n_medium=args.n_medium,
+        alpha_ri=args.alpha_ri,
+        min_area=args.min_area,
+        max_frames=args.max_frames,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

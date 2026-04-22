@@ -50,7 +50,7 @@ DIRECT_RUN_CONFIG = {
     "pixel_size_um": 0.348,
     "time_interval_min": None,
     "scalebar_um": 2.0,
-    "wavelength_nm": 663.0,
+    "wavelength_nm": 658.0,
     "n_medium": 1.333,
     "alpha_ri": 0.00018,
     "preset": "manuscript",
@@ -60,8 +60,8 @@ DIRECT_RUN_CONFIG = {
     "kymograph_vmin": -0.5,
     "kymograph_vmax": 2.0,
     "volume_ylim": [0.0, 400.0],
-    "mean_ri_ylim": [1.34, 1.37],
-    "mass_ylim": [0.0, 500000.0],
+    "mean_ri_ylim": [1.33, 1.42],
+    "mass_ylim": [0.0, 500.0],
     "media_switch_frames": [575.0, 875.0, 1439.0],
     "kymograph_sample_hours": 48.0,
     "kymograph_window_frames": 10,
@@ -617,7 +617,7 @@ def calc_optical_metrics(
     if not np.isfinite(mean_ri):
         return np.nan, np.nan, np.nan
     mean_conc = (mean_ri - n_medium) / alpha_ri if alpha_ri > 0 else np.nan
-    mass_pg = mean_conc * volume_um3 if np.isfinite(mean_conc) else np.nan
+    mass_pg = mean_conc * volume_um3 * 1e-3 if np.isfinite(mean_conc) else np.nan  # [mg/mL] × [µm³] × 1e-3 → [pg]
     return float(mean_ri), float(mean_conc), float(mass_pg)
 
 
