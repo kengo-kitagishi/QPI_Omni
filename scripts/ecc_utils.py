@@ -113,7 +113,7 @@ def to_uint8(img, vmin, vmax):
 # ECC alignment
 # ====================================================================
 
-def ecc_align(ref_u8, tl_u8, max_iter=10000, epsilon=1e-8):
+def ecc_align(ref_u8, tl_u8, max_iter=20000, epsilon=1e-8):
     """ECC translation alignment between two uint8 images.
 
     Returns ``(tx, ty, correlation)`` on success, or ``None`` if ECC fails
