@@ -17,8 +17,9 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 GRID_DIR = Path(r"D:\AquisitionData\Kitagishi\260423\grid_2pergluc_1")
 Z_INDEX = 5
 POS_SPLIT = 52
-N_WORKERS_DETECT = 12
-N_WORKERS_CALIBRATE = 12
+N_WORKERS_DETECT = 20
+N_WORKERS_CALIBRATE = 4
+N_GRID_THREADS = 7
 
 pattern_re = re.compile(r"^(Pos\d+)_x\+0_y\+0$")
 
@@ -122,6 +123,8 @@ for label in labels:
 
 
 def _calibrate_one(args):
+    import cv2
+    cv2.setNumThreads(1)
     label, rois_path, out_path = args
     if str(SCRIPT_DIR) not in sys.path:
         sys.path.insert(0, str(SCRIPT_DIR))
@@ -132,6 +135,7 @@ def _calibrate_one(args):
     cgp.CHANNEL_ROIS_JSON = rois_path
     cgp.OUTPUT_JSON = out_path
     cgp.POS_SPLIT = POS_SPLIT
+    cgp.N_GRID_THREADS = N_GRID_THREADS
     try:
         cgp.main()
         return label, True, None

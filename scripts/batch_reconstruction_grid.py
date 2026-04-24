@@ -44,7 +44,9 @@ from PIL import Image
 from skimage.restoration import unwrap_phase
 from tqdm import tqdm
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+import queue as queue_mod
+import threading
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
@@ -93,8 +95,10 @@ SAVE_PNG = False
 PNG_DPI  = 150
 PNG_VMIN = -2.0
 PNG_VMAX =  2.0
-# Parallel processing worker count (same as pipeline_full: N_WORKERS_GRID)
+# Parallel processing worker count (CPU fallback mode)
 N_WORKERS = 24
+# GPU+CPU pipeline: consumer thread count for unwrap_phase
+N_CPU_CONSUMERS = 24
 # ============================================================
 
 # QPI import
@@ -105,7 +109,7 @@ except ImportError:
     sys.exit(1)
 
 # GPU acceleration (get_field uses CuPy FFT, unwrap_phase is CPU-only)
-_FORCE_CPU = True  # Set True for CPU benchmark
+_FORCE_CPU = False
 _USE_GPU = False
 if _HAS_CUPY and not _FORCE_CPU:
     try:
@@ -193,6 +197,96 @@ def reconstruct_from_holo(holo_path, crop):
     """
     qpi = make_qpi_params(holo_path, crop)
     return reconstruct_image(holo_path, qpi, crop)
+
+
+def _gpu_pipeline(frame_dicts, qpi_params, crop, desc=""):
+    """GPU+CPU pipeline: 1 GPU producer (FFT) + N CPU consumers (unwrap+save).
+
+    frame_dicts: list of dicts with keys:
+        tgt_path, raw_out_path (or None), out_path (or None),
+        bg_raw_path (or None), pos_number, xi, yi, z_idx
+    Returns (n_ok, n_err).
+    """
+    if not frame_dicts:
+        return 0, 0
+
+    q = queue_mod.Queue(maxsize=48)
+    results_lock = threading.Lock()
+    n_ok = [0]
+    n_err = [0]
+
+    def _producer():
+        if _USE_GPU:
+            set_backend("cupy")
+        for fd in frame_dicts:
+            try:
+                img = np.array(Image.open(str(fd["tgt_path"])))
+                rs, re_, cs, ce = crop
+                img = img[rs:re_, cs:ce]
+                field = get_field(img, qpi_params)
+                if hasattr(field, "get"):
+                    angle_arr = np.angle(field.get())
+                else:
+                    angle_arr = np.angle(field)
+                q.put((fd, angle_arr))
+            except Exception:
+                with results_lock:
+                    n_err[0] += 1
+        q.put(None)
+
+    def _consumer():
+        while True:
+            item = q.get()
+            if item is None:
+                q.put(None)
+                break
+            fd, angle_arr = item
+            try:
+                phase = unwrap_phase(angle_arr)
+
+                raw_out = fd.get("raw_out_path")
+                if raw_out and not Path(raw_out).exists():
+                    Path(raw_out).parent.mkdir(exist_ok=True)
+                    tifffile.imwrite(str(raw_out), phase.astype(np.float32))
+
+                out = fd.get("out_path")
+                bg_raw = fd.get("bg_raw_path")
+                if out and not Path(out).exists():
+                    if bg_raw and Path(bg_raw).exists():
+                        phase_bg = tifffile.imread(str(bg_raw)).astype(np.float64)
+                        phase_diff = phase - phase_bg
+                        h, w = phase_diff.shape
+                        pn = fd.get("pos_number", 0)
+                        if pn < POS_SPLIT:
+                            region = phase_diff[1:h - 1, 1:w // 2]
+                        else:
+                            region = phase_diff[1:h - 1, w // 2:w - 1]
+                        if region.size > 0:
+                            phase_diff -= np.mean(region)
+                        Path(out).parent.mkdir(exist_ok=True)
+                        tifffile.imwrite(str(out), phase_diff.astype(np.float32))
+                    else:
+                        pass
+
+                with results_lock:
+                    n_ok[0] += 1
+            except Exception:
+                with results_lock:
+                    n_err[0] += 1
+
+    n_consumers = N_CPU_CONSUMERS
+    print(f"  GPU+CPU pipeline: {len(frame_dicts)} frames, 1 GPU + {n_consumers} CPU  [{desc}]",
+          flush=True)
+    t0 = time.perf_counter()
+    with ThreadPoolExecutor(max_workers=1 + n_consumers) as pool:
+        pool.submit(_producer)
+        futs = [pool.submit(_consumer) for _ in range(n_consumers)]
+        for f in futs:
+            f.result()
+    elapsed = time.perf_counter() - t0
+    fps = len(frame_dicts) / elapsed if elapsed > 0 else 0
+    print(f"  Done: {n_ok[0]} OK, {n_err[0]} errors  ({elapsed:.1f}s, {fps:.1f} fps)", flush=True)
+    return n_ok[0], n_err[0]
 
 
 def _reconstruct_grid_point(args):
@@ -397,83 +491,162 @@ def main():
     print(f"BG base label: {bg_label}  ({len(bg_map)} coordinate points)")
     print(f"Target base labels: {target_labels}  (total {sum(len(folders[l]) for l in target_labels if l in folders)} folders)")
 
-    # --- BG (Pos0) raw phase with both crops ---
-    print(f"\n{'='*60}")
-    print(f"  BG raw phase ({bg_label}) - both crops  ({len(bg_map)} points)")
-    print(f"{'='*60}")
-    bg_tasks = [(xi, yi, str(d)) for (xi, yi), d in sorted(bg_map.items())]
-    if N_WORKERS == 1:
-        bg_results = [_reconstruct_bg_raw(t) for t in tqdm(bg_tasks, desc=f"{bg_label} BG")]
-    else:
-        bg_results = []
-        with ProcessPoolExecutor(max_workers=N_WORKERS) as executor:
-            futures = {executor.submit(_reconstruct_bg_raw, t): t for t in bg_tasks}
-            for fut in tqdm(as_completed(futures), total=len(bg_tasks), desc=f"{bg_label} BG"):
-                bg_results.append(fut.result())
-    bg_ok = sum(1 for _, _, ok, _ in bg_results if ok)
-    bg_err = sum(1 for _, _, ok, _ in bg_results if not ok)
-    print(f"  BG raw: {bg_ok} OK, {bg_err} errors")
-
     total_ok = 0
     total_err = 0
 
-    for base_label in target_labels:
-        if base_label not in folders:
-            print(f"  [WARN] '{base_label}_x*_y*' folders not found. Skipping.")
-            continue
-
-        target_map = folders[base_label]
-        # Get Pos number from base_label (e.g., "Pos3" -> 3)
-        m = re.match(r"Pos(\d+)$", base_label)
-        pos_number = int(m.group(1)) if m else 0
-        crop = get_crop(pos_number)
+    if _USE_GPU:
+        # ========== GPU+CPU pipeline mode ==========
+        # BG: reconstruct with both crops via pipeline
         print(f"\n{'='*60}")
-        print(f"  {base_label}  ({len(target_map)} folders)  crop={crop}")
+        print(f"  BG raw phase ({bg_label}) - GPU+CPU pipeline  ({len(bg_map)} points)")
         print(f"{'='*60}")
-
-        # Build task list (skip and BG missing checks)
-        tasks = []
-        for (xi, yi) in sorted(target_map.keys()):
-            if TARGET_COORDS is not None and (xi, yi) not in TARGET_COORDS:
-                continue
-            tgt_dir = target_map[(xi, yi)]
-            # Skip is done per z inside _reconstruct_grid_point (allows resuming partially completed folders)
-            if (xi, yi) not in bg_map:
-                print(f"  [WARN] BG not found: {bg_label}_x{xi:+d}_y{yi:+d}  -> skipping")
-                total_err += 1
-                continue
-            bg_d = bg_map[(xi, yi)]
-            tasks.append((xi, yi, str(tgt_dir), str(bg_d), crop, pos_number))
-
-        if not tasks:
-            continue
-
-        n_workers_display = N_WORKERS if N_WORKERS is not None else os.cpu_count()
-        gpu_tag = " + CuPy" if _USE_GPU else ""
-        print(f"  Parallel: {len(tasks)} points / {n_workers_display} workers{gpu_tag}")
-        if N_WORKERS == 1:
-            results = [_reconstruct_grid_point(args) for args in tqdm(tasks, desc=base_label)]
-        else:
-            results = []
-            with ProcessPoolExecutor(max_workers=N_WORKERS) as executor:
-                futures = {executor.submit(_reconstruct_grid_point, args): args for args in tasks}
-                for fut in tqdm(as_completed(futures), total=len(tasks), desc=base_label):
-                    results.append(fut.result())
-
-        for xi, yi, folder_ok, err_msg in results:
-            if folder_ok:
-                total_ok += 1
+        for crop_name, crop_val in [("before", CROP_BEFORE), ("after", CROP_AFTER)]:
+            bg_frames = []
+            for (xi, yi), bg_dir in sorted(bg_map.items()):
+                raw_out_dir = bg_dir / ("output_phase_raw" if crop_name == "before"
+                                        else "output_phase_raw_crop_after")
+                raw_out_dir.mkdir(exist_ok=True)
+                z_files = {get_z_index(p): p for p in get_z_files(bg_dir)}
+                for z_idx, zf in sorted(z_files.items()):
+                    if Z_INDICES is not None and z_idx not in Z_INDICES:
+                        continue
+                    raw_out = raw_out_dir / (zf.stem + "_phase.tif")
+                    if raw_out.exists():
+                        continue
+                    bg_frames.append({
+                        "tgt_path": str(zf), "raw_out_path": str(raw_out),
+                        "out_path": None, "bg_raw_path": None,
+                        "pos_number": 0, "xi": xi, "yi": yi, "z_idx": z_idx,
+                    })
+            if bg_frames:
+                qpi_bg = make_qpi_params(Path(bg_frames[0]["tgt_path"]), crop_val)
+                ok, err = _gpu_pipeline(bg_frames, qpi_bg, crop_val,
+                                        f"BG {crop_name}")
+                total_ok += ok
+                total_err += err
             else:
-                total_err += 1
-                if err_msg:
-                    print(f"  [ERR] ({xi:+d},{yi:+d}): {err_msg}")
+                print(f"  BG {crop_name}: all exist, skipped")
+
+        # Targets: per Pos, build frame list and run pipeline
+        for base_label in target_labels:
+            if base_label not in folders:
+                print(f"  [WARN] '{base_label}_x*_y*' folders not found. Skipping.")
+                continue
+            target_map = folders[base_label]
+            m = re.match(r"Pos(\d+)$", base_label)
+            pos_number = int(m.group(1)) if m else 0
+            crop = get_crop(pos_number)
+            print(f"\n{'='*60}")
+            print(f"  {base_label}  ({len(target_map)} folders)  crop={crop}")
+            print(f"{'='*60}")
+
+            target_frames = []
+            for (xi, yi) in sorted(target_map.keys()):
+                if TARGET_COORDS is not None and (xi, yi) not in TARGET_COORDS:
+                    continue
+                tgt_dir = target_map[(xi, yi)]
+                if (xi, yi) not in bg_map:
+                    print(f"  [WARN] BG not found: {bg_label}_x{xi:+d}_y{yi:+d}  -> skipping")
+                    total_err += 1
+                    continue
+                bg_d = bg_map[(xi, yi)]
+                out_dir = tgt_dir / "output_phase"
+                raw_out_dir = tgt_dir / "output_phase_raw"
+                out_dir.mkdir(exist_ok=True)
+                raw_out_dir.mkdir(exist_ok=True)
+                z_files = {get_z_index(p): p for p in get_z_files(tgt_dir)}
+                bg_raw_subdir = ("output_phase_raw" if pos_number < POS_SPLIT
+                                 else "output_phase_raw_crop_after")
+                for z_idx, tgt_path in sorted(z_files.items()):
+                    if Z_INDICES is not None and z_idx not in Z_INDICES:
+                        continue
+                    out_path = out_dir / (tgt_path.stem + "_phase.tif")
+                    raw_out_path = raw_out_dir / (tgt_path.stem + "_phase.tif")
+                    if SKIP_IF_EXISTS and out_path.exists() and raw_out_path.exists():
+                        continue
+                    bg_raw_path = bg_d / bg_raw_subdir / (tgt_path.stem + "_phase.tif")
+                    target_frames.append({
+                        "tgt_path": str(tgt_path),
+                        "raw_out_path": str(raw_out_path),
+                        "out_path": str(out_path),
+                        "bg_raw_path": str(bg_raw_path) if bg_raw_path.exists() else None,
+                        "pos_number": pos_number,
+                        "xi": xi, "yi": yi, "z_idx": z_idx,
+                    })
+
+            if target_frames:
+                qpi = make_qpi_params(Path(target_frames[0]["tgt_path"]), crop)
+                ok, err = _gpu_pipeline(target_frames, qpi, crop, base_label)
+                total_ok += ok
+                total_err += err
+            else:
+                print(f"  {base_label}: all exist, skipped")
+
+    else:
+        # ========== CPU ProcessPoolExecutor fallback ==========
+        print(f"\n{'='*60}")
+        print(f"  BG raw phase ({bg_label}) - CPU mode  ({len(bg_map)} points)")
+        print(f"{'='*60}")
+        bg_tasks = [(xi, yi, str(d)) for (xi, yi), d in sorted(bg_map.items())]
+        if N_WORKERS == 1:
+            bg_results = [_reconstruct_bg_raw(t) for t in tqdm(bg_tasks, desc=f"{bg_label} BG")]
+        else:
+            bg_results = []
+            with ProcessPoolExecutor(max_workers=N_WORKERS) as executor:
+                futures = {executor.submit(_reconstruct_bg_raw, t): t for t in bg_tasks}
+                for fut in tqdm(as_completed(futures), total=len(bg_tasks), desc=f"{bg_label} BG"):
+                    bg_results.append(fut.result())
+        bg_ok = sum(1 for _, _, ok, _ in bg_results if ok)
+        bg_err = sum(1 for _, _, ok, _ in bg_results if not ok)
+        print(f"  BG raw: {bg_ok} OK, {bg_err} errors")
+
+        for base_label in target_labels:
+            if base_label not in folders:
+                print(f"  [WARN] '{base_label}_x*_y*' folders not found. Skipping.")
+                continue
+            target_map = folders[base_label]
+            m = re.match(r"Pos(\d+)$", base_label)
+            pos_number = int(m.group(1)) if m else 0
+            crop = get_crop(pos_number)
+            print(f"\n{'='*60}")
+            print(f"  {base_label}  ({len(target_map)} folders)  crop={crop}")
+            print(f"{'='*60}")
+            tasks = []
+            for (xi, yi) in sorted(target_map.keys()):
+                if TARGET_COORDS is not None and (xi, yi) not in TARGET_COORDS:
+                    continue
+                tgt_dir = target_map[(xi, yi)]
+                if (xi, yi) not in bg_map:
+                    print(f"  [WARN] BG not found: {bg_label}_x{xi:+d}_y{yi:+d}  -> skipping")
+                    total_err += 1
+                    continue
+                bg_d = bg_map[(xi, yi)]
+                tasks.append((xi, yi, str(tgt_dir), str(bg_d), crop, pos_number))
+            if not tasks:
+                continue
+            print(f"  Parallel: {len(tasks)} points / {N_WORKERS} workers (CPU)")
+            if N_WORKERS == 1:
+                results = [_reconstruct_grid_point(args) for args in tqdm(tasks, desc=base_label)]
+            else:
+                results = []
+                with ProcessPoolExecutor(max_workers=N_WORKERS) as executor:
+                    futures = {executor.submit(_reconstruct_grid_point, args): args for args in tasks}
+                    for fut in tqdm(as_completed(futures), total=len(tasks), desc=base_label):
+                        results.append(fut.result())
+            for xi, yi, folder_ok, err_msg in results:
+                if folder_ok:
+                    total_ok += 1
+                else:
+                    total_err += 1
+                    if err_msg:
+                        print(f"  [ERR] ({xi:+d},{yi:+d}): {err_msg}")
 
     elapsed = time.perf_counter() - t_start
-    mode = "GPU" if _USE_GPU else f"CPU ({N_WORKERS} workers)"
+    mode = "GPU pipeline" if _USE_GPU else f"CPU ({N_WORKERS} workers)"
     print(f"\n{'='*60}")
     print(f"Done  ({mode}, {elapsed:.1f}s)")
-    print(f"  OK:    {total_ok} folders")
-    print(f"  Error: {total_err} folders")
+    print(f"  OK:    {total_ok}")
+    print(f"  Error: {total_err}")
     print(f"  (SKIP_IF_EXISTS={SKIP_IF_EXISTS})")
 
 

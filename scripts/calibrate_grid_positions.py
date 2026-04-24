@@ -21,6 +21,10 @@ Output:
   GRID_DIR/grid_calibration.json
   -> Specify in GRID_CALIBRATION_JSON of compute_pos_shifts.py / grid_subtract.py
 """
+import os
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+
 import numpy as np
 import tifffile
 import cv2
@@ -29,6 +33,7 @@ import re
 import sys
 from collections import deque
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 
 # ============================================================
@@ -63,6 +68,10 @@ POS_SPLIT          = 52    # Pos < POS_SPLIT: left 1/3 fit, Pos >= POS_SPLIT: ri
 
 # None -> GRID_DIR/grid_calibration.json
 OUTPUT_JSON = None
+
+# Grid-point parallelism (None = auto: os.cpu_count() for standalone,
+# set by parallel_calibrate when running in batch)
+N_GRID_THREADS = None
 # ============================================================
 
 
@@ -124,6 +133,8 @@ def ecc_relative(ref_crops_u8, cur_crops_u8, n_channels):
 
 
 def main():
+    cv2.setNumThreads(1)
+
     pixel_scale_um = SENSOR_PIXEL_SIZE / MAGNIFICATION * ORIGINAL_DIM / RECONSTRUCTED_DIM * 1e6
     print(f"Pixel scale: {pixel_scale_um:.4f} μm/px")
 
@@ -187,16 +198,16 @@ def main():
     print("\nStarting direct comparison calibration (ECC each point against (0,0))...")
     other_positions = sorted((k, v) for k, v in pos_map.items() if k != (0, 0))
 
-    for (xi, yi), pos_dir in tqdm(other_positions, desc="Measuring"):
+    def _measure_one(item):
+        (xi, yi), pos_dir = item
         nominal_dx = SHIFT_SIGN_Y * yi * Y_STEP / pixel_scale_um
         nominal_dy = SHIFT_SIGN_X * xi * X_STEP / pixel_scale_um
 
         try:
             cur_img = load_grid_image(pos_dir, GRID_Z_INDEX)
             cur_crops = get_crops_u8(cur_img, rois, n_channels, fit_right=fit_right)
-        except FileNotFoundError as e:
-            print(f"\n  [{xi},{yi}] No image -> using nominal values: {e}")
-            results[(xi, yi)] = {
+        except FileNotFoundError:
+            return (xi, yi), {
                 "xi": xi, "yi": yi,
                 "actual_dx_px": nominal_dx, "actual_dy_px": nominal_dy,
                 "nominal_dx_px": nominal_dx, "nominal_dy_px": nominal_dy,
@@ -205,14 +216,11 @@ def main():
                 "n_channels_used": 0, "mean_correlation": None,
                 "failed": True,
             }
-            n_failed += 1
-            continue
 
         res = ecc_relative(ref_crops, cur_crops, n_channels)
 
         if res is None:
-            print(f"\n  [{xi},{yi}] All channels ECC failed -> using nominal values")
-            results[(xi, yi)] = {
+            return (xi, yi), {
                 "xi": xi, "yi": yi,
                 "actual_dx_px": nominal_dx, "actual_dy_px": nominal_dy,
                 "nominal_dx_px": nominal_dx, "nominal_dy_px": nominal_dy,
@@ -221,11 +229,9 @@ def main():
                 "n_channels_used": 0, "mean_correlation": None,
                 "failed": True,
             }
-            n_failed += 1
-            continue
 
         actual_dx, actual_dy, corr = res
-        results[(xi, yi)] = {
+        return (xi, yi), {
             "xi": xi, "yi": yi,
             "actual_dx_px": actual_dx,
             "actual_dy_px": actual_dy,
@@ -239,6 +245,14 @@ def main():
             "mean_correlation": corr,
             "failed": False,
         }
+
+    n_threads = N_GRID_THREADS if N_GRID_THREADS else (os.cpu_count() or 4)
+    print(f"  grid-point threads: {n_threads}")
+    with ThreadPoolExecutor(max_workers=n_threads) as pool:
+        for key, val in pool.map(_measure_one, other_positions):
+            results[key] = val
+            if val["failed"]:
+                n_failed += 1
 
     # ---- Statistics ----
     successful = [r for r in results.values()
