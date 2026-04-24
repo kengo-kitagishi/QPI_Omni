@@ -28,7 +28,7 @@
   "ecc_threads_per_pos": 4,
   "enable_third_pass": true,
   "ecc_min_corr": 0.98,
-  "pos_split": 31,
+  "pos_split": 52,
   "crop_before": [
     0,
     2048,

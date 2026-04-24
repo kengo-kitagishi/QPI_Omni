@@ -111,7 +111,7 @@ TILT_CROP_H_RAW  = 270
 
 # Pos split threshold for which side to take background 1/3 (same as compute_pos_shifts.py).
 # Pos number < POS_SPLIT -> fit with left 1/3. Pos number >= POS_SPLIT -> fit with right 1/3.
-POS_SPLIT        = 33
+POS_SPLIT        = 52
 # ============================================================
 
 

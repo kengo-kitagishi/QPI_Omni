@@ -49,6 +49,8 @@ def parse_args():
     p.add_argument("--test-dir",  required=True)
     p.add_argument("--config",    required=True)
     p.add_argument("--n-reps",    type=int, required=True)
+    p.add_argument("--rois",      required=True,
+                   help="Path to channel_rois.json for the test position")
     return p.parse_args()
 
 
@@ -114,7 +116,7 @@ def main():
     pixel_scale = cfg["pixel_scale_um"]
 
     # ---- Load channel_rois ----
-    rois_path = Path(cfg["channel_rois_json"])
+    rois_path = Path(args.rois)
     with open(rois_path, encoding="utf-8") as f:
         rois = json.load(f)
     print(f"ROIs: {len(rois)} channels")

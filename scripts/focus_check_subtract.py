@@ -58,7 +58,7 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 #   Low Pos number (< POS_SPLIT) = right channel -> col 400:2448
 #   High Pos number (>= POS_SPLIT) = left channel -> col 0:2048
 # [!] Left/right may swap depending on dataset. Always verify with actual data.
-POS_SPLIT    = 31
+POS_SPLIT    = 52
 CROP_BEFORE  = (0, 2048, 400, 2448)   # pos < POS_SPLIT  -> right channel (col 400-2448)
 CROP_AFTER   = (0, 2048,   0, 2048)   # pos >= POS_SPLIT -> left channel (col 0-2048)
 

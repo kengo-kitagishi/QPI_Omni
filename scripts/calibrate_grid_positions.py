@@ -59,7 +59,7 @@ X_STEP             = 0.1       # Grid step [um]
 Y_STEP             = 0.1
 SHIFT_SIGN_X       = 1
 SHIFT_SIGN_Y       = 1
-POS_SPLIT          = 33    # Pos < POS_SPLIT: left 1/3 fit, Pos >= POS_SPLIT: right 1/3 fit
+POS_SPLIT          = 52    # Pos < POS_SPLIT: left 1/3 fit, Pos >= POS_SPLIT: right 1/3 fit
 
 # None -> GRID_DIR/grid_calibration.json
 OUTPUT_JSON = None

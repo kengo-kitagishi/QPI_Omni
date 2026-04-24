@@ -29,8 +29,7 @@ sys.path.insert(0, str(_script_dir))
 
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 
-# Same as pipeline_full.py (Pos1 is normally below POS_SPLIT)
-POS_SPLIT = 33
+POS_SPLIT = 52
 CROP_BEFORE = (0, 2048, 400, 2448)
 CROP_AFTER = (0, 2048, 0, 2048)
 

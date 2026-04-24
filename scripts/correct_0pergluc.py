@@ -147,7 +147,7 @@ GLUCOSE_0_END   = 1151   # frame index (exclusive)
 RAW_CROP        = _OPTICAL_RAW_CROP
 TILT_CROP_H_RAW = 270
 ECC_CROP_H      = 80       # must match compute_pos_shifts.py
-POS_SPLIT       = 33       # must match compute_pos_shifts.py
+POS_SPLIT       = 52       # must match compute_pos_shifts.py
 
 # Output crop height override (None -> use channel_rois.json crop_h)
 OUTPUT_CROP_H = None
@@ -164,6 +164,10 @@ FIT_RIGHT = None
 
 # Folder name prefix when base_label is absent in grid_subtract_log (e.g., Pos0_x*_y*)
 GRID_POINTS_BASE_LABEL = "Pos0"
+
+# Pre-computed delta TIFs directory (from extract_timelapse_delta.py).
+# When set, load delta_z{grid_z_index:03d}.tif instead of computing from grid_0per.
+DELTA_TIFS_DIR = None
 
 # ============================================================
 
@@ -442,17 +446,45 @@ def run_correct_0pergluc(
     qpi_params = None
     print(f"[raw] QPIParameters lazy-init (built only if on-the-fly fallback fires)")
 
-    # --- Compute delta_full ---
-    delta_full, ecc_info = compute_delta_full(
-        GRID_0PER_DIR,
-        GRID_2PER_DIR,
-        grid_points_label,
-        grid_z_index,
-        qpi_params,
-        raw_crop,
-        rois,
-        fit_right,
-    )
+    # --- Compute or load delta_full ---
+    if DELTA_TIFS_DIR:
+        delta_tifs_path = Path(DELTA_TIFS_DIR)
+        delta_path = delta_tifs_path / f"delta_z{grid_z_index:03d}.tif"
+        if not delta_path.exists():
+            raise FileNotFoundError(
+                f"Pre-computed delta not found: {delta_path}\n"
+                f"Run extract_timelapse_delta.py first."
+            )
+        delta_full = tifffile.imread(str(delta_path)).astype(np.float64)
+        delta_log_path = delta_tifs_path / "extract_timelapse_delta_log.json"
+        _delta_log = {}
+        if delta_log_path.exists():
+            _delta_log = json.loads(delta_log_path.read_text(encoding="utf-8"))
+        ecc_info = {
+            "tx": _delta_log.get("closest_shift_x", 0.0),
+            "ty": _delta_log.get("closest_shift_y", 0.0),
+            "corr": 0.0,
+            "success": True,
+            "grid_0per_point": [0, 0],
+            "ecc_source": "timelapse_delta",
+            "delta_source": (
+                f"timelapse_frame_{_delta_log.get('closest_frame_index', '?')}"
+            ),
+        }
+        print(f"[delta] loaded pre-computed: {delta_path}")
+        print(f"[delta] source: frame {_delta_log.get('closest_frame_index')}, "
+              f"shift=({ecc_info['tx']:.3f}, {ecc_info['ty']:.3f}) px")
+    else:
+        delta_full, ecc_info = compute_delta_full(
+            GRID_0PER_DIR,
+            GRID_2PER_DIR,
+            grid_points_label,
+            grid_z_index,
+            qpi_params,
+            raw_crop,
+            rois,
+            fit_right,
+        )
     print(f"delta_full: shape={delta_full.shape}, mean={delta_full.mean():.6f} rad")
 
     # --- Identify target frames (0% glucose period) ---
@@ -587,7 +619,7 @@ def run_correct_0pergluc(
 
     # --- Save log ---
     correction_log = {
-        "grid_0per_dir": str(GRID_0PER_DIR),
+        "grid_0per_dir": str(DELTA_TIFS_DIR) if DELTA_TIFS_DIR else str(GRID_0PER_DIR),
         "grid_2per_dir": str(GRID_2PER_DIR),
         "session_base_label": base_label,
         "grid_points_base_label": grid_points_label,

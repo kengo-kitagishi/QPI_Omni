@@ -38,8 +38,8 @@ POSITIONS_FILE   = r"C:\260416\_per_pos_ecc_corrected.pos"
 GRID_DIR         = r"C:\260416\2per_gridgluc_1"
 GRID_Z_INDEX     = 9        # z-slice of the grid TIFFs to use as reference
 
-# channel_rois.json (built beforehand by pipeline_full.py / channel_crop.py)
-CHANNEL_ROIS_JSON = r"C:\260416\2per_gridgluc_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
+# channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
+# No single path needed — compute_drift_online.py reads per-pos from grid_dir.
 
 # Session working directory (config + state files land here)
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
@@ -93,7 +93,7 @@ ORIGINAL_DIM         = 2048
 RECONSTRUCTED_DIM    = 511
 
 # Position-dependent crop (matches pipeline_full.py)
-POS_SPLIT    = 31
+POS_SPLIT    = 52
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 
@@ -116,6 +116,12 @@ VMAX =  2.0
 TILT_CROP_H = 270
 ECC_CROP_H  = 80
 
+# Z-stack parameters (single-z mode: N_Z_SLICES=1, Z_START_UM=0.0)
+N_Z_SLICES            = 1
+Z_STEP_UM             = 0.4
+Z_START_UM            = 0.0
+CLEANUP_RAW_HOLOGRAMS = False
+
 # Crop-subtract / raw-phase Phase B (online crop_sub_rawraw save)
 # Step values are nominal fallback only; grid_calibration_*.json (measured)
 # wins when present.
@@ -127,6 +133,7 @@ CROP_SUB_ROOT         = r"C:\260416\online_crop_sub"
 CROP_SUB_MAX_SECONDS  = 60.0
 CROP_SUB_MAX_WORKERS  = 4
 CROP_SUB_MIN_FREE_GB  = 2.0
+ECC_THREADS_PER_POS   = 4
 
 # ============================================================
 
@@ -165,39 +172,53 @@ def main():
         print(f"ERROR: BG_POS_INDEX={BG_POS_INDEX} out of range (0..{n_positions-1})")
         sys.exit(1)
 
-    csv_path = session_dir / "positions.csv"
+    zstack = N_Z_SLICES > 1
+    suffix = "_zstack" if zstack else ""
+    csv_path = session_dir / f"positions{suffix}.csv"
     with open(csv_path, "w", encoding="utf-8") as f:
         f.write("index,label,x,y,z_offset\n")
         for p in positions:
             f.write(f"{p['index']},{p['label']},{p['x']:.6f},{p['y']:.6f},{p['z_offset']:.6f}\n")
     print(f"positions.csv written: {csv_path}")
 
-    # ---- 2. channel_rois.json ----
-    rois_path = Path(CHANNEL_ROIS_JSON)
-    if not rois_path.exists():
-        print(f"ERROR: channel_rois.json not found: {rois_path}")
-        sys.exit(1)
-    with open(rois_path, encoding="utf-8") as f:
-        rois = json.load(f)
-    n_channels = len(rois)
-    print(f"Channels: {n_channels}")
-    if n_channels == 0:
-        print(f"ERROR: channel_rois.json has zero channels: {rois_path}")
-        print("  Run channel_crop.py --detect to populate it.")
-        sys.exit(1)
-
-    # ---- 3. grid_calibration_{label}.json must exist for every sample Pos ----
+    # ---- 2. Per-pos channel_rois.json & grid_calibration ----
     grid_dir = Path(GRID_DIR)
-    missing = []
+    missing_rois = []
+    missing_cal = []
+    n_channels = None
     for p in positions:
         if p["index"] == BG_POS_INDEX:
             continue
-        cal_path = grid_dir / f"grid_calibration_{p['label']}.json"
+        label = p["label"]
+        rois_path = (grid_dir / f"{label}_x+0_y+0" / "output_phase"
+                     / "channels" / "channel_rois.json")
+        if not rois_path.exists():
+            missing_rois.append(rois_path)
+        elif n_channels is None:
+            with open(rois_path, encoding="utf-8") as f:
+                rois = json.load(f)
+            n_channels = len(rois)
+            if n_channels == 0:
+                print(f"ERROR: channel_rois.json has zero channels: {rois_path}")
+                print("  Run channel_crop.py --detect to populate it.")
+                sys.exit(1)
+
+        cal_path = grid_dir / f"grid_calibration_{label}.json"
         if not cal_path.exists():
-            missing.append(cal_path)
-    if missing:
+            missing_cal.append(cal_path)
+
+    if missing_rois:
+        print("ERROR: channel_rois.json missing for the following positions:")
+        for m in missing_rois:
+            print(f"  - {m}")
+        print("Run channel_crop.py --detect for each Pos first.")
+        sys.exit(1)
+    print(f"channel_rois: verified for {n_positions - 1} sample positions "
+          f"({n_channels} channels)")
+
+    if missing_cal:
         print("ERROR: grid_calibration JSON missing for the following positions:")
-        for m in missing:
+        for m in missing_cal:
             print(f"  - {m}")
         print("Run calibrate_grid_pos_per_pos.py first.")
         sys.exit(1)
@@ -210,11 +231,10 @@ def main():
         "script_dir":         str(_script_dir),
         "session_dir":        str(session_dir),
         "save_dir":           SAVE_DIR,
-        "positions_csv":      str(csv_path),
-        "state_file":         str(session_dir / "drift_state.txt"),
-        "log_file":           str(session_dir / "drift_log.json"),
-        "channel_rois_json":  str(rois_path),
-        "kf_state_file":      str(session_dir / "drift_kf_state.json"),
+        "positions_csv":      str(session_dir / f"positions{suffix}.csv"),
+        "state_file":         str(session_dir / f"drift_state{suffix}.txt"),
+        "log_file":           str(session_dir / f"drift_log{suffix}.json"),
+        "kf_state_file":      str(session_dir / f"drift_kf_state{suffix}.json"),
 
         # Acquisition
         "n_timepoints":       N_TIMEPOINTS,
@@ -276,6 +296,13 @@ def main():
         "crop_sub_max_seconds": CROP_SUB_MAX_SECONDS,
         "crop_sub_max_workers": CROP_SUB_MAX_WORKERS,
         "crop_sub_min_free_gb": CROP_SUB_MIN_FREE_GB,
+        "cleanup_raw_holograms": CLEANUP_RAW_HOLOGRAMS,
+        "ecc_threads_per_pos": ECC_THREADS_PER_POS,
+
+        # Z-stack
+        "n_z_slices":         N_Z_SLICES,
+        "z_step_um":          Z_STEP_UM,
+        "z_start_um":         Z_START_UM,
 
         # EMA / Kalman
         "correction_ema_alpha": CORRECTION_EMA_ALPHA,
@@ -285,35 +312,35 @@ def main():
         "kf_R_ty_nm2":        KF_R_TY_NM2,
         "kf_R_tx_nm2":        KF_R_TX_NM2,
     }
-    config_path = session_dir / "drift_config.json"
+    config_path = session_dir / f"drift_config{suffix}.json"
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
-    print(f"drift_config.json written: {config_path}")
+    print(f"drift_config written: {config_path}")
 
     # ---- 5. drift_state.txt (per-pos format; populated by compute_drift_online.py) ----
-    state_path = session_dir / "drift_state.txt"
+    state_path = session_dir / f"drift_state{suffix}.txt"
     with open(state_path, "w", encoding="utf-8") as f:
-        f.write("# drift_state.txt - written by compute_drift_online.py\n")
+        f.write("# drift_state - written by compute_drift_online.py\n")
         f.write("STATUS=idle\n")
         f.write("TIMEPOINT=-1\n")
-    print(f"drift_state.txt initialised: {state_path}")
+    print(f"drift_state initialised: {state_path}")
 
     # ---- 6. drift_log.json (archive previous run) ----
-    log_path = session_dir / "drift_log.json"
+    log_path = session_dir / f"drift_log{suffix}.json"
     if log_path.exists():
         timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
         archive_path = session_dir / f"drift_log_{timestamp}.json"
         shutil.copy2(log_path, archive_path)
-        print(f"Previous drift_log.json archived: {archive_path}")
+        print(f"Previous drift_log archived: {archive_path}")
     with open(log_path, "w", encoding="utf-8") as f:
         json.dump([], f)
-    print(f"drift_log.json initialised: {log_path}")
+    print(f"drift_log initialised: {log_path}")
 
     # ---- 6b. Reset Kalman state ----
-    kf_state_path = session_dir / "drift_kf_state.json"
+    kf_state_path = session_dir / f"drift_kf_state{suffix}.json"
     if kf_state_path.exists():
         kf_state_path.unlink()
-        print(f"drift_kf_state.json removed (Kalman state reset): {kf_state_path}")
+        print(f"Kalman state reset: {kf_state_path}")
 
     # ---- 7. Create per-position save directories ----
     save_dir = Path(SAVE_DIR)
@@ -326,7 +353,8 @@ def main():
     print("\n" + "=" * 60)
     print("Setup complete. Next steps:")
     print(f"  1. Open MM1.4 Script Panel.")
-    print(f"  2. Load realtime_drift_mda.bsh.")
+    bsh_name = "realtime_drift_mda_zstack.bsh" if zstack else "realtime_drift_mda.bsh"
+    print(f"  2. Load {bsh_name}.")
     print(f"  3. Set CONFIG_FILE in the script to:")
     print(f"     {config_path}")
     print(f"  4. Press Run.")

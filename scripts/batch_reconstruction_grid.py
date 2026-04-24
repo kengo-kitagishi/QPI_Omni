@@ -54,7 +54,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 # Configuration parameters
 # ============================================================
 # Must match GRID_DIR in pipeline_full.py
-GRID_DIR = r"C:\260416\0per_gridgluc_1"
+GRID_DIR = r"D:\AquisitionData\Kitagishi\260423\grid_2pergluc_1"
 
 # Base label used as BG (pipeline_full: GRID_BG_BASE_LABEL)
 BG_BASE_LABEL = "Pos0"
@@ -78,7 +78,7 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 # pos_number < POS_SPLIT -> right side (400:2448)  sensor width 2448
 # pos_number >= POS_SPLIT -> left side (0:2048)
 # Note: BG (Pos0) uses the crop determined by the target's pos_number (not always right)
-POS_SPLIT    = 31
+POS_SPLIT    = 52
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 
@@ -94,7 +94,7 @@ PNG_DPI  = 150
 PNG_VMIN = -2.0
 PNG_VMAX =  2.0
 # Parallel processing worker count (same as pipeline_full: N_WORKERS_GRID)
-N_WORKERS = 1
+N_WORKERS = 24
 # ============================================================
 
 # QPI import
@@ -105,7 +105,7 @@ except ImportError:
     sys.exit(1)
 
 # GPU acceleration (get_field uses CuPy FFT, unwrap_phase is CPU-only)
-_FORCE_CPU = False  # Set True for CPU benchmark
+_FORCE_CPU = True  # Set True for CPU benchmark
 _USE_GPU = False
 if _HAS_CUPY and not _FORCE_CPU:
     try:

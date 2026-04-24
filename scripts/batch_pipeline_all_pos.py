@@ -70,7 +70,7 @@ BG_CACHE_AFTER  = TIMELAPSE_ROOT / "Pos0" / "bg_phase_after"
 # ============================================================
 # Confirmed parameters (from drift_config.json + memory)
 # ============================================================
-POS_SPLIT   = 33
+POS_SPLIT   = 52
 CROP_BEFORE = (0, 2048, 400, 2448)   # Pos < POS_SPLIT
 CROP_AFTER  = (0, 2048, 0, 2048)     # Pos >= POS_SPLIT
 
