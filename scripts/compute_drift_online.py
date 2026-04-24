@@ -1699,7 +1699,7 @@ def _cleanup_raw_holograms(t, sample_positions, cfg):
                 f.unlink()
                 deleted += 1
     # Also clean BG pos
-    bg_label = [p for p in load_positions(cfg["positions_csv"])
+    bg_label = [p for p in load_positions_csv(cfg["positions_csv"])
                 if p["index"] == cfg["bg_pos_index"]]
     if bg_label:
         bg_dir = save_dir / bg_label[0]["label"]
