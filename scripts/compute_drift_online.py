@@ -33,6 +33,7 @@ from pathlib import Path
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait, ALL_COMPLETED
 import threading
+import queue as _queue_mod
 
 
 # ================================================================
@@ -317,6 +318,101 @@ def reconstruct_phase_for_pos(raw_path, cfg, bg_phase=None, pos_index=0):
     if bg_phase is not None:
         phase = phase - bg_phase
     return phase
+
+
+# ================================================================
+# GPU+CPU pipeline: 1 GPU producer (FFT) + N CPU consumers (unwrap)
+# ================================================================
+
+_N_CPU_CONSUMERS = 12
+
+
+def _gpu_cpu_recon_pipeline(frame_specs, cfg, n_consumers=_N_CPU_CONSUMERS):
+    """Reconstruct raw holograms using a producer/consumer pipeline.
+
+    ``frame_specs``: list of dicts with keys:
+        raw_path (str), pos_index (int), key (any hashable identifier)
+        Optional: save_path (str|None) — if set, write phase TIF here
+    Returns dict  {key: ndarray(float64)} of reconstructed phases.
+
+    GPU producer runs get_field (CuPy FFT) sequentially, pushes angle arrays
+    to a bounded queue; CPU consumer threads run unwrap_phase in parallel.
+    """
+    if not frame_specs:
+        return {}
+
+    script_dir = Path(cfg["script_dir"])
+    if str(script_dir) not in sys.path:
+        sys.path.insert(0, str(script_dir))
+
+    from PIL import Image
+    from qpi import QPIParameters, get_field
+    from skimage.restoration import unwrap_phase
+    from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
+
+    pos_split = cfg.get("pos_split", 3)
+    crop_before = tuple(cfg["crop_before"])
+    crop_after = tuple(cfg["crop_after"])
+
+    q = _queue_mod.Queue(maxsize=48)
+    results = {}
+    results_lock = threading.Lock()
+    qpi_cache = {}
+
+    def _producer():
+        for spec in frame_specs:
+            raw_path = Path(spec["raw_path"])
+            if not raw_path.exists():
+                continue
+            pidx = spec["pos_index"]
+            crop = crop_before if pidx < pos_split else crop_after
+            try:
+                img = np.array(Image.open(str(raw_path)))
+                rs, re_, cs, ce = crop
+                img_crop = img[rs:re_, cs:ce]
+                cache_key = (img_crop.shape, crop)
+                if cache_key not in qpi_cache:
+                    qpi_cache[cache_key] = QPIParameters(
+                        wavelength=WAVELENGTH, NA=NA,
+                        img_shape=img_crop.shape, pixelsize=PIXELSIZE,
+                        offaxis_center=OFFAXIS_CENTER,
+                    )
+                field = get_field(img_crop, qpi_cache[cache_key])
+                if hasattr(field, "get"):
+                    angle = np.angle(field.get())
+                else:
+                    angle = np.angle(field)
+                q.put((spec, angle))
+            except Exception as e:
+                print(f"  [pipeline] producer error {raw_path.name}: {e}")
+        q.put(None)
+
+    def _consumer():
+        while True:
+            item = q.get()
+            if item is None:
+                q.put(None)
+                break
+            spec, angle = item
+            try:
+                phase = unwrap_phase(angle)
+                save_path = spec.get("save_path")
+                if save_path:
+                    p = Path(save_path)
+                    p.parent.mkdir(exist_ok=True)
+                    tifffile.imwrite(str(p), phase.astype(np.float32))
+                with results_lock:
+                    results[spec["key"]] = phase
+            except Exception as e:
+                print(f"  [pipeline] consumer error: {e}")
+
+    with ThreadPoolExecutor(max_workers=1 + n_consumers) as pool:
+        pool.submit(_producer)
+        futs = [pool.submit(_consumer) for _ in range(n_consumers)]
+        for f in futs:
+            f.result()
+
+    return results
 
 
 # ================================================================
@@ -1247,6 +1343,7 @@ def main():
         leader_idx = min((i // interval) * interval, len(sample_positions) - 1) if interval > 1 else i
         group_map[pos["index"]] = sample_positions[leader_idx]["index"]
 
+    t_total_start = datetime.now()
     print(f"[T={t}] compute_drift_online.py  "
           f"{len(group_leaders)} leaders / {len(sample_positions)} positions  "
           f"interval={interval}")
@@ -1305,22 +1402,23 @@ def main():
         print(f"  BG phase reconstructed ({','.join(variants) or 'none'}){gpu_tag} "
               f"in {(datetime.now() - t_bg_start).total_seconds():.2f}s")
 
-    # ---- Pre-reconstruct leader sample phases (GPU in main) ----
-    # Workers receive numpy arrays and skip FFT+unwrap entirely.
-    pre_phases = {}
+    # ---- Pre-reconstruct leader sample phases (GPU+CPU pipeline) ----
+    # GPU producer runs FFT sequentially, CPU consumers unwrap in parallel.
     t_pre_start = datetime.now()
+    leader_specs = []
     for leader in group_leaders:
-        raw_path = get_raw_path(cfg['save_dir'], leader['label'], t, z_index=ecc_tl_z,
-                               n_z_slices=n_z_slices)
+        raw_path = get_raw_path(cfg['save_dir'], leader['label'], t,
+                                z_index=ecc_tl_z, n_z_slices=n_z_slices)
         if raw_path.exists():
-            try:
-                pre_phases[leader['index']] = _reconstruct_phase_raw(
-                    str(raw_path), cfg, leader['index'])
-            except Exception as e:
-                print(f"  [{leader['label']}] phase pre-recon failed: {e}")
+            leader_specs.append({
+                "raw_path": str(raw_path),
+                "pos_index": leader["index"],
+                "key": leader["index"],
+            })
+    pre_phases = _gpu_cpu_recon_pipeline(leader_specs, cfg)
     n_pre = len(pre_phases)
     if n_pre > 0:
-        gpu_tag = " (GPU)" if _use_gpu else ""
+        gpu_tag = " (GPU+CPU pipeline)" if _use_gpu else ""
         print(f"  Pre-reconstructed {n_pre}/{len(group_leaders)} leader phases{gpu_tag} "
               f"in {(datetime.now() - t_pre_start).total_seconds():.2f}s")
 
@@ -1374,12 +1472,14 @@ def main():
         for leader in group_leaders
     ]
 
-    print(f"  Processing with {max_workers} workers (ThreadPool)...")
+    t_ecc_start = datetime.now()
+    print(f"  ECC processing with {max_workers} workers (ThreadPool)...")
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         leader_results = list(pool.map(_process_leader_task, task_args))
 
     # Filter out None results (skipped leaders)
     leader_results = [r for r in leader_results if r is not None]
+    print(f"  ECC done in {(datetime.now() - t_ecc_start).total_seconds():.1f}s")
 
     # ---- Apply group mapping ----
     leader_result_map = {r["pos_idx"]: r for r in leader_results}
@@ -1481,7 +1581,9 @@ def main():
     n_valid_native = sum(1 for r in all_results if r["valid"] and not r["jump"]) - n_fallback_stage
     n_jump = sum(1 for r in all_results if r["jump"])
     n_failed = len(all_results) - n_valid_native - n_fallback_stage - n_jump
-    print(f"[T={t}] done  {n_valid_native} valid, {n_fallback_stage} fallback, "
+    t_phase_a_elapsed = (datetime.now() - t_total_start).total_seconds()
+    print(f"[T={t}] Phase A done in {t_phase_a_elapsed:.1f}s  "
+          f"{n_valid_native} valid, {n_fallback_stage} fallback, "
           f"{n_jump} jump, {n_failed} failed")
 
     # ---- Pre-reconstruct ALL z-slices for all positions (GPU) ----
@@ -1525,55 +1627,51 @@ def main():
 
 
 def _prerecon_save_all_z(t, all_positions, cfg, bg_phases, ecc_z):
-    """Reconstruct and save output_phase_raw for ALL z-slices of all positions.
+    """Reconstruct and save output_phase_raw for ALL z-slices using GPU+CPU pipeline.
 
+    GPU producer runs FFT sequentially, CPU consumers unwrap in parallel.
     Phase A already reconstructed the ECC z-slice; here we reconstruct the
-    remaining slices so Phase B (crop_sub) can read the saved TIFs instead
-    of re-running FFT+unwrap.  Uses GPU if the backend is set to cupy.
+    remaining slices so Phase B (crop_sub) can read the saved TIFs.
 
     For the BG position (bg_pos_index), both crop_before and crop_after
-    variants are saved (output_phase_raw/ and output_phase_raw_after/)
-    so offline processing of Pos >= pos_split can use the correct BG crop.
+    variants are saved (output_phase_raw/ and output_phase_raw_after/).
     """
     save_dir = Path(cfg["save_dir"])
     n_z = cfg.get("n_z_slices", 1)
     bg_idx = cfg.get("bg_pos_index", 0)
     pos_split = cfg.get("pos_split", 0)
-    n_saved = 0
 
-    def _save_one(raw_path, pos_index, out_dir_name="output_phase_raw"):
-        nonlocal n_saved
-        out_dir = raw_path.parent / out_dir_name
-        out_path = out_dir / (raw_path.stem + "_phase.tif")
-        if out_path.exists():
-            return
-        if not raw_path.exists():
-            return
-        try:
-            phase_raw = _reconstruct_phase_raw(str(raw_path), cfg, pos_index)
-            out_dir.mkdir(exist_ok=True)
-            tifffile.imwrite(str(out_path), phase_raw.astype(np.float32))
-            n_saved += 1
-        except Exception as e:
-            print(f"  [{raw_path.parent.parent.name} z={raw_path.parent.name}] "
-                  f"prerecon failed: {e}")
-
+    specs = []
     for pos in all_positions:
         label = pos["label"]
         idx = pos["index"]
         for z_idx in range(n_z):
             raw_path = get_raw_path(save_dir, label, t,
                                     z_index=z_idx, n_z_slices=n_z)
-            # Default crop (crop_before for idx < pos_split, crop_after otherwise)
-            _save_one(raw_path, idx)
+            out_dir = raw_path.parent / "output_phase_raw"
+            out_path = out_dir / (raw_path.stem + "_phase.tif")
+            if out_path.exists() or not raw_path.exists():
+                continue
+            specs.append({
+                "raw_path": str(raw_path),
+                "pos_index": idx,
+                "key": (idx, z_idx, "default"),
+                "save_path": str(out_path),
+            })
 
-            # BG position: also save with the alternate crop
             if idx == bg_idx:
-                # _reconstruct_phase_raw uses pos_index to choose crop.
-                # Use pos_split as fake index to force crop_after.
-                _save_one(raw_path, pos_split, out_dir_name="output_phase_raw_after")
+                alt_out_dir = raw_path.parent / "output_phase_raw_after"
+                alt_out_path = alt_out_dir / (raw_path.stem + "_phase.tif")
+                if not alt_out_path.exists():
+                    specs.append({
+                        "raw_path": str(raw_path),
+                        "pos_index": pos_split,
+                        "key": (idx, z_idx, "after"),
+                        "save_path": str(alt_out_path),
+                    })
 
-    print(f"  [prerecon] T={t}: saved {n_saved} phase images "
+    results = _gpu_cpu_recon_pipeline(specs, cfg)
+    print(f"  [prerecon] T={t}: saved {len(results)} phase images "
           f"({len(all_positions)} pos x {n_z} z)")
 
 
