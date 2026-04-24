@@ -312,6 +312,101 @@ def main():
         json.dump(out_data, f, indent=2, ensure_ascii=False)
     print(f"\nSaved: {out_path}")
 
+    # ---- Figures ----
+    _save_calibration_figures(results, pixel_scale_um, BASE_LABEL)
+
+
+def _save_calibration_figures(results, pixel_scale_um, base_label):
+    """Save error / correlation heatmaps via figure_logger."""
+    try:
+        from figure_logger import save_figure
+    except ImportError:
+        print("WARN: figure_logger not available, skipping figures")
+        return
+
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    xi_vals = sorted(set(r["xi"] for r in results.values()))
+    yi_vals = sorted(set(r["yi"] for r in results.values()))
+    nx, ny = len(xi_vals), len(yi_vals)
+    xi_to_idx = {v: i for i, v in enumerate(xi_vals)}
+    yi_to_idx = {v: i for i, v in enumerate(yi_vals)}
+
+    err_dx = np.full((ny, nx), np.nan)
+    err_dy = np.full((ny, nx), np.nan)
+    corr_map = np.full((ny, nx), np.nan)
+    for r in results.values():
+        ix = xi_to_idx[r["xi"]]
+        iy = yi_to_idx[r["yi"]]
+        if not r["failed"]:
+            err_dx[iy, ix] = r["error_dx_px"] * pixel_scale_um
+            err_dy[iy, ix] = r["error_dy_px"] * pixel_scale_um
+            corr_map[iy, ix] = r["mean_correlation"]
+
+    common_params = {
+        "base_label": base_label,
+        "grid_dir": str(GRID_DIR),
+        "pixel_scale_um": pixel_scale_um,
+        "n_positions": len(results),
+    }
+
+    vabs = max(np.nanmax(np.abs(err_dx)), np.nanmax(np.abs(err_dy)), 0.01)
+
+    # --- Error DX heatmap ---
+    fig, ax = plt.subplots(figsize=(6, 5))
+    im = ax.imshow(err_dx, cmap="RdBu_r", vmin=-vabs, vmax=vabs,
+                   origin="lower", extent=[xi_vals[0]-0.5, xi_vals[-1]+0.5,
+                                           yi_vals[0]-0.5, yi_vals[-1]+0.5])
+    ax.set_xlabel("xi (grid index)")
+    ax.set_ylabel("yi (grid index)")
+    ax.set_title(f"{base_label}  error DX")
+    cb = fig.colorbar(im, ax=ax)
+    cb.set_label("error DX (um)")
+    fig.tight_layout()
+    save_figure(fig, params=common_params,
+                description=f"Grid calibration error DX — {base_label}",
+                data={"err_dx_um": err_dx, "xi_vals": np.array(xi_vals),
+                      "yi_vals": np.array(yi_vals)})
+    plt.close(fig)
+
+    # --- Error DY heatmap ---
+    fig, ax = plt.subplots(figsize=(6, 5))
+    im = ax.imshow(err_dy, cmap="RdBu_r", vmin=-vabs, vmax=vabs,
+                   origin="lower", extent=[xi_vals[0]-0.5, xi_vals[-1]+0.5,
+                                           yi_vals[0]-0.5, yi_vals[-1]+0.5])
+    ax.set_xlabel("xi (grid index)")
+    ax.set_ylabel("yi (grid index)")
+    ax.set_title(f"{base_label}  error DY")
+    cb = fig.colorbar(im, ax=ax)
+    cb.set_label("error DY (um)")
+    fig.tight_layout()
+    save_figure(fig, params=common_params,
+                description=f"Grid calibration error DY — {base_label}",
+                data={"err_dy_um": err_dy, "xi_vals": np.array(xi_vals),
+                      "yi_vals": np.array(yi_vals)})
+    plt.close(fig)
+
+    # --- ECC correlation heatmap ---
+    fig, ax = plt.subplots(figsize=(6, 5))
+    im = ax.imshow(corr_map, cmap="viridis",
+                   origin="lower", extent=[xi_vals[0]-0.5, xi_vals[-1]+0.5,
+                                           yi_vals[0]-0.5, yi_vals[-1]+0.5])
+    ax.set_xlabel("xi (grid index)")
+    ax.set_ylabel("yi (grid index)")
+    ax.set_title(f"{base_label}  ECC correlation")
+    cb = fig.colorbar(im, ax=ax)
+    cb.set_label("mean ECC correlation")
+    fig.tight_layout()
+    save_figure(fig, params=common_params,
+                description=f"Grid calibration ECC correlation — {base_label}",
+                data={"corr_map": corr_map, "xi_vals": np.array(xi_vals),
+                      "yi_vals": np.array(yi_vals)})
+    plt.close(fig)
+
+    print(f"Saved 3 calibration figures for {base_label}")
+
 
 if __name__ == "__main__":
     main()

@@ -134,6 +134,10 @@ print("Positions loaded: " + nPositions);
 double[] corrX = Arrays.copyOf(baseX, nPositions);
 double[] corrY = Arrays.copyOf(baseY, nPositions);
 
+// ---- Device timeout ----
+mmc.setTimeoutMs(20000);
+print("Device timeout set: 20000 ms");
+
 // ---- Camera setup ----
 mmc.setExposure(EXPOSURE_MS);
 print("Exposure set: " + EXPOSURE_MS + " ms");

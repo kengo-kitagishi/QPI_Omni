@@ -32,11 +32,11 @@ sys.path.insert(0, str(_script_dir))
 # ============================================================
 
 # .pos file consumed by Micro-Manager (the actual time-lapse position list)
-POSITIONS_FILE   = r"C:\260416\_per_pos_ecc_corrected.pos"
+POSITIONS_FILE   = r"C:\260423\timelapse.pos"
 
 # Grid acquisition directory (small grid is fine)
-GRID_DIR         = r"C:\260416\2per_gridgluc_1"
-GRID_Z_INDEX     = 9        # z-slice of the grid TIFFs to use as reference
+GRID_DIR         = r"D:\AquisitionData\Kitagishi\260423\grid_2pergluc_1"
+GRID_Z_INDEX     = 5        # z-slice of the grid TIFFs to use as reference
 
 # channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
 # No single path needed — compute_drift_online.py reads per-pos from grid_dir.
@@ -45,17 +45,17 @@ GRID_Z_INDEX     = 9        # z-slice of the grid TIFFs to use as reference
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"D:\AquisitionData\Kitagishi\260416\ph_1"
+SAVE_DIR         = r"E:\260424\0per_gluc"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
 
 # Micro-Manager acquisition parameters
-N_TIMEPOINTS     = 3168
-INTERVAL_SEC     = 300        # Time-lapse interval [s]
+N_TIMEPOINTS     = 288
+INTERVAL_SEC     = 600        # Time-lapse interval [s]
 EXPOSURE_MS      = 60.0
 SETTLE_MS        = 150        # Stage settle time after move [ms]
-PFS_SETTLE_MS    = 200        # Nikon PFS lock time [ms] (0 to disable)
+PFS_SETTLE_MS    = 0          # PFS continuously tracks; no extra settle needed
 
 # Micro-Manager device names
 XY_STAGE_DEVICE  = "XYStage"
@@ -117,20 +117,20 @@ TILT_CROP_H = 270
 ECC_CROP_H  = 80
 
 # Z-stack parameters (single-z mode: N_Z_SLICES=1, Z_START_UM=0.0)
-N_Z_SLICES            = 1
+N_Z_SLICES            = 11
 Z_STEP_UM             = 0.4
-Z_START_UM            = 0.0
-CLEANUP_RAW_HOLOGRAMS = False
+Z_START_UM            = -2.0
+CLEANUP_RAW_HOLOGRAMS = True
 
 # Crop-subtract / raw-phase Phase B (online crop_sub_rawraw save)
 # Step values are nominal fallback only; grid_calibration_*.json (measured)
 # wins when present.
-RAW_TL_Z_INDEX        = 0
+RAW_TL_Z_INDEX        = 5
 CROP_SUB_X_STEP_UM    = 0.1
 CROP_SUB_Y_STEP_UM    = 0.1
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"C:\260416\online_crop_sub"
-CROP_SUB_MAX_SECONDS  = 60.0
+CROP_SUB_ROOT         = r"E:\260424\online_crop_sub_zstack"
+CROP_SUB_MAX_SECONDS  = 150.0
 CROP_SUB_MAX_WORKERS  = 4
 CROP_SUB_MIN_FREE_GB  = 2.0
 ECC_THREADS_PER_POS   = 4
