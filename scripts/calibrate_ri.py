@@ -50,20 +50,22 @@ from ecc_utils import apply_2pi_tilt_crop, extract_rect_roi
 # ============================================================
 
 # 2% glucose grid directory (for channel_rois.json and output_phase mask)
-GRID_2PER_DIR = r"E:\Acuisition\kitagishi\260424\grid_2pergluc_60ms_1"
+GRID_2PER_DIR = r"D:\AquisitionData\Kitagishi\260423\grid_2pergluc_1"
 
 # Session roots for delta TIF directories
-MILIQ_SESSION = r"E:\Acuisition\kitagishi\260424\miliq_60ms"
-ETOH_SESSION = r"E:\Acuisition\kitagishi\260424\etoh_60ms"
+MILIQ_SESSION = r"E:\260424\0per_gluc"
+ETOH_SESSION = r"E:\260424\0per_gluc"
 
 # Relative path from PosN/ to the delta TIF directory
 DELTA_SUBDIR = "output_phase/channels/delta_timelapse"
+MILIQ_DELTA_SUBDIR = "output_phase/channels/delta_miliq"
+ETOH_DELTA_SUBDIR = "output_phase/channels/delta_etoh"
 
 # Grid z index to load (delta_z{DELTA_Z:03d}.tif)
 DELTA_Z = 5
 
 # Pos numbers to process
-POS_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+POS_NUMBERS = list(range(1, 102))
 
 # Reference media refractive indices (at lambda=658nm, ~25C)
 # *** VERIFY for your exact concentration and temperature ***
@@ -138,12 +140,13 @@ def create_channel_masks(phase_bg, rois, fit_right):
     return masks
 
 
-def load_delta_tif(session_dir, pos_num, z_index):
+def load_delta_tif(session_dir, pos_num, z_index, delta_subdir=None):
     """Load pre-computed delta TIF (511x511) from extract_timelapse_delta.py."""
+    subdir = delta_subdir if delta_subdir is not None else DELTA_SUBDIR
     path = (
         Path(session_dir)
         / f"Pos{pos_num}"
-        / DELTA_SUBDIR
+        / subdir
         / f"delta_z{z_index:03d}.tif"
     )
     if not path.exists():
@@ -296,13 +299,13 @@ def main():
         masks_dict[pos_num] = masks
 
         # --- MilliQ delta ---
-        delta_m, delta_m_path = load_delta_tif(MILIQ_SESSION, pos_num, DELTA_Z)
+        delta_m, delta_m_path = load_delta_tif(MILIQ_SESSION, pos_num, DELTA_Z, MILIQ_DELTA_SUBDIR)
         sums_m = compute_channel_sums(delta_m, rois, masks, fit_r)
         pos_miliq = sum(s for s, _ in sums_m)
         print(f"  [MilliQ] {delta_m_path.name}  sum={pos_miliq:.2f} rad*px")
 
         # --- EtOH delta ---
-        delta_e, delta_e_path = load_delta_tif(ETOH_SESSION, pos_num, DELTA_Z)
+        delta_e, delta_e_path = load_delta_tif(ETOH_SESSION, pos_num, DELTA_Z, ETOH_DELTA_SUBDIR)
         sums_e = compute_channel_sums(delta_e, rois, masks, fit_r)
         pos_etoh = sum(s for s, _ in sums_e)
         print(f"  [EtOH]  {delta_e_path.name}  sum={pos_etoh:.2f} rad*px")
