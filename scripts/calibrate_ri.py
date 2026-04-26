@@ -81,6 +81,7 @@ OUTPUT_CROP_H = 180     # output crop for mask & summation
 MASK_THRESHOLD = -1.0   # phase threshold (rad) on BG-subtracted grid
 
 POS_SPLIT = 52          # fit_right boundary
+SKIP_EDGE_CHANNELS = True  # exclude first and last channel (Y-direction boundary artifacts)
 
 # 0% glucose grid directory (optional, for n_0per)
 GRID_0PER_DIR = None
@@ -301,27 +302,41 @@ def main():
         # --- MilliQ delta ---
         delta_m, delta_m_path = load_delta_tif(MILIQ_SESSION, pos_num, DELTA_Z, MILIQ_DELTA_SUBDIR)
         sums_m = compute_channel_sums(delta_m, rois, masks, fit_r)
-        pos_miliq = sum(s for s, _ in sums_m)
-        print(f"  [MilliQ] {delta_m_path.name}  sum={pos_miliq:.2f} rad*px")
 
         # --- EtOH delta ---
         delta_e, delta_e_path = load_delta_tif(ETOH_SESSION, pos_num, DELTA_Z, ETOH_DELTA_SUBDIR)
         sums_e = compute_channel_sums(delta_e, rois, masks, fit_r)
-        pos_etoh = sum(s for s, _ in sums_e)
+
+        if SKIP_EDGE_CHANNELS and n_ch > 2:
+            used_m = sums_m[1:-1]
+            used_e = sums_e[1:-1]
+            n_skip = 2
+        else:
+            used_m = sums_m
+            used_e = sums_e
+            n_skip = 0
+
+        pos_miliq = sum(s for s, _ in used_m)
+        pos_etoh = sum(s for s, _ in used_e)
+        used_mask = sum(n for _, n in used_m)
+        print(f"  [MilliQ] {delta_m_path.name}  sum={pos_miliq:.2f} rad*px"
+              f"  (skip_edge={n_skip})")
         print(f"  [EtOH]  {delta_e_path.name}  sum={pos_etoh:.2f} rad*px")
 
         total_miliq += pos_miliq
         total_etoh += pos_etoh
-        total_mask_pixels += mask_pixels
+        total_mask_pixels += used_mask
 
         per_pos_results.append({
             "pos": pos_num,
             "n_channels": n_ch,
-            "mask_pixels": mask_pixels,
+            "n_channels_used": n_ch - n_skip,
+            "mask_pixels": used_mask,
             "miliq_sum": pos_miliq,
             "miliq_per_ch": [(s, n) for s, n in sums_m],
             "etoh_sum": pos_etoh,
             "etoh_per_ch": [(s, n) for s, n in sums_e],
+            "skip_edge_channels": n_skip,
         })
 
         if example_data is None:
