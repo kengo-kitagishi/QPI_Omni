@@ -3,17 +3,19 @@
 # 251105
 from cellpose_omni import io
 from cellpose_omni.models import CellposeModel
-import os, numpy as np, tifffile, traceback
+import os, sys, argparse, numpy as np, tifffile, traceback
 
 # ==== Settings (modify as needed) ====
-# Input directory (images for inference)
-indir = r"F:\260405\ph_260405\Pos2\output_phase\channels\crop_sub_rawraw\ch01"
+_parser = argparse.ArgumentParser(add_help=False)
+_parser.add_argument("--indir", default=r"G:\マイドライブ\ch02")
+_args, _ = _parser.parse_known_args()
+indir = _args.indir
 # Output directory (where masks etc. are saved)
 outdir = os.path.join(indir, "inference_out")
 os.makedirs(outdir, exist_ok=True)
 
 # Trained model path
-model_path = r"C:\Users\QPI\Desktop\train\omni_model\models\cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_2026_04_13_10_54_41.173761"
+model_path = r"C:\Users\QPI\Desktop\train\omni_model_d20\models\cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_d20_2026_05_01_19_01_52.321350"
 # Inference settings (tunable)
 USE_GPU = True
 NCHAN = 1
@@ -23,16 +25,15 @@ NCLASSES = 3
 EVAL_PARAMS = dict(
     channels=None,
     channel_axis=None,
-    diameter=15,
+    diameter=20,
     normalize=True,    # Same 1st-99th percentile normalization as during training
     tile=False,        # Disable tiling (to suppress fluctuation)
     net_avg=True,
     omni=True,
     verbose=False,
-    # Adjust the following to avoid the "too few points" problem
-    flow_threshold=0.11,   # Lower than default to ensure enough detected points
-    mask_threshold=0,   # Lower to pick up more masks
-    min_size=10           # Remove small debris
+    flow_threshold=0.4,
+    mask_threshold=0,
+    min_size=10
 )
 
 # ==== Get files (with safety handling) ====

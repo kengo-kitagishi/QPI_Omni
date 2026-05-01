@@ -26,23 +26,25 @@ use_gpu      = True
 nchan        = 1
 nclasses     = 3
 lr_value     = 0.01
-diameter     = 15
+diameter     = 20
 batch_size   = 5
 save_every   = 100
-n_epochs     = 3000
+n_epochs     = 1500
 crop_size    = (40, 128)   # tyx
-save_dir     = r"C:\Users\QPI\Desktop\train\omni_model"
-pretrained_model = r"C:\Users\QPI\Desktop\train\omni_model\models\cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_2026_04_12_19_50_19.802592"
+save_dir     = r"C:\Users\QPI\Desktop\train\omni_model_d20"
+pretrained_model = None
 loss_log_path = r"C:\Users\QPI\Desktop\train\train_loss.log"
 
 # Pass LR as an array to disable warmup (constant LR throughout)
 learning_rate = np.full(n_epochs, lr_value)
 
 # === Log settings (append mode with run separators) ===
+os.makedirs(os.path.dirname(loss_log_path), exist_ok=True)
+_pretrained_label = os.path.basename(pretrained_model) if pretrained_model else "scratch"
 with open(loss_log_path, mode='a', encoding='utf-8') as f:
     f.write(f"\n{'='*60}\n")
     f.write(f"=== Run started: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n")
-    f.write(f"=== LR={lr_value}, n_epochs={n_epochs}, pretrained={os.path.basename(pretrained_model)} ===\n")
+    f.write(f"=== LR={lr_value}, n_epochs={n_epochs}, pretrained={_pretrained_label} ===\n")
     f.write(f"{'='*60}\n")
 
 _loss_fh = logging.FileHandler(loss_log_path, mode='a', encoding='utf-8')

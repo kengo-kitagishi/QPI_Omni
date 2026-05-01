@@ -13,12 +13,18 @@ INTERVAL_MS = 5000  # polling interval (5 seconds)
 _pattern = re.compile(
     r"Train epoch:\s*(\d+).*?<Batch Loss>:\s*([\d.]+).*?<Epoch Loss>:\s*([\d.]+)"
 )
+_run_separator = re.compile(r"Run started:")
 
 def _parse(path):
     epochs, batch_losses, epoch_losses = [], [], []
     try:
         with open(path, encoding="utf-8") as f:
             for line in f:
+                if _run_separator.search(line):
+                    epochs.clear()
+                    batch_losses.clear()
+                    epoch_losses.clear()
+                    continue
                 m = _pattern.search(line)
                 if m:
                     epochs.append(int(m.group(1)))
