@@ -135,7 +135,11 @@ gs = GridSpec(
 
 ax_a = fig.add_subplot(gs[0, 0])
 ax_b = fig.add_subplot(gs[0, 2])
-ax_c = fig.add_subplot(gs[0, 4])
+# Panel c: half size (1/2 width × 1/2 height), placed at top-left of its cell
+# - Top-aligned with row 0 (matches b's top edge)
+# - Left-aligned with cell (b->c arrow still connects to c's left edge)
+gs_c = gs[0, 4].subgridspec(2, 2, wspace=0, hspace=0)
+ax_c = fig.add_subplot(gs_c[0, 0])
 ax_d = fig.add_subplot(gs[1, 4])
 ax_e = fig.add_subplot(gs[1, 2])
 ax_f = fig.add_subplot(gs[1, 0])
@@ -228,7 +232,14 @@ y_top   = 0.94
 y_bot   = 0.06
 
 # Top horizontal line (from right edge of img_c to vertical line)
-ax_lp.plot([0.05, x_line], [y_top, y_top], "k-", lw=1.5, transform=ax_lp.transAxes)
+# Panel c is now half-width at top-left of its cell, so its right edge sits at the
+# middle of column 4 (not at column 4's right edge). Extend the line leftward to
+# reach c's new right edge using clip_on=False.
+_total_ratio = 10 + 2 + 10 + 2 + 10 + 3  # GridSpec width_ratios sum
+_col_c_in_lp = (10 / _total_ratio) / (3 / _total_ratio)  # column 4 width in ax_lp axes coords
+_x_c_right_edge = -_col_c_in_lp / 2  # c's new right edge in ax_lp axes coords
+ax_lp.plot([_x_c_right_edge + 0.05, x_line], [y_top, y_top], "k-", lw=1.5,
+           transform=ax_lp.transAxes, clip_on=False)
 # Vertical line
 ax_lp.plot([x_line, x_line], [y_top, y_bot], "k-", lw=1.5, transform=ax_lp.transAxes)
 # Bottom arrow (from vertical line to left edge of img_d)

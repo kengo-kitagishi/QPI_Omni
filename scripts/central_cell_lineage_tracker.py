@@ -63,7 +63,7 @@ OKABE_ITO = [
 ]
 
 # Division / tracking thresholds
-DIV_AREA_RATIO_MIN = 0.65     # continuation if curr/prev > this
+DIV_AREA_RATIO_MIN = 0.68     # continuation if curr/prev > this
 DIV_SUM_TOL = 0.30            # |(a+b) - prev| / prev < this -> division confirmed
 
 # 3-frame outlier rule (checked on volume and area independently; OR):
