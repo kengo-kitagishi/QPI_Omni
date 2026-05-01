@@ -22,6 +22,11 @@ from skimage import measure
 from skimage.transform import rotate
 
 from figure_logger import save_figure
+from ri_calibration import (
+    load_calibration,
+    n_medium_at_frame,
+    parse_media_schedule,
+)
 
 ALL_FIGURES = [
     "overlay_strip",
@@ -53,6 +58,10 @@ DIRECT_RUN_CONFIG = {
     "wavelength_nm": 658.0,
     "n_medium": 1.333,
     "alpha_ri": 0.00018,
+    "ri_calibration": None,
+    "calibration_id": None,
+    "media_schedule": None,
+    "n_milliq": None,
     "preset": "manuscript",
     "no_save": False,
     "attach_source_tifs": False,
@@ -238,6 +247,40 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.00018,
         help="Specific refractive increment used for concentration and mass estimation.",
+    )
+    parser.add_argument(
+        "--ri-calibration",
+        type=Path,
+        default=None,
+        help=(
+            "Path to ri_calibration_results.json (append-history schema). "
+            "When set, mean-RI is computed with frame-dependent n_medium "
+            "looked up from --media-schedule, and protein density uses MilliQ as baseline."
+        ),
+    )
+    parser.add_argument(
+        "--calibration-id",
+        type=str,
+        default=None,
+        help="Specific calibration entry id; default uses the JSON's `active`.",
+    )
+    parser.add_argument(
+        "--media-schedule",
+        type=str,
+        default=None,
+        help=(
+            "Frame->medium step schedule, e.g. '0:wo_2,575:wo_0,1439:wo_2'. "
+            "Required when --ri-calibration is set."
+        ),
+    )
+    parser.add_argument(
+        "--n-milliq",
+        type=float,
+        default=None,
+        help=(
+            "MilliQ refractive index used as baseline for protein density. "
+            "Defaults to the calibration's reference.n_miliq when --ri-calibration is set."
+        ),
     )
     parser.add_argument(
         "--preset",
@@ -606,7 +649,10 @@ def calc_optical_metrics(
     wavelength_nm: float,
     n_medium: float,
     alpha_ri: float,
+    n_protein_basis: float | None = None,
 ) -> tuple[float, float, float]:
+    """mean_RI uses n_medium; protein concentration / mass uses n_protein_basis
+    (defaults to n_medium when not given, preserving legacy behavior)."""
     if not np.isfinite(total_phase) or not np.isfinite(volume_um3) or volume_um3 <= 0 or pixel_size_um <= 0:
         return np.nan, np.nan, np.nan
 
@@ -616,7 +662,8 @@ def calc_optical_metrics(
 
     if not np.isfinite(mean_ri):
         return np.nan, np.nan, np.nan
-    mean_conc = (mean_ri - n_medium) / alpha_ri if alpha_ri > 0 else np.nan
+    basis = float(n_protein_basis) if n_protein_basis is not None else float(n_medium)
+    mean_conc = (mean_ri - basis) / alpha_ri if alpha_ri > 0 else np.nan
     mass_pg = mean_conc * volume_um3 * 1e-3 if np.isfinite(mean_conc) else np.nan  # [mg/mL] × [µm³] × 1e-3 → [pg]
     return float(mean_ri), float(mean_conc), float(mass_pg)
 
@@ -714,7 +761,21 @@ def build_summary_table(
     wavelength_nm: float,
     n_medium: float,
     alpha_ri: float,
+    media_schedule: list[tuple[int, str]] | None = None,
+    media_ri: dict[str, float] | None = None,
+    n_milliq: float | None = None,
 ) -> pd.DataFrame:
+    """Build per-frame summary table.
+
+    Frame-dependent medium RI:
+      If `media_schedule` and `media_ri` are given, n_medium for each frame is
+      looked up from the schedule. Otherwise the constant `n_medium` is used.
+
+    Protein basis:
+      If `n_milliq` is given, `mean_concentration` and `mass_pg` use MilliQ as
+      the baseline (independent of which medium the cell sits in). Otherwise
+      the per-frame n_medium is used (legacy behavior).
+    """
     rows = [select_center_cell_for_frame(pair, min_area=min_area, exclude_border=exclude_border) for pair in frame_pairs]
     df = pd.DataFrame(rows)
     df["frame_label"] = df["frame_name"]
@@ -740,12 +801,27 @@ def build_summary_table(
     else:
         df["volume_um3_rod"] = np.nan
 
+    use_schedule = bool(media_schedule) and bool(media_ri)
+    if use_schedule:
+        n_medium_per_row = [
+            n_medium_at_frame(int(f), media_schedule, media_ri)
+            for f in df["frame_index"].to_numpy()
+        ]
+    else:
+        n_medium_per_row = [float(n_medium)] * len(df)
+    df["n_medium_used"] = n_medium_per_row
+    df["n_milliq_used"] = float(n_milliq) if n_milliq is not None else np.nan
+
     if pixel_size_um is not None and pixel_size_um > 0:
         optical_metrics = [
-            calc_optical_metrics(total_phase, volume_um3, pixel_size_um, wavelength_nm, n_medium, alpha_ri)
-            for total_phase, volume_um3 in zip(
+            calc_optical_metrics(
+                total_phase, volume_um3, pixel_size_um, wavelength_nm,
+                nm_row, alpha_ri, n_protein_basis=n_milliq,
+            )
+            for total_phase, volume_um3, nm_row in zip(
                 df["total_phase"].to_numpy(dtype=float),
                 df["volume_um3_rod"].to_numpy(dtype=float),
+                n_medium_per_row,
             )
         ]
         df["mean_ri"] = [vals[0] for vals in optical_metrics]
@@ -1564,6 +1640,10 @@ def save_fig_with_formats(
         "wavelength_nm": args.wavelength_nm,
         "n_medium": args.n_medium,
         "alpha_ri": args.alpha_ri,
+        "ri_calibration": str(args.ri_calibration) if args.ri_calibration else None,
+        "calibration_id": getattr(args, "calibration_id_used", None) or args.calibration_id,
+        "media_schedule": args.media_schedule,
+        "n_milliq": getattr(args, "n_milliq_used", None) or args.n_milliq,
         "kymograph_vmin": args.kymograph_vmin,
         "kymograph_vmax": args.kymograph_vmax,
         "volume_ylim": args.volume_ylim,
@@ -1710,6 +1790,38 @@ def main() -> int:
     print(f"[central_cell_track] channel_dir: {channel_dir}")
     print(f"[central_cell_track] paired frames: {len(frame_pairs)}")
 
+    media_schedule = None
+    media_ri = None
+    n_milliq = args.n_milliq
+    calibration_id_used = None
+    if args.ri_calibration is not None:
+        cal = load_calibration(args.ri_calibration, args.calibration_id)
+        media_ri = cal.media
+        calibration_id_used = cal.calibration_id
+        if n_milliq is None:
+            n_milliq = cal.n_miliq
+        if not args.media_schedule:
+            raise SystemExit(
+                "--media-schedule is required when --ri-calibration is set "
+                "(e.g. '0:wo_2,575:wo_0,1439:wo_2')."
+            )
+        media_schedule = parse_media_schedule(args.media_schedule)
+        print(
+            f"[central_cell_track] calibration: {cal.calibration_id} "
+            f"({cal.calibrated_at})"
+        )
+        print(f"[central_cell_track] media RI: {cal.media}")
+        print(f"[central_cell_track] schedule: {media_schedule}")
+        print(f"[central_cell_track] n_milliq for protein density: {n_milliq}")
+    elif args.media_schedule:
+        raise SystemExit(
+            "--media-schedule was given without --ri-calibration; "
+            "schedule lookup needs the calibration JSON for media RI values."
+        )
+
+    args.calibration_id_used = calibration_id_used
+    args.n_milliq_used = n_milliq
+
     summary_df = build_summary_table(
         frame_pairs,
         min_area=args.min_area,
@@ -1718,6 +1830,9 @@ def main() -> int:
         wavelength_nm=args.wavelength_nm,
         n_medium=args.n_medium,
         alpha_ri=args.alpha_ri,
+        media_schedule=media_schedule,
+        media_ri=media_ri,
+        n_milliq=n_milliq,
     )
     crop_size = determine_crop_size(summary_df, margin=args.crop_margin)
     panel_rows = select_panel_rows(summary_df, panel_count=args.panel_count)

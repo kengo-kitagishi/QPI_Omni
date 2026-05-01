@@ -32,6 +32,7 @@ from central_cell_track_figures import (
     natural_key,
 )
 from figure_logger import save_figure
+from ri_calibration import load_calibration, parse_media_schedule
 
 
 def series_to_npz_dict(
@@ -46,6 +47,8 @@ def series_to_npz_dict(
         out[f"volume_um3_rod_{i}"] = df["volume_um3_rod"].to_numpy(dtype=np.float64)
         out[f"mean_ri_{i}"] = df["mean_ri"].to_numpy(dtype=np.float64)
         out[f"mass_pg_{i}"] = df["mass_pg"].to_numpy(dtype=np.float64)
+        if "n_medium_used" in df.columns:
+            out[f"n_medium_used_{i}"] = df["n_medium_used"].to_numpy(dtype=np.float64)
     if time_interval_min is not None:
         out["time_interval_min"] = np.array(float(time_interval_min), dtype=np.float64)
     return out
@@ -67,14 +70,16 @@ def load_series_from_npz(path: Path) -> tuple[list[tuple[str, pd.DataFrame]], di
     for i in range(n):
         lab = z[f"label_{i}"]
         label = str(lab[0]) if getattr(lab, "shape", ()) else str(lab)
-        df = pd.DataFrame(
-            {
-                "frame_index": np.asarray(z[f"frame_index_{i}"], dtype=np.float64),
-                "volume_um3_rod": np.asarray(z[f"volume_um3_rod_{i}"], dtype=np.float64),
-                "mean_ri": np.asarray(z[f"mean_ri_{i}"], dtype=np.float64),
-                "mass_pg": np.asarray(z[f"mass_pg_{i}"], dtype=np.float64),
-            }
-        )
+        cols = {
+            "frame_index": np.asarray(z[f"frame_index_{i}"], dtype=np.float64),
+            "volume_um3_rod": np.asarray(z[f"volume_um3_rod_{i}"], dtype=np.float64),
+            "mean_ri": np.asarray(z[f"mean_ri_{i}"], dtype=np.float64),
+            "mass_pg": np.asarray(z[f"mass_pg_{i}"], dtype=np.float64),
+        }
+        key_nm = f"n_medium_used_{i}"
+        if key_nm in z.files:
+            cols["n_medium_used"] = np.asarray(z[key_nm], dtype=np.float64)
+        df = pd.DataFrame(cols)
         series.append((label, df))
     meta: dict[str, float] = {}
     if "time_interval_min" in z.files:
@@ -234,6 +239,9 @@ def collect_series(
             wavelength_nm=args.wavelength_nm,
             n_medium=args.n_medium,
             alpha_ri=args.alpha_ri,
+            media_schedule=getattr(args, "_media_schedule_parsed", None),
+            media_ri=getattr(args, "_media_ri", None),
+            n_milliq=getattr(args, "_n_milliq_resolved", None),
         )
         if not channel_has_volume_trace_data(summary_df):
             skipped.append((label, "no_volume_trace_data"))
@@ -282,6 +290,34 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--n-medium", type=float, default=1.333)
     p.add_argument("--alpha-ri", type=float, default=0.00018)
     p.add_argument(
+        "--ri-calibration",
+        type=Path,
+        default=None,
+        help=(
+            "Path to ri_calibration_results.json (append-history schema). "
+            "When set, n_medium is looked up per frame from --media-schedule, "
+            "and protein density uses MilliQ as baseline."
+        ),
+    )
+    p.add_argument(
+        "--calibration-id",
+        type=str,
+        default=None,
+        help="Specific calibration entry id; default uses the JSON's `active`.",
+    )
+    p.add_argument(
+        "--media-schedule",
+        type=str,
+        default=None,
+        help="Frame->medium step schedule, e.g. '0:wo_2,575:wo_0,1439:wo_2'.",
+    )
+    p.add_argument(
+        "--n-milliq",
+        type=float,
+        default=None,
+        help="Override MilliQ RI for protein density baseline (defaults to calibration's reference).",
+    )
+    p.add_argument(
         "--preset",
         choices=["manuscript", "presentation", "qc"],
         default="manuscript",
@@ -327,6 +363,37 @@ def main() -> int:
         return 1
 
     apply_style(args.preset)
+
+    # Resolve RI calibration / per-frame n_medium / MilliQ baseline.
+    args._media_schedule_parsed = None
+    args._media_ri = None
+    args._n_milliq_resolved = args.n_milliq
+    args._calibration_id_used = None
+    if args.ri_calibration is not None:
+        cal = load_calibration(args.ri_calibration, args.calibration_id)
+        args._media_ri = cal.media
+        args._calibration_id_used = cal.calibration_id
+        if args._n_milliq_resolved is None:
+            args._n_milliq_resolved = cal.n_miliq
+        if not args.media_schedule:
+            print(
+                "[batch_volume_trace_overlay] error: --media-schedule is required "
+                "when --ri-calibration is set (e.g. '0:wo_2,575:wo_0,1439:wo_2')"
+            )
+            return 1
+        args._media_schedule_parsed = parse_media_schedule(args.media_schedule)
+        print(
+            f"[batch_volume_trace_overlay] calibration: {cal.calibration_id}"
+            f" ({cal.calibrated_at})"
+        )
+        print(f"[batch_volume_trace_overlay] media RI: {cal.media}")
+        print(f"[batch_volume_trace_overlay] schedule: {args._media_schedule_parsed}")
+        print(f"[batch_volume_trace_overlay] n_milliq for protein density: {args._n_milliq_resolved}")
+    elif args.media_schedule:
+        print(
+            "[batch_volume_trace_overlay] error: --media-schedule given without --ri-calibration"
+        )
+        return 1
 
     if args.from_npz is not None:
         npz_path = args.from_npz.expanduser().resolve()
@@ -409,6 +476,13 @@ def main() -> int:
             "mass_ylim": list(plot_ns.mass_ylim),
             "vline_frames": vline_frames,
             "time_interval_min": args.time_interval_min,
+            "n_medium_default": args.n_medium,
+            "alpha_ri": args.alpha_ri,
+            "ri_calibration": str(args.ri_calibration) if args.ri_calibration else None,
+            "calibration_id": args._calibration_id_used,
+            "media_schedule": args.media_schedule,
+            "media_ri": args._media_ri,
+            "n_milliq": args._n_milliq_resolved,
         }
         if args.from_npz is not None:
             params["source_npz"] = str(args.from_npz.expanduser().resolve())

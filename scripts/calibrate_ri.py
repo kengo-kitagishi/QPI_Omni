@@ -38,12 +38,19 @@ Theory:
 import numpy as np
 import tifffile
 import json
+import math
+import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from optical_config import WAVELENGTH
 from ecc_utils import apply_2pi_tilt_crop, extract_rect_roi
+
+
+# Optional: free-form note attached to this calibration entry. Edit before running.
+CALIBRATION_NOTES = ""
 
 # ============================================================
 # Configuration
@@ -87,6 +94,56 @@ SKIP_EDGE_CHANNELS = True  # exclude first and last channel (Y-direction boundar
 GRID_0PER_DIR = None
 
 # ============================================================
+
+
+def _git_commit_short() -> str | None:
+    """Return short git SHA of the current HEAD (with -dirty suffix), or None."""
+    try:
+        sha = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(Path(__file__).resolve().parent),
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(Path(__file__).resolve().parent),
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        return f"{sha}-dirty" if dirty else sha
+    except Exception:
+        return None
+
+
+def _load_history(path: Path) -> dict:
+    """Load existing append-history JSON, migrating legacy single-entry if needed."""
+    if not path.exists():
+        return {"schema_version": "1.0", "active": None, "calibrations": []}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        # Corrupt or empty -- back it up and start fresh.
+        backup = path.with_suffix(path.suffix + f".bak_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        path.replace(backup)
+        print(f"  WARNING: existing JSON unreadable ({e}); backed up to {backup.name}")
+        return {"schema_version": "1.0", "active": None, "calibrations": []}
+
+    if "calibrations" in data:
+        data.setdefault("schema_version", "1.0")
+        data.setdefault("active", None)
+        data.setdefault("calibrations", [])
+        return data
+
+    # Legacy single-entry format -- wrap it
+    legacy_entry = dict(data)
+    legacy_entry.setdefault("calibration_id", "legacy_pre_history")
+    legacy_entry.setdefault("calibrated_at", "")
+    legacy_entry.setdefault("notes", "auto-migrated from single-entry schema")
+    print("  Migrating legacy single-entry JSON to append-history schema")
+    return {
+        "schema_version": "1.0",
+        "active": legacy_entry["calibration_id"],
+        "calibrations": [legacy_entry],
+    }
 
 
 def _fit_right(pos_num):
@@ -394,6 +451,7 @@ def main():
 
     # --- 0per glucose RI (optional) ---
     n_0per = None
+    total_0per = None
     delta_0per_details = None
     if GRID_0PER_DIR and Path(GRID_0PER_DIR).exists():
         print("\n--- Computing n_0per from 0% glucose grid ---")
@@ -405,38 +463,92 @@ def main():
         print(f"  Delta n (2per - 0per) = {n_2per - n_0per:.6f}")
 
     # ============================================================
-    # Save results JSON
+    # Save results JSON (append-history schema)
     # ============================================================
-    results = {
-        "n_2per": n_2per,
-        "n_0per": n_0per,
-        "n_miliq_ref": N_MILIQ,
-        "n_etoh_ref": N_ETOH,
-        "total_miliq_sum": total_miliq,
-        "total_etoh_sum": total_etoh,
-        "total_mask_pixels": total_mask_pixels,
-        "V_total": V_total,
-        "crop_w": CROP_W,
-        "tilt_crop_h": TILT_CROP_H,
-        "output_crop_h": OUTPUT_CROP_H,
-        "mask_threshold": MASK_THRESHOLD,
-        "delta_z": DELTA_Z,
-        "wavelength_m": WAVELENGTH,
-        "grid_2per_dir": str(GRID_2PER_DIR),
-        "miliq_session": str(MILIQ_SESSION),
-        "etoh_session": str(ETOH_SESSION),
-        "delta_subdir": DELTA_SUBDIR,
-        "grid_0per_dir": str(GRID_0PER_DIR) if GRID_0PER_DIR else None,
-        "pos_numbers": POS_NUMBERS,
+    out_json = Path(GRID_2PER_DIR) / "ri_calibration_results.json"
+
+    # Build the new entry
+    now_local = datetime.now(timezone.utc).astimezone()
+    timestamp_iso = now_local.isoformat(timespec="seconds")
+    timestamp_id = now_local.strftime("%Y%m%dT%H%M%S")
+    session_label = Path(MILIQ_SESSION).name or "session"
+    calibration_id = f"{session_label}_{timestamp_id}"
+
+    media: dict = {
+        "wo_milliq": float(N_MILIQ),
+        "wo_2": float(n_2per),
+        "wo_etoh": float(N_ETOH),
+    }
+    if n_0per is not None:
+        media["wo_0"] = float(n_0per)
+
+    # Channel depth (µm) from V_total: d = V_total * λ / (2π · N_mask_pixels)
+    if total_mask_pixels > 0:
+        wavelength_um = float(WAVELENGTH) * 1e6  # m → µm
+        channel_depth_um = float(V_total) * wavelength_um / (
+            2.0 * math.pi * float(total_mask_pixels)
+        )
+    else:
+        channel_depth_um = None
+
+    entry = {
+        "calibration_id": calibration_id,
+        "calibrated_at": timestamp_iso,
+        "session": session_label,
+        "method": "two-point (MilliQ + EtOH)",
+        "wavelength_nm": float(WAVELENGTH) * 1e9,
+        "git_commit": _git_commit_short(),
+        "reference": {
+            "n_miliq": float(N_MILIQ),
+            "n_etoh": float(N_ETOH),
+            "source": "literature @658nm 25C (verify)",
+        },
+        "media": media,
+        "raw": {
+            "S_miliq_rad_px": float(total_miliq),
+            "S_etoh_rad_px": float(total_etoh),
+            "S_0per_rad_px": float(total_0per) if total_0per is not None else None,
+            "V_total_rad_px": float(V_total),
+            "n_mask_pixels": int(total_mask_pixels),
+        },
+        "exclusions": {
+            "skip_edge_channels": bool(SKIP_EDGE_CHANNELS),
+            "excluded_pos": [],
+        },
+        "channel_depth_um": channel_depth_um,
+        "config": {
+            "grid_2per_dir": str(GRID_2PER_DIR),
+            "miliq_session": str(MILIQ_SESSION),
+            "etoh_session": str(ETOH_SESSION),
+            "miliq_delta_subdir": MILIQ_DELTA_SUBDIR,
+            "etoh_delta_subdir": ETOH_DELTA_SUBDIR,
+            "delta_subdir": DELTA_SUBDIR,
+            "grid_0per_dir": str(GRID_0PER_DIR) if GRID_0PER_DIR else None,
+            "delta_z": DELTA_Z,
+            "crop_w": CROP_W,
+            "tilt_crop_h": TILT_CROP_H,
+            "output_crop_h": OUTPUT_CROP_H,
+            "mask_threshold": MASK_THRESHOLD,
+            "pos_numbers": list(POS_NUMBERS),
+            "pos_split": POS_SPLIT,
+        },
         "per_pos": per_pos_results,
         "delta_0per": delta_0per_details,
+        "notes": CALIBRATION_NOTES,
     }
 
-    out_json = Path(GRID_2PER_DIR) / "ri_calibration_results.json"
+    history = _load_history(out_json)
+    history["calibrations"].append(entry)
+    history["active"] = calibration_id
+
     out_json.write_text(
-        json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8",
+        json.dumps(history, indent=2, ensure_ascii=False), encoding="utf-8",
     )
     print(f"\nResults JSON: {out_json}")
+    print(f"  calibration_id: {calibration_id}")
+    print(f"  total entries: {len(history['calibrations'])}")
+    if channel_depth_um is not None:
+        print(f"  channel depth: {channel_depth_um:.3f} µm")
 
     # ============================================================
     # Diagnostic figure
