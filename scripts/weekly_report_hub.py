@@ -1017,15 +1017,19 @@ def run(args: argparse.Namespace) -> int:
         for lb in lib_entries:
             libs_by_date.setdefault(lb["date"], []).append(lb)
 
-        all_dates_set = set(
-            list(sessions_by_date) + list(figures_by_date) +
-            list(notions_by_date) + list(libs_by_date)
-        )
-        # Always generate today's daily_index even if there is no activity (for daily log generation)
+        # Regenerate daily_index for every day in the target week up to today.
+        # Late-arriving Drive data (Windows PC -> Drive -> Mac sync delay) can populate
+        # the DB days after the original cron run; without unconditional regeneration,
+        # those past-day daily_index files would stay frozen as the empty stubs created
+        # on their original day.
         today_str = datetime.now(JST).date().strftime("%Y-%m-%d")
-        if monday.strftime("%Y-%m-%d") <= today_str <= sunday.strftime("%Y-%m-%d"):
-            all_dates_set.add(today_str)
-        all_dates = sorted(all_dates_set)
+        all_dates: list[str] = []
+        d_iter = monday
+        while d_iter <= sunday:
+            d_str = d_iter.strftime("%Y-%m-%d")
+            if d_str <= today_str:
+                all_dates.append(d_str)
+            d_iter = d_iter + timedelta(days=1)
 
         # Generate daily index files
         daily_files: list[tuple[str, str]] = []

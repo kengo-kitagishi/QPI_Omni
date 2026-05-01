@@ -31,6 +31,7 @@ import shutil
 import subprocess
 import sys
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta, timezone
 from pathlib import Path
 
@@ -53,6 +54,11 @@ STYLE_FILES = [
 
 DEFAULT_MODEL = "claude-opus-4-6"
 JST = timezone(timedelta(hours=9))
+
+# Map-reduce settings
+MAX_TOKENS_SINGLE = 150_000   # above this, switch to map-reduce
+MAX_TOKENS_PER_CHUNK = 120_000  # target size per map chunk
+MAX_MAP_WORKERS = 3
 
 # ────────────────────────────────────────────
 # System prompt (multi-file output mode)
@@ -113,6 +119,62 @@ SYSTEM_PROMPT_MULTI = """\
 """
 
 # ────────────────────────────────────────────
+# System prompt (map phase — per-chunk draft)
+# ────────────────────────────────────────────
+
+SYSTEM_PROMPT_MAP = """\
+あなたは研究者のアシスタントです。
+日次索引の一部（セッション群）が与えられます。
+このチャンク内のセッションを読み、以下の形式でドラフトを出力してください。
+
+## 出力ルール
+- トピック（内容）単位でまとめる。セッションIDで区切らない
+- 「仮説→試行→観察→判断→次の試行」の思考フロー形式で書く
+- 「背景→設計→実装→結果」の報告書形式にしない
+- 図は ![[ファイル名]] 形式で全件埋め込み、パラメータ表を付ける
+- 定量的に書く。推測禁止
+- 最低 3000 日本語文字/トピック
+- 他のテキストは出力しないこと。ドラフト本文のみ出力する
+"""
+
+# ────────────────────────────────────────────
+# System prompt (reduce phase — merge drafts)
+# ────────────────────────────────────────────
+
+SYSTEM_PROMPT_REDUCE = """\
+あなたは研究者のアシスタントです。
+複数のドラフト（同じ日の異なるセッション群から生成）と図一覧が与えられます。
+これらを統合して、スタイルガイドに従った日次ログを作成してください。
+
+## 出力形式（厳守）
+
+**複数ファイルを以下のマーカーで区切って出力してください。他のテキストは出力しないこと。**
+
+<<FILE: ファイル名.md>>
+ファイルの内容
+<<ENDFILE>>
+
+## ファイル構成
+
+### ハブページ（YYYY-MM-DD.md）
+- トピックへのリンク一覧（`[[YYYY-MM-DD_トピック名]]` 形式）
+- 各リンクに一行説明
+
+### トピックページ（YYYY-MM-DD_トピック名.md）
+- 先頭に必ず `> [[YYYY-MM-DD]] に戻る`
+- 「仮説→試行→観察→判断→次の試行」の思考フロー形式
+- **最低 5000 日本語文字**
+- 図は全件埋め込み、パラメータ表付き
+
+## 統合ルール
+- 同じトピックが複数ドラフトにまたがる場合は1つに統合する
+- ドラフト間の重複を排除する
+- 因果の流れが途切れないようにする
+- 図は全件残す（選別禁止）
+- タスクリスト形式にしない
+"""
+
+# ────────────────────────────────────────────
 # System prompt (single file mode, backward compatibility)
 # ────────────────────────────────────────────
 
@@ -166,6 +228,72 @@ def parse_multi_file_output(text: str) -> dict[str, str]:
     """Parse <<FILE: name.md>> ... <<ENDFILE>> blocks and return {filename: content}."""
     pattern = re.compile(r'<<FILE:\s*(.+?)\s*>>\n(.*?)<<ENDFILE>>', re.DOTALL)
     return {m.group(1).strip(): m.group(2).rstrip('\n') for m in pattern.finditer(text)}
+
+
+def parse_figures_section(figures_section: str) -> list[tuple[str, str]]:
+    """Parse '## Figures' section into [(image_filename, full_block), ...].
+
+    Each block starts with '#### [fig]' and contains a '![[filename]]' reference
+    plus parameter table. We key by the filename so we can detect when the LLM
+    dropped a figure from its output.
+    """
+    if not figures_section or not figures_section.strip():
+        return []
+    blocks = re.split(r'\n(?=#### \[fig\])', figures_section)
+    results: list[tuple[str, str]] = []
+    for block in blocks:
+        if not block.lstrip().startswith("#### [fig]"):
+            continue
+        m = re.search(r'!\[\[([^\]]+)\]\]', block)
+        if not m:
+            continue
+        fname = m.group(1).strip()
+        results.append((fname, block.strip()))
+    return results
+
+
+def ensure_figures_preserved(
+    files: dict[str, str],
+    figures_section: str,
+    target_date: str,
+) -> dict[str, str]:
+    """Guarantee every figure in figures_section appears somewhere in the output.
+
+    Map-reduce LLM output tends to drop figures when the figures list is large
+    (e.g. 50+) because models summarize rather than copy verbatim. We scan the
+    saved output for each figure's filename; any figure not referenced in any
+    file is appended as-is to the hub page under a recovery section.
+    """
+    figures = parse_figures_section(figures_section)
+    if not figures:
+        return files
+
+    all_content = "\n".join(files.values())
+    missing = [(fn, block) for fn, block in figures if fn not in all_content]
+    if not missing:
+        print(f"  Figure safety net: all {len(figures)} figures preserved by LLM", file=sys.stderr)
+        return files
+
+    hub_name = f"{target_date}.md"
+    hub_content = files.get(hub_name, f"# {target_date}\n")
+    appendix_parts = [
+        hub_content.rstrip(),
+        "",
+        "",
+        "## 当日の図（自動補完）",
+        "",
+        f"> LLM が topic ページに配置しなかった図 {len(missing)}/{len(figures)} 件を補完しました。",
+        "",
+    ]
+    appendix_parts.extend(
+        block + "\n\n---" for _, block in missing
+    )
+    files[hub_name] = "\n".join(appendix_parts).rstrip() + "\n"
+    print(
+        f"  Figure safety net: {len(missing)}/{len(figures)} missing figures appended to {hub_name}",
+        file=sys.stderr,
+    )
+    return files
 
 
 # ────────────────────────────────────────────
@@ -339,6 +467,223 @@ def _call_with_fallback(
 
 
 
+def _is_prompt_too_long(output: str, stderr: str) -> bool:
+    """Check if the error is 'Prompt is too long'."""
+    combined = (output + "\n" + stderr).lower()
+    return "prompt is too long" in combined
+
+
+# ────────────────────────────────────────────
+# Map-reduce helpers
+# ────────────────────────────────────────────
+
+def estimate_tokens(text: str) -> int:
+    """Rough token estimate for mixed Japanese/English text."""
+    return len(text) // 3
+
+
+def split_index_by_session(index_text: str) -> tuple[str, list[tuple[str, str]], str]:
+    """Split daily_index into (header, [(session_id, session_text), ...], figures_section).
+
+    header = everything before first session
+    figures_section = everything from '## Figures' onward (shared across chunks)
+    """
+    lines = index_text.split('\n')
+
+    # Find session boundaries
+    session_starts: list[tuple[int, str]] = []
+    figures_start = len(lines)
+
+    for i, line in enumerate(lines):
+        if line.startswith("#### Session `"):
+            sid = line.split('`')[1] if '`' in line else f"s{i}"
+            session_starts.append((i, sid))
+        elif line.startswith("## Figures"):
+            figures_start = i
+            break
+
+    if not session_starts:
+        return index_text, [], ""
+
+    header = '\n'.join(lines[:session_starts[0][0]])
+    figures_section = '\n'.join(lines[figures_start:]) if figures_start < len(lines) else ""
+
+    sessions = []
+    for idx, (start, sid) in enumerate(session_starts):
+        if idx + 1 < len(session_starts):
+            end = session_starts[idx + 1][0]
+        else:
+            end = figures_start
+        session_text = '\n'.join(lines[start:end])
+        sessions.append((sid, session_text))
+
+    return header, sessions, figures_section
+
+
+def group_chunks(
+    sessions: list[tuple[str, str]],
+    header: str,
+    figures_section: str,
+    max_tokens: int = MAX_TOKENS_PER_CHUNK,
+) -> list[str]:
+    """Group sessions into chunks that fit within max_tokens.
+
+    Each chunk includes: header + grouped sessions.
+    Figures section is NOT included in map chunks (passed separately in reduce).
+    """
+    header_tokens = estimate_tokens(header)
+    chunks: list[str] = []
+    current_sessions: list[str] = []
+    current_tokens = header_tokens
+
+    for sid, session_text in sessions:
+        session_tokens = estimate_tokens(session_text)
+
+        if current_sessions and current_tokens + session_tokens > max_tokens:
+            # Flush current chunk
+            chunks.append(header + '\n\n' + '\n\n'.join(current_sessions))
+            current_sessions = []
+            current_tokens = header_tokens
+
+        current_sessions.append(session_text)
+        current_tokens += session_tokens
+
+    if current_sessions:
+        chunks.append(header + '\n\n' + '\n\n'.join(current_sessions))
+
+    return chunks
+
+
+def _map_one_chunk(
+    chunk_idx: int,
+    chunk_text: str,
+    style_text: str,
+    target_date: str,
+    detected: str,
+    model: str,
+) -> tuple[int, str, str]:
+    """Process a single chunk (map phase). Returns (chunk_idx, draft, error)."""
+    user_prompt = f"""\
+# 対象日: {target_date}
+
+# スタイルガイド（日次ログの書き方）
+{style_text}
+
+---
+
+# 日次索引（チャンク {chunk_idx + 1}）
+{chunk_text}
+
+---
+
+上記のスタイルガイドに従って、このチャンクに含まれるセッションのドラフトを日本語で作成してください。
+"""
+    print(f"  [map chunk {chunk_idx + 1}] ~{estimate_tokens(user_prompt):,} tokens", file=sys.stderr)
+    output, rc, stderr = _call_with_fallback(detected, SYSTEM_PROMPT_MAP, user_prompt, model)
+    if rc != 0:
+        return chunk_idx, "", f"chunk {chunk_idx + 1} failed: {stderr[-500:]}"
+    return chunk_idx, output, ""
+
+
+def map_reduce_generate(
+    index_text: str,
+    style_text: str,
+    target_date: str,
+    detected: str,
+    model: str,
+) -> tuple[str, int, str]:
+    """Map-reduce generation for large daily indexes.
+
+    1. Split index by session
+    2. Group into chunks
+    3. Run map phase in parallel (each chunk → draft)
+    4. Run reduce phase (combine drafts + figures → final output)
+
+    Returns (output, returncode, stderr) like _call_with_fallback.
+    """
+    header, sessions, figures_section = split_index_by_session(index_text)
+
+    if not sessions:
+        return "", 1, "No sessions found in index"
+
+    chunks = group_chunks(sessions, header, figures_section)
+    n_chunks = len(chunks)
+
+    print(f"\n  Map-reduce: {len(sessions)} sessions → {n_chunks} chunks", file=sys.stderr)
+    for i, c in enumerate(chunks):
+        print(f"    chunk {i + 1}: ~{estimate_tokens(c):,} tokens", file=sys.stderr)
+
+    # ── Map phase: parallel ──
+    drafts: dict[int, str] = {}
+    errors: list[str] = []
+
+    workers = min(MAX_MAP_WORKERS, n_chunks)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(_map_one_chunk, i, chunk, style_text, target_date, detected, model): i
+            for i, chunk in enumerate(chunks)
+        }
+        for future in as_completed(futures):
+            idx, draft, err = future.result()
+            if err:
+                errors.append(err)
+                print(f"  [map chunk {idx + 1}] ERROR: {err}", file=sys.stderr)
+            else:
+                drafts[idx] = draft
+                print(f"  [map chunk {idx + 1}] OK ({len(draft):,} chars)", file=sys.stderr)
+
+    if not drafts:
+        return "", 1, f"All map chunks failed: {'; '.join(errors)}"
+
+    # ── Reduce phase: single call ──
+    ordered_drafts = [drafts[i] for i in sorted(drafts.keys())]
+    combined = '\n\n---\n\n'.join(
+        f"# ドラフト {i + 1}/{len(ordered_drafts)}\n\n{d}"
+        for i, d in enumerate(ordered_drafts)
+    )
+
+    # Use a compact figure index (filename + heading only) in the reduce prompt
+    # rather than the full figures_section with 50+ parameter tables. The full
+    # tables are appended by the post-processing safety net
+    # (ensure_figures_preserved), so the LLM only needs filenames to decide
+    # which topic a figure belongs to.
+    compact_figures = "\n".join(
+        f"- `![[{fn}]]`"
+        for fn, _ in parse_figures_section(figures_section)
+    ) or "(no figures)"
+
+    reduce_prompt = f"""\
+# 対象日: {target_date}
+
+# スタイルガイド
+{style_text}
+
+---
+
+# ドラフト（{len(ordered_drafts)}チャンクから生成）
+
+{combined}
+
+---
+
+# 当日の図一覧（ファイル名のみ・詳細は後処理で追加）
+
+{compact_figures}
+
+---
+
+上記のドラフトと図一覧を統合して、{target_date} の日次ログを作成してください。
+関連するトピックページに `![[filename]]` の形で図を埋め込んでください。
+ドラフトに出てこない図も、関連する topic にできるだけ配置してください
+（配置できなかったものはスクリプトが自動的にハブページに追記します）。
+"""
+    reduce_tokens = estimate_tokens(reduce_prompt)
+    print(f"\n  Reduce phase: ~{reduce_tokens:,} tokens", file=sys.stderr)
+
+    output, rc, stderr = _call_with_fallback(detected, SYSTEM_PROMPT_REDUCE, reduce_prompt, model)
+    return output, rc, stderr
+
+
 # exit code 2 = empty index (retrying is pointless)
 EXIT_EMPTY_INDEX = 2
 
@@ -373,37 +718,31 @@ def _load_inputs(target_date: str) -> tuple[str, str] | None:
     return index_text, style_text
 
 
-def generate_multi_file(target_date: str, model: str, overwrite: bool, backend: str = "auto") -> int:
-    """Multi-file output mode (hub page + topic pages)."""
-    detected, reason = detect_backend(backend)
-    if detected == "none":
-        print(f"ERROR: {reason}")
-        return 1
-    print(f"Backend: {detected} ({reason})")
+def _save_multi_files(
+    output: str,
+    target_date: str,
+    overwrite: bool,
+    figures_section: str = "",
+) -> int:
+    """Parse <<FILE:...>><<ENDFILE>> output and save files. Returns exit code.
 
-    result = _load_inputs(target_date)
-    if result is None:
-        return 1
-    index_text, style_text = result
-
-    user_prompt = build_user_prompt(target_date, style_text, index_text)
-    print(f"Model: {model} | Input: ~{len(user_prompt):,} chars")
-    print("Generating (multi-file mode)...")
-
-    output, returncode, stderr = _call_with_fallback(detected, SYSTEM_PROMPT_MULTI, user_prompt, model)
-    if returncode != 0:
-        print(f"ERROR: Model call failed:\n{stderr[-2000:]}")
-        return 1
-
+    When figures_section is provided, ensure_figures_preserved is applied so
+    that any figures dropped by the LLM are recovered onto the hub page.
+    """
     files = parse_multi_file_output(output)
     if not files:
         # Fallback: save as single file if parsing failed
         print("WARNING: No <<FILE:...>><<ENDFILE>> blocks found. Saving as single file.")
         out_path = DAILY_LOG_DIR / f"{target_date}.md"
         DAILY_LOG_DIR.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(output, encoding="utf-8")
-        print(f"Saved: {out_path} ({len(output.splitlines()):,} lines)")
+        combined = output
+        if figures_section.strip():
+            combined = combined.rstrip() + "\n\n## 当日の図（自動補完）\n\n" + figures_section
+        out_path.write_text(combined, encoding="utf-8")
+        print(f"Saved: {out_path} ({len(combined.splitlines()):,} lines)")
         return 0
+
+    files = ensure_figures_preserved(files, figures_section, target_date)
 
     DAILY_LOG_DIR.mkdir(parents=True, exist_ok=True)
     saved = []
@@ -422,6 +761,56 @@ def generate_multi_file(target_date: str, model: str, overwrite: bool, backend: 
     for fname, lines, chars in saved:
         print(f"  ~/Documents/Obsidian Vault/01_Daily/{fname}")
     return 0
+
+
+def generate_multi_file(target_date: str, model: str, overwrite: bool, backend: str = "auto") -> int:
+    """Multi-file output mode (hub page + topic pages).
+
+    Tries single-call first. If the prompt is too long, falls back to
+    map-reduce (split by session, parallel map, single reduce).
+    """
+    detected, reason = detect_backend(backend)
+    if detected == "none":
+        print(f"ERROR: {reason}")
+        return 1
+    print(f"Backend: {detected} ({reason})")
+
+    result = _load_inputs(target_date)
+    if result is None:
+        return 1
+    index_text, style_text = result
+
+    # Extract figures section up front so we can pass it to the safety net
+    # regardless of which generation path runs.
+    _, _, figures_section = split_index_by_session(index_text)
+
+    user_prompt = build_user_prompt(target_date, style_text, index_text)
+    prompt_tokens = estimate_tokens(user_prompt)
+    print(f"Model: {model} | Input: ~{len(user_prompt):,} chars (~{prompt_tokens:,} tokens)")
+
+    use_map_reduce = prompt_tokens > MAX_TOKENS_SINGLE
+
+    if not use_map_reduce:
+        print("Generating (single-call mode)...")
+        output, returncode, stderr = _call_with_fallback(detected, SYSTEM_PROMPT_MULTI, user_prompt, model)
+
+        if returncode != 0 and _is_prompt_too_long(output, stderr):
+            print("  Prompt too long for single call — switching to map-reduce", file=sys.stderr)
+            use_map_reduce = True
+        elif returncode != 0:
+            print(f"ERROR: Model call failed:\n{stderr[-2000:]}")
+            return 1
+
+    if use_map_reduce:
+        print("Generating (map-reduce mode)...")
+        output, returncode, stderr = map_reduce_generate(
+            index_text, style_text, target_date, detected, model
+        )
+        if returncode != 0:
+            print(f"ERROR: Map-reduce failed:\n{stderr[-2000:]}")
+            return 1
+
+    return _save_multi_files(output, target_date, overwrite, figures_section)
 
 
 def generate_single_file(target_date: str, model: str, overwrite: bool, backend: str = "auto") -> int:
