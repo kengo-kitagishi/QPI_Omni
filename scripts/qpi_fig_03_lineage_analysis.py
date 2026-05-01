@@ -34,6 +34,8 @@ import glob
 import os
 import sys
 
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -1099,7 +1101,6 @@ def main():
     fig11_interval_homeostasis(per_cell_cycles)
 
     print("\nDone.")
-    plt.show()
 
 
 if __name__ == "__main__":
