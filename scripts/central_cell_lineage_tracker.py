@@ -49,6 +49,11 @@ import tifffile
 from skimage import measure
 
 from figure_logger import save_figure
+from ri_calibration import (
+    load_calibration,
+    n_medium_at_frame,
+    parse_media_schedule,
+)
 
 # ----- Okabe-Ito palette (colorblind-safe) -----
 OKABE_ITO = [
@@ -98,6 +103,7 @@ class FrameData:
     volume_um3_rod: float = np.nan
     mean_ri: float = np.nan
     mass_pg: float = np.nan
+    n_medium_used: float = np.nan
     is_outlier: bool = False
 
 
@@ -182,6 +188,7 @@ def calc_rod_volume_um3(major_px: float, minor_px: float, pixel_size_um: float) 
 def calc_optical_metrics(
     total_phase: float, volume_um3: float, pixel_size_um: float,
     wavelength_nm: float, n_medium: float, alpha_ri: float,
+    n_protein_basis: float | None = None,
 ) -> tuple[float, float, float]:
     if not (np.isfinite(total_phase) and np.isfinite(volume_um3) and volume_um3 > 0 and pixel_size_um > 0):
         return np.nan, np.nan, np.nan
@@ -190,7 +197,8 @@ def calc_optical_metrics(
     mean_ri = n_medium + (total_phase * wl_um * px_area) / (2.0 * np.pi * volume_um3)
     if not np.isfinite(mean_ri):
         return np.nan, np.nan, np.nan
-    conc = (mean_ri - n_medium) / alpha_ri if alpha_ri > 0 else np.nan
+    basis = float(n_protein_basis) if n_protein_basis is not None else float(n_medium)
+    conc = (mean_ri - basis) / alpha_ri if alpha_ri > 0 else np.nan
     mass = conc * volume_um3 * 1e-3 if np.isfinite(conc) else np.nan
     return float(mean_ri), float(conc), float(mass)
 
@@ -386,12 +394,32 @@ def apply_outlier_detection(state: LineageState) -> None:
 def compute_metrics_for_all(
     state: LineageState,
     pixel_size_um: float, wavelength_nm: float, n_medium: float, alpha_ri: float,
+    media_schedule: list[tuple[int, str]] | None = None,
+    media_ri: dict[str, float] | None = None,
+    n_milliq: float | None = None,
 ) -> None:
+    """Compute volume/mean_RI/mass for every frame.
+
+    Frame-dependent medium RI: when `media_schedule` + `media_ri` are provided,
+    n_medium for each frame is looked up from the schedule. Otherwise the scalar
+    `n_medium` is used for every frame (legacy behavior).
+
+    Protein basis: when `n_milliq` is given, mass uses MilliQ as the baseline so
+    a step in medium RI doesn't show up as a step in dry mass. Otherwise the
+    per-frame n_medium is the basis (legacy behavior).
+    """
+    use_schedule = bool(media_schedule) and bool(media_ri)
     for cell in state.cells.values():
         for f in cell.frames:
             f.volume_um3_rod = calc_rod_volume_um3(f.major_axis_px, f.minor_axis_px, pixel_size_um)
+            nm_f = (
+                n_medium_at_frame(int(f.frame), media_schedule, media_ri)
+                if use_schedule else float(n_medium)
+            )
+            f.n_medium_used = nm_f
             ri, _conc, mass = calc_optical_metrics(
-                f.total_phase, f.volume_um3_rod, pixel_size_um, wavelength_nm, n_medium, alpha_ri,
+                f.total_phase, f.volume_um3_rod, pixel_size_um, wavelength_nm,
+                nm_f, alpha_ri, n_protein_basis=n_milliq,
             )
             f.mean_ri = ri
             f.mass_pg = mass
@@ -404,9 +432,11 @@ def build_long_table(
     state: LineageState,
     time_interval_min: Optional[float],
     pixel_size_um: float,
+    n_milliq: float | None = None,
 ) -> pd.DataFrame:
     """Per-frame long table (data3D style). Outlier frames mask out volume/RI/mass to NaN."""
     rows = []
+    n_milliq_val = float(n_milliq) if n_milliq is not None else np.nan
     for cid, cell in state.cells.items():
         for f in cell.frames:
             t_h = f.frame * (time_interval_min / 60.0) if time_interval_min else np.nan
@@ -433,6 +463,8 @@ def build_long_table(
                 "volume_um3_rod": v,
                 "mean_ri": ri,
                 "mass_pg": mass,
+                "n_medium_used": f.n_medium_used,
+                "n_milliq_used": n_milliq_val,
                 "is_outlier": f.is_outlier,
                 "touches_border": f.touches_border,
             })
@@ -534,6 +566,8 @@ def build_clist_table(
             "mean_ri_death": _ri_of(f_death),
             "mass_birth_pg": _mass_of(f_birth),
             "mass_death_pg": _mass_of(f_death),
+            "n_medium_birth": float(f_birth.n_medium_used),
+            "n_medium_death": float(f_death.n_medium_used),
 
             "x_pos_birth_px": f_birth.centroid_x,
             "y_pos_birth_px": f_birth.centroid_y,
@@ -762,7 +796,39 @@ def plot_lineage_tree(state: LineageState, time_interval_min: Optional[float]) -
     return fig
 
 
-def plot_timeseries_by_lineage(state: LineageState, time_interval_min: Optional[float]) -> plt.Figure:
+def _auto_mean_ri_ylim(
+    state: LineageState,
+    extra_values: Optional[list[float]] = None,
+) -> tuple[float, float]:
+    """Pick a mean_RI ylim from observed values (and optionally media RI levels).
+
+    Falls back to the legacy MEAN_RI_YLIM if no finite samples exist.
+    """
+    vals: list[float] = []
+    for cell in state.cells.values():
+        if not cell.in_tree:
+            continue
+        for f in cell.frames:
+            if f.is_outlier or f.touches_border:
+                continue
+            if np.isfinite(f.mean_ri):
+                vals.append(float(f.mean_ri))
+    if extra_values:
+        vals.extend(float(v) for v in extra_values if np.isfinite(v))
+    if not vals:
+        return MEAN_RI_YLIM
+    lo = float(np.nanmin(vals))
+    hi = float(np.nanmax(vals))
+    pad = max(0.001, (hi - lo) * 0.08)
+    return lo - pad, hi + pad
+
+
+def plot_timeseries_by_lineage(
+    state: LineageState,
+    time_interval_min: Optional[float],
+    media_schedule: Optional[list[tuple[int, str]]] = None,
+    media_ri: Optional[dict[str, float]] = None,
+) -> plt.Figure:
     fig, axes = plt.subplots(2, 1, figsize=(7.2, 4.5), sharex=True)  # two-column ~183mm
     to_hours = (lambda f: f * (time_interval_min / 60.0)) if time_interval_min else (lambda f: float(f))
 
@@ -795,9 +861,30 @@ def plot_timeseries_by_lineage(state: LineageState, time_interval_min: Optional[
     axes[0].set_ylabel(r"volume [µm$^3$]")
     axes[1].set_ylabel("mean RI")
     axes[1].set_xlabel("time [h]" if time_interval_min else "frame")
-    # fixed y-range so channels can be compared side by side
+    # volume range stays fixed for cross-channel comparison; mean_RI auto-scales
+    # because frame-dependent n_medium can shift the absolute level by ~0.002–0.003.
     axes[0].set_ylim(VOLUME_YLIM)
-    axes[1].set_ylim(MEAN_RI_YLIM)
+    extra_levels = (
+        [media_ri[name] for _, name in (media_schedule or []) if name in (media_ri or {})]
+        if media_schedule and media_ri else None
+    )
+    axes[1].set_ylim(_auto_mean_ri_ylim(state, extra_levels))
+
+    # vertical markers at media-switch frames (skip the initial frame 0)
+    if media_schedule and media_ri:
+        for f_switch, name in media_schedule:
+            if f_switch <= 0:
+                continue
+            x = to_hours(f_switch)
+            for ax in axes:
+                ax.axvline(x, color="#888888", linestyle="--", linewidth=0.6, alpha=0.7, zorder=1)
+            label = f"{name} (n={media_ri.get(name, float('nan')):.4f})" if name in media_ri else name
+            axes[1].annotate(
+                label, xy=(x, 1.0), xycoords=("data", "axes fraction"),
+                xytext=(2, -2), textcoords="offset points",
+                ha="left", va="top", fontsize=6, color="#555555",
+            )
+
     for ax in axes:
         ax.spines["right"].set_visible(False)
         ax.spines["top"].set_visible(False)
@@ -823,6 +910,10 @@ def run(
     alpha_ri: float,
     min_area: int,
     max_frames: Optional[int],
+    ri_calibration: Optional[Path] = None,
+    calibration_id: Optional[str] = None,
+    media_schedule_str: Optional[str] = None,
+    n_milliq: Optional[float] = None,
 ) -> None:
     pairs = collect_frame_pairs(channel_dir)
     if max_frames is not None:
@@ -830,6 +921,36 @@ def run(
     if not pairs:
         raise RuntimeError(f"No mask files found in {channel_dir}/inference_out")
     print(f"[info] {len(pairs)} frames to process", file=sys.stderr)
+
+    # --- RI calibration / media schedule (optional) ---
+    media_schedule: Optional[list[tuple[int, str]]] = None
+    media_ri: Optional[dict[str, float]] = None
+    calibration_id_used: Optional[str] = None
+    n_milliq_used: Optional[float] = n_milliq
+    if ri_calibration is not None:
+        cal = load_calibration(ri_calibration, calibration_id)
+        media_ri = dict(cal.media)
+        calibration_id_used = cal.calibration_id
+        if n_milliq_used is None:
+            n_milliq_used = cal.n_miliq
+        if not media_schedule_str:
+            raise RuntimeError(
+                "--media-schedule is required when --ri-calibration is set "
+                "(e.g. '0:wo_2,575:wo_0,1439:wo_2')."
+            )
+        media_schedule = parse_media_schedule(media_schedule_str)
+        print(
+            f"[info] calibration: {cal.calibration_id} ({cal.calibrated_at})",
+            file=sys.stderr,
+        )
+        print(f"[info] media RI: {cal.media}", file=sys.stderr)
+        print(f"[info] schedule: {media_schedule}", file=sys.stderr)
+        print(f"[info] n_milliq for protein basis: {n_milliq_used}", file=sys.stderr)
+    elif media_schedule_str:
+        raise RuntimeError(
+            "--media-schedule was given without --ri-calibration; "
+            "schedule lookup needs the calibration JSON for media RI values."
+        )
 
     state = LineageState()
     rank_to_id_prev: list[int] = []
@@ -882,7 +1003,10 @@ def run(
         if cell.death_frame is None and cell.frames:
             cell.death_frame = cell.frames[-1].frame
 
-    compute_metrics_for_all(state, pixel_size_um, wavelength_nm, n_medium, alpha_ri)
+    compute_metrics_for_all(
+        state, pixel_size_um, wavelength_nm, n_medium, alpha_ri,
+        media_schedule=media_schedule, media_ri=media_ri, n_milliq=n_milliq_used,
+    )
     apply_outlier_detection(state)
 
     # === outputs ===
@@ -893,7 +1017,7 @@ def run(
     last_mask = load_label_image(pairs[-1][1])
     img_h, img_w = last_mask.shape
 
-    df_long = build_long_table(state, time_interval_min, pixel_size_um)
+    df_long = build_long_table(state, time_interval_min, pixel_size_um, n_milliq=n_milliq_used)
     long_path = out_dir / "lineage_data3D.csv"
     df_long.to_csv(long_path, index=False)
     print(f"[ok] wrote {long_path}  ({len(df_long)} rows)", file=sys.stderr)
@@ -931,7 +1055,18 @@ def run(
         "n_tree_cells": n_tree,
         "n_divisions": n_div,
         "n_outlier_frames": n_outlier,
+        "calibration_id": calibration_id_used,
+        "media_schedule": media_schedule_str,
+        "media_ri": media_ri,
+        "n_milliq": n_milliq_used,
     }
+
+    # also dump the calibration/schedule next to the CSVs so they are recoverable
+    # without depending on the figure sidecar JSONs.
+    run_meta_path = out_dir / "lineage_run_params.json"
+    with open(run_meta_path, "w") as f:
+        json.dump(params, f, indent=2, default=str)
+    print(f"[ok] wrote {run_meta_path}", file=sys.stderr)
 
     fig_tree = plot_lineage_tree(state, time_interval_min)
     save_figure(fig_tree, params=params,
@@ -939,7 +1074,10 @@ def run(
                 fmt="pdf")
     plt.close(fig_tree)
 
-    fig_ts = plot_timeseries_by_lineage(state, time_interval_min)
+    fig_ts = plot_timeseries_by_lineage(
+        state, time_interval_min,
+        media_schedule=media_schedule, media_ri=media_ri,
+    )
     save_figure(fig_ts, params=params,
                 description="per-lineage volume/mean-RI timeseries",
                 fmt="pdf")
@@ -959,6 +1097,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--min-area", type=int, default=20)
     p.add_argument("--max-frames", type=int, default=None,
                    help="Limit to first N frames (for quick testing)")
+    p.add_argument("--ri-calibration", type=Path, default=None,
+                   help="Path to RI calibration append-history JSON "
+                        "(written by calibrate_ri.py). If set, --media-schedule "
+                        "is required and n_medium becomes frame-dependent.")
+    p.add_argument("--calibration-id", type=str, default=None,
+                   help="Pick a non-active calibration entry by id (defaults to "
+                        "the JSON's 'active' field).")
+    p.add_argument("--media-schedule", type=str, default=None,
+                   help="Frame-keyed medium switches, e.g. '0:wo_2,575:wo_0,1439:wo_2'. "
+                        "Must start at frame 0. Requires --ri-calibration.")
+    p.add_argument("--n-milliq", type=float, default=None,
+                   help="Override the protein-density baseline (defaults to "
+                        "calibration's reference.n_miliq). Falls back to per-frame "
+                        "n_medium when no calibration is given (legacy behavior).")
     return p
 
 
@@ -974,6 +1126,10 @@ def main() -> int:
         alpha_ri=args.alpha_ri,
         min_area=args.min_area,
         max_frames=args.max_frames,
+        ri_calibration=args.ri_calibration,
+        calibration_id=args.calibration_id,
+        media_schedule_str=args.media_schedule,
+        n_milliq=args.n_milliq,
     )
     return 0
 
