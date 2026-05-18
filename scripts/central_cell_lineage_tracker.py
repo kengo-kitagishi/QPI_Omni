@@ -39,33 +39,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import tifffile
 from skimage import measure
 
-from figure_logger import save_figure
 from ri_calibration import (
     load_calibration,
     n_medium_at_frame,
     parse_media_schedule,
 )
-
-# ----- Okabe-Ito palette (colorblind-safe) -----
-OKABE_ITO = [
-    "#000000",  # black (mother)
-    "#E69F00",
-    "#56B4E9",
-    "#009E73",
-    "#F0E442",
-    "#0072B2",
-    "#D55E00",
-    "#CC79A7",
-]
 
 # Division / tracking thresholds
 DIV_AREA_RATIO_MIN = 0.68     # continuation if curr/prev > this
@@ -79,11 +62,6 @@ DIV_SUM_TOL = 0.30            # |(a+b) - prev| / prev < this -> division confirm
 OUT_PREV_LOW = 0.30
 OUT_PREV_HIGH = 1.50
 OUT_NEXT_LOW = 1.0 / 1.8
-
-# Fixed y-axis ranges for per-lineage timeseries so channels can be compared.
-# Derived from ch01 distribution (1-99 percentile) with margin.
-VOLUME_YLIM = (50.0, 400.0)     # µm³
-MEAN_RI_YLIM = (1.345, 1.370)
 
 
 # =============================================================================
@@ -606,299 +584,6 @@ def cells_summary_json(state: LineageState) -> list[dict]:
 
 
 # =============================================================================
-# Visualization
-# =============================================================================
-def _assign_tree_x(state: LineageState) -> dict[int, float]:
-    """Dendrogram layout. Mother always at x=0. Daughters branch strictly to the right.
-
-    Each cell keeps its own column for its whole life. When a daughter is born,
-    it opens a new column to the right of its parent's subtree. Grand-daughters
-    are placed further right still. Branches never cross or reverse direction.
-    """
-    mother_id = None
-    for cid, cell in state.cells.items():
-        if cell.in_tree and cell.parent_id is None:
-            mother_id = cid
-            break
-    if mother_id is None:
-        return {}
-
-    children_map: dict[int, list[int]] = {}
-    for cid, cell in state.cells.items():
-        if cell.parent_id is not None and cell.in_tree:
-            children_map.setdefault(cell.parent_id, []).append(cid)
-    # Mother Machine physical order: when a parent divides, the new daughter
-    # appears just outside the parent and older daughters get pushed further
-    # out. So later-born daughters are closer to the channel center (mother).
-    # Sort children by birth_frame descending so the most recently born
-    # daughter sits immediately to the right of the parent.
-    for v in children_map.values():
-        v.sort(key=lambda c: state.cells[c].birth_frame or 0, reverse=True)
-
-    positions: dict[int, float] = {}
-
-    def assign(cid: int, x: float) -> float:
-        """Put cid at column x. Recursively place descendants to the right.
-        Returns the next free column after cid's whole subtree."""
-        positions[cid] = x
-        next_x = x + 1.0
-        for child in children_map.get(cid, []):
-            next_x = assign(child, next_x)
-        return next_x
-
-    assign(mother_id, 0.0)
-    return positions
-
-
-def plot_lineage_tree(state: LineageState, time_interval_min: Optional[float]) -> plt.Figure:
-    positions = _assign_tree_x(state)
-    n_cols = max(1, int(max(positions.values())) + 1) if positions else 1
-    # width scales with number of columns but stays within ~two-column figure
-    width_in = max(4.0, min(9.0, 0.045 * n_cols + 3.0))
-    fig, ax = plt.subplots(figsize=(width_in, 5.2), constrained_layout=True)
-
-    to_hours = (lambda f: f * (time_interval_min / 60.0)) if time_interval_min else (lambda f: float(f))
-
-    ordered = sorted(
-        (cid for cid, cell in state.cells.items() if cell.in_tree and cid in positions),
-        key=lambda c: positions[c],
-    )
-
-    # A cell's line is split into segments by its own division events. Each
-    # segment is colored by whether the cell is on the higher or lower
-    # mean_ri side at the event that starts the segment:
-    #   - segment 0 (birth .. first own division): compare self vs parent at birth
-    #   - segment i >= 1 (division i .. next event): compare self vs newborn
-    #     daughter at that division frame
-    # Mother's first segment uses a dedicated "mother" color.
-    TREE_MOTHER = "#D55E00"
-    TREE_HIGHER = "#E69F00"   # orange (higher mean RI side)
-    TREE_LOWER  = "#0072B2"   # blue (lower mean RI side)
-    TREE_UNDET  = "#999999"   # gray (outlier or missing frame)
-
-    def _color_from_compare(self_f, other_f):
-        if self_f is None or other_f is None:
-            return TREE_UNDET
-        if self_f.is_outlier or other_f.is_outlier:
-            return TREE_UNDET
-        if self_f.touches_border or other_f.touches_border:
-            return TREE_UNDET
-        if not (np.isfinite(self_f.mean_ri) and np.isfinite(other_f.mean_ri)):
-            return TREE_UNDET
-        return TREE_HIGHER if self_f.mean_ri >= other_f.mean_ri else TREE_LOWER
-
-    children_map: dict[int, list[int]] = {}
-    for cid_ in state.cells:
-        p = state.cells[cid_].parent_id
-        if p is not None and state.cells[cid_].in_tree:
-            children_map.setdefault(p, []).append(cid_)
-
-    # horizontal connectors first so the cell lines sit on top
-    for cid in ordered:
-        cell = state.cells[cid]
-        if cell.parent_id is None:
-            continue
-        parent = cell.parent_id
-        if parent not in positions:
-            continue
-        y = to_hours(cell.birth_frame or 0)
-        ax.plot([positions[parent], positions[cid]], [y, y],
-                color="#888888", linewidth=0.3, alpha=0.6)
-
-    # vertical cell lines, split by division events, colored per segment
-    seg_color_counter = {TREE_HIGHER: 0, TREE_LOWER: 0, TREE_UNDET: 0, TREE_MOTHER: 0}
-    for cid in ordered:
-        cell = state.cells[cid]
-        x = positions[cid]
-        birth = cell.birth_frame if cell.birth_frame is not None else (cell.frames[0].frame if cell.frames else 0)
-        death = cell.death_frame if cell.death_frame is not None else (cell.frames[-1].frame if cell.frames else birth)
-        lw = 1.2 if cell.parent_id is None else 0.7
-
-        own_div_frames = sorted(
-            state.cells[c].birth_frame for c in children_map.get(cid, [])
-            if state.cells[c].birth_frame is not None and birth <= state.cells[c].birth_frame <= death
-        )
-        boundaries = [birth] + own_div_frames + [death]
-
-        cell_frames_by_num = {f.frame: f for f in cell.frames}
-        parent_frames_by_num = (
-            {f.frame: f for f in state.cells[cell.parent_id].frames}
-            if cell.parent_id is not None and cell.parent_id in state.cells else {}
-        )
-
-        for seg_idx in range(len(boundaries) - 1):
-            seg_start = boundaries[seg_idx]
-            seg_end = boundaries[seg_idx + 1]
-            if seg_end <= seg_start:
-                continue
-            event_frame = boundaries[seg_idx]
-            if seg_idx == 0:
-                # segment 0: birth comparison
-                if cell.parent_id is None:
-                    col = TREE_MOTHER
-                else:
-                    col = _color_from_compare(
-                        cell_frames_by_num.get(event_frame),
-                        parent_frames_by_num.get(event_frame),
-                    )
-            else:
-                # segment i>=1: division at event_frame vs the daughter born then
-                daughter_id = next(
-                    (c for c in children_map.get(cid, [])
-                     if state.cells[c].birth_frame == event_frame),
-                    None,
-                )
-                if daughter_id is None:
-                    col = TREE_UNDET
-                else:
-                    daughter_frames_by_num = {f.frame: f for f in state.cells[daughter_id].frames}
-                    col = _color_from_compare(
-                        cell_frames_by_num.get(event_frame),
-                        daughter_frames_by_num.get(event_frame),
-                    )
-            seg_color_counter[col] = seg_color_counter.get(col, 0) + 1
-            ax.plot([x, x], [to_hours(seg_start), to_hours(seg_end)],
-                    color=col, linewidth=lw, solid_capstyle="butt")
-
-    n_higher = seg_color_counter[TREE_HIGHER]
-    n_lower = seg_color_counter[TREE_LOWER]
-    n_undet = seg_color_counter[TREE_UNDET]
-
-    # mother label
-    mother_id = next((cid for cid, cell in state.cells.items()
-                      if cell.in_tree and cell.parent_id is None), None)
-    if mother_id is not None and mother_id in positions:
-        ax.text(positions[mother_id], to_hours(state.cells[mother_id].frames[0].frame) - 0.3,
-                "M", ha="center", va="bottom", fontsize=7, fontweight="bold")
-
-    ax.invert_yaxis()
-    ax.set_xlabel("lineage (M = mother, branches to the right)")
-    ax.set_ylabel("time [h]" if time_interval_min else "frame")
-    ax.set_title("Central cell lineage tree", fontsize=9)
-    ax.spines["right"].set_visible(False)
-    ax.spines["top"].set_visible(False)
-    ax.set_xticks([])
-    # give a tiny margin so the leftmost column (mother) is not on the spine
-    ax.set_xlim(-0.5, n_cols - 0.5)
-    handles = [
-        plt.Line2D([0], [0], color=TREE_MOTHER, lw=1.2, label="mother"),
-        plt.Line2D([0], [0], color=TREE_HIGHER, lw=0.9,
-                   label=f"higher mean RI at birth (n={n_higher})"),
-        plt.Line2D([0], [0], color=TREE_LOWER, lw=0.9,
-                   label=f"lower mean RI at birth (n={n_lower})"),
-    ]
-    if n_undet:
-        handles.append(
-            plt.Line2D([0], [0], color=TREE_UNDET, lw=0.9,
-                       label=f"undetermined (n={n_undet})")
-        )
-    ax.legend(handles=handles, fontsize=6, frameon=False, loc="upper right")
-    return fig
-
-
-def _auto_mean_ri_ylim(
-    state: LineageState,
-    extra_values: Optional[list[float]] = None,
-) -> tuple[float, float]:
-    """Pick a mean_RI ylim from observed values (and optionally media RI levels).
-
-    Falls back to the legacy MEAN_RI_YLIM if no finite samples exist.
-    """
-    vals: list[float] = []
-    for cell in state.cells.values():
-        if not cell.in_tree:
-            continue
-        for f in cell.frames:
-            if f.is_outlier or f.touches_border:
-                continue
-            if np.isfinite(f.mean_ri):
-                vals.append(float(f.mean_ri))
-    if extra_values:
-        vals.extend(float(v) for v in extra_values if np.isfinite(v))
-    if not vals:
-        return MEAN_RI_YLIM
-    lo = float(np.nanmin(vals))
-    hi = float(np.nanmax(vals))
-    pad = max(0.001, (hi - lo) * 0.08)
-    return lo - pad, hi + pad
-
-
-def plot_timeseries_by_lineage(
-    state: LineageState,
-    time_interval_min: Optional[float],
-    media_schedule: Optional[list[tuple[int, str]]] = None,
-    media_ri: Optional[dict[str, float]] = None,
-) -> plt.Figure:
-    fig, axes = plt.subplots(2, 1, figsize=(7.2, 4.5), sharex=True)  # two-column ~183mm
-    to_hours = (lambda f: f * (time_interval_min / 60.0)) if time_interval_min else (lambda f: float(f))
-
-    color_idx = 0
-    for cid, cell in state.cells.items():
-        if not cell.in_tree or not cell.frames:
-            continue
-        t = np.array([to_hours(f.frame) for f in cell.frames])
-        v = np.array([np.nan if (f.is_outlier or f.touches_border) else f.volume_um3_rod for f in cell.frames])
-        ri = np.array([np.nan if (f.is_outlier or f.touches_border) else f.mean_ri for f in cell.frames])
-        is_mother = cell.parent_id is None
-        if is_mother:
-            color = "#D55E00"  # vermillion, reserved for mother
-            lw = 1.0
-            zorder = 3
-        else:
-            color = OKABE_ITO[color_idx % len(OKABE_ITO)]
-            color_idx += 1
-            lw = 0.35
-            zorder = 2
-        axes[0].plot(t, v, color=color, linewidth=lw, zorder=zorder,
-                      label="mother (cid=0)" if is_mother else None)
-        axes[1].plot(t, ri, color=color, linewidth=lw, zorder=zorder,
-                      label="mother (cid=0)" if is_mother else None)
-
-    # count daughters for a one-line annotation instead of a crowded legend
-    n_daughters = sum(1 for c in state.cells.values()
-                      if c.in_tree and c.parent_id is not None)
-
-    axes[0].set_ylabel(r"volume [µm$^3$]")
-    axes[1].set_ylabel("mean RI")
-    axes[1].set_xlabel("time [h]" if time_interval_min else "frame")
-    # volume range stays fixed for cross-channel comparison; mean_RI auto-scales
-    # because frame-dependent n_medium can shift the absolute level by ~0.002–0.003.
-    axes[0].set_ylim(VOLUME_YLIM)
-    extra_levels = (
-        [media_ri[name] for _, name in (media_schedule or []) if name in (media_ri or {})]
-        if media_schedule and media_ri else None
-    )
-    axes[1].set_ylim(_auto_mean_ri_ylim(state, extra_levels))
-
-    # vertical markers at media-switch frames (skip the initial frame 0)
-    if media_schedule and media_ri:
-        for f_switch, name in media_schedule:
-            if f_switch <= 0:
-                continue
-            x = to_hours(f_switch)
-            for ax in axes:
-                ax.axvline(x, color="#888888", linestyle="--", linewidth=0.6, alpha=0.7, zorder=1)
-            label = f"{name} (n={media_ri.get(name, float('nan')):.4f})" if name in media_ri else name
-            axes[1].annotate(
-                label, xy=(x, 1.0), xycoords=("data", "axes fraction"),
-                xytext=(2, -2), textcoords="offset points",
-                ha="left", va="top", fontsize=6, color="#555555",
-            )
-
-    for ax in axes:
-        ax.spines["right"].set_visible(False)
-        ax.spines["top"].set_visible(False)
-    axes[0].legend(
-        [plt.Line2D([0], [0], color="#D55E00", lw=1.0),
-         plt.Line2D([0], [0], color="#888888", lw=0.35)],
-        ["mother (cid=0)", f"daughter lineages (n={n_daughters})"],
-        fontsize=7, frameon=False, loc="upper right",
-    )
-    fig.tight_layout()
-    return fig
-
-
-# =============================================================================
 # Main pipeline
 # =============================================================================
 def run(
@@ -1061,27 +746,12 @@ def run(
         "n_milliq": n_milliq_used,
     }
 
-    # also dump the calibration/schedule next to the CSVs so they are recoverable
-    # without depending on the figure sidecar JSONs.
+    # dump calibration/schedule next to the CSVs so plotting scripts (which
+    # read only CSV + this JSON) have everything they need.
     run_meta_path = out_dir / "lineage_run_params.json"
     with open(run_meta_path, "w") as f:
         json.dump(params, f, indent=2, default=str)
     print(f"[ok] wrote {run_meta_path}", file=sys.stderr)
-
-    fig_tree = plot_lineage_tree(state, time_interval_min)
-    save_figure(fig_tree, params=params,
-                description="lineage tree rooted at mother (Mother Machine 1D rank model)",
-                fmt="pdf")
-    plt.close(fig_tree)
-
-    fig_ts = plot_timeseries_by_lineage(
-        state, time_interval_min,
-        media_schedule=media_schedule, media_ri=media_ri,
-    )
-    save_figure(fig_ts, params=params,
-                description="per-lineage volume/mean-RI timeseries",
-                fmt="pdf")
-    plt.close(fig_ts)
 
 
 def build_parser() -> argparse.ArgumentParser:
