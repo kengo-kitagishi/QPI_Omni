@@ -80,7 +80,7 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 # pos_number < POS_SPLIT -> right side (400:2448)  sensor width 2448
 # pos_number >= POS_SPLIT -> left side (0:2048)
 # Note: BG (Pos0) uses the crop determined by the target's pos_number (not always right)
-POS_SPLIT    = 52
+POS_SPLIT    = 33
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 

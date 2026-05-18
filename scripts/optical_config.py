@@ -15,7 +15,7 @@ Do not modify WAVELENGTH / NA / PIXELSIZE unless hardware changes.
 # Parameters to update before experiments
 # ============================================================
 
-OFFAXIS_CENTER = (1640, 432)   # (row, col) -- updated 2026-04-23 (crop 400:2448 right channel)
+OFFAXIS_CENTER = (1634, 442)   # (row, col) -- updated 2026-05-19 for 260405_acute_z18_200h dataset (measured from FFT peak)
 
 # Crop region (row_start, row_end, col_start, col_end)
 # Update when camera position changes
@@ -44,6 +44,7 @@ PIXELSIZE    = 3.45e-6 / 40     # m/px  (sensor 3.45 um, 40x objective)
 # Add new entries at the top for each experiment
 
 OFFAXIS_HISTORY = [
+    {"date": "2026-05-19", "center": (1634,  442), "note": "measured from FFT peak for 260405_acute_z18_200h dataset (range across Pos: row 1631-1636, col 441-445)"},
     {"date": "2026-04-23", "center": (1640,  432), "note": "re-measured for new experiment session (crop 400:2448)"},
     {"date": "2026-04-15", "center": (1633,  439), "note": "re-measured for new timelapse (crop 400:2448)"},
     {"date": "2026-03-23", "center": (1632,  445), "note": "re-measured with right channel crop 400:2448"},

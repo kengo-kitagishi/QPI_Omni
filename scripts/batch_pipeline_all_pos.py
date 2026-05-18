@@ -42,15 +42,17 @@ if str(_SCRIPT_DIR) not in sys.path:
 # ============================================================
 # Configuration
 # ============================================================
-TIMELAPSE_ROOT = Path(r"F:\260405\ph_260405")
-GRID_2PER_DIR  = Path(r"F:\260405\grid_2pergluc_60ms_1")
-GRID_0PER_DIR  = Path(r"F:\260405\grid_0pergluc_60ms_1")
+TIMELAPSE_ROOT = Path(r"F:\260405_acute_z18_200h\ph_260405")
+GRID_2PER_DIR  = Path(r"F:\260405_acute_z18_200h\grid_2pergluc_60ms_1")
+GRID_0PER_DIR  = Path(r"F:\260405_acute_z18_200h\grid_0pergluc_60ms_1")
 
-# Pos range (inclusive). Pos0 is BG, skip it.
-POS_START = 10
+# Pos range (inclusive). Pos0 is BG, skip it. Pos3 and Pos5 are missing on disk
+# and will be skipped automatically by the existence check.
+POS_START = 1
 POS_END   = 64
 
-# 0% glucose frame range
+# 0% glucose frame range (user 2026-05-19: 575..1440 → END=1440 exclusive,
+# i.e. last 0% frame is 1439, recovery starts at 1440)
 GLUCOSE_0_START = 575
 GLUCOSE_0_END   = 1440   # exclusive
 
@@ -70,7 +72,7 @@ BG_CACHE_AFTER  = TIMELAPSE_ROOT / "Pos0" / "bg_phase_after"
 # ============================================================
 # Confirmed parameters (from drift_config.json + memory)
 # ============================================================
-POS_SPLIT   = 52
+POS_SPLIT   = 33
 CROP_BEFORE = (0, 2048, 400, 2448)   # Pos < POS_SPLIT
 CROP_AFTER  = (0, 2048, 0, 2048)     # Pos >= POS_SPLIT
 
