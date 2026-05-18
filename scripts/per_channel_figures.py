@@ -382,6 +382,59 @@ def fig_lineage_tree(
 
 
 # =============================================================================
+# Data sidecar helpers — what gets attached to each figure
+# =============================================================================
+def _mother_timeseries_data(
+    data3D: pd.DataFrame,
+    division_frames: np.ndarray,
+) -> dict:
+    """Mother dataframe (cell_id==0) reshaped as a wide dict of equal-length
+    1D arrays, suitable for figure_logger.save_figure(data=...). One row per
+    frame; a boolean `is_division` column marks the mother's own division
+    frames so the timeseries can be replotted with division ticks."""
+    m = data3D[data3D["cell_id"] == 0].sort_values("frame").reset_index(drop=True)
+    cols: list[str] = [
+        c for c in (
+            "frame", "time_h", "rank",
+            "area_px", "area_um2", "long_axis_um", "short_axis_um",
+            "total_phase", "volume_um3_rod", "mean_ri", "mass_pg",
+            "n_medium_used", "n_milliq_used",
+            "is_outlier", "touches_border",
+        ) if c in m.columns
+    ]
+    out: dict = {c: m[c].to_numpy() for c in cols}
+    if "frame" in out and division_frames.size:
+        div_set = set(int(f) for f in division_frames)
+        out["is_division"] = np.array(
+            [int(f) in div_set for f in out["frame"].astype(int)],
+            dtype=bool,
+        )
+    elif "frame" in out:
+        out["is_division"] = np.zeros(len(out["frame"]), dtype=bool)
+    return out
+
+
+def _lineage_tree_data(clist: pd.DataFrame) -> dict:
+    """clist subset shaped as a wide dict of equal-length arrays. Carries
+    everything the tree layout needs (cell_id, mother_id, birth/death frames,
+    in_tree) plus the per-cell mean_ri summary used for segment coloring."""
+    cols: list[str] = [
+        c for c in (
+            "cell_id", "mother_id", "daughter1_id", "daughter2_id",
+            "generation", "in_tree",
+            "birth_frame", "death_frame", "age_frames",
+            "birth_time_h", "death_time_h", "age_h",
+            "long_axis_birth_um", "long_axis_death_um",
+            "volume_birth_um3", "volume_death_um3",
+            "mean_ri_birth", "mean_ri_death",
+            "mass_birth_pg", "mass_death_pg",
+            "n_medium_birth", "n_medium_death",
+        ) if c in clist.columns
+    ]
+    return {c: clist[c].to_numpy() for c in cols}
+
+
+# =============================================================================
 # Main
 # =============================================================================
 def run(channel_dir: Path) -> None:
@@ -410,21 +463,28 @@ def run(channel_dir: Path) -> None:
         str(channel_dir / "inference_out" / "lineage_out" / "clist.csv"),
     ]}
 
+    # The mother trajectory is the underlying dataframe for both timeseries
+    # figures; attaching it as `data=` makes figure_logger emit a sidecar
+    # _data.npz + _data.csv so the inbox copy already contains the dataframe
+    # that produced the plot (no need to re-query lineage_data3D.csv later).
+    mother_ts_data = _mother_timeseries_data(data3D, div_frames)
+
     fig_v = fig_mother_volume(data3D, div_frames, media_schedule, media_ri,
                               time_interval_min, label)
     save_figure(fig_v, params=params, description=f"{label} mother volume vs time",
-                fmt="pdf", data_source=data_source)
+                fmt="pdf", data_source=data_source, data=mother_ts_data)
     plt.close(fig_v)
 
     fig_r = fig_mother_mean_ri(data3D, div_frames, media_schedule, media_ri,
                                time_interval_min, label)
     save_figure(fig_r, params=params, description=f"{label} mother mean RI vs time",
-                fmt="pdf", data_source=data_source)
+                fmt="pdf", data_source=data_source, data=mother_ts_data)
     plt.close(fig_r)
 
     fig_t = fig_lineage_tree(clist, data3D, time_interval_min, label)
     save_figure(fig_t, params=params, description=f"{label} lineage tree",
-                fmt="pdf", data_source=data_source)
+                fmt="pdf", data_source=data_source,
+                data=_lineage_tree_data(clist))
     plt.close(fig_t)
 
 

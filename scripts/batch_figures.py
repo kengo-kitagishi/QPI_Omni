@@ -204,6 +204,36 @@ def overlay_figure(
 
 
 # =============================================================================
+# Data sidecar helpers
+# =============================================================================
+def _pooled_sidecar_dict(m_dfs: list[pd.DataFrame], value_col: str) -> dict:
+    """Pack the per-channel mother trajectories into figure_logger's
+    multi-series format: keys `n_series`, `label_i`, `time_h_i`, `value_i`,
+    `frame_i`, `is_outlier_i`, `touches_border_i` (plus `n_medium_used_i`
+    when available). figure_logger.\_write_data_csv then emits a long-format
+    CSV with a `label` column identifying the channel.
+    """
+    out: dict = {"n_series": np.int64(len(m_dfs))}
+    for i, m in enumerate(m_dfs):
+        if m.empty:
+            continue
+        src = str(m["source"].iloc[0]) if "source" in m.columns else f"ch_{i}"
+        out[f"label_{i}"] = np.array([src])
+        for col_src, col_dst in [
+            ("frame", "frame"),
+            ("time_h", "time_h"),
+            (value_col, "value"),
+            ("is_outlier", "is_outlier"),
+            ("touches_border", "touches_border"),
+            ("n_medium_used", "n_medium_used"),
+            ("n_milliq_used", "n_milliq_used"),
+        ]:
+            if col_src in m.columns:
+                out[f"{col_dst}_{i}"] = m[col_src].to_numpy()
+    return out
+
+
+# =============================================================================
 # Main
 # =============================================================================
 def run(channel_dirs: list[Path]) -> None:
@@ -260,8 +290,14 @@ def run(channel_dirs: list[Path]) -> None:
                              title)
         if fig is None:
             continue
+        # Attach the pooled mother dataframe (slimmed to columns the figure
+        # actually uses) as the data sidecar. figure_logger writes both a
+        # compressed .npz and a long-format _data.csv next to the PDF, so
+        # the figure-hub inbox copy already contains the dataframe and
+        # callers don't need to re-read lineage_data3D.csv per channel.
+        sidecar = _pooled_sidecar_dict(m_dfs, value_col=col)
         save_figure(fig, params=params, description=desc, fmt="pdf",
-                    data_source=data_source)
+                    data_source=data_source, data=sidecar)
         plt.close(fig)
 
 
