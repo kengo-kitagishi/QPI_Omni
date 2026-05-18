@@ -73,9 +73,14 @@ def discover_channels(root: Path, exclude: list[str]) -> list[Path]:
 # =============================================================================
 # Data loading
 # =============================================================================
-def load_mother_series(channel_dir: Path) -> tuple[pd.DataFrame, dict]:
-    """Return (mother_df, run_meta). Filters to cell_id==0 and drops outlier /
-    border-touching frames. Adds a 'source' column with the channel label."""
+def load_channel_data(channel_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    """Return (full_data3D_with_source, mother_df_for_plotting, run_meta).
+
+    The full data3D has every cell × every frame, with a `source` column added
+    so multiple channels can be concatenated. The mother df is filtered to
+    cell_id==0 and has outlier / border-touching frames replaced with NaN for
+    plotting; it is a slice of the full data3D, not a separate read.
+    """
     out = channel_dir / "inference_out" / "lineage_out"
     data3D = pd.read_csv(out / "lineage_data3D.csv")
     run_meta_path = out / "lineage_run_params.json"
@@ -85,15 +90,17 @@ def load_mother_series(channel_dir: Path) -> tuple[pd.DataFrame, dict]:
             run_meta = json.loads(run_meta_path.read_text(encoding="utf-8"))
         except Exception:
             pass
+    src = channel_label(channel_dir)
+    data3D = data3D.copy()
+    data3D["source"] = src
+
     m = data3D[data3D["cell_id"] == 0].sort_values("frame").copy()
-    if m.empty:
-        return m, run_meta
-    m["source"] = channel_label(channel_dir)
-    bad = m["is_outlier"].to_numpy(dtype=bool) | m["touches_border"].to_numpy(dtype=bool)
-    for col in ("volume_um3_rod", "mean_ri", "mass_pg"):
-        if col in m.columns:
-            m.loc[bad, col] = np.nan
-    return m, run_meta
+    if not m.empty:
+        bad = m["is_outlier"].to_numpy(dtype=bool) | m["touches_border"].to_numpy(dtype=bool)
+        for col in ("volume_um3_rod", "mean_ri", "mass_pg"):
+            if col in m.columns:
+                m.loc[bad, col] = np.nan
+    return data3D, m, run_meta
 
 
 def parse_schedule_str(s: Optional[str]) -> list[tuple[int, str]]:
@@ -204,32 +211,19 @@ def overlay_figure(
 
 
 # =============================================================================
-# Data sidecar helpers
+# Per-channel sidecar file list — collect the three artifacts for every ch,
+# renamed with a "<source>__" prefix so 8 channels of lineage_data3D.csv
+# don't overwrite each other in a single inbox directory.
 # =============================================================================
-def _pooled_sidecar_dict(m_dfs: list[pd.DataFrame], value_col: str) -> dict:
-    """Pack the per-channel mother trajectories into figure_logger's
-    multi-series format: keys `n_series`, `label_i`, `time_h_i`, `value_i`,
-    `frame_i`, `is_outlier_i`, `touches_border_i` (plus `n_medium_used_i`
-    when available). figure_logger.\_write_data_csv then emits a long-format
-    CSV with a `label` column identifying the channel.
-    """
-    out: dict = {"n_series": np.int64(len(m_dfs))}
-    for i, m in enumerate(m_dfs):
-        if m.empty:
-            continue
-        src = str(m["source"].iloc[0]) if "source" in m.columns else f"ch_{i}"
-        out[f"label_{i}"] = np.array([src])
-        for col_src, col_dst in [
-            ("frame", "frame"),
-            ("time_h", "time_h"),
-            (value_col, "value"),
-            ("is_outlier", "is_outlier"),
-            ("touches_border", "touches_border"),
-            ("n_medium_used", "n_medium_used"),
-            ("n_milliq_used", "n_milliq_used"),
-        ]:
-            if col_src in m.columns:
-                out[f"{col_dst}_{i}"] = m[col_src].to_numpy()
+def _per_channel_sidecar_files(channel_dirs: list[Path]) -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    for ch in channel_dirs:
+        src = channel_label(ch)
+        lineage_out = ch / "inference_out" / "lineage_out"
+        for name in ("lineage_data3D.csv", "clist.csv", "lineage_run_params.json"):
+            p = lineage_out / name
+            if p.exists():
+                out.append((str(p), f"{src}__{name}"))
     return out
 
 
@@ -243,9 +237,10 @@ def run(channel_dirs: list[Path]) -> None:
     m_dfs: list[pd.DataFrame] = []
     metas: list[dict] = []
     raw_files: list[str] = []
+    succeeded_chs: list[Path] = []
     for ch in channel_dirs:
         try:
-            m_df, meta = load_mother_series(ch)
+            _d3_df, m_df, meta = load_channel_data(ch)
         except Exception as e:
             print(f"[warn] skip {ch}: {e}", file=sys.stderr)
             continue
@@ -254,6 +249,7 @@ def run(channel_dirs: list[Path]) -> None:
             continue
         m_dfs.append(m_df)
         metas.append(meta)
+        succeeded_chs.append(ch)
         raw_files.append(str(ch / "inference_out" / "lineage_out" / "lineage_data3D.csv"))
         print(f"[info] {channel_label(ch)}: {len(m_df)} mother frames", file=sys.stderr)
 
@@ -261,6 +257,7 @@ def run(channel_dirs: list[Path]) -> None:
         raise SystemExit("No usable mother trajectories.")
 
     pooled = pd.concat(m_dfs, ignore_index=True)
+    sidecar_files = _per_channel_sidecar_files(succeeded_chs)
     media_schedule, media_ri = merge_schedules(metas)
     time_interval_min = next(
         (m.get("time_interval_min") for m in metas if m.get("time_interval_min")),
@@ -290,14 +287,12 @@ def run(channel_dirs: list[Path]) -> None:
                              title)
         if fig is None:
             continue
-        # Attach the pooled mother dataframe (slimmed to columns the figure
-        # actually uses) as the data sidecar. figure_logger writes both a
-        # compressed .npz and a long-format _data.csv next to the PDF, so
-        # the figure-hub inbox copy already contains the dataframe and
-        # callers don't need to re-read lineage_data3D.csv per channel.
-        sidecar = _pooled_sidecar_dict(m_dfs, value_col=col)
+        # Copy every channel's lineage_data3D.csv / clist.csv /
+        # lineage_run_params.json into the inbox, prefixed with the channel
+        # label so an inbox folder of 8 channels doesn't collapse to one
+        # overwriting file.
         save_figure(fig, params=params, description=desc, fmt="pdf",
-                    data_source=data_source, data=sidecar)
+                    data_source=data_source, copy_files=sidecar_files)
         plt.close(fig)
 
 
