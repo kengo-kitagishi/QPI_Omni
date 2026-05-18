@@ -414,24 +414,37 @@ def _mother_timeseries_data(
     return out
 
 
-def _lineage_tree_data(clist: pd.DataFrame) -> dict:
-    """clist subset shaped as a wide dict of equal-length arrays. Carries
-    everything the tree layout needs (cell_id, mother_id, birth/death frames,
-    in_tree) plus the per-cell mean_ri summary used for segment coloring."""
+def _lineage_tree_data(clist: pd.DataFrame, data3D: pd.DataFrame) -> dict:
+    """In-tree slice of lineage_data3D as a wide dict of equal-length arrays.
+
+    The tree drawing needs both the layout (parent_id, birth_frame,
+    death_frame, in_tree per cell) AND the per-frame mean_ri at every
+    division event for the higher/lower-RI segment coloring. All of that
+    lives in lineage_data3D — parent_id / birth_frame / death_frame / in_tree
+    are already replicated on every per-frame row by build_long_table — so
+    attaching the in_tree subset of data3D is enough to redraw the tree
+    exactly from the sidecar CSV alone.
+    """
+    in_tree_ids = clist[clist["in_tree"]]["cell_id"].astype(int).tolist()
+    sub = (
+        data3D[data3D["cell_id"].isin(in_tree_ids)]
+        .sort_values(["cell_id", "frame"])
+        .reset_index(drop=True)
+    )
     cols: list[str] = [
         c for c in (
-            "cell_id", "mother_id", "daughter1_id", "daughter2_id",
-            "generation", "in_tree",
-            "birth_frame", "death_frame", "age_frames",
-            "birth_time_h", "death_time_h", "age_h",
-            "long_axis_birth_um", "long_axis_death_um",
-            "volume_birth_um3", "volume_death_um3",
-            "mean_ri_birth", "mean_ri_death",
-            "mass_birth_pg", "mass_death_pg",
-            "n_medium_birth", "n_medium_death",
-        ) if c in clist.columns
+            "cell_id", "parent_id", "in_tree",
+            "birth_frame", "death_frame",
+            "frame", "time_h", "rank",
+            "area_px", "area_um2",
+            "long_axis_um", "short_axis_um",
+            "total_phase",
+            "volume_um3_rod", "mean_ri", "mass_pg",
+            "n_medium_used", "n_milliq_used",
+            "is_outlier", "touches_border",
+        ) if c in sub.columns
     ]
-    return {c: clist[c].to_numpy() for c in cols}
+    return {c: sub[c].to_numpy() for c in cols}
 
 
 # =============================================================================
@@ -484,7 +497,7 @@ def run(channel_dir: Path) -> None:
     fig_t = fig_lineage_tree(clist, data3D, time_interval_min, label)
     save_figure(fig_t, params=params, description=f"{label} lineage tree",
                 fmt="pdf", data_source=data_source,
-                data=_lineage_tree_data(clist))
+                data=_lineage_tree_data(clist, data3D))
     plt.close(fig_t)
 
 
