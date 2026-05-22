@@ -8,18 +8,25 @@ import os, sys, argparse, numpy as np, tifffile, traceback
 # ==== Settings (modify as needed) ====
 _parser = argparse.ArgumentParser(add_help=False)
 _parser.add_argument("--indir", default=r"G:\マイドライブ\ch02")
+_parser.add_argument("--model-path", default=None)
+_parser.add_argument("--outdir", default=None)
 _args, _ = _parser.parse_known_args()
 indir = _args.indir
 # Output directory (where masks etc. are saved)
-outdir = os.path.join(indir, "inference_out")
+outdir = _args.outdir if _args.outdir else os.path.join(indir, "inference_out")
 os.makedirs(outdir, exist_ok=True)
 
 # Trained model path
-model_path = r"C:\Users\QPI\Desktop\train\omni_model_d20\models\cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_d20_2026_05_01_19_01_52.321350"
+model_path = _args.model_path or r"C:\Users\QPI\Desktop\train\omni_model_d20\models\cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_d20_2026_05_01_19_01_52.321350"
 # Inference settings (tunable)
 USE_GPU = True
 NCHAN = 1
 NCLASSES = 3
+
+# Early-exit: abort the whole channel if this many consecutive frames yield
+# no cells (the mother machine channel has emptied out and won't refill).
+# Set to None to disable.
+NO_CELL_BREAK_AFTER = 100
 
 # Omnipose eval hyperparameters (relaxed to mitigate kNN errors)
 EVAL_PARAMS = dict(
@@ -62,6 +69,8 @@ model = CellposeModel(gpu=USE_GPU, pretrained_model=model_path, omni=True, nchan
 skipped = 0
 error_count = 0
 processed = 0
+consecutive_empty = 0  # for NO_CELL_BREAK_AFTER early exit
+aborted_early = False
 
 for i, f in enumerate(files, 1):
     try:
@@ -113,7 +122,15 @@ for i, f in enumerate(files, 1):
         tifffile.imwrite(os.path.join(outdir, os.path.basename(f).replace(".tif", "_binary.tif")),
                          np.full_like(empty_mask, 255, dtype=np.uint8))
         skipped += 1
+        consecutive_empty += 1
+        if NO_CELL_BREAK_AFTER is not None and consecutive_empty >= NO_CELL_BREAK_AFTER:
+            print(f"  → {consecutive_empty} consecutive empty frames "
+                  f">= NO_CELL_BREAK_AFTER ({NO_CELL_BREAK_AFTER}); "
+                  f"aborting channel after frame {i}/{len(files)}.")
+            aborted_early = True
+            break
         continue
+    consecutive_empty = 0  # got a real detection; reset the counter
 
     # Normal case: save masks
     base = os.path.splitext(os.path.basename(f))[0]
@@ -144,6 +161,8 @@ print(f"Total files : {len(files)}")
 print(f"Processed   : {processed}")
 print(f"Skipped     : {skipped} (no cells or kNN issue)")
 print(f"Errors      : {error_count}")
+if aborted_early:
+    print(f"Aborted early: yes (>= {NO_CELL_BREAK_AFTER} consecutive empty frames)")
 print("Saved results to:", outdir)
 
 # %%
