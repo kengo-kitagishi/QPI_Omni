@@ -45,14 +45,21 @@ from batch_reconstruction_grid import (
     CROP_AFTER,
     POS_SPLIT,
 )
+from ecc_utils import tilt_fit_crop, to_uint8, ecc_align, remove_outliers_mad
 
 # ============================================================
 # Configuration
 # ============================================================
 
-TIMELAPSE_ROOT = r"D:\AquisitionData\Kitagishi\260416\ph_zstack_3"
+TIMELAPSE_ROOT = r"E:\260504\0per_gluc"
 
-GRID_2PER_DIR = r"C:\260416\2per_gridgluc_1"
+GRID_2PER_DIR = r"E:\260504\grid_2pergluc_1"
+
+# When raw phase lives under a different root than shifts/output,
+# set SHIFTS_OUTPUT_ROOT to the directory containing PosN with
+# output_phase/channels/ (shifts JSON, channel_rois, output).
+# None -> same as TIMELAPSE_ROOT.
+SHIFTS_OUTPUT_ROOT = r"E:\260504\online_crop_sub_zstack"
 
 # Pos range [inclusive]. Pos0 is always BG, skipped.
 # POS_END = None -> auto-detect last Pos.
@@ -67,19 +74,97 @@ SHIFTS_FILENAME = "pos_shifts_cal_online.json"
 #
 # 260416+ grid: 11 slices, -2.0 to +2.0 um, 0.4 um/step, z=5 = 0.0 um
 #
-# 11-slice timelapse (z_start=-2.0, step=0.4, n_z=11) -> 1:1 with grid:
-#   tl_z=0 (-2.0 um) -> grid_z=0
-#   tl_z=5 ( 0.0 um) -> grid_z=5  (focus, ECC reference)
-#   tl_z=10(+2.0 um) -> grid_z=10
-Z_PAIRS = [(i, i) for i in range(11)]
+# 260508: 3-slice timelapse, tl_z=0 = focus = grid_z=5
+Z_PAIRS = [(5, 5)]
+
+# Minimum frame index to consider (skip early unstable frames).
+MIN_FRAME_INDEX = 5
 
 # Frame index range to search [inclusive, exclusive). None = all frames.
-FRAME_RANGE = None  # e.g., (575, 1151)
+FRAME_RANGE = (5, 13)
 
 # Output subfolder name (under PosN/output_phase/channels/)
 OUTPUT_SUBDIR = "delta_timelapse"
 
+# Recompute ECC shift instead of using pos_shifts_cal_online.json values.
+# Runs single-pass ECC (grid(0,0) reference) per channel, filters by
+# ECC_MIN_CORR, and averages the remaining shifts.
+RECOMPUTE_ECC = True
+ECC_MIN_CORR = 0.99
+ECC_VMIN = -5.0
+ECC_VMAX = 2.0
+TILT_CROP_H = 270
+ECC_CROP_H = 80
+
 # ============================================================
+
+
+def _recompute_ecc_shift(tl_output_phase, grid_output_phase, rois, fit_right):
+    """Single-pass ECC between output_phase images, filtered by ECC_MIN_CORR.
+
+    Returns (avg_sx, avg_sy, n_used, n_total) or None if all channels fail.
+    """
+    tx_list, ty_list, corr_list = [], [], []
+    for roi in rois:
+        try:
+            ref_crop = tilt_fit_crop(
+                grid_output_phase, roi["cy"], roi["cx"], roi["crop_w"],
+                ECC_CROP_H, TILT_CROP_H, fit_right=fit_right)
+            cur_crop = tilt_fit_crop(
+                tl_output_phase, roi["cy"], roi["cx"], roi["crop_w"],
+                ECC_CROP_H, TILT_CROP_H, fit_right=fit_right)
+        except Exception:
+            continue
+        if ref_crop is None or cur_crop is None:
+            continue
+        ref_u8 = to_uint8(ref_crop, ECC_VMIN, ECC_VMAX)
+        cur_u8 = to_uint8(cur_crop, ECC_VMIN, ECC_VMAX)
+        result = ecc_align(ref_u8, cur_u8)
+        if result is None:
+            continue
+        tx, ty, corr = result
+        if corr >= ECC_MIN_CORR:
+            tx_list.append(tx)
+            ty_list.append(ty)
+            corr_list.append(corr)
+    if not tx_list:
+        return None
+    n_raw = len(tx_list)
+    tx_arr = np.array(tx_list)
+    ty_arr = np.array(ty_list)
+    if n_raw >= 3:
+        is_out = remove_outliers_mad(tx_list, 5.0) | remove_outliers_mad(ty_list, 5.0)
+        used = [i for i, o in enumerate(is_out) if not o]
+        if not used:
+            used = list(range(n_raw))
+    else:
+        used = list(range(n_raw))
+    return (float(np.mean(tx_arr[used])), float(np.mean(ty_arr[used])),
+            len(used), len(rois))
+
+
+def _load_output_phase(directory, z_index, frame_index=None):
+    """Load output_phase image (float64). Tries z-subdir then flat layout."""
+    base = Path(directory)
+    candidates = []
+    if frame_index is not None:
+        pat = f"img_{frame_index:09d}_ph_{z_index:03d}_phase.tif"
+        candidates.append(base / f"z{z_index:03d}" / "output_phase" / pat)
+        candidates.append(base / "output_phase" / pat)
+    pat_glob = f"img_*_ph_{z_index:03d}_phase.tif"
+    for d in [base / f"z{z_index:03d}" / "output_phase",
+              base / "output_phase"]:
+        if d.is_dir():
+            if frame_index is not None:
+                exact = d / f"img_{frame_index:09d}_ph_{z_index:03d}_phase.tif"
+                if exact.exists():
+                    return tifffile.imread(str(exact)).astype(np.float64), exact
+            files = sorted(d.glob(pat_glob))
+            if frame_index is not None and frame_index < len(files):
+                return tifffile.imread(str(files[frame_index])).astype(np.float64), files[frame_index]
+            if files:
+                return tifffile.imread(str(files[0])).astype(np.float64), files[0]
+    return None, None
 
 
 def _determine_crop(base_label):
@@ -103,8 +188,32 @@ def _get_shift(fr):
     return float(sx), float(sy)
 
 
+def _count_available_frames(tl_dir, z_index):
+    """Count available raw phase or hologram frames at z_index."""
+    tl = Path(tl_dir)
+    pat = f"img_*_ph_{z_index:03d}_phase.tif"
+    holo_pat = f"img_*_ph_{z_index:03d}.tif"
+    for d in [
+        tl / "output_phase_raw",
+        tl / f"z{z_index:03d}" / "output_phase_raw",
+    ]:
+        if d.is_dir():
+            n = len(list(d.glob(pat)))
+            if n > 0:
+                return n
+    for d in [tl / f"z{z_index:03d}", tl]:
+        if d.is_dir():
+            n = len(list(d.glob(holo_pat)))
+            if n > 0:
+                return n
+    return None
+
+
 def _load_timelapse_raw(tl_dir, frame_index, z_index, crop):
     """Load timelapse raw phase at (frame_index, z_index).
+
+    Uses exact filename match (img_{frame_index:09d}_ph_{z_index:03d}_phase.tif)
+    to avoid mismatch when file numbering has gaps.
 
     Search order:
       1. PosN/output_phase_raw/ (flat, single-z pipeline)
@@ -113,42 +222,41 @@ def _load_timelapse_raw(tl_dir, frame_index, z_index, crop):
       4. PosN/ raw hologram flat (on-the-fly reconstruction)
     """
     tl = Path(tl_dir)
-    pat = f"img_*_ph_{z_index:03d}_phase.tif"
+    exact_phase = f"img_{frame_index:09d}_ph_{z_index:03d}_phase.tif"
     holo_pat = f"img_*_ph_{z_index:03d}.tif"
+    exact_holo = f"img_{frame_index:09d}_ph_{z_index:03d}.tif"
 
     # 1. Flat output_phase_raw
     flat = tl / "output_phase_raw"
     if flat.is_dir():
-        frames = sorted(flat.glob(pat))
-        if frame_index < len(frames):
-            img = tifffile.imread(str(frames[frame_index])).astype(np.float64)
-            return img, frames[frame_index], "prerecon"
+        exact_path = flat / exact_phase
+        if exact_path.exists():
+            img = tifffile.imread(str(exact_path)).astype(np.float64)
+            return img, exact_path, "prerecon"
 
     # 2. Z-subdir output_phase_raw (compute_drift_online z-stack)
     z_raw = tl / f"z{z_index:03d}" / "output_phase_raw"
     if z_raw.is_dir():
-        frames = sorted(z_raw.glob(pat))
-        if frame_index < len(frames):
-            img = tifffile.imread(str(frames[frame_index])).astype(np.float64)
-            return img, frames[frame_index], "prerecon-zdir"
+        exact_path = z_raw / exact_phase
+        if exact_path.exists():
+            img = tifffile.imread(str(exact_path)).astype(np.float64)
+            return img, exact_path, "prerecon-zdir"
 
     # 3. Z-subdir raw hologram -> on-the-fly
     z_dir = tl / f"z{z_index:03d}"
     if z_dir.is_dir():
-        holos = sorted(z_dir.glob(holo_pat))
-        if frame_index < len(holos):
-            h = holos[frame_index]
-            print(f"  [reconstruct on-the-fly] {h}")
-            phase = reconstruct_from_holo(h, crop)
-            return phase.astype(np.float64), h, "on-the-fly"
+        exact_holo_path = z_dir / exact_holo
+        if exact_holo_path.exists():
+            print(f"  [reconstruct on-the-fly] {exact_holo_path}")
+            phase = reconstruct_from_holo(exact_holo_path, crop)
+            return phase.astype(np.float64), exact_holo_path, "on-the-fly"
 
     # 4. Flat raw hologram -> on-the-fly
-    holos = sorted(tl.glob(holo_pat))
-    if frame_index < len(holos):
-        h = holos[frame_index]
-        print(f"  [reconstruct on-the-fly] {h}")
-        phase = reconstruct_from_holo(h, crop)
-        return phase.astype(np.float64), h, "on-the-fly"
+    exact_holo_path = tl / exact_holo
+    if exact_holo_path.exists():
+        print(f"  [reconstruct on-the-fly] {exact_holo_path}")
+        phase = reconstruct_from_holo(exact_holo_path, crop)
+        return phase.astype(np.float64), exact_holo_path, "on-the-fly"
 
     raise FileNotFoundError(
         f"No raw phase or hologram found for frame_index={frame_index}, "
@@ -199,22 +307,38 @@ def _detect_pos_dirs(root):
     return result
 
 
+def _shifts_output_dir(pos_label):
+    """Return the directory for shifts JSON and output for a given Pos."""
+    if SHIFTS_OUTPUT_ROOT:
+        return Path(SHIFTS_OUTPUT_ROOT) / pos_label
+    return None
+
+
 def _process_single_pos(pos_label, pos_dir, grid_2per_dir):
     """Process one Pos: find closest frame, compute deltas, save TIFs."""
-    shifts_path = pos_dir / "output_phase" / "channels" / SHIFTS_FILENAME
+    so_dir = _shifts_output_dir(pos_label)
+    shifts_base = so_dir if so_dir else pos_dir
+    shifts_path = shifts_base / "output_phase" / "channels" / SHIFTS_FILENAME
     if not shifts_path.exists():
         print(f"  SKIP: {SHIFTS_FILENAME} not found at {shifts_path}")
         return None
 
     frame_results = _load_shifts(shifts_path)
 
+    ref_z = Z_PAIRS[0][0]
+    n_available = _count_available_frames(str(pos_dir), ref_z)
+    if n_available is not None:
+        print(f"  Available raw frames at z={ref_z}: {n_available}")
+
     if FRAME_RANGE:
         start, end = FRAME_RANGE
         candidates = [fr for fr in frame_results if start <= fr["frame_index"] < end]
         print(f"  Frame range: [{start}, {end}), {len(candidates)} candidates")
     else:
-        candidates = frame_results
-        print(f"  All frames: {len(candidates)} candidates")
+        candidates = [fr for fr in frame_results if fr["frame_index"] >= MIN_FRAME_INDEX]
+        if n_available is not None:
+            candidates = [fr for fr in candidates if fr["frame_index"] < n_available]
+        print(f"  Candidates (>= {MIN_FRAME_INDEX}, < {n_available}): {len(candidates)}")
 
     if not candidates:
         print(f"  SKIP: no candidate frames")
@@ -227,7 +351,41 @@ def _process_single_pos(pos_label, pos_dir, grid_2per_dir):
     print(f"  Closest frame: index={closest_idx}, "
           f"shift=({sx:.3f}, {sy:.3f}) px, magnitude={mag:.3f} px")
 
-    out_dir = pos_dir / "output_phase" / "channels" / OUTPUT_SUBDIR
+    ecc_recomputed = False
+    if RECOMPUTE_ECC:
+        rois_path = shifts_base / "output_phase" / "channels" / "channel_rois.json"
+        if not rois_path.exists():
+            rois_path = (Path(grid_2per_dir) / f"{pos_label}_x+0_y+0"
+                         / "output_phase" / "channels" / "channel_rois.json")
+        if rois_path.exists():
+            rois = json.loads(rois_path.read_text(encoding="utf-8"))
+            grid_z = Z_PAIRS[0][1]
+            tl_op, _ = _load_output_phase(str(pos_dir), grid_z, closest_idx)
+            grid_00_dir = Path(grid_2per_dir) / f"{pos_label}_x+0_y+0"
+            grid_op, _ = _load_output_phase(str(grid_00_dir), grid_z)
+            if tl_op is not None and grid_op is not None:
+                m = re.match(r"Pos(\d+)", pos_label)
+                fit_right = int(m.group(1)) >= POS_SPLIT if m else False
+                ecc_result = _recompute_ecc_shift(tl_op, grid_op, rois, fit_right)
+                if ecc_result is not None:
+                    sx_old, sy_old = sx, sy
+                    sx, sy, n_used, n_total = ecc_result
+                    mag = (sx**2 + sy**2) ** 0.5
+                    print(f"  ECC recomputed (corr>={ECC_MIN_CORR}): "
+                          f"shift=({sx:.3f}, {sy:.3f}) px, mag={mag:.3f} px, "
+                          f"{n_used}/{n_total} ch  "
+                          f"[was ({sx_old:.3f}, {sy_old:.3f})]")
+                    ecc_recomputed = True
+                else:
+                    print(f"  ECC recompute failed (no ch passed corr>={ECC_MIN_CORR}), "
+                          f"using JSON shift")
+            else:
+                print(f"  ECC recompute: output_phase not found, using JSON shift")
+        else:
+            print(f"  ECC recompute: channel_rois.json not found, using JSON shift")
+
+    out_base = shifts_base if so_dir else pos_dir
+    out_dir = out_base / "output_phase" / "channels" / OUTPUT_SUBDIR
     out_dir.mkdir(parents=True, exist_ok=True)
 
     crop = _determine_crop(pos_label)
@@ -283,6 +441,8 @@ def _process_single_pos(pos_label, pos_dir, grid_2per_dir):
         "closest_shift_x": sx,
         "closest_shift_y": sy,
         "closest_shift_magnitude_px": mag,
+        "ecc_recomputed": ecc_recomputed,
+        "ecc_min_corr": ECC_MIN_CORR if RECOMPUTE_ECC else None,
         "frame_range": list(FRAME_RANGE) if FRAME_RANGE else None,
         "z_pairs": Z_PAIRS,
         "deltas": delta_info,
@@ -318,11 +478,13 @@ def main():
             f"(range: Pos{POS_START}..Pos{POS_END or '?'})"
         )
 
-    print(f"TIMELAPSE_ROOT: {root}")
-    print(f"GRID_2PER_DIR:  {GRID_2PER_DIR}")
-    print(f"Positions:      {[p[1].name for p in pos_list]}")
-    print(f"Z_PAIRS:        {len(Z_PAIRS)} pairs")
-    print(f"FRAME_RANGE:    {FRAME_RANGE}")
+    print(f"TIMELAPSE_ROOT:     {root}")
+    print(f"SHIFTS_OUTPUT_ROOT: {SHIFTS_OUTPUT_ROOT or '(same as TIMELAPSE_ROOT)'}")
+    print(f"GRID_2PER_DIR:      {GRID_2PER_DIR}")
+    print(f"Positions:          {[p[1].name for p in pos_list]}")
+    print(f"Z_PAIRS:            {len(Z_PAIRS)} pairs")
+    print(f"MIN_FRAME_INDEX:    {MIN_FRAME_INDEX}")
+    print(f"FRAME_RANGE:        {FRAME_RANGE}")
     print()
 
     all_results = []
