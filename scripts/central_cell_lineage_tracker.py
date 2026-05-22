@@ -446,6 +446,18 @@ def build_long_table(
                 "is_outlier": f.is_outlier,
                 "touches_border": f.touches_border,
             })
+    if not rows:
+        # No cells ever detected — return an empty frame with the expected schema
+        # so downstream code (per_channel_figures, batch_figures) can read it.
+        return pd.DataFrame(columns=[
+            "cell_id", "parent_id", "in_tree", "birth_frame", "death_frame",
+            "frame", "time_h", "rank",
+            "area_px", "area_um2", "long_axis_um", "short_axis_um",
+            "centroid_x_px", "centroid_y_px", "total_phase",
+            "volume_um3_rod", "mean_ri", "mass_pg",
+            "n_medium_used", "n_milliq_used",
+            "is_outlier", "touches_border",
+        ])
     return pd.DataFrame(rows).sort_values(["cell_id", "frame"]).reset_index(drop=True)
 
 
@@ -564,6 +576,26 @@ def build_clist_table(
             "mean_ri_over_life": float(np.nanmean([_ri_of(x) for x in valid])) if valid else np.nan,
             "mean_mass_pg": float(np.nanmean([_mass_of(x) for x in valid])) if valid else np.nan,
         })
+    if not rows:
+        return pd.DataFrame(columns=[
+            "cell_id", "mother_id", "daughter1_id", "daughter2_id",
+            "generation", "in_tree", "n_frames", "n_outliers",
+            "birth_frame", "death_frame", "age_frames",
+            "birth_time_h", "death_time_h", "age_h",
+            "long_axis_birth_um", "long_axis_death_um",
+            "short_axis_birth_um", "short_axis_death_um",
+            "area_birth_um2", "area_death_um2",
+            "volume_birth_um3", "volume_death_um3",
+            "mean_ri_birth", "mean_ri_death",
+            "mass_birth_pg", "mass_death_pg",
+            "n_medium_birth", "n_medium_death",
+            "x_pos_birth_px", "y_pos_birth_px",
+            "x_pos_death_px", "y_pos_death_px",
+            "dist_to_edge_birth_px",
+            "dL_max_um_per_frame", "dL_min_um_per_frame", "L_death_over_birth",
+            "rank_birth", "rank_death",
+            "mean_volume_um3", "mean_ri_over_life", "mean_mass_pg",
+        ])
     return pd.DataFrame(rows).sort_values("cell_id").reset_index(drop=True)
 
 
