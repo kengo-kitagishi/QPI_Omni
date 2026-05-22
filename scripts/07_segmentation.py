@@ -69,10 +69,34 @@ model = CellposeModel(gpu=USE_GPU, pretrained_model=model_path, omni=True, nchan
 skipped = 0
 error_count = 0
 processed = 0
+already_done = 0
 consecutive_empty = 0  # for NO_CELL_BREAK_AFTER early exit
 aborted_early = False
 
 for i, f in enumerate(files, 1):
+    # Resumable: if both outputs already exist for this frame, skip cellpose.
+    _base = os.path.splitext(os.path.basename(f))[0]
+    _mask_out = os.path.join(outdir, f"{_base}_masks.tif")
+    _binary_out = os.path.join(outdir, f"{_base}_binary.tif")
+    if os.path.exists(_mask_out) and os.path.exists(_binary_out):
+        already_done += 1
+        # An existing mask resets the empty-frame counter only if it has cells.
+        try:
+            _m = tifffile.imread(_mask_out)
+            if int(_m.max()) > 0:
+                consecutive_empty = 0
+            else:
+                consecutive_empty += 1
+                if NO_CELL_BREAK_AFTER is not None and consecutive_empty >= NO_CELL_BREAK_AFTER:
+                    print(f"  → {consecutive_empty} consecutive empty frames "
+                          f">= NO_CELL_BREAK_AFTER ({NO_CELL_BREAK_AFTER}); "
+                          f"aborting channel after frame {i}/{len(files)} (resume path).")
+                    aborted_early = True
+                    break
+        except Exception:
+            pass
+        continue
+
     try:
         # Load image (robustly via tifffile)
         img = tifffile.imread(f)
@@ -159,6 +183,7 @@ for i, f in enumerate(files, 1):
 print("=== Inference summary ===")
 print(f"Total files : {len(files)}")
 print(f"Processed   : {processed}")
+print(f"Already done: {already_done} (existing mask + binary skipped)")
 print(f"Skipped     : {skipped} (no cells or kNN issue)")
 print(f"Errors      : {error_count}")
 if aborted_early:

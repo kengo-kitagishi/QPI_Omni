@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 PYTHON = r"C:\Users\QPI\anaconda3\envs\omnipose\python.exe"
@@ -137,6 +138,10 @@ def main() -> int:
 
     p.add_argument("--skip-batch-figures", action="store_true",
                    help="Skip the final cross-channel pooled overlay step.")
+    p.add_argument("--ch-workers", type=int, default=1,
+                   help="Number of channels to process in parallel via ProcessPoolExecutor "
+                        "(default 1 = sequential). Each worker loads its own cellpose model "
+                        "on the GPU; with ~3 GB per model + 24 GB GPU, 4-6 is safe.")
     args = p.parse_args()
 
     root = Path(args.root)
@@ -146,31 +151,54 @@ def main() -> int:
         chs = sorted(d for d in root.glob("ch*") if d.is_dir())
 
     print(f"Channels to process ({len(chs)}): {[c.name for c in chs]}", flush=True)
+    print(f"ch-workers: {args.ch_workers}", flush=True)
 
     results: dict[str, bool] = {}
     succeeded: list[Path] = []
-    for ch in chs:
-        try:
-            ok = process_channel(
-                ch,
-                skip_seg=args.skip_seg,
-                model_path=args.model_path,
-                pixel_size_um=args.pixel_size_um,
-                time_interval_min=args.time_interval_min,
-                wavelength_nm=args.wavelength_nm,
-                n_medium=args.n_medium,
-                alpha_ri=args.alpha_ri,
-                ri_calibration=args.ri_calibration,
-                calibration_id=args.calibration_id,
-                media_schedule=args.media_schedule,
-                n_milliq=args.n_milliq,
-            )
-        except Exception as e:
-            print(f"!! {ch.name} crashed: {e!r}", flush=True)
-            ok = False
-        results[ch.name] = ok
-        if ok:
-            succeeded.append(ch)
+    kwargs = dict(
+        skip_seg=args.skip_seg,
+        model_path=args.model_path,
+        pixel_size_um=args.pixel_size_um,
+        time_interval_min=args.time_interval_min,
+        wavelength_nm=args.wavelength_nm,
+        n_medium=args.n_medium,
+        alpha_ri=args.alpha_ri,
+        ri_calibration=args.ri_calibration,
+        calibration_id=args.calibration_id,
+        media_schedule=args.media_schedule,
+        n_milliq=args.n_milliq,
+    )
+
+    if args.ch_workers <= 1:
+        # Sequential path (preserves previous behavior + interleaved output)
+        for ch in chs:
+            try:
+                ok = process_channel(ch, **kwargs)
+            except Exception as e:
+                print(f"!! {ch.name} crashed: {e!r}", flush=True)
+                ok = False
+            results[ch.name] = ok
+            if ok:
+                succeeded.append(ch)
+    else:
+        # Parallel: each ch is a separate subprocess running its own cellpose +
+        # tracker + per_channel_figures. ProcessPoolExecutor spawns ch_workers
+        # Python processes; each one calls process_channel which itself spawns
+        # subprocess.run for 07_segmentation.py etc.
+        with ProcessPoolExecutor(max_workers=args.ch_workers) as ex:
+            future_to_ch = {ex.submit(process_channel, ch, **kwargs): ch for ch in chs}
+            for fut in as_completed(future_to_ch):
+                ch = future_to_ch[fut]
+                try:
+                    ok = fut.result()
+                except Exception as e:
+                    print(f"!! {ch.name} crashed: {e!r}", flush=True)
+                    ok = False
+                results[ch.name] = ok
+                if ok:
+                    succeeded.append(ch)
+        # Stable order for the SUMMARY block + batch_figures.
+        succeeded.sort(key=lambda p: p.name)
 
     # Pooled batch plots across all successful channels.
     if not args.skip_batch_figures and succeeded:
