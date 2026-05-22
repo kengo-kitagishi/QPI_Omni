@@ -88,7 +88,7 @@ for i, f in enumerate(files, 1):
             else:
                 consecutive_empty += 1
                 if NO_CELL_BREAK_AFTER is not None and consecutive_empty >= NO_CELL_BREAK_AFTER:
-                    print(f"  → {consecutive_empty} consecutive empty frames "
+                    print(f"  -> {consecutive_empty} consecutive empty frames "
                           f">= NO_CELL_BREAK_AFTER ({NO_CELL_BREAK_AFTER}); "
                           f"aborting channel after frame {i}/{len(files)} (resume path).")
                     aborted_early = True
@@ -101,7 +101,7 @@ for i, f in enumerate(files, 1):
         # Load image (robustly via tifffile)
         img = tifffile.imread(f)
     except Exception as e:
-        print(f"[{i}/{len(files)}] {os.path.basename(f)}  ❌ failed to read: {e}")
+        print(f"[{i}/{len(files)}] {os.path.basename(f)}  [ERROR] failed to read: {e}")
         traceback.print_exc()
         # Leave an empty mask for output (remove if not needed)
         empty_mask = np.zeros((1 if img is None else img.shape[0], 1 if img is None else img.shape[1]), dtype=np.uint16)
@@ -118,7 +118,7 @@ for i, f in enumerate(files, 1):
         masks, flows, _ = model.eval([img], **EVAL_PARAMS)
     except ValueError as e:
         # ValueError can occur here from kNN etc. (too few points, etc.)
-        print(f"  ⚠ Skipping due to ValueError: {e}")
+        print(f"  [WARN] Skipping due to ValueError: {e}")
         # Save an empty mask (to facilitate batch processing later)
         empty_mask = np.zeros_like(img, dtype=np.uint16)
         tifffile.imwrite(os.path.join(outdir, os.path.basename(f).replace(".tif", "_masks.tif")), empty_mask)
@@ -129,7 +129,7 @@ for i, f in enumerate(files, 1):
         continue
     except Exception as e:
         # Log other exceptions and skip
-        print(f"  ⚠ Skipped due to unexpected error: {e}")
+        print(f"  [WARN] Skipped due to unexpected error: {e}")
         traceback.print_exc()
         empty_mask = np.zeros_like(img, dtype=np.uint16)
         tifffile.imwrite(os.path.join(outdir, os.path.basename(f).replace(".tif", "_masks.tif")), empty_mask)
@@ -140,7 +140,7 @@ for i, f in enumerate(files, 1):
 
     # Check if masks is None or all zeros (no cells)
     if masks is None or (isinstance(masks, (list, tuple, np.ndarray)) and np.max(masks) == 0):
-        print("  → No cells detected (saving empty mask).")
+        print("  -> No cells detected (saving empty mask).")
         empty_mask = np.zeros_like(img, dtype=np.uint16)
         tifffile.imwrite(os.path.join(outdir, os.path.basename(f).replace(".tif", "_masks.tif")), empty_mask)
         tifffile.imwrite(os.path.join(outdir, os.path.basename(f).replace(".tif", "_binary.tif")),
@@ -148,7 +148,7 @@ for i, f in enumerate(files, 1):
         skipped += 1
         consecutive_empty += 1
         if NO_CELL_BREAK_AFTER is not None and consecutive_empty >= NO_CELL_BREAK_AFTER:
-            print(f"  → {consecutive_empty} consecutive empty frames "
+            print(f"  -> {consecutive_empty} consecutive empty frames "
                   f">= NO_CELL_BREAK_AFTER ({NO_CELL_BREAK_AFTER}); "
                   f"aborting channel after frame {i}/{len(files)}.")
             aborted_early = True
@@ -171,7 +171,7 @@ for i, f in enumerate(files, 1):
                          np.where(border, 0, 255).astype(np.uint8))
         processed += 1
     except Exception as e:
-        print(f"  ❌ Failed to save outputs for {f}: {e}")
+        print(f"  [ERROR] Failed to save outputs for {f}: {e}")
         traceback.print_exc()
         error_count += 1
         # attempt to save empty mask to keep outputs consistent
