@@ -477,38 +477,68 @@ def _write_data_csv(data: dict, csv_path: Path) -> None:
 
 
 def _append_manifest(record: dict, manifest_path: Path) -> None:
+    """Append a JSONL record to the shared manifest. Retries on Windows
+    PermissionError when concurrent save_figure workers contend on the
+    same file."""
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    with manifest_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    line = json.dumps(record, ensure_ascii=False) + "\n"
+    last_exc: Exception | None = None
+    for attempt in range(8):
+        try:
+            with manifest_path.open("a", encoding="utf-8") as f:
+                f.write(line)
+            return
+        except (PermissionError, OSError) as e:
+            last_exc = e
+            time.sleep(0.05 * (attempt + 1))
+    print(f"[figure_logger] manifest append skipped after retries: {last_exc!r}",
+          file=sys.stderr)
 
 
 def _append_session_log(record: dict) -> None:
+    """Append one record to today's session log. Retries on
+    PermissionError (Windows file-locking when several parallel
+    save_figure calls hit the same JSON at once). The whole call
+    silently no-ops after a few retries — the session log is
+    diagnostic, not load-bearing for downstream analysis."""
     _HISTORY_DIR.mkdir(parents=True, exist_ok=True)
     date_str = record.get("date_local", datetime.now().strftime("%Y-%m-%d"))
     session_file = _HISTORY_DIR / f"session_{date_str}.json"
-    if session_file.exists():
-        try:
-            entries = json.loads(session_file.read_text(encoding="utf-8"))
-            if not isinstance(entries, list):
-                entries = []
-        except Exception:
-            entries = []
-    else:
-        entries = []
 
-    entries.append(
-        {
-            "time": datetime.now().strftime("%H:%M:%S"),
-            "script": record.get("script", "unknown"),
-            "run_id": record.get("run_id", ""),
-            "figure_index": record.get("figure_index", 0),
-            "description": record.get("description", ""),
-            "elapsed_sec": record.get("elapsed_sec", 0),
-            "inbox_file": record.get("inbox_file", ""),
-            "published_file": record.get("published_file", ""),
-        }
-    )
-    session_file.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
+    new_entry = {
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "script": record.get("script", "unknown"),
+        "run_id": record.get("run_id", ""),
+        "figure_index": record.get("figure_index", 0),
+        "description": record.get("description", ""),
+        "elapsed_sec": record.get("elapsed_sec", 0),
+        "inbox_file": record.get("inbox_file", ""),
+        "published_file": record.get("published_file", ""),
+    }
+
+    last_exc: Exception | None = None
+    for attempt in range(8):  # up to ~1s of retries
+        try:
+            if session_file.exists():
+                try:
+                    entries = json.loads(session_file.read_text(encoding="utf-8"))
+                    if not isinstance(entries, list):
+                        entries = []
+                except Exception:
+                    entries = []
+            else:
+                entries = []
+            entries.append(new_entry)
+            session_file.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
+            return
+        except (PermissionError, OSError) as e:
+            # Another worker is mid-write. Back off and try again.
+            last_exc = e
+            time.sleep(0.05 * (attempt + 1))
+    # Couldn't acquire the file after retries — drop this entry rather than
+    # crashing the whole save_figure pipeline.
+    print(f"[figure_logger] session log skipped after retries: {last_exc!r}",
+          file=sys.stderr)
 
 
 def _next_publish_version(output_dir: Path, date_str: str, script_name: str, fmt: str) -> int:
@@ -589,8 +619,17 @@ def _append_experiment_log(record: dict) -> None:
 **Published**: `{published_rel}`
 """
 
-    with _EXPERIMENT_LOG.open("a", encoding="utf-8") as f:
-        f.write(entry)
+    last_exc: Exception | None = None
+    for attempt in range(8):
+        try:
+            with _EXPERIMENT_LOG.open("a", encoding="utf-8") as f:
+                f.write(entry)
+            return
+        except (PermissionError, OSError) as e:
+            last_exc = e
+            time.sleep(0.05 * (attempt + 1))
+    print(f"[figure_logger] experiment log append skipped after retries: {last_exc!r}",
+          file=sys.stderr)
 
 
 def _to_rel_or_abs(path: Path) -> str:
