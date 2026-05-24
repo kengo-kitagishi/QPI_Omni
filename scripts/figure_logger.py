@@ -241,13 +241,26 @@ def _load_timing_history(script_name: str) -> list[float]:
 
 
 def _save_timing_history(script_name: str, elapsed_sec: float) -> None:
-    """Append execution time to history file (keeps last 5 entries)."""
+    """Append execution time to history file (keeps last 5 entries).
+    Retries on Windows file-locking; drops the entry after retries."""
     _HISTORY_DIR.mkdir(parents=True, exist_ok=True)
     p = _HISTORY_DIR / f"{script_name}_timing.json"
-    history = _load_timing_history(script_name)
-    history.append(round(elapsed_sec, 1))
-    history = history[-5:]  # Keep only the last 5 entries
-    p.write_text(json.dumps({"elapsed_sec_history": history}, ensure_ascii=False, indent=2), encoding="utf-8")
+    last_exc: Exception | None = None
+    for attempt in range(8):
+        try:
+            history = _load_timing_history(script_name)
+            history.append(round(elapsed_sec, 1))
+            history = history[-5:]  # Keep only the last 5 entries
+            p.write_text(
+                json.dumps({"elapsed_sec_history": history}, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            return
+        except (PermissionError, OSError) as e:
+            last_exc = e
+            time.sleep(0.05 * (attempt + 1))
+    print(f"[figure_logger] timing history skipped after retries: {last_exc!r}",
+          file=sys.stderr)
 
 
 def _fmt_elapsed(seconds: float) -> str:
