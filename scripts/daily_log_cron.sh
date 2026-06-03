@@ -104,8 +104,11 @@ find "$LOG_DIR" -name "daily_log_recovery_*.log" -mtime +30 -delete 2>/dev/null
         final_rc=1
         for attempt in 1 2 3; do
             echo "  attempt $attempt/3 ..."
+            # 1M-context Opus 4.7 to handle large daily_index (e.g., 24k-line days)
+            # without "Prompt is too long". claude-opus-4-6 is 200K and chokes on
+            # the global CLAUDE.md + project CLAUDE.md + skills + index reference.
             claude -p "$PROMPT" \
-                --model claude-opus-4-6 \
+                --model "claude-opus-4-7[1m]" \
                 --allowedTools "Bash,Read,Write,Edit,Glob,Grep,Agent,TaskCreate,TaskUpdate,TaskList" \
                 --dangerously-skip-permissions \
                 --no-session-persistence

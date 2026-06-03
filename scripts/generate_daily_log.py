@@ -22,7 +22,7 @@ Usage:
 
 Output:
   ~/Documents/Obsidian Vault/01_Daily/YYYY-MM-DD.md          <- hub page
-  ~/Documents/Obsidian Vault/01_Daily/YYYY-MM-DD_topic.md    <- topic pages
+  ~/Documents/Obsidian Vault/01_Daily/topic_YYYY-MM-DD.md    <- topic pages (topic first, then date)
 """
 
 import argparse
@@ -52,12 +52,14 @@ STYLE_FILES = [
     Path.home() / ".claude/skills/daily-log/references/daily_log_style.md",
 ]
 
-DEFAULT_MODEL = "claude-opus-4-6"
+DEFAULT_MODEL = "claude-opus-4-7[1m]"
 JST = timezone(timedelta(hours=9))
 
-# Map-reduce settings
-MAX_TOKENS_SINGLE = 150_000   # above this, switch to map-reduce
-MAX_TOKENS_PER_CHUNK = 120_000  # target size per map chunk
+# Map-reduce settings.
+# Bumped to use Opus 4.7's 1M context. Previously 150k/120k for opus-4-6 (200K).
+# Cuts a 24k-line daily_index from ~10 chunks to a single call.
+MAX_TOKENS_SINGLE = 800_000
+MAX_TOKENS_PER_CHUNK = 600_000
 MAX_MAP_WORKERS = 3
 
 # ────────────────────────────────────────────
@@ -81,9 +83,9 @@ SYSTEM_PROMPT_MULTI = """\
 例:
 <<FILE: 2026-03-26.md>>
 # 2026-03-26（木）
-- [[2026-03-26_アライメント改善]] — アライメント改善でドリフト補正精度が向上
+- [[アライメント改善_2026-03-26]] — アライメント改善でドリフト補正精度が向上
 <<ENDFILE>>
-<<FILE: 2026-03-26_アライメント改善.md>>
+<<FILE: アライメント改善_2026-03-26.md>>
 # アライメント改善
 
 > [[2026-03-26]] に戻る
@@ -95,12 +97,13 @@ SYSTEM_PROMPT_MULTI = """\
 ## ファイル構成
 
 ### ハブページ（YYYY-MM-DD.md）
-- トピックへのリンク一覧（`[[YYYY-MM-DD_トピック名]]` 形式）
+- トピックへのリンク一覧（`[[トピック名_YYYY-MM-DD]]` 形式 — トピック名を先、日付を後ろにする）
 - 各リンクに一行説明（何をやったか・結果の一言）
 - 発表用・解析外の図がある場合のみ末尾に `## 発表用・整形済み図` セクション
 - 短くてよい（内容はトピックページに任せる）
 
-### トピックページ（YYYY-MM-DD_トピック名.md）
+### トピックページ（トピック名_YYYY-MM-DD.md）
+- ファイル名はトピック名を先頭にし、`_YYYY-MM-DD` を後ろに付ける。日付プレフィックスは禁止（Obsidian のファイル一覧で内容が一目でわからなくなるため）
 - 先頭に必ず `> [[YYYY-MM-DD]] に戻る`
 - セクション構成: `## 背景・設計` / `## 実装・実行` / `## 結果` / `## 解釈・次の一手`
 - **最低 5000 日本語文字**（Qiita 記事相当の厚み）
@@ -157,10 +160,11 @@ SYSTEM_PROMPT_REDUCE = """\
 ## ファイル構成
 
 ### ハブページ（YYYY-MM-DD.md）
-- トピックへのリンク一覧（`[[YYYY-MM-DD_トピック名]]` 形式）
+- トピックへのリンク一覧（`[[トピック名_YYYY-MM-DD]]` 形式 — トピック名を先、日付を後ろにする）
 - 各リンクに一行説明
 
-### トピックページ（YYYY-MM-DD_トピック名.md）
+### トピックページ（トピック名_YYYY-MM-DD.md）
+- ファイル名はトピック名を先頭にし、`_YYYY-MM-DD` を後ろに付ける。日付プレフィックスは禁止（Obsidian のファイル一覧で内容が一目でわからなくなるため）
 - 先頭に必ず `> [[YYYY-MM-DD]] に戻る`
 - 「仮説→試行→観察→判断→次の試行」の思考フロー形式
 - **最低 5000 日本語文字**
@@ -356,7 +360,7 @@ def _call_via_cli(model: str, system_prompt: str, user_prompt: str) -> tuple[str
     Improvements:
     - Extended env strip list (CLAUDE_* general + ANTHROPIC_PROJECT)
     - cwd=HOME to avoid inheriting parent session .claude/projects
-    - timeout=600 to prevent infinite hangs
+    - timeout=1800 (1M-context Opus needs 5-15 min on huge daily_index)
     - Returns both stdout + stderr (claude CLI may output errors to stdout)
     """
     skip_prefixes = ("CLAUDECODE", "CLAUDE_CODE", "CLAUDE_", "MCP_", "ANTHROPIC_PROJECT")
@@ -374,10 +378,10 @@ def _call_via_cli(model: str, system_prompt: str, user_prompt: str) -> tuple[str
         result = subprocess.run(
             cmd, input=user_prompt,
             capture_output=True, text=True, env=env,
-            cwd=str(Path.home()), timeout=600,
+            cwd=str(Path.home()), timeout=1800,
         )
     except subprocess.TimeoutExpired as e:
-        return "", 124, f"TIMEOUT after 600s: {e}"
+        return "", 124, f"TIMEOUT after 1800s: {e}"
 
     # claude CLI may output errors to stdout, so combine both on failure
     if result.returncode != 0:
@@ -421,7 +425,7 @@ def _call_model(detected: str, model: str, system_prompt: str, user_prompt: str)
 
 
 # Model fallback ladder: downgrade in order on rate limit
-MODEL_LADDER = ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"]
+MODEL_LADDER = ["claude-opus-4-7[1m]"]
 
 
 def _is_rate_limit(output: str, stderr: str) -> bool:

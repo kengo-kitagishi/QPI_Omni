@@ -52,7 +52,13 @@ SHARED_SESSION_DIR = Path(
     # TODO-JP: 共有ドライブ is the literal Google Drive folder name on disk; must remain as-is.
     "共有ドライブ/wakamotolab_meeting/kitagishi/claude_logs/QPI_Omni"
 )
-DEFAULT_SESSION_DIRS = [SESSION_DIR, SHARED_SESSION_DIR]
+
+# Pick up every Claude Code project the user works in, not just QPI_Omni.
+# Without this, days spent in Obsidian Vault / figure-hub / thesis repos vanish
+# from claude_sessions and the daily log generator concludes "no activity".
+LOCAL_PROJECTS_ROOT = Path.home() / ".claude/projects"
+LOCAL_SESSION_DIRS = sorted(LOCAL_PROJECTS_ROOT.glob("-Users-kitak*")) if LOCAL_PROJECTS_ROOT.exists() else [SESSION_DIR]
+DEFAULT_SESSION_DIRS = LOCAL_SESSION_DIRS + [SHARED_SESSION_DIR]
 OBSIDIAN_SESSIONS_DIR = Path("/Users/kitak/Documents/Obsidian Vault/00_Inbox/claude_sessions")
 
 # Active sessions (last entry within ACTIVE_THRESHOLD minutes) are skipped

@@ -32,6 +32,7 @@ Usage:
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
 from datetime import date, datetime, timedelta, timezone
@@ -52,8 +53,16 @@ OBSIDIAN_SESSIONS_DIR = OBSIDIAN_ROOT / "00_Inbox/claude_sessions"
 OBSIDIAN_FIGURE_INBOX_DIR = OBSIDIAN_ROOT / "00_Inbox/figure_inbox"
 OBSIDIAN_NOTION_SYNC_DIR = OBSIDIAN_ROOT / "00_Inbox/notion_sync/api"
 OBSIDIAN_WEEKLY_REPORTS_DIR = OBSIDIAN_ROOT / "04_WeeklyReports"
+OBSIDIAN_FIGURE_HUB_MIRROR_DIR = OBSIDIAN_ROOT / "00_Inbox/figure_hub_mirror"
 
 FIGURE_HUB_LIBRARY = Path.home() / "Desktop/figure-hub/library"
+
+# Source asset fig_id suffixes that should NOT be embedded in daily logs
+# (they're auto-registered alongside the primary artifact)
+FIGURE_HUB_SOURCE_SUFFIXES = ("_src_afdesign", "_src_svg", "_svg")
+
+# Renderable file extensions for Obsidian embeds
+FIGURE_HUB_EMBEDDABLE_EXTS = {".pdf", ".png", ".jpg", ".jpeg", ".svg", ".gif"}
 
 JST = timezone(timedelta(hours=9))
 
@@ -238,8 +247,48 @@ def scan_notion_sync(monday: date, sunday: date) -> list[dict]:
     return results
 
 
+def _is_source_asset_fig_id(fig_id: str) -> bool:
+    """Source-asset companion fig_ids that shouldn't be embedded in daily logs."""
+    return any(fig_id.endswith(suf) for suf in FIGURE_HUB_SOURCE_SUFFIXES)
+
+
+def _mirror_figure_hub_file_to_vault(
+    fig_id: str, version: str, stored_filename: str
+) -> str | None:
+    """Copy the bundled figure file into the vault so Obsidian wikilinks can resolve it.
+
+    Returns the basename of the mirrored file (for `![[filename]]`), or None if the
+    source file is missing or not a renderable type.
+    """
+    if not stored_filename:
+        return None
+    ext = Path(stored_filename).suffix.lower()
+    if ext not in FIGURE_HUB_EMBEDDABLE_EXTS:
+        return None
+
+    src = FIGURE_HUB_LIBRARY / fig_id / "versions" / version / stored_filename
+    if not src.exists():
+        return None
+
+    OBSIDIAN_FIGURE_HUB_MIRROR_DIR.mkdir(parents=True, exist_ok=True)
+    # Unique filename per (fig_id, version) so older copies aren't overwritten
+    dest_name = f"{fig_id}__{version}__{stored_filename}"
+    dest = OBSIDIAN_FIGURE_HUB_MIRROR_DIR / dest_name
+
+    # Copy if missing or if source has a different size (lightweight change detection)
+    if not dest.exists() or dest.stat().st_size != src.stat().st_size:
+        shutil.copy2(src, dest)
+
+    return dest_name
+
+
 def scan_figure_hub_library(monday: date, sunday: date) -> list[dict]:
-    """Scan versions registered during the target week from the figure-hub library."""
+    """Scan versions registered during the target week from the figure-hub library.
+
+    Source-asset companion fig_ids (e.g. `*_src_afdesign`, `*_svg`) are filtered out.
+    For each remaining entry, the bundled file is mirrored into the vault so it can
+    be embedded via `![[filename]]`.
+    """
     results = []
     if not FIGURE_HUB_LIBRARY.exists():
         return results
@@ -251,6 +300,9 @@ def scan_figure_hub_library(monday: date, sunday: date) -> list[dict]:
             continue
 
         fig_id = meta.get("id", "")
+        if _is_source_asset_fig_id(fig_id):
+            continue
+
         for v in meta.get("versions", []):
             added_at = v.get("added_at", "")
             if not added_at:
@@ -260,15 +312,29 @@ def scan_figure_hub_library(monday: date, sunday: date) -> list[dict]:
             except ValueError:
                 continue
 
-            if monday <= added_date <= sunday:
-                results.append({
-                    "date": added_at[:10],
-                    "source": "figure-hub-library",
-                    "fig_id": fig_id,
-                    "version": v.get("version", ""),
-                    "note": v.get("note", "")[:80],
-                    "path": str(meta_path),
-                })
+            if not (monday <= added_date <= sunday):
+                continue
+
+            version = v.get("version", "")
+            stored_filename = v.get("stored_filename", "")
+            mirrored_name = _mirror_figure_hub_file_to_vault(
+                fig_id, version, stored_filename
+            )
+
+            results.append({
+                "date": added_at[:10],
+                "added_at": added_at,
+                "source": "figure-hub-library",
+                "fig_id": fig_id,
+                "version": version,
+                "note": v.get("note", ""),
+                "stored_filename": stored_filename,
+                "library_path": str(
+                    FIGURE_HUB_LIBRARY / fig_id / "versions" / version / stored_filename
+                ),
+                "mirrored_name": mirrored_name,
+                "path": str(meta_path),
+            })
 
     return results
 
@@ -714,6 +780,54 @@ def render_figure_block(fig: dict) -> list[str]:
     return lines
 
 
+def render_figure_hub_block(lb: dict) -> list[str]:
+    """Render a figure-hub library registration in the same `#### [fig]` format as
+    inbox figures so it gets embedded by the daily-log generator's safety net.
+
+    Falls back to a metadata-only block (no `![[...]]`) when the file isn't a
+    renderable format (e.g. `.afdesign` slipped through, or mirroring failed).
+    """
+    fig_id = lb.get("fig_id", "")
+    version = lb.get("version", "")
+    note = lb.get("note", "") or ""
+    added_at = lb.get("added_at", "")
+    library_path = lb.get("library_path", "")
+    mirrored_name = lb.get("mirrored_name")
+
+    # JST timestamp (added_at is UTC ISO from figure-hub)
+    added_at_jst = ""
+    if added_at:
+        try:
+            dt = datetime.fromisoformat(added_at.replace("Z", "+00:00"))
+            added_at_jst = dt.astimezone(JST).strftime("%Y-%m-%d %H:%M JST")
+        except ValueError:
+            added_at_jst = added_at
+
+    heading = f"#### [fig] [figure-hub] `{fig_id}` {version}"
+    if note:
+        heading += f" — {note}"
+    lines = [heading, ""]
+
+    if mirrored_name:
+        lines.append(f"![[{mirrored_name}]]")
+        lines.append("")
+
+    lines.append("| Item | Value |")
+    lines.append("|------|-----|")
+    lines.append(f"| fig_id | `{fig_id}` |")
+    lines.append(f"| version | {version} |")
+    if added_at_jst:
+        lines.append(f"| registered_at | {added_at_jst} |")
+    if note:
+        lines.append(f"| note | {note} |")
+    if library_path:
+        lines.append(f"| source | `{library_path}` |")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+    return lines
+
+
 def render_notion_block(notion: dict) -> list[str]:
     """Generate a summary block for one Notion memo. Includes full text and interpretation instructions."""
     title = notion.get("title", "(untitled)")
@@ -788,12 +902,18 @@ def render_daily_index(
         for s in sessions:
             lines.extend(render_session_block(conn, s))
 
-    # Figures
-    if figures:
-        lines.append(f"## Figures ({len(figures)})")
+    # Figures (inbox figures from figure_logger + figure-hub library registrations)
+    n_inbox = len(figures)
+    n_lib = len(lib_entries)
+    if n_inbox or n_lib:
+        header = f"## Figures ({n_inbox} inbox + {n_lib} figure-hub)" \
+            if n_lib else f"## Figures ({n_inbox})"
+        lines.append(header)
         lines.append("")
         for fig in figures:
             lines.extend(render_figure_block(fig))
+        for lb in lib_entries:
+            lines.extend(render_figure_hub_block(lb))
 
     # Notion memos
     if notions:
@@ -801,17 +921,6 @@ def render_daily_index(
         lines.append("")
         for notion in notions:
             lines.extend(render_notion_block(notion))
-
-    # figure-hub library registrations
-    if lib_entries:
-        lines.append(f"## figure-hub Library registrations ({len(lib_entries)})")
-        lines.append("")
-        for lb in lib_entries:
-            lines.append(f"### `{lb['fig_id']}` {lb['version']}")
-            if lb.get("note"):
-                lines.append(f"- note: {lb['note']}")
-            lines.append(f"- `{lb['path']}`")
-            lines.append("")
 
     return "\n".join(lines)
 
