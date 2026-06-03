@@ -332,8 +332,12 @@ def process_single_frame(tl_img, sx, sy, rois,
 
     if apply_subpixel_correction and (residual_x != 0.0 or residual_y != 0.0):
         tl_warped = apply_inverse_shift_warp(tl_img, residual_x, residual_y)
+        valid_full = apply_inverse_shift_warp(
+            np.ones_like(tl_img, dtype=np.float32), residual_x, residual_y
+        )
     else:
         tl_warped = tl_img
+        valid_full = np.ones_like(tl_img, dtype=np.float32)
 
     if grid_img is not None:
         full_frame = (tl_warped - grid_img).astype(np.float32)
@@ -352,6 +356,9 @@ def process_single_frame(tl_img, sx, sy, rois,
 
         if use_raw_phase:
             tl_large = extract_rect_roi(tl_warped, crop_cy, crop_cx, crop_w, _tilt_h)
+            valid_large = extract_rect_roi(valid_full, crop_cy, crop_cx, crop_w, _tilt_h)
+            _vstart = (_tilt_h - out_crop_h) // 2
+            valid_out = valid_large[:, _vstart : _vstart + out_crop_h] > 0.5
             if grid_img is not None:
                 grid_large = extract_rect_roi(grid_img, crop_cy, crop_cx, crop_w, _tilt_h)
                 if grid_large.shape != tl_large.shape:
@@ -369,6 +376,7 @@ def process_single_frame(tl_img, sx, sy, rois,
                 subtracted = np.zeros((crop_w, out_crop_h), dtype=np.float64)
         else:
             tl_crop = extract_rect_roi(tl_warped, crop_cy, crop_cx, crop_w, out_crop_h)
+            valid_out = extract_rect_roi(valid_full, crop_cy, crop_cx, crop_w, out_crop_h) > 0.5
             if grid_img is not None:
                 grid_crop = extract_rect_roi(grid_img, crop_cy, crop_cx, crop_w, out_crop_h)
                 if grid_crop.shape != tl_crop.shape:
@@ -383,6 +391,8 @@ def process_single_frame(tl_img, sx, sy, rois,
                 subtracted = tl_bc - grid_bc
             else:
                 subtracted = tl_crop.copy()
+
+        subtracted = subtracted * valid_out
 
         if apply_inverse_shift and (sx != 0.0 or sy != 0.0):
             subtracted = apply_inverse_shift_warp(subtracted, sx, sy)
