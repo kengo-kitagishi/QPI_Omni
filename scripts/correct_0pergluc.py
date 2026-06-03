@@ -129,35 +129,35 @@ GRID_SUB_LOG = r"D:\AquisitionData\Kitagishi\260405\ph_260405\Pos1\output_phase\
 CHANNEL_ROIS_JSON = r"D:\AquisitionData\Kitagishi\260405\ph_260405\Pos1\output_phase\channels\channel_rois.json"
 
 # Grid directories
-GRID_2PER_DIR = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
-GRID_0PER_DIR = r"C:\grid_0pergluc_60ms_1"
+GRID_2PER_DIR = r"E:\260504\grid_2pergluc_1"
+GRID_0PER_DIR = r"E:\260504\0per_gluc"
 BASE_LABEL    = "Pos1"
 
 # Grid calibration JSON (for (xi,yi) -> (cal_dx, cal_dy) mapping)
 GRID_CALIBRATION_JSON = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1\grid_calibration_Pos1.json"
 
 # z-index default (grid_z_index from grid_subtract_log takes priority if available)
-GRID_Z_INDEX = 18
+GRID_Z_INDEX = 5
 
 # 0% glucose frame range [inclusive, exclusive)
-GLUCOSE_0_START = 575    # frame index (inclusive)
-GLUCOSE_0_END   = 1151   # frame index (exclusive)
+GLUCOSE_0_START = 870    # frame index (inclusive)
+GLUCOSE_0_END   = 1445   # frame index (exclusive)
 
 # raw-raw reconstruction and tilt correction parameters
 RAW_CROP        = _OPTICAL_RAW_CROP
 TILT_CROP_H_RAW = 270
 ECC_CROP_H      = 80       # must match compute_pos_shifts.py
-POS_SPLIT       = 52       # must match compute_pos_shifts.py
+POS_SPLIT       = 53       # must match compute_pos_shifts.py
 
 # Output crop height override (None -> use channel_rois.json crop_h)
 OUTPUT_CROP_H = None
 
 # --- Batch multiple Pos (if empty list, only the single path settings below are used) ---
-PH_SESSION_ROOT = r"D:\AquisitionData\Kitagishi\260405\ph_260405"
+PH_SESSION_ROOT = r"D:\AquisitionData\Kitagishi\260508\online_crop_sub_zstack"
 # grid_subtract output subfolder name (assumes same structure as Pos1)
 # If grid_subtract output folder names differ per Pos, align them before running
 CHANNEL_OUTPUT_SUBDIR = "crop_sub_rawraw"
-POS_NUMBERS_TO_RUN = []
+POS_NUMBERS_TO_RUN = list(range(34, 105))
 
 # ECC background fit side (None to auto-determine from Pos number and POS_SPLIT)
 FIT_RIGHT = None
@@ -167,7 +167,12 @@ GRID_POINTS_BASE_LABEL = "Pos0"
 
 # Pre-computed delta TIFs directory (from extract_timelapse_delta.py).
 # When set, load delta_z{grid_z_index:03d}.tif instead of computing from grid_0per.
+# In batch mode, set DELTA_TIFS_SUBDIR instead (per-Pos subdirectory name).
 DELTA_TIFS_DIR = None
+
+# Per-Pos delta subfolder under PosN/output_phase/channels/ (batch mode only).
+# When set, overrides DELTA_TIFS_DIR for each Pos automatically.
+DELTA_TIFS_SUBDIR = "delta_timelapse"
 
 # ============================================================
 
@@ -577,7 +582,10 @@ def run_correct_0pergluc(
                 print(f"  [WARNING] File not found: {tif_path}")
                 continue
 
-            img = tifffile.imread(str(tif_path)).astype(np.float64)
+            try:
+                img = tifffile.imread(str(tif_path)).astype(np.float64)
+            except Exception:
+                continue
             if img.ndim != 2:
                 print(f"  [WARNING] Expected 2D at frame {fi} ch{ch:02d}: shape={img.shape}")
                 continue
@@ -779,6 +787,14 @@ def main():
             glog = session / label / "output_phase" / "channels" / "grid_subtract_log.json"
             crois = session / label / "output_phase" / "channels" / "channel_rois.json"
             gcal = grid2 / f"grid_calibration_{label}.json"
+            if DELTA_TIFS_SUBDIR:
+                per_pos_delta = session / label / "output_phase" / "channels" / DELTA_TIFS_SUBDIR
+                if per_pos_delta.is_dir():
+                    global DELTA_TIFS_DIR
+                    DELTA_TIFS_DIR = str(per_pos_delta)
+                else:
+                    print(f"\n  SKIP {label}: {DELTA_TIFS_SUBDIR}/ not found")
+                    continue
             print("\n" + "=" * 60)
             print(f"  correct_0pergluc - {label}")
             print("=" * 60)

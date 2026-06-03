@@ -111,7 +111,7 @@ TILT_CROP_H_RAW  = 270
 
 # Pos split threshold for which side to take background 1/3 (same as compute_pos_shifts.py).
 # Pos number < POS_SPLIT -> fit with left 1/3. Pos number >= POS_SPLIT -> fit with right 1/3.
-POS_SPLIT        = 52
+POS_SPLIT        = 53
 # ============================================================
 
 
@@ -538,6 +538,9 @@ def main():
     # --- Get shift per frame ---
     frame_shifts = []
     for r in frame_results:
+        if r is None:
+            frame_shifts.append((None, None))
+            continue
         sx = r.get("shift_x_avg") or r.get("shift_x")
         sy = r.get("shift_y_avg") or r.get("shift_y")
         frame_shifts.append((sx, sy))
@@ -593,7 +596,7 @@ def main():
             "grid_nearest_dist_um": dist_um,
             "residual_x_px": residual_x,
             "residual_y_px": residual_y,
-            "is_outlier_timeseries": frame_results[t].get("is_outlier_timeseries", False)
+            "is_outlier_timeseries": (frame_results[t] or {}).get("is_outlier_timeseries", False)
         }
 
         tl_img = tifffile.imread(str(tl_frames[t])).astype(np.float64)

@@ -32,11 +32,11 @@ sys.path.insert(0, str(_script_dir))
 # ============================================================
 
 # .pos file consumed by Micro-Manager (the actual time-lapse position list)
-POSITIONS_FILE   = r"C:\260423\timelapse.pos"
+POSITIONS_FILE   = r"C:\260517\timelapse.pos"
 
 # Grid acquisition directory (small grid is fine)
-GRID_DIR         = r"D:\AquisitionData\Kitagishi\260423\grid_2pergluc_1"
-GRID_Z_INDEX     = 5        # z-slice of the grid TIFFs to use as reference
+GRID_DIR         = r"E:\260517\grid_2pergluc_2"
+GRID_Z_INDEX     = 8        # z-slice of the grid TIFFs to use as reference
 
 # channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
 # No single path needed — compute_drift_online.py reads per-pos from grid_dir.
@@ -45,14 +45,14 @@ GRID_Z_INDEX     = 5        # z-slice of the grid TIFFs to use as reference
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"E:\260424\0per_gluc"
+SAVE_DIR         = r"E:\260517\2per_0055per_0per_2per"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
 
 # Micro-Manager acquisition parameters
-N_TIMEPOINTS     = 288
-INTERVAL_SEC     = 600        # Time-lapse interval [s]
+N_TIMEPOINTS     = 50000
+INTERVAL_SEC     = 300        # Time-lapse interval [s]
 EXPOSURE_MS      = 60.0
 SETTLE_MS        = 150        # Stage settle time after move [ms]
 PFS_SETTLE_MS    = 0          # PFS continuously tracks; no extra settle needed
@@ -84,7 +84,7 @@ KF_R_TX_NM2          = 274.0
 DRIFT_SAMPLE_INTERVAL = 1      # 1 = every position; N = every Nth (group leader)
 MAX_DRIFT_WORKERS     = 8      # 0 = auto (cpu_count - 4)
 ENABLE_THIRD_PASS     = True   # Run pass 3 (re-select grid after pass 2)
-ECC_MIN_CORR          = 0.97   # ECC correlation threshold (0 disables filter)
+ECC_MIN_CORR          = 0.99   # ECC correlation threshold (0 disables filter)
 
 # Optical parameters
 SENSOR_PIXEL_SIZE    = 3.45e-6
@@ -93,7 +93,7 @@ ORIGINAL_DIM         = 2048
 RECONSTRUCTED_DIM    = 511
 
 # Position-dependent crop (matches pipeline_full.py)
-POS_SPLIT    = 52
+POS_SPLIT    = 53
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 
@@ -117,19 +117,19 @@ TILT_CROP_H = 270
 ECC_CROP_H  = 80
 
 # Z-stack parameters (single-z mode: N_Z_SLICES=1, Z_START_UM=0.0)
-N_Z_SLICES            = 11
+N_Z_SLICES            = 1
 Z_STEP_UM             = 0.4
-Z_START_UM            = -2.0
+Z_START_UM            = 1.2
 CLEANUP_RAW_HOLOGRAMS = True
 
 # Crop-subtract / raw-phase Phase B (online crop_sub_rawraw save)
 # Step values are nominal fallback only; grid_calibration_*.json (measured)
 # wins when present.
-RAW_TL_Z_INDEX        = 5
+RAW_TL_Z_INDEX        = 0
 CROP_SUB_X_STEP_UM    = 0.1
 CROP_SUB_Y_STEP_UM    = 0.1
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"E:\260424\online_crop_sub_zstack"
+CROP_SUB_ROOT         = r"E:\260517\2per_0055per_0per_2per_crop_sub"
 CROP_SUB_MAX_SECONDS  = 150.0
 CROP_SUB_MAX_WORKERS  = 4
 CROP_SUB_MIN_FREE_GB  = 2.0
@@ -172,8 +172,7 @@ def main():
         print(f"ERROR: BG_POS_INDEX={BG_POS_INDEX} out of range (0..{n_positions-1})")
         sys.exit(1)
 
-    zstack = N_Z_SLICES > 1
-    suffix = "_zstack" if zstack else ""
+    suffix = "_zstack"
     csv_path = session_dir / f"positions{suffix}.csv"
     with open(csv_path, "w", encoding="utf-8") as f:
         f.write("index,label,x,y,z_offset\n")
@@ -353,7 +352,7 @@ def main():
     print("\n" + "=" * 60)
     print("Setup complete. Next steps:")
     print(f"  1. Open MM1.4 Script Panel.")
-    bsh_name = "realtime_drift_mda_zstack.bsh" if zstack else "realtime_drift_mda.bsh"
+    bsh_name = "realtime_drift_mda_zstack.bsh"
     print(f"  2. Load {bsh_name}.")
     print(f"  3. Set CONFIG_FILE in the script to:")
     print(f"     {config_path}")

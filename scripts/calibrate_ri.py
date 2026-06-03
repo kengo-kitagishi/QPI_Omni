@@ -87,7 +87,7 @@ TILT_CROP_H = 270       # wide crop for tilt fitting
 OUTPUT_CROP_H = 180     # output crop for mask & summation
 MASK_THRESHOLD = -1.0   # phase threshold (rad) on BG-subtracted grid
 
-POS_SPLIT = 52          # fit_right boundary
+POS_SPLIT = 53          # fit_right boundary
 SKIP_EDGE_CHANNELS = True  # exclude first and last channel (Y-direction boundary artifacts)
 
 # 0% glucose grid directory (optional, for n_0per)

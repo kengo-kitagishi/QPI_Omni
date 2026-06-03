@@ -39,11 +39,9 @@ from tqdm import tqdm
 # ============================================================
 # Configuration parameters
 # ============================================================
-GRID_DIR          = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
+GRID_DIR          = r"E:\260504\grid_2pergluc_1"
 BASE_LABEL        = "Pos1"
-GRID_Z_INDEX      = 10
-
-CHANNEL_ROIS_JSON = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
+GRID_Z_INDEX      = 5
 
 # ECC normalization range (same values as VMIN/VMAX in compute_pos_shifts.py)
 VMIN = -5.0
@@ -64,7 +62,7 @@ X_STEP             = 0.1       # Grid step [um]
 Y_STEP             = 0.1
 SHIFT_SIGN_X       = -1
 SHIFT_SIGN_Y       = -1
-POS_SPLIT          = 52    # Pos < POS_SPLIT: left 1/3 fit, Pos >= POS_SPLIT: right 1/3 fit
+POS_SPLIT          = 53    # Pos < POS_SPLIT: left 1/3 fit, Pos >= POS_SPLIT: right 1/3 fit
 
 # None -> GRID_DIR/grid_calibration.json
 OUTPUT_JSON = None
@@ -144,10 +142,12 @@ def main():
     fit_right = pos_num >= POS_SPLIT
     print(f"BASE_LABEL: {BASE_LABEL}  pos_num={pos_num}  fit_right={fit_right}")
 
-    # Load ROI
-    rois_path = Path(CHANNEL_ROIS_JSON)
+    # Auto-discover per-Pos channel_rois.json from grid center point
+    rois_path = (Path(GRID_DIR) / f"{BASE_LABEL}_x+0_y+0"
+                 / "output_phase" / "channels" / "channel_rois.json")
     if not rois_path.exists():
-        print(f"ERROR: CHANNEL_ROIS_JSON not found: {rois_path}")
+        print(f"ERROR: channel_rois.json not found: {rois_path}")
+        print(f"  Run: python channel_crop.py --dir \"{rois_path.parent.parent}\" --detect")
         sys.exit(1)
     with open(rois_path, encoding="utf-8") as f:
         rois = json.load(f)
@@ -408,7 +408,61 @@ def _save_calibration_figures(results, pixel_scale_um, base_label):
     print(f"Saved 3 calibration figures for {base_label}")
 
 
+def run_all():
+    """Calibrate ALL Pos labels in GRID_DIR (parallel)."""
+    global BASE_LABEL, OUTPUT_JSON
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+    import time as _time
+
+    grid_path = Path(GRID_DIR)
+    pat = re.compile(r"^(Pos\d+)_x\+0_y\+0$")
+    labels = sorted(
+        [pat.match(d.name).group(1)
+         for d in grid_path.iterdir()
+         if d.is_dir() and pat.match(d.name) and not d.name.startswith("Pos0_")],
+        key=lambda x: int(re.search(r"\d+", x).group()),
+    )
+
+    todo = []
+    skip = 0
+    for label in labels:
+        out_path = grid_path / f"grid_calibration_{label}.json"
+        if out_path.exists():
+            skip += 1
+            continue
+        rois_path = (grid_path / f"{label}_x+0_y+0"
+                     / "output_phase" / "channels" / "channel_rois.json")
+        if not rois_path.exists():
+            print(f"WARN: {label} no channel_rois.json, skipping")
+            continue
+        todo.append((label, str(out_path)))
+
+    print(f"{len(labels)} total, {skip} already done, {len(todo)} to calibrate")
+    if not todo:
+        print("Nothing to do.")
+        return
+
+    t0 = _time.perf_counter()
+    ok = 0
+    errors = []
+    for i, (label, out_path) in enumerate(todo, 1):
+        BASE_LABEL = label
+        OUTPUT_JSON = out_path
+        try:
+            main()
+            ok += 1
+            print(f"[{i}/{len(todo)}] {label} OK", flush=True)
+        except Exception as e:
+            errors.append((label, str(e)))
+            print(f"[{i}/{len(todo)}] {label} ERROR: {e}", flush=True)
+
+    elapsed = _time.perf_counter() - t0
+    print(f"\nDone in {elapsed:.0f}s: {ok} OK, {skip} skipped, {len(errors)} errors")
+    for label, err in errors:
+        print(f"  ERROR {label}: {err}")
+
+
 if __name__ == "__main__":
-    main()
+    run_all()
 
 # %%

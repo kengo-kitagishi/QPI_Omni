@@ -47,24 +47,24 @@ from pathlib import Path
 # ============================================================
 
 # Output directory
-BASE_DIR = r"C:\260416"
+BASE_DIR = r"E:\260504"
 
 # timelapse.pos to correct (contains only base positions)
-TIMELAPSE_POS = r"D:\AquisitionData\Kitagishi\260416\timelapse.pos"
+TIMELAPSE_POS = r"D:\AquisitionData\Kitagishi\260504\timelapse.pos"
 
 # Today's calibration data folder
 # For grid data (Pos1_x+0_y+0): CALIB_SUFFIX = "x+0_y+0"
 # For focus/timelapse data (Pos1): CALIB_SUFFIX = ""
-CALIB_SUFFIX   = ""
-CALIB_GRID_DIR = r"C:\260416\_for_focus_check_subtract_2"
+CALIB_SUFFIX   = "x+0_y+0"
+CALIB_GRID_DIR = r"E:\260504\grid_2pergluc_1"
 
 # Day-1 fixed reference grid folder
 # PosN_x+0_y+0/output_phase/*_phase.tif must be pre-reconstructed
-REF_GRID_DIR   = r"C:\260416\2per_gridgluc_1"
+REF_GRID_DIR   = r"E:\260504\grid_2pergluc_1"
 
 # z index (img_000000000_ph_{Z:03d}_phase.tif)
-REF_Z_INDEX   = 5    # REF side (260416: 11-frame z-stack, z=0=index5)
-CALIB_Z_INDEX = 0    # CALIB side (single z acquisition)
+REF_Z_INDEX   = 5    # REF side (260504: 11-frame z-stack, z=0=index5)
+CALIB_Z_INDEX = 5    # CALIB side (same z-stack)
 
 # BG base label for CALIB_GRID (Pos0_x+0_y+0 used for BG subtraction during reconstruction)
 CALIB_BG_BASE_LABEL = "Pos0"

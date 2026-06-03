@@ -154,3 +154,8 @@ docs/EXPERIMENT_LOG.md
 .tmp.driveupload/
 *.bak.*
 [[]0, 380.025[]]
+
+# ============================================
+# Drift session logs (too large for GitHub)
+# ============================================
+drift_session*/*.json

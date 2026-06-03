@@ -56,7 +56,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 # Configuration parameters
 # ============================================================
 # Must match GRID_DIR in pipeline_full.py
-GRID_DIR = r"D:\AquisitionData\Kitagishi\260423\grid_2pergluc_1"
+GRID_DIR = r"C:\260517\grid_2pergluc_2"
 
 # Base label used as BG (pipeline_full: GRID_BG_BASE_LABEL)
 BG_BASE_LABEL = "Pos0"
@@ -80,7 +80,7 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 # pos_number < POS_SPLIT -> right side (400:2448)  sensor width 2448
 # pos_number >= POS_SPLIT -> left side (0:2048)
 # Note: BG (Pos0) uses the crop determined by the target's pos_number (not always right)
-POS_SPLIT    = 33
+POS_SPLIT    = 53
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 
@@ -199,16 +199,19 @@ def reconstruct_from_holo(holo_path, crop):
     return reconstruct_image(holo_path, qpi, crop)
 
 
-def _gpu_pipeline(frame_dicts, qpi_params, crop, desc=""):
+def _gpu_pipeline(frame_dicts, qpi_params, crop, desc="", bg_cache=None):
     """GPU+CPU pipeline: 1 GPU producer (FFT) + N CPU consumers (unwrap+save).
 
     frame_dicts: list of dicts with keys:
         tgt_path, raw_out_path (or None), out_path (or None),
         bg_raw_path (or None), pos_number, xi, yi, z_idx
+    bg_cache: optional dict {bg_raw_path_str: np.ndarray} to avoid per-frame disk reads.
     Returns (n_ok, n_err).
     """
     if not frame_dicts:
         return 0, 0
+    if bg_cache is None:
+        bg_cache = {}
 
     q = queue_mod.Queue(maxsize=48)
     results_lock = threading.Lock()
@@ -252,8 +255,10 @@ def _gpu_pipeline(frame_dicts, qpi_params, crop, desc=""):
                 out = fd.get("out_path")
                 bg_raw = fd.get("bg_raw_path")
                 if out and not Path(out).exists():
-                    if bg_raw and Path(bg_raw).exists():
+                    phase_bg = bg_cache.get(bg_raw)
+                    if phase_bg is None and bg_raw and Path(bg_raw).exists():
                         phase_bg = tifffile.imread(str(bg_raw)).astype(np.float64)
+                    if phase_bg is not None:
                         phase_diff = phase - phase_bg
                         h, w = phase_diff.shape
                         pn = fd.get("pos_number", 0)
@@ -265,8 +270,6 @@ def _gpu_pipeline(frame_dicts, qpi_params, crop, desc=""):
                             phase_diff -= np.mean(region)
                         Path(out).parent.mkdir(exist_ok=True)
                         tifffile.imwrite(str(out), phase_diff.astype(np.float32))
-                    else:
-                        pass
 
                 with results_lock:
                     n_ok[0] += 1
@@ -296,7 +299,7 @@ def _reconstruct_grid_point(args):
       - output_phase/     : BG-subtracted + region mean subtracted (for ECC)
       - output_phase_raw/ : raw phase, no BG subtraction (for grid_subtract / correct_0pergluc)
     """
-    xi, yi, target_dir_str, bg_dir_str, crop, pos_number = args
+    xi, yi, target_dir_str, bg_dir_str, crop, pos_number, grid_dir_str, output_base_str = args
     # Re-init CuPy in spawned worker (Windows spawn resets qpi.xp to numpy)
     if _HAS_CUPY and not _FORCE_CPU:
         try:
@@ -305,8 +308,12 @@ def _reconstruct_grid_point(args):
             pass
     target_dir  = Path(target_dir_str)
     bg_dir      = Path(bg_dir_str)
-    out_dir     = target_dir / "output_phase"
-    raw_out_dir = target_dir / "output_phase_raw"
+    _grid = Path(grid_dir_str)
+    _obase = Path(output_base_str)
+    def _remap(p):
+        return _obase / p.relative_to(_grid) if _obase != _grid else p
+    out_dir     = _remap(target_dir / "output_phase")
+    raw_out_dir = _remap(target_dir / "output_phase_raw")
 
     z_files_target = {get_z_index(p): p for p in get_z_files(target_dir)}
     z_files_bg     = {get_z_index(p): p for p in get_z_files(bg_dir)}
@@ -314,8 +321,8 @@ def _reconstruct_grid_point(args):
     if not z_files_target:
         return xi, yi, False, "no z images"
 
-    out_dir.mkdir(exist_ok=True)
-    raw_out_dir.mkdir(exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    raw_out_dir.mkdir(parents=True, exist_ok=True)
     sample_path = next(iter(z_files_target.values()))
     try:
         qpi_params = make_qpi_params(sample_path, crop)
@@ -347,7 +354,7 @@ def _reconstruct_grid_point(args):
                 # Get BG phase (pre-reconstructed raw first, reconstruct as fallback)
                 phase_bg = None
                 bg_raw_subdir = "output_phase_raw" if pos_number < POS_SPLIT else "output_phase_raw_crop_after"
-                bg_raw_path = bg_dir / bg_raw_subdir / (tgt_path.stem + "_phase.tif")
+                bg_raw_path = _remap(bg_dir / bg_raw_subdir) / (tgt_path.stem + "_phase.tif")
                 if bg_raw_path.exists():
                     phase_bg = tifffile.imread(str(bg_raw_path)).astype(np.float64)
                 elif z_idx in z_files_bg:
@@ -387,7 +394,7 @@ def _reconstruct_bg_raw(args):
     Downstream scripts (correct_0pergluc) need Pos0 output_phase_raw
     with CROP_BEFORE (for Pos < POS_SPLIT) and CROP_AFTER (for Pos >= POS_SPLIT).
     """
-    xi, yi, bg_dir_str = args
+    xi, yi, bg_dir_str, grid_dir_str, output_base_str = args
     # Re-init CuPy in spawned worker (Windows spawn resets qpi.xp to numpy)
     if _HAS_CUPY and not _FORCE_CPU:
         try:
@@ -395,10 +402,15 @@ def _reconstruct_bg_raw(args):
         except Exception:
             pass
     bg_dir = Path(bg_dir_str)
+    _grid = Path(grid_dir_str)
+    _obase = Path(output_base_str)
+    def _remap(p):
+        return _obase / p.relative_to(_grid) if _obase != _grid else p
 
     for crop_name, crop in [("before", CROP_BEFORE), ("after", CROP_AFTER)]:
-        raw_out_dir = bg_dir / "output_phase_raw" if crop_name == "before" else bg_dir / "output_phase_raw_crop_after"
-        raw_out_dir.mkdir(exist_ok=True)
+        raw_subdir = "output_phase_raw" if crop_name == "before" else "output_phase_raw_crop_after"
+        raw_out_dir = _remap(bg_dir / raw_subdir)
+        raw_out_dir.mkdir(parents=True, exist_ok=True)
         z_files = {get_z_index(p): p for p in get_z_files(bg_dir)}
         if not z_files:
             return xi, yi, False, "z files not found"
@@ -452,6 +464,12 @@ def _parse_cli():
         metavar="Z",
         help="Only reconstruct these z indices (e.g., --z-indices 5). Default: all z slices.",
     )
+    p.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="Write output_phase / output_phase_raw here instead of inside GRID_DIR.",
+    )
     return p.parse_args()
 
 
@@ -459,6 +477,7 @@ def main():
     global Z_INDICES
     args = _parse_cli()
     grid_dir = Path(args.grid_dir or GRID_DIR)
+    output_base = Path(args.output_dir) if args.output_dir else grid_dir
     bg_label = args.bg_label or BG_BASE_LABEL
     if args.targets is not None:
         target_labels_override = args.targets if args.targets else None
@@ -467,6 +486,15 @@ def main():
     if args.z_indices is not None:
         Z_INDICES = args.z_indices
         print(f"Z-index filter: {Z_INDICES}")
+
+    if output_base != grid_dir:
+        output_base.mkdir(parents=True, exist_ok=True)
+        print(f"Output dir: {output_base}")
+
+    def remap(p: Path) -> Path:
+        if output_base == grid_dir:
+            return p
+        return output_base / p.relative_to(grid_dir)
 
     if not grid_dir.exists():
         print(f"ERROR: GRID_DIR not found: {grid_dir}")
@@ -503,9 +531,9 @@ def main():
         for crop_name, crop_val in [("before", CROP_BEFORE), ("after", CROP_AFTER)]:
             bg_frames = []
             for (xi, yi), bg_dir in sorted(bg_map.items()):
-                raw_out_dir = bg_dir / ("output_phase_raw" if crop_name == "before"
-                                        else "output_phase_raw_crop_after")
-                raw_out_dir.mkdir(exist_ok=True)
+                raw_subdir = "output_phase_raw" if crop_name == "before" else "output_phase_raw_crop_after"
+                raw_out_dir = remap(bg_dir / raw_subdir)
+                raw_out_dir.mkdir(parents=True, exist_ok=True)
                 z_files = {get_z_index(p): p for p in get_z_files(bg_dir)}
                 for z_idx, zf in sorted(z_files.items()):
                     if Z_INDICES is not None and z_idx not in Z_INDICES:
@@ -550,10 +578,10 @@ def main():
                     total_err += 1
                     continue
                 bg_d = bg_map[(xi, yi)]
-                out_dir = tgt_dir / "output_phase"
-                raw_out_dir = tgt_dir / "output_phase_raw"
-                out_dir.mkdir(exist_ok=True)
-                raw_out_dir.mkdir(exist_ok=True)
+                out_dir = remap(tgt_dir / "output_phase")
+                raw_out_dir = remap(tgt_dir / "output_phase_raw")
+                out_dir.mkdir(parents=True, exist_ok=True)
+                raw_out_dir.mkdir(parents=True, exist_ok=True)
                 z_files = {get_z_index(p): p for p in get_z_files(tgt_dir)}
                 bg_raw_subdir = ("output_phase_raw" if pos_number < POS_SPLIT
                                  else "output_phase_raw_crop_after")
@@ -564,7 +592,7 @@ def main():
                     raw_out_path = raw_out_dir / (tgt_path.stem + "_phase.tif")
                     if SKIP_IF_EXISTS and out_path.exists() and raw_out_path.exists():
                         continue
-                    bg_raw_path = bg_d / bg_raw_subdir / (tgt_path.stem + "_phase.tif")
+                    bg_raw_path = remap(bg_d / bg_raw_subdir) / (tgt_path.stem + "_phase.tif")
                     target_frames.append({
                         "tgt_path": str(tgt_path),
                         "raw_out_path": str(raw_out_path),
@@ -575,10 +603,21 @@ def main():
                     })
 
             if target_frames:
+                bg_cache = {}
+                for fd in target_frames:
+                    p = fd.get("bg_raw_path")
+                    if p and p not in bg_cache:
+                        pp = Path(p)
+                        if pp.exists():
+                            bg_cache[p] = tifffile.imread(str(pp)).astype(np.float64)
+                if bg_cache:
+                    print(f"  BG pre-loaded: {len(bg_cache)} files")
                 qpi = make_qpi_params(Path(target_frames[0]["tgt_path"]), crop)
-                ok, err = _gpu_pipeline(target_frames, qpi, crop, base_label)
+                ok, err = _gpu_pipeline(target_frames, qpi, crop, base_label,
+                                        bg_cache=bg_cache)
                 total_ok += ok
                 total_err += err
+                del bg_cache
             else:
                 print(f"  {base_label}: all exist, skipped")
 
@@ -587,7 +626,7 @@ def main():
         print(f"\n{'='*60}")
         print(f"  BG raw phase ({bg_label}) - CPU mode  ({len(bg_map)} points)")
         print(f"{'='*60}")
-        bg_tasks = [(xi, yi, str(d)) for (xi, yi), d in sorted(bg_map.items())]
+        bg_tasks = [(xi, yi, str(d), str(grid_dir), str(output_base)) for (xi, yi), d in sorted(bg_map.items())]
         if N_WORKERS == 1:
             bg_results = [_reconstruct_bg_raw(t) for t in tqdm(bg_tasks, desc=f"{bg_label} BG")]
         else:
@@ -621,7 +660,7 @@ def main():
                     total_err += 1
                     continue
                 bg_d = bg_map[(xi, yi)]
-                tasks.append((xi, yi, str(tgt_dir), str(bg_d), crop, pos_number))
+                tasks.append((xi, yi, str(tgt_dir), str(bg_d), crop, pos_number, str(grid_dir), str(output_base)))
             if not tasks:
                 continue
             print(f"  Parallel: {len(tasks)} points / {N_WORKERS} workers (CPU)")

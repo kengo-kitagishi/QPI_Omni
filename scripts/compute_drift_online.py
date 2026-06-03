@@ -233,9 +233,7 @@ def load_positions_csv(csv_path):
 
 
 def get_raw_path(save_dir, label, timepoint, z_index=0, n_z_slices=1):
-    base = Path(save_dir) / label
-    if n_z_slices > 1:
-        base = base / f"z{z_index:03d}"
+    base = Path(save_dir) / label / f"z{z_index:03d}"
     return base / f"img_{timepoint:09d}_ph_{z_index:03d}.tif"
 
 
@@ -1071,10 +1069,7 @@ def _save_crop_sub_one_pos(args):
 
         n_saved = 0
         for z_idx in z_indices:
-            if n_z_slices > 1:
-                raw_holo = save_dir / pos_label / f"z{z_idx:03d}" / f"img_{t:09d}_ph_{z_idx:03d}.tif"
-            else:
-                raw_holo = save_dir / pos_label / f"img_{t:09d}_ph_{z_idx:03d}.tif"
+            raw_holo = save_dir / pos_label / f"z{z_idx:03d}" / f"img_{t:09d}_ph_{z_idx:03d}.tif"
 
             # Prefer pre-reconstructed phase (saved by _prerecon_save_all_z)
             prerecon_tl = raw_holo.parent / "output_phase_raw" / (raw_holo.stem + "_phase.tif")
@@ -1113,10 +1108,7 @@ def _save_crop_sub_one_pos(args):
 
             tif_name = raw_holo.name
             for ch in range(len(rois)):
-                if n_z_slices > 1:
-                    ch_dir = out_base / f"z{z_idx:03d}" / f"ch{ch:02d}"
-                else:
-                    ch_dir = out_base / f"ch{ch:02d}"
+                ch_dir = out_base / f"z{z_idx:03d}" / f"ch{ch:02d}"
                 ch_dir.mkdir(parents=True, exist_ok=True)
                 final = ch_dir / tif_name
                 tmp = ch_dir / (tif_name + ".tmp")
@@ -1683,18 +1675,12 @@ def _cleanup_raw_holograms(t, sample_positions, cfg):
     save_dir = Path(cfg["save_dir"])
     n_z = cfg.get("n_z_slices", 1)
     deleted = 0
+    z_range = range(n_z) if n_z > 1 else [cfg.get("raw_tl_z_index", 0)]
     for pos in sample_positions:
         label = pos["label"]
         pos_dir = save_dir / label
-        if n_z > 1:
-            for z_idx in range(n_z):
-                f = pos_dir / f"z{z_idx:03d}" / f"img_{t:09d}_ph_{z_idx:03d}.tif"
-                if f.exists():
-                    f.unlink()
-                    deleted += 1
-        else:
-            tl_z = cfg.get("raw_tl_z_index", 0)
-            f = pos_dir / f"img_{t:09d}_ph_{tl_z:03d}.tif"
+        for z_idx in z_range:
+            f = pos_dir / f"z{z_idx:03d}" / f"img_{t:09d}_ph_{z_idx:03d}.tif"
             if f.exists():
                 f.unlink()
                 deleted += 1
@@ -1703,15 +1689,8 @@ def _cleanup_raw_holograms(t, sample_positions, cfg):
                 if p["index"] == cfg["bg_pos_index"]]
     if bg_label:
         bg_dir = save_dir / bg_label[0]["label"]
-        if n_z > 1:
-            for z_idx in range(n_z):
-                f = bg_dir / f"z{z_idx:03d}" / f"img_{t:09d}_ph_{z_idx:03d}.tif"
-                if f.exists():
-                    f.unlink()
-                    deleted += 1
-        else:
-            tl_z = cfg.get("raw_tl_z_index", 0)
-            f = bg_dir / f"img_{t:09d}_ph_{tl_z:03d}.tif"
+        for z_idx in z_range:
+            f = bg_dir / f"z{z_idx:03d}" / f"img_{t:09d}_ph_{z_idx:03d}.tif"
             if f.exists():
                 f.unlink()
                 deleted += 1

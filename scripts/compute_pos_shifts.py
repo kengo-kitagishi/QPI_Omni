@@ -36,7 +36,7 @@ CHANNEL_PATTERN = "channel_*.tif"      # use "channel_*_bg_corr.tif" if backsub 
 USE_GRID_REFERENCE  = True
 GRID_DIR            = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1"
 GRID_BASE_LABEL     = "Pos1"           # PosX part of PosX_x+0_y+0
-POS_SPLIT           = 52              # Must match pos_split in drift_config
+POS_SPLIT           = 53              # Must match pos_split in drift_config
 GRID_Z_INDEX        = 18              # img_000000000_ph_{Z_INDEX:03d}.tif
 CHANNEL_ROIS_JSON   = r"F:\260405\ph_260405\Pos1\output_phase\channels\channel_rois.json"
 

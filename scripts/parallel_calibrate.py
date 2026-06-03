@@ -6,9 +6,9 @@ import cv2
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-GRID_DIR = Path(r"D:\AquisitionData\Kitagishi\260423\grid_2pergluc_1")
+GRID_DIR = Path(r"C:\260517\grid_2pergluc_2")
 Z_INDEX = 5
-POS_SPLIT = 52
+POS_SPLIT = 53
 N_WORKERS = 4
 N_GRID_THREADS = 7   # per-process grid-point threads (N_WORKERS * N_GRID_THREADS ≈ cpu_count)
 
@@ -24,7 +24,6 @@ def calibrate_one(args):
     cgp.GRID_DIR = str(GRID_DIR)
     cgp.BASE_LABEL = label
     cgp.GRID_Z_INDEX = Z_INDEX
-    cgp.CHANNEL_ROIS_JSON = rois_path
     cgp.OUTPUT_JSON = out_path
     cgp.POS_SPLIT = POS_SPLIT
     cgp.N_GRID_THREADS = N_GRID_THREADS

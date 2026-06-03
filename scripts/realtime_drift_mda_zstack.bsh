@@ -148,9 +148,7 @@ print("Camera bit depth: " + (bytesPerPx * 8) + " bit");
 // ---- Helper: move stage and wait ----
 void moveToPosition(int posIdx) {
     mmc.setXYPosition(XY_STAGE, corrX[posIdx], corrY[posIdx]);
-    mmc.setPosition(Z_DEVICE, baseZ[posIdx]);  // Z not corrected (PFS handles it)
     mmc.waitForDevice(XY_STAGE);
-    mmc.waitForDevice(Z_DEVICE);
     Thread.sleep(SETTLE_MS);
     if (PFS_SETTLE_MS > 0) {
         Thread.sleep(PFS_SETTLE_MS);
@@ -279,7 +277,7 @@ if (!FORCE_FRESH_START && stateFileObj.exists()) {
     String tpStr  = (String)resumeState.get("TIMEPOINT");
     if (tpStr != null && !"idle".equals(status)) {
         int lastTP = Integer.parseInt(tpStr);
-        if (lastTP >= 0 && lastTP < N_TIMEPOINTS - 1) {
+        if (lastTP >= -1 && lastTP < N_TIMEPOINTS - 1) {
             startT = lastTP + 1;
             double fallbackDx = 0.0, fallbackDy = 0.0;
             try {
@@ -325,12 +323,8 @@ if (!FORCE_FRESH_START && stateFileObj.exists()) {
 // ---- Ensure position subdirectories exist ----
 for (int i = 0; i < nPositions; i++) {
     String pl = (String)posLabels.get(i);
-    if (N_Z_SLICES > 1) {
-        for (int z = 0; z < N_Z_SLICES; z++) {
-            new File(SAVE_DIR + "/" + pl + "/z" + padLeft(z, 3)).mkdirs();
-        }
-    } else {
-        new File(SAVE_DIR + "/" + pl).mkdirs();
+    for (int z = 0; z < N_Z_SLICES; z++) {
+        new File(SAVE_DIR + "/" + pl + "/z" + padLeft(z, 3)).mkdirs();
     }
 }
 
@@ -342,39 +336,24 @@ for (int t = startT; t < N_TIMEPOINTS; t++) {
 
     // ---- Acquire all positions ----
     setChannelPh();
-    if (N_Z_SLICES > 1) {
-        // Z-stack mode: snap+save one z at a time
-        for (int i = 0; i < nPositions; i++) {
-            String posLabel = (String)posLabels.get(i);
-            moveToPosition(i);
+    for (int i = 0; i < nPositions; i++) {
+        String posLabel = (String)posLabels.get(i);
+        moveToPosition(i);
 
-            for (int z = 0; z < N_Z_SLICES; z++) {
-                double zTarget = baseZ[i] + Z_START_UM + z * Z_STEP_UM;
-                mmc.setPosition(Z_DEVICE, zTarget);
-                mmc.waitForDevice(Z_DEVICE);
+        for (int z = 0; z < N_Z_SLICES; z++) {
+            double zTarget = baseZ[i] + Z_START_UM + z * Z_STEP_UM;
+            mmc.setPosition(Z_DEVICE, zTarget);
+            mmc.waitForDevice(Z_DEVICE);
 
-                String frameFile = "img_" + padLeft(t, 9) + "_ph_" + padLeft(z, 3) + ".tif";
-                String savePath = SAVE_DIR + "/" + posLabel + "/z" + padLeft(z, 3) + "/" + frameFile;
-                snapAndSave(savePath);
-            }
-            print("  [T=" + t + "] " + posLabel + " -> " + N_Z_SLICES + " z-slices");
-        }
-        moveToPosition(0);
-        print("  Returned to Pos[0] (standby)");
-
-    } else {
-        // Single-slice mode (original behavior)
-        for (int i = 0; i < nPositions; i++) {
-            String posLabel = (String)posLabels.get(i);
-            String frameFile = "img_" + padLeft(t, 9) + "_ph_000.tif";
-            String savePath  = SAVE_DIR + "/" + posLabel + "/" + frameFile;
-            moveToPosition(i);
+            String frameFile = "img_" + padLeft(t, 9) + "_ph_" + padLeft(z, 3) + ".tif";
+            String savePath = SAVE_DIR + "/" + posLabel + "/z" + padLeft(z, 3) + "/" + frameFile;
             snapAndSave(savePath);
-            print("  [T=" + t + "] " + posLabel + " -> " + frameFile);
         }
-        moveToPosition(0);
-        print("  Returned to Pos[0] (standby)");
+        print("  [T=" + t + "] " + posLabel + " -> " + N_Z_SLICES + " z-slices");
     }
+    moveToPosition(0);
+    print("  Returned to Pos[0] (standby)");
+
 
     // ---- Drift computation (per-Pos corrections) ----
     if (t == 0) {
@@ -384,7 +363,7 @@ for (int t = startT; t < N_TIMEPOINTS; t++) {
             "--timepoint", "0",
             "--config", CONFIG_FILE
         };
-        int exitCode0 = callPython(cmd, 180000L);
+        int exitCode0 = callPython(cmd, 600000L);
         if (exitCode0 == 0) {
             HashMap state0 = readState(STATE_FILE);
             boolean anyJump0 = "true".equals(state0.get("JUMP_DETECTED"));
@@ -430,7 +409,7 @@ for (int t = startT; t < N_TIMEPOINTS; t++) {
             "--timepoint", String.valueOf(t),
             "--config",     CONFIG_FILE
         };
-        int exitCode = callPython(cmd, 180000L);
+        int exitCode = callPython(cmd, 600000L);
 
         if (exitCode == 0) {
             HashMap state = readState(STATE_FILE);

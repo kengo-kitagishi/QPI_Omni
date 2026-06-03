@@ -29,7 +29,7 @@ sys.path.insert(0, str(_script_dir))
 
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 
-POS_SPLIT = 52
+POS_SPLIT = 53
 CROP_BEFORE = (0, 2048, 400, 2448)
 CROP_AFTER = (0, 2048, 0, 2048)
 
