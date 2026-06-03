@@ -118,6 +118,7 @@ def render_overlay(
     alpha: float,
     upscale: int,
     annotation: Optional[str] = None,
+    mother_only: bool = False,
 ) -> Image.Image:
     """Build an RGB PIL image: phase grayscale + semi-transparent colored masks."""
     h, w = mask.shape
@@ -132,9 +133,13 @@ def render_overlay(
         region = mask == lab
         if int(lab) in used_labels:
             cid = label_to_cell[int(lab)]
+            if mother_only and cid != 0:
+                continue
             color = np.array(color_for_cell(cid, cell_in_tree.get(cid, False)),
                              dtype=np.float32)
         else:
+            if mother_only:
+                continue
             # label present but dropped by extract (border-touching or too small)
             color = np.array(BORDER_COLOR, dtype=np.float32)
         rgb[region] = rgb[region] * (1.0 - alpha) + color * alpha
@@ -157,7 +162,8 @@ def render_overlay(
 # Main driver: replay tracking + emit overlays
 # =============================================================================
 def run(channel_dir: Path, out_dir: Path, upscale: int, alpha: float,
-        min_area: int, max_frames: Optional[int]) -> None:
+        min_area: int, max_frames: Optional[int],
+        mother_only: bool = False) -> None:
     pairs = collect_frame_pairs(channel_dir)
     if max_frames is not None:
         pairs = pairs[:max_frames]
@@ -197,7 +203,8 @@ def run(channel_dir: Path, out_dir: Path, upscale: int, alpha: float,
             h, w = expected_shape if expected_shape else (40, 270)
             blank = np.zeros((h, w), dtype=np.uint16)
             img = render_overlay(phase, blank, {}, {}, vlow, vhigh, alpha, upscale,
-                                  annotation=f"t={t} (skipped)")
+                                  annotation=f"t={t} (skipped)",
+                                  mother_only=mother_only)
             img.save(out_dir / f"frame_{t:0{n_digits}d}.png")
             skipped += 1
             continue
@@ -228,7 +235,8 @@ def run(channel_dir: Path, out_dir: Path, upscale: int, alpha: float,
 
         img = render_overlay(phase, mask, label_to_cell, cell_in_tree,
                               vlow, vhigh, alpha, upscale,
-                              annotation=f"t={t}")
+                              annotation=f"t={t}",
+                              mother_only=mother_only)
         img.save(out_dir / f"frame_{t:0{n_digits}d}.png")
 
         if (t + 1) % 200 == 0:
@@ -251,13 +259,18 @@ def build_parser() -> argparse.ArgumentParser:
                    help="overlay opacity, 0..1 (default 0.55)")
     p.add_argument("--min-area", type=int, default=20)
     p.add_argument("--max-frames", type=int, default=None)
+    p.add_argument("--mother-only", action="store_true",
+                   help="render overlay only for the mother cell (cell_id=0); "
+                        "all other labels are left as bare phase")
     return p
 
 
 def main() -> int:
     args = build_parser().parse_args()
-    out_dir = args.outdir if args.outdir else args.indir / "inference_out" / "lineage_overlay"
-    run(args.indir, out_dir, args.upscale, args.alpha, args.min_area, args.max_frames)
+    default_sub = "lineage_overlay_mother" if args.mother_only else "lineage_overlay"
+    out_dir = args.outdir if args.outdir else args.indir / "inference_out" / default_sub
+    run(args.indir, out_dir, args.upscale, args.alpha, args.min_area, args.max_frames,
+        mother_only=args.mother_only)
     return 0
 
 
