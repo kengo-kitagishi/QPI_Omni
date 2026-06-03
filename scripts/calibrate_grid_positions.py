@@ -62,8 +62,8 @@ ORIGINAL_DIM       = 2048
 RECONSTRUCTED_DIM  = 511
 X_STEP             = 0.1       # Grid step [um]
 Y_STEP             = 0.1
-SHIFT_SIGN_X       = 1
-SHIFT_SIGN_Y       = 1
+SHIFT_SIGN_X       = -1
+SHIFT_SIGN_Y       = -1
 POS_SPLIT          = 52    # Pos < POS_SPLIT: left 1/3 fit, Pos >= POS_SPLIT: right 1/3 fit
 
 # None -> GRID_DIR/grid_calibration.json
