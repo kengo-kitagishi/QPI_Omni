@@ -98,12 +98,34 @@ class CellInfo:
 # =============================================================================
 # I/O helpers (adapted from central_cell_track_figures.py)
 # =============================================================================
+_TP_RE = re.compile(r"img_0*(\d+)_")
+
+
 def natural_key(text: str) -> list[object]:
     return [int(tok) if tok.isdigit() else tok.lower() for tok in re.split(r"(\d+)", text)]
 
 
+def parse_timepoint(stem: str) -> Optional[int]:
+    m = _TP_RE.match(stem)
+    return int(m.group(1)) if m else None
+
+
 def strip_mask_suffix(stem: str) -> str:
     return stem[: -len("_masks")] if stem.endswith("_masks") else stem
+
+
+def _extract_pos_label(channel_dir: Path) -> Optional[str]:
+    for part in channel_dir.parts:
+        if part.startswith("Pos") and part[3:].isdigit():
+            return part
+    return None
+
+
+def load_bad_timepoints(bad_frames_path: Path, pos_label: str) -> set[int]:
+    with open(bad_frames_path) as f:
+        data = json.load(f)
+    entry = data.get(pos_label, {})
+    return {int(k) for k in entry.get("bad_timepoints", {})}
 
 
 def is_binary_mask(mask: np.ndarray) -> bool:
@@ -135,7 +157,10 @@ def load_phase_image(path: Path) -> Optional[np.ndarray]:
     return arr.astype(np.float32, copy=False)
 
 
-def collect_frame_pairs(channel_dir: Path) -> list[tuple[int, Path, Optional[Path]]]:
+def collect_frame_pairs(
+    channel_dir: Path,
+    bad_timepoints: Optional[set[int]] = None,
+) -> list[tuple[int, Path, Optional[Path]]]:
     inference_dir = channel_dir / "inference_out"
     mask_paths = sorted(inference_dir.glob("*_masks.tif"), key=lambda p: natural_key(p.name))
     raw_paths = [
@@ -144,9 +169,21 @@ def collect_frame_pairs(channel_dir: Path) -> list[tuple[int, Path, Optional[Pat
     ]
     raw_map = {p.stem: p for p in raw_paths}
     pairs: list[tuple[int, Path, Optional[Path]]] = []
-    for idx, mpath in enumerate(mask_paths):
+    n_skipped_bad = 0
+    for mpath in mask_paths:
         stem = strip_mask_suffix(mpath.stem)
-        pairs.append((idx, mpath, raw_map.get(stem)))
+        tp = parse_timepoint(stem)
+        if tp is None:
+            raise ValueError(
+                f"Cannot parse timepoint from mask filename: {mpath.name}. "
+                f"Expected pattern: img_NNNNNNNNN_*_masks.tif"
+            )
+        if bad_timepoints and tp in bad_timepoints:
+            n_skipped_bad += 1
+            continue
+        pairs.append((tp, mpath, raw_map.get(stem)))
+    if n_skipped_bad:
+        print(f"[info] skipped {n_skipped_bad} bad-frame timepoints", file=sys.stderr)
     return pairs
 
 
@@ -631,8 +668,20 @@ def run(
     calibration_id: Optional[str] = None,
     media_schedule_str: Optional[str] = None,
     n_milliq: Optional[float] = None,
+    bad_frames: Optional[Path] = None,
 ) -> None:
-    pairs = collect_frame_pairs(channel_dir)
+    bad_tp: Optional[set[int]] = None
+    if bad_frames is not None:
+        pos_label = _extract_pos_label(channel_dir)
+        if pos_label is None:
+            raise RuntimeError(
+                f"Cannot determine Pos label from path: {channel_dir}. "
+                f"Expected a 'PosN' component in the directory path."
+            )
+        bad_tp = load_bad_timepoints(bad_frames, pos_label)
+        print(f"[info] {pos_label}: {len(bad_tp)} bad timepoints to skip", file=sys.stderr)
+
+    pairs = collect_frame_pairs(channel_dir, bad_timepoints=bad_tp)
     if max_frames is not None:
         pairs = pairs[:max_frames]
     if not pairs:
@@ -813,6 +862,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Override the protein-density baseline (defaults to "
                         "calibration's reference.n_miliq). Falls back to per-frame "
                         "n_medium when no calibration is given (legacy behavior).")
+    p.add_argument("--bad-frames", type=Path, default=None,
+                   help="Path to bad_frames.json (from extract_bad_frames.py). "
+                        "Bad timepoints for this Pos are excluded from tracking.")
     return p
 
 
@@ -832,6 +884,7 @@ def main() -> int:
         calibration_id=args.calibration_id,
         media_schedule_str=args.media_schedule,
         n_milliq=args.n_milliq,
+        bad_frames=args.bad_frames,
     )
     return 0
 

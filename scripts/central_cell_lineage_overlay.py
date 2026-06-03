@@ -33,9 +33,11 @@ from PIL import Image
 # reuse tracker internals
 from central_cell_lineage_tracker import (
     LineageState,
+    _extract_pos_label,
     _make_frame_data,
     collect_frame_pairs,
     extract_cells_from_frame,
+    load_bad_timepoints,
     load_label_image,
     load_phase_image,
     update_rank_to_id,
@@ -163,8 +165,17 @@ def render_overlay(
 # =============================================================================
 def run(channel_dir: Path, out_dir: Path, upscale: int, alpha: float,
         min_area: int, max_frames: Optional[int],
-        mother_only: bool = False) -> None:
-    pairs = collect_frame_pairs(channel_dir)
+        mother_only: bool = False,
+        bad_frames: Optional[Path] = None) -> None:
+    bad_tp: Optional[set[int]] = None
+    if bad_frames is not None:
+        pos_label = _extract_pos_label(channel_dir)
+        if pos_label is None:
+            raise RuntimeError(f"Cannot determine Pos label from path: {channel_dir}")
+        bad_tp = load_bad_timepoints(bad_frames, pos_label)
+        print(f"[info] {pos_label}: {len(bad_tp)} bad timepoints to skip", file=sys.stderr)
+
+    pairs = collect_frame_pairs(channel_dir, bad_timepoints=bad_tp)
     if max_frames is not None:
         pairs = pairs[:max_frames]
     if not pairs:
@@ -262,6 +273,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--mother-only", action="store_true",
                    help="render overlay only for the mother cell (cell_id=0); "
                         "all other labels are left as bare phase")
+    p.add_argument("--bad-frames", type=Path, default=None,
+                   help="Path to bad_frames.json (from extract_bad_frames.py).")
     return p
 
 
@@ -270,7 +283,7 @@ def main() -> int:
     default_sub = "lineage_overlay_mother" if args.mother_only else "lineage_overlay"
     out_dir = args.outdir if args.outdir else args.indir / "inference_out" / default_sub
     run(args.indir, out_dir, args.upscale, args.alpha, args.min_area, args.max_frames,
-        mother_only=args.mother_only)
+        mother_only=args.mother_only, bad_frames=args.bad_frames)
     return 0
 
 

@@ -115,8 +115,16 @@ class FramePair:
     mask_path: Path | None
 
 
+_TP_RE = re.compile(r"img_0*(\d+)_")
+
+
 def natural_key(text: str) -> list[object]:
     return [int(tok) if tok.isdigit() else tok.lower() for tok in re.split(r"(\d+)", text)]
+
+
+def parse_timepoint(stem: str) -> int | None:
+    m = _TP_RE.match(stem)
+    return int(m.group(1)) if m else None
 
 
 def strip_mask_suffix(path: Path) -> str:
@@ -457,7 +465,10 @@ def load_raw_image(raw_path: Path) -> np.ndarray:
     return arr
 
 
-def build_frame_pairs(channel_dir: Path) -> list[FramePair]:
+def build_frame_pairs(
+    channel_dir: Path,
+    bad_timepoints: set[int] | None = None,
+) -> list[FramePair]:
     if not channel_dir.is_dir():
         raise FileNotFoundError(f"Channel directory not found: {channel_dir}")
 
@@ -474,15 +485,27 @@ def build_frame_pairs(channel_dir: Path) -> list[FramePair]:
     frame_names = sorted(set(raw_map) | set(mask_map), key=natural_key)
 
     pairs: list[FramePair] = []
-    for idx, name in enumerate(frame_names):
+    n_skipped_bad = 0
+    for name in frame_names:
+        tp = parse_timepoint(name)
+        if tp is None:
+            raise ValueError(
+                f"Cannot parse timepoint from filename: {name}. "
+                f"Expected pattern: img_NNNNNNNNN_*"
+            )
+        if bad_timepoints and tp in bad_timepoints:
+            n_skipped_bad += 1
+            continue
         pairs.append(
             FramePair(
-                frame_index=idx,
+                frame_index=tp,
                 frame_name=name,
                 raw_path=raw_map.get(name),
                 mask_path=mask_map.get(name),
             )
         )
+    if n_skipped_bad:
+        print(f"[info] skipped {n_skipped_bad} bad-frame timepoints", file=sys.stderr)
     return pairs
 
 

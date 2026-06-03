@@ -57,6 +57,7 @@ def process_channel(
     calibration_id: str | None,
     media_schedule: str | None,
     n_milliq: float | None,
+    bad_frames: str | None = None,
 ) -> bool:
     print(f"\n{'='*60}\n=== {ch_dir.name} ===\n{'='*60}", flush=True)
 
@@ -87,6 +88,8 @@ def process_channel(
         tracker_cmd += ["--media-schedule", media_schedule]
     if n_milliq is not None:
         tracker_cmd += ["--n-milliq", str(n_milliq)]
+    if bad_frames:
+        tracker_cmd += ["--bad-frames", bad_frames]
     rc = run(tracker_cmd)
     if rc != 0:
         print(f"!! central_cell_lineage_tracker.py failed for {ch_dir.name} (rc={rc})", flush=True)
@@ -136,6 +139,9 @@ def main() -> int:
     p.add_argument("--n-milliq", type=float, default=None,
                    help="Override protein-density baseline RI.")
 
+    p.add_argument("--bad-frames", default=None,
+                   help="Path to bad_frames.json (from extract_bad_frames.py). "
+                        "Bad timepoints for each Pos are excluded from tracking.")
     p.add_argument("--skip-batch-figures", action="store_true",
                    help="Skip the final cross-channel pooled overlay step.")
     p.add_argument("--ch-workers", type=int, default=1,
@@ -167,6 +173,7 @@ def main() -> int:
         calibration_id=args.calibration_id,
         media_schedule=args.media_schedule,
         n_milliq=args.n_milliq,
+        bad_frames=args.bad_frames,
     )
 
     if args.ch_workers <= 1:
