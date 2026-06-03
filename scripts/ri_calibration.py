@@ -192,6 +192,28 @@ def n_medium_at_frame(
     return float(media_ri[name])
 
 
+def medium_name_at_frame(
+    frame: float | int,
+    schedule: Sequence[tuple[int, str]],
+) -> str:
+    """Step-function lookup of medium NAME (string) at `frame`.
+
+    Same step-function as n_medium_at_frame but returns the medium identifier
+    string (e.g. 'wo_2', 'wo_0.0055') without touching media_ri. Useful for
+    period tagging where two epochs may share the same RI value but want to
+    be distinguishable downstream.
+    """
+    if not schedule:
+        raise ValueError("Empty media_schedule")
+    name = schedule[0][1]
+    for f, n in schedule:
+        if frame >= f:
+            name = n
+        else:
+            break
+    return str(name)
+
+
 def mean_ri_to_protein_mg_ml(
     mean_ri: float,
     n_milliq: float,

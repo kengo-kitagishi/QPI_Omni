@@ -46,6 +46,7 @@ from skimage import measure
 
 from ri_calibration import (
     load_calibration,
+    medium_name_at_frame,
     n_medium_at_frame,
     parse_media_schedule,
 )
@@ -82,6 +83,7 @@ class FrameData:
     mean_ri: float = np.nan
     mass_pg: float = np.nan
     n_medium_used: float = np.nan
+    medium_name: str = ""
     is_outlier: bool = False
 
 
@@ -443,10 +445,12 @@ def compute_metrics_for_all(
     for cell in state.cells.values():
         for f in cell.frames:
             f.volume_um3_rod = calc_rod_volume_um3(f.major_axis_px, f.minor_axis_px, pixel_size_um)
-            nm_f = (
-                n_medium_at_frame(int(f.frame), media_schedule, media_ri)
-                if use_schedule else float(n_medium)
-            )
+            if use_schedule:
+                nm_f = n_medium_at_frame(int(f.frame), media_schedule, media_ri)
+                f.medium_name = medium_name_at_frame(int(f.frame), media_schedule)
+            else:
+                nm_f = float(n_medium)
+                f.medium_name = ""
             f.n_medium_used = nm_f
             ri, _conc, mass = calc_optical_metrics(
                 f.total_phase, f.volume_um3_rod, pixel_size_um, wavelength_nm,
@@ -492,6 +496,10 @@ def build_bad_frames_table(
             n_medium_at_frame(int(r["frame"]), media_schedule, media_ri)
             if use_schedule else np.nan
         )
+        med_name = (
+            medium_name_at_frame(int(r["frame"]), media_schedule)
+            if use_schedule else ""
+        )
         reason = "; ".join(bad_reasons.get(int(r["frame"]), []))
         rows.append({
             "frame": int(r["frame"]),
@@ -509,6 +517,7 @@ def build_bad_frames_table(
             "mean_ri": np.nan,   # intentionally NaN: drift-uncorrected phase
             "mass_pg": np.nan,   # intentionally NaN: depends on mean_ri
             "n_medium_used": n_med,
+            "medium_name": med_name,
             "touches_border": bool(r["touches_border"]),
             "bad_reason": reason,
         })
@@ -518,7 +527,7 @@ def build_bad_frames_table(
             "area_px", "area_um2", "long_axis_um", "short_axis_um",
             "centroid_x_px", "centroid_y_px", "total_phase",
             "volume_um3_rod", "mean_ri", "mass_pg",
-            "n_medium_used", "touches_border", "bad_reason",
+            "n_medium_used", "medium_name", "touches_border", "bad_reason",
         ])
     return (
         pd.DataFrame(rows)
@@ -563,6 +572,7 @@ def build_long_table(
                 "mean_ri": ri,
                 "mass_pg": mass,
                 "n_medium_used": f.n_medium_used,
+                "medium_name": f.medium_name,
                 "n_milliq_used": n_milliq_val,
                 "is_outlier": f.is_outlier,
                 "touches_border": f.touches_border,
@@ -576,7 +586,7 @@ def build_long_table(
             "area_px", "area_um2", "long_axis_um", "short_axis_um",
             "centroid_x_px", "centroid_y_px", "total_phase",
             "volume_um3_rod", "mean_ri", "mass_pg",
-            "n_medium_used", "n_milliq_used",
+            "n_medium_used", "medium_name", "n_milliq_used",
             "is_outlier", "touches_border",
         ])
     return pd.DataFrame(rows).sort_values(["cell_id", "frame"]).reset_index(drop=True)
