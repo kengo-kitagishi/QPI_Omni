@@ -121,11 +121,21 @@ def _extract_pos_label(channel_dir: Path) -> Optional[str]:
     return None
 
 
-def load_bad_timepoints(bad_frames_path: Path, pos_label: str) -> set[int]:
+def load_bad_timepoints(bad_frames_path: Path, pos_label: str) -> tuple[set[int], dict[int, list[str]]]:
+    """Return (bad_timepoints, bad_reasons) for one Pos from bad_frames.json.
+
+    bad_reasons maps timepoint -> list of reason strings (e.g. ["zure(7.3px,...)", "modori(...)"]).
+    """
     with open(bad_frames_path) as f:
         data = json.load(f)
     entry = data.get(pos_label, {})
-    return {int(k) for k in entry.get("bad_timepoints", {})}
+    bt_dict = entry.get("bad_timepoints", {})
+    bad_tp = {int(k) for k in bt_dict}
+    bad_reasons = {
+        int(k): (list(v) if isinstance(v, list) else [str(v)])
+        for k, v in bt_dict.items()
+    }
+    return bad_tp, bad_reasons
 
 
 def is_binary_mask(mask: np.ndarray) -> bool:
@@ -160,7 +170,12 @@ def load_phase_image(path: Path) -> Optional[np.ndarray]:
 def collect_frame_pairs(
     channel_dir: Path,
     bad_timepoints: Optional[set[int]] = None,
-) -> list[tuple[int, Path, Optional[Path]]]:
+) -> list[tuple[int, Path, Optional[Path], bool]]:
+    """Return [(timepoint, mask_path, raw_path, is_bad), ...] in timepoint order.
+
+    Bad frames are kept in the list but marked with is_bad=True so the caller
+    can route them to a separate "raw measurements only, no tracking" path.
+    """
     inference_dir = channel_dir / "inference_out"
     mask_paths = sorted(inference_dir.glob("*_masks.tif"), key=lambda p: natural_key(p.name))
     raw_paths = [
@@ -168,8 +183,8 @@ def collect_frame_pairs(
         if not p.stem.endswith(("_masks", "_binary"))
     ]
     raw_map = {p.stem: p for p in raw_paths}
-    pairs: list[tuple[int, Path, Optional[Path]]] = []
-    n_skipped_bad = 0
+    pairs: list[tuple[int, Path, Optional[Path], bool]] = []
+    n_bad = 0
     for mpath in mask_paths:
         stem = strip_mask_suffix(mpath.stem)
         tp = parse_timepoint(stem)
@@ -178,12 +193,13 @@ def collect_frame_pairs(
                 f"Cannot parse timepoint from mask filename: {mpath.name}. "
                 f"Expected pattern: img_NNNNNNNNN_*_masks.tif"
             )
-        if bad_timepoints and tp in bad_timepoints:
-            n_skipped_bad += 1
-            continue
-        pairs.append((tp, mpath, raw_map.get(stem)))
-    if n_skipped_bad:
-        print(f"[info] skipped {n_skipped_bad} bad-frame timepoints", file=sys.stderr)
+        is_bad = bool(bad_timepoints and tp in bad_timepoints)
+        if is_bad:
+            n_bad += 1
+        pairs.append((tp, mpath, raw_map.get(stem), is_bad))
+    if n_bad:
+        print(f"[info] {n_bad} bad-frame timepoints flagged (excluded from tracking, "
+              f"raw measurements saved to lineage_bad_frames.csv)", file=sys.stderr)
     return pairs
 
 
@@ -443,6 +459,74 @@ def compute_metrics_for_all(
 # =============================================================================
 # Output: CSV / JSON
 # =============================================================================
+def build_bad_frames_table(
+    bad_records: list[dict],
+    pixel_size_um: float,
+    time_interval_min: Optional[float],
+    media_schedule: Optional[list[tuple[int, str]]] = None,
+    media_ri: Optional[dict[str, float]] = None,
+    bad_reasons: Optional[dict[int, list[str]]] = None,
+) -> pd.DataFrame:
+    """Build the lineage_bad_frames.csv table from raw region records.
+
+    Each row = one detected mask region in one bad frame. NOT tracked, so no
+    cell_id. mean_ri/mass_pg are deliberately NaN because total_phase is read
+    on a drift-uncorrected phase image and is not trustworthy. Morphology
+    (area, major/minor, volume_um3_rod) is stored at face value since shape
+    is locally observed and largely independent of the centroid drift error.
+    """
+    use_schedule = bool(media_schedule) and bool(media_ri)
+    bad_reasons = bad_reasons or {}
+    rows = []
+    for r in bad_records:
+        L_um = r["major_axis_px"] * pixel_size_um
+        w_um = r["minor_axis_px"] * pixel_size_um
+        volume_um3 = calc_rod_volume_um3(
+            r["major_axis_px"], r["minor_axis_px"], pixel_size_um
+        )
+        t_h = (
+            r["frame"] * (time_interval_min / 60.0)
+            if time_interval_min else np.nan
+        )
+        n_med = (
+            n_medium_at_frame(int(r["frame"]), media_schedule, media_ri)
+            if use_schedule else np.nan
+        )
+        reason = "; ".join(bad_reasons.get(int(r["frame"]), []))
+        rows.append({
+            "frame": int(r["frame"]),
+            "time_h": t_h,
+            "rank_in_frame": int(r["rank_in_frame"]),
+            "label": int(r["label"]),
+            "area_px": int(r["area_px"]),
+            "area_um2": int(r["area_px"]) * (pixel_size_um ** 2),
+            "long_axis_um": L_um,
+            "short_axis_um": w_um,
+            "centroid_x_px": float(r["centroid_x_px"]),
+            "centroid_y_px": float(r["centroid_y_px"]),
+            "total_phase": float(r["total_phase"]),
+            "volume_um3_rod": volume_um3,
+            "mean_ri": np.nan,   # intentionally NaN: drift-uncorrected phase
+            "mass_pg": np.nan,   # intentionally NaN: depends on mean_ri
+            "n_medium_used": n_med,
+            "touches_border": bool(r["touches_border"]),
+            "bad_reason": reason,
+        })
+    if not rows:
+        return pd.DataFrame(columns=[
+            "frame", "time_h", "rank_in_frame", "label",
+            "area_px", "area_um2", "long_axis_um", "short_axis_um",
+            "centroid_x_px", "centroid_y_px", "total_phase",
+            "volume_um3_rod", "mean_ri", "mass_pg",
+            "n_medium_used", "touches_border", "bad_reason",
+        ])
+    return (
+        pd.DataFrame(rows)
+          .sort_values(["frame", "rank_in_frame"])
+          .reset_index(drop=True)
+    )
+
+
 def build_long_table(
     state: LineageState,
     time_interval_min: Optional[float],
@@ -671,6 +755,8 @@ def run(
     bad_frames: Optional[Path] = None,
 ) -> None:
     bad_tp: Optional[set[int]] = None
+    bad_reasons: dict[int, list[str]] = {}
+    pos_label: Optional[str] = None
     if bad_frames is not None:
         pos_label = _extract_pos_label(channel_dir)
         if pos_label is None:
@@ -678,8 +764,8 @@ def run(
                 f"Cannot determine Pos label from path: {channel_dir}. "
                 f"Expected a 'PosN' component in the directory path."
             )
-        bad_tp = load_bad_timepoints(bad_frames, pos_label)
-        print(f"[info] {pos_label}: {len(bad_tp)} bad timepoints to skip", file=sys.stderr)
+        bad_tp, bad_reasons = load_bad_timepoints(bad_frames, pos_label)
+        print(f"[info] {pos_label}: {len(bad_tp)} bad timepoints flagged", file=sys.stderr)
 
     pairs = collect_frame_pairs(channel_dir, bad_timepoints=bad_tp)
     if max_frames is not None:
@@ -724,33 +810,57 @@ def run(
 
     expected_shape: Optional[tuple[int, int]] = None
     skipped_frames: list[int] = []
+    bad_records: list[dict] = []
+    first_valid_done = False  # init happens on the first non-bad, non-degenerate frame
 
-    for t, mask_path, raw_path in pairs:
+    for t, mask_path, raw_path, is_bad in pairs:
         mask = load_label_image(mask_path)
         if expected_shape is None and mask.size > 0 and mask.max() > 0:
             expected_shape = mask.shape
-        # skip frames with unexpected shape (segmentation placeholder) or no cells after init
+        # skip frames with unexpected shape (segmentation placeholder)
         if expected_shape is not None and mask.shape != expected_shape:
-            skipped_frames.append(t)
-            continue
-        if t > 0 and (mask.size == 0 or mask.max() == 0):
             skipped_frames.append(t)
             continue
 
         phase = load_phase_image(raw_path) if raw_path and raw_path.exists() else None
         df = extract_cells_from_frame(mask, phase, min_area)
 
-        if t == 0:
-            # initialization: rank 1 = mother (in_tree), others = unknown-lineage
+        # ---- bad frame branch: collect raw measurements, do NOT track ----
+        if is_bad:
+            for _, row in df.iterrows():
+                bad_records.append({
+                    "frame": int(t),
+                    "rank_in_frame": int(row["rank"]),
+                    "label": int(row["label"]),
+                    "area_px": int(row["area_px"]),
+                    "centroid_x_px": float(row["centroid_x"]),
+                    "centroid_y_px": float(row["centroid_y"]),
+                    "major_axis_px": float(row["major_axis_px"]),
+                    "minor_axis_px": float(row["minor_axis_px"]),
+                    "total_phase": float(row["total_phase"]),
+                    "touches_border": bool(row.get("touches_border", False)),
+                })
+            continue
+
+        # ---- empty mask after init: skip; before init: still let init happen
+        # (matches original t==0 behavior which allowed degenerate empty init)
+        if first_valid_done and (mask.size == 0 or mask.max() == 0):
+            skipped_frames.append(t)
+            continue
+
+        if not first_valid_done:
+            # initialization on the FIRST non-bad frame (was t==0 originally):
+            #   rank 1 = mother (in_tree), others = unknown-lineage
             rank_to_id_prev = []
             prev_areas = []
             for idx, row in df.iterrows():
                 in_tree = (idx == 0)
-                birth = None  # already present at t=0
+                birth = None  # already present at first valid frame
                 new_id = state.new_id(parent=None, birth=birth, in_tree=in_tree)
                 rank_to_id_prev.append(new_id)
                 prev_areas.append(int(row["area_px"]))
                 state.append(new_id, _make_frame_data(row, t, int(row["rank"])))
+            first_valid_done = True
             continue
 
         rank_to_id_prev = update_rank_to_id(state, rank_to_id_prev, prev_areas, df, t)
@@ -798,6 +908,41 @@ def run(
         json.dump(cells_summary_json(state), f, indent=2)
     print(f"[ok] wrote {json_path}", file=sys.stderr)
 
+    # === bad frames: raw mask measurements (NOT tracked, no cell_id) ===
+    df_bad = build_bad_frames_table(
+        bad_records,
+        pixel_size_um=pixel_size_um,
+        time_interval_min=time_interval_min,
+        media_schedule=media_schedule,
+        media_ri=media_ri,
+        bad_reasons=bad_reasons,
+    )
+    bad_csv_path = out_dir / "lineage_bad_frames.csv"
+    df_bad.to_csv(bad_csv_path, index=False)
+    print(f"[ok] wrote {bad_csv_path}  ({len(df_bad)} bad-region records "
+          f"across {len(bad_tp) if bad_tp else 0} bad timepoints)", file=sys.stderr)
+
+    # Copy the relevant Pos entry from bad_frames.json next to the CSVs
+    # for reproducibility / QC.
+    if bad_frames is not None and pos_label is not None:
+        try:
+            with open(bad_frames) as f:
+                bf_full = json.load(f)
+            pos_entry = bf_full.get(pos_label, {})
+            bad_used_path = out_dir / "bad_frames_used.json"
+            with open(bad_used_path, "w") as f:
+                json.dump(
+                    {
+                        "source": str(bad_frames),
+                        "pos_label": pos_label,
+                        pos_label: pos_entry,
+                    },
+                    f, indent=2, ensure_ascii=False,
+                )
+            print(f"[ok] wrote {bad_used_path}", file=sys.stderr)
+        except Exception as e:
+            print(f"[warn] failed to copy bad_frames entry: {e}", file=sys.stderr)
+
     n_tree = sum(1 for c in state.cells.values() if c.in_tree)
     n_div = sum(1 for c in state.cells.values() if c.in_tree and c.parent_id is not None)
     n_outlier = int(df_long["is_outlier"].sum())
@@ -825,6 +970,14 @@ def run(
         "media_schedule": media_schedule_str,
         "media_ri": media_ri,
         "n_milliq": n_milliq_used,
+        "bad_frames_used": (
+            {
+                "path": str(bad_frames),
+                "pos_label": pos_label,
+                "n_bad_timepoints": len(bad_tp) if bad_tp else 0,
+                "n_bad_region_records": len(df_bad),
+            } if bad_frames is not None else None
+        ),
     }
 
     # dump calibration/schedule next to the CSVs so plotting scripts (which
