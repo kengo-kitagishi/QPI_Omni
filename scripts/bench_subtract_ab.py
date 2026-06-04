@@ -63,8 +63,12 @@ SG_MARGIN = 14   # NCC search half-window; must exceed the largest real shift (~
 # ==========================================================================
 
 def sg_ncc_align(ref, mov, margin=SG_MARGIN):
+    if ref is None or mov is None:
+        return None
     ref = np.asarray(ref, dtype=np.float32)
     mov = np.asarray(mov, dtype=np.float32)
+    if ref.ndim != 2 or mov.ndim != 2:
+        return None
     m = margin
     th, tw = mov.shape[0] - 2 * m, mov.shape[1] - 2 * m
     if th < SG_WIN or tw < SG_WIN:
@@ -226,6 +230,10 @@ def parse_args():
                    help="grid_calibration json override (default: production "
                         "grid_dir/grid_calibration_Pos{N}.json). Use an isolated "
                         "recalibration here to avoid touching production.")
+    p.add_argument("--per-arm-cal", action="store_true",
+                   help="each arm uses the calibration made with its OWN estimator: "
+                        "<out_root>/../grid_calibration_Pos{N}_z{Z}_{tag}.json "
+                        "(generate via bench_recalibrate.py). Overrides --grid-cal.")
     p.add_argument("--out-suffix", default="",
                    help="suffix appended to crop_sub_<tag> output dirs, to keep "
                         "results from different calibrations side by side.")
@@ -301,10 +309,19 @@ def main():
             {"n_frames": len(frame_results), "frame_results": frame_results},
             ensure_ascii=False), encoding="utf-8")
 
+        if args.per_arm_cal:
+            grid_cal_tag = out_root.parent / f"grid_calibration_Pos{pos}_z{grid_z}_{tag}.json"
+            if not grid_cal_tag.exists():
+                raise FileNotFoundError(
+                    f"per-arm calibration missing: {grid_cal_tag}\n"
+                    f"  run: python scripts/bench_recalibrate.py --estimator {tag} --grid-z {grid_z}")
+        else:
+            grid_cal_tag = grid_cal
+
         out_dir = out_root / f"crop_sub_{tag}{args.out_suffix}"
         out_dir.mkdir(parents=True, exist_ok=True)
-        print(f"=== [{tag}] grid_subtract -> {out_dir.name} ===")
-        run_grid_subtract(gs, cfg, pos, tl_pos_dir, rois_json, shifts_json, out_dir, grid_z, grid_cal)
+        print(f"=== [{tag}] grid_subtract -> {out_dir.name}  (cal={Path(grid_cal_tag).name}) ===")
+        run_grid_subtract(gs, cfg, pos, tl_pos_dir, rois_json, shifts_json, out_dir, grid_z, grid_cal_tag)
         outputs[tag] = out_dir
 
     print("\n==== DONE ====")
