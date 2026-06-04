@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from scipy.ndimage import binary_erosion
 
 # Number of threads for the per-frame main loop (cv2/tifffile release the GIL).
 N_PARALLEL_FRAMES = 8
@@ -112,6 +113,15 @@ TILT_CROP_H_RAW  = 270
 # Pos split threshold for which side to take background 1/3 (same as compute_pos_shifts.py).
 # Pos number < POS_SPLIT -> fit with left 1/3. Pos number >= POS_SPLIT -> fit with right 1/3.
 POS_SPLIT        = 53
+
+# Erode the valid (non-OOB) mask by this many px at the OOB boundary before
+# zeroing.  valid_out (warp-ones > 0.999) keeps the first in-frame column, but
+# when a crop end sits at the reconstructed-frame edge that column carries FFT
+# reconstruction edge artifacts not seen by the warp-validity test -> drop one
+# extra column.  binary_erosion(border_value=1) only erodes pixels adjacent to
+# the interior OOB region, leaving genuinely-valid outer crop edges intact, and
+# is a no-op when the crop has no OOB.  Set 0 to restore the old behaviour.
+VALID_ERODE_PX   = 1
 # ============================================================
 
 
@@ -392,6 +402,10 @@ def process_single_frame(tl_img, sx, sy, rois,
             else:
                 subtracted = tl_crop.copy()
 
+        if VALID_ERODE_PX > 0:
+            # Drop the reconstruction-edge column kept by the warp-validity test:
+            # erode only at the OOB boundary (border_value=1 protects valid outer edges).
+            valid_out = binary_erosion(valid_out, iterations=VALID_ERODE_PX, border_value=1)
         subtracted = subtracted * valid_out
 
         if apply_inverse_shift and (sx != 0.0 or sy != 0.0):
@@ -672,6 +686,7 @@ def main():
             "use_raw_phase": USE_RAW_PHASE,
             "raw_crop": list(RAW_CROP) if USE_RAW_PHASE else None,
             "tilt_crop_h_raw": TILT_CROP_H_RAW if USE_RAW_PHASE else None,
+            "valid_erode_px": VALID_ERODE_PX,
             "tl_raw_source": _tl_raw_source,
             "tl_phase_dir": str(_tl_phase_dir) if _tl_phase_dir else None,
             "grid_raw_sources": {f"{k[0]:+d},{k[1]:+d}": v
