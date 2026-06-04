@@ -104,10 +104,16 @@ def selftest_sign(ref_u8):
 
 
 # tag: (estimator, use_float_input, min_corr)
+# min_corr high enough to drop cell-bearing channels (low corr vs the cell-free
+# grid background) and average only cell-free channels -> removes the
+# glucose-dependent cell-channel ECC bias. ECC-uint8's corr scale runs ~0.01
+# lower than float here (quantization + grid(0,0) far reference), so it needs
+# 0.98 to select the same cell-free set [1,2,4,6,7,8] that 0.99 selects for
+# float/SG. Override with --min-corr.
 METHODS = {
-    "ecc":       (ecc_align,    False, 0.50),
-    "sg":        (sg_ncc_align, True,  0.30),
-    "ecc_float": (ecc_align,    True,  0.50),
+    "ecc":       (ecc_align,    False, 0.98),
+    "sg":        (sg_ncc_align, True,  0.99),
+    "ecc_float": (ecc_align,    True,  0.99),
 }
 
 
@@ -129,11 +135,13 @@ def build_ref_crops(grid_img, rois, cfg, fit_right, use_float):
     return out
 
 
-def compute_shifts(tag, cfg, rois, ref_crops, phase_paths, fit_right):
+def compute_shifts(tag, cfg, rois, ref_crops, phase_paths, fit_right, min_corr_override=None):
     """Return frame_results list (cps schema) for the given estimator."""
     import compute_pos_shifts as cps
     cps.OUTLIER_MAD_THRESH = 5.0  # same as production aggregation
     estimator, use_float, min_corr = METHODS[tag]
+    if min_corr_override is not None:
+        min_corr = min_corr_override
 
     def proc(t):
         img = tifffile.imread(str(phase_paths[t])).astype(np.float64)
@@ -221,6 +229,9 @@ def parse_args():
     p.add_argument("--out-suffix", default="",
                    help="suffix appended to crop_sub_<tag> output dirs, to keep "
                         "results from different calibrations side by side.")
+    p.add_argument("--min-corr", type=float, default=None,
+                   help="override per-arm ECC/NCC corr threshold for all arms. "
+                        "High (0.98-0.99) drops cell channels -> cell-free average.")
     p.add_argument("--out-root", default=None)
     return p.parse_args()
 
@@ -277,8 +288,11 @@ def main():
         _, use_float, _ = METHODS[tag]
         print(f"\n=== [{tag}] computing shifts ({len(phase_paths)} frames) ===")
         ref_crops = build_ref_crops(grid_img, rois, cfg, fit_right, use_float)
-        frame_results = compute_shifts(tag, cfg, rois, ref_crops, phase_paths, fit_right)
+        frame_results = compute_shifts(tag, cfg, rois, ref_crops, phase_paths, fit_right,
+                                       min_corr_override=args.min_corr)
         n_ok = sum(1 for fr in frame_results if fr and fr["shift_x_avg"] is not None)
+        nu = [fr["n_channels_used"] for fr in frame_results[2:] if fr and fr["shift_x_avg"] is not None]
+        print(f"  channels used (cell-free): median {int(np.median(nu)) if nu else 0}/{len(rois)}")
         sx = [fr["shift_x_avg"] for fr in frame_results[:4] if fr]
         print(f"  shifts ok: {n_ok}/{len(frame_results)}   shift_x[:4]={[round(v,3) if v is not None else None for v in sx]}")
 
