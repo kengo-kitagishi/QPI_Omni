@@ -170,7 +170,7 @@ def compute_shifts(tag, cfg, rois, ref_crops, phase_paths, fit_right):
 # grid_subtract driver (mirror batch_pipeline_all_pos step3)
 # ==========================================================================
 
-def run_grid_subtract(gs, cfg, pos, tl_pos_dir, rois_json, shifts_json, out_dir, grid_z):
+def run_grid_subtract(gs, cfg, pos, tl_pos_dir, rois_json, shifts_json, out_dir, grid_z, grid_cal):
     grid_dir = cfg["grid_dir"]
     crop = cfg["crop_before"] if pos < cfg["pos_split"] else cfg["crop_after"]
     gs.TIMELAPSE_DIR = str(tl_pos_dir)
@@ -178,7 +178,7 @@ def run_grid_subtract(gs, cfg, pos, tl_pos_dir, rois_json, shifts_json, out_dir,
     gs.CHANNEL_ROIS_JSON = str(rois_json)
     gs.GRID_DIR = grid_dir
     gs.BASE_LABEL = f"Pos{pos}"
-    gs.GRID_CALIBRATION_JSON = str(Path(grid_dir) / f"grid_calibration_Pos{pos}.json")
+    gs.GRID_CALIBRATION_JSON = str(grid_cal)
     gs.OUTPUT_DIR = str(out_dir)
     gs.TL_Z_INDEX = 0
     gs.GRID_Z_INDEX = grid_z
@@ -214,6 +214,13 @@ def parse_args():
                    help="grid z plane index to subtract against. Default: config "
                         "raw_grid_z_index. NOTE production correct_0pergluc used 8 "
                         "for 260517 (drift_config's 5 is the wrong plane).")
+    p.add_argument("--grid-cal", default=None,
+                   help="grid_calibration json override (default: production "
+                        "grid_dir/grid_calibration_Pos{N}.json). Use an isolated "
+                        "recalibration here to avoid touching production.")
+    p.add_argument("--out-suffix", default="",
+                   help="suffix appended to crop_sub_<tag> output dirs, to keep "
+                        "results from different calibrations side by side.")
     p.add_argument("--out-root", default=None)
     return p.parse_args()
 
@@ -226,6 +233,8 @@ def main():
     fit_right = pos >= cfg["pos_split"]
 
     grid_z = args.grid_z if args.grid_z is not None else cfg["raw_grid_z_index"]
+    grid_cal = (Path(args.grid_cal) if args.grid_cal
+                else grid_dir / f"grid_calibration_Pos{pos}.json")
 
     tl_pos_dir = Path(cfg["save_dir"]) / f"Pos{pos}" / args.zsub
     phase_dir = tl_pos_dir / "output_phase"
@@ -253,7 +262,8 @@ def main():
     print(f"Timelapse: {tl_pos_dir}  ({len(phase_paths)} frames)")
     print(f"Grid ref:  {grid_ref_path.name}  (grid z index {grid_z})")
     print(f"Channels:  {len(rois)}   fit_right={fit_right}")
-    print(f"Output (isolated): {out_root}")
+    print(f"Grid cal:  {grid_cal}")
+    print(f"Output (isolated): {out_root}  suffix='{args.out_suffix}'")
     print(f"Methods:   {args.methods}\n")
 
     print("Sign self-test:")
@@ -277,10 +287,10 @@ def main():
             {"n_frames": len(frame_results), "frame_results": frame_results},
             ensure_ascii=False), encoding="utf-8")
 
-        out_dir = out_root / f"crop_sub_{tag}"
+        out_dir = out_root / f"crop_sub_{tag}{args.out_suffix}"
         out_dir.mkdir(parents=True, exist_ok=True)
         print(f"=== [{tag}] grid_subtract -> {out_dir.name} ===")
-        run_grid_subtract(gs, cfg, pos, tl_pos_dir, rois_json, shifts_json, out_dir, grid_z)
+        run_grid_subtract(gs, cfg, pos, tl_pos_dir, rois_json, shifts_json, out_dir, grid_z, grid_cal)
         outputs[tag] = out_dir
 
     print("\n==== DONE ====")
