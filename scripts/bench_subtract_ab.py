@@ -170,7 +170,7 @@ def compute_shifts(tag, cfg, rois, ref_crops, phase_paths, fit_right):
 # grid_subtract driver (mirror batch_pipeline_all_pos step3)
 # ==========================================================================
 
-def run_grid_subtract(gs, cfg, pos, tl_pos_dir, rois_json, shifts_json, out_dir):
+def run_grid_subtract(gs, cfg, pos, tl_pos_dir, rois_json, shifts_json, out_dir, grid_z):
     grid_dir = cfg["grid_dir"]
     crop = cfg["crop_before"] if pos < cfg["pos_split"] else cfg["crop_after"]
     gs.TIMELAPSE_DIR = str(tl_pos_dir)
@@ -181,7 +181,7 @@ def run_grid_subtract(gs, cfg, pos, tl_pos_dir, rois_json, shifts_json, out_dir)
     gs.GRID_CALIBRATION_JSON = str(Path(grid_dir) / f"grid_calibration_Pos{pos}.json")
     gs.OUTPUT_DIR = str(out_dir)
     gs.TL_Z_INDEX = 0
-    gs.GRID_Z_INDEX = cfg["raw_grid_z_index"]
+    gs.GRID_Z_INDEX = grid_z
     gs.MAX_FRAMES = None
     gs.PICK_FRAMES = None
     gs.APPLY_SUBPIXEL_CORRECTION = True
@@ -193,7 +193,7 @@ def run_grid_subtract(gs, cfg, pos, tl_pos_dir, rois_json, shifts_json, out_dir)
     gs.TL_PHASE_DIR = str(raw_phase_dir) if raw_phase_dir.exists() else None
     gs.RAW_CROP = tuple(crop)
     gs.RAW_TL_Z_INDEX = cfg["raw_tl_z_index"]
-    gs.RAW_GRID_Z_INDEX = cfg["raw_grid_z_index"]
+    gs.RAW_GRID_Z_INDEX = grid_z
     gs.TILT_CROP_H_RAW = cfg["tilt_crop_h_raw"]
     gs.SHIFT_SIGN_X = -1
     gs.SHIFT_SIGN_Y = -1
@@ -210,6 +210,10 @@ def parse_args():
     p.add_argument("--n-frames", type=int, default=300)
     p.add_argument("--methods", nargs="+", default=["ecc", "sg", "ecc_float"],
                    choices=list(METHODS))
+    p.add_argument("--grid-z", type=int, default=None,
+                   help="grid z plane index to subtract against. Default: config "
+                        "raw_grid_z_index. NOTE production correct_0pergluc used 8 "
+                        "for 260517 (drift_config's 5 is the wrong plane).")
     p.add_argument("--out-root", default=None)
     return p.parse_args()
 
@@ -221,6 +225,8 @@ def main():
     grid_dir = Path(cfg["grid_dir"])
     fit_right = pos >= cfg["pos_split"]
 
+    grid_z = args.grid_z if args.grid_z is not None else cfg["raw_grid_z_index"]
+
     tl_pos_dir = Path(cfg["save_dir"]) / f"Pos{pos}" / args.zsub
     phase_dir = tl_pos_dir / "output_phase"
     phase_paths = sorted(phase_dir.glob("img_*_ph_000_phase.tif"))[:args.n_frames]
@@ -231,9 +237,9 @@ def main():
     grid_rois = grid_dir / f"Pos{pos}_x+0_y+0" / "output_phase" / "channels" / "channel_rois.json"
     rois = json.loads(grid_rois.read_text(encoding="utf-8"))
 
-    # grid(0,0) reference image (same z plane production ECC uses).
+    # grid(0,0) reference image at the z plane that matches the timelapse focus.
     grid_ref_path = (grid_dir / f"Pos{pos}_x+0_y+0" / "output_phase"
-                     / f"img_000000000_ph_{cfg['raw_grid_z_index']:03d}_phase.tif")
+                     / f"img_000000000_ph_{grid_z:03d}_phase.tif")
     grid_img = tifffile.imread(str(grid_ref_path)).astype(np.float64)
 
     # Isolated output root: nothing written to production or grid dirs.
@@ -245,7 +251,7 @@ def main():
     shutil.copyfile(grid_rois, rois_json)
 
     print(f"Timelapse: {tl_pos_dir}  ({len(phase_paths)} frames)")
-    print(f"Grid ref:  {grid_ref_path.name}  (z index {cfg['raw_grid_z_index']})")
+    print(f"Grid ref:  {grid_ref_path.name}  (grid z index {grid_z})")
     print(f"Channels:  {len(rois)}   fit_right={fit_right}")
     print(f"Output (isolated): {out_root}")
     print(f"Methods:   {args.methods}\n")
@@ -274,7 +280,7 @@ def main():
         out_dir = out_root / f"crop_sub_{tag}"
         out_dir.mkdir(parents=True, exist_ok=True)
         print(f"=== [{tag}] grid_subtract -> {out_dir.name} ===")
-        run_grid_subtract(gs, cfg, pos, tl_pos_dir, rois_json, shifts_json, out_dir)
+        run_grid_subtract(gs, cfg, pos, tl_pos_dir, rois_json, shifts_json, out_dir, grid_z)
         outputs[tag] = out_dir
 
     print("\n==== DONE ====")
