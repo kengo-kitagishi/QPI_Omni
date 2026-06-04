@@ -38,6 +38,7 @@ def parse_args():
     p.add_argument("--pos", type=int, default=1)
     p.add_argument("--frame", type=int, default=150)
     p.add_argument("--channels", type=int, nargs="+", default=[3, 5, 7])
+    p.add_argument("--suffix", default="", help="crop_sub_<tag><suffix> folder suffix")
     p.add_argument("--vlim", type=float, default=0.6, help="subtracted image color limit (rad)")
     p.add_argument("--dlim", type=float, default=0.15, help="difference image color limit (rad)")
     return p.parse_args()
@@ -49,7 +50,7 @@ def main():
     root = Path(cfg["save_dir"]).parent / "ecc_sg_ab" / f"Pos{args.pos}"
 
     def load(tag, ch):
-        fs = sorted((root / f"crop_sub_{tag}" / f"ch{ch:02d}").glob("*.tif"))
+        fs = sorted((root / f"crop_sub_{tag}{args.suffix}" / f"ch{ch:02d}").glob("*.tif"))
         return tifffile.imread(str(fs[args.frame])).astype(np.float32)
 
     chans = args.channels
