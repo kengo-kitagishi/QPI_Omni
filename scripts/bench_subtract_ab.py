@@ -1,32 +1,40 @@
-"""bench_subtract_ab.py -- ECC vs SG-NCC end-to-end subtraction A/B
+"""bench_subtract_ab.py -- ECC vs SG-NCC end-to-end subtraction A/B (mode A)
 
 Produce final grid-subtracted crop folders for the SAME small timelapse using
-two (or three) alignment estimators, so the result can be judged by eye.
+several alignment estimators, so the result can be judged by eye.
 
-The alignment method enters the pipeline ONLY through the per-frame shift in
-pos_shifts.json. We therefore reuse the production scripts verbatim and only
-swap the per-channel estimator:
+Why a standalone shift loop (mode A)
+------------------------------------
+compute_pos_shifts.py computes the per-frame shift with a ProcessPoolExecutor;
+its workers re-import the module in fresh processes, so a parent-process
+monkeypatch of ecc_align never reaches them. Instead of editing production
+code, we compute the per-frame shifts here, IN-PROCESS, reusing the production
+building blocks unchanged:
 
-  ECC-uint8 (current production)  : compute_pos_shifts.ecc_align  on uint8
-  SG-NCC    (Qiita method)        : matchTemplate(NCC) + SG subpixel peak
-  ECC-float (optional)            : same ECC but fed float32 (to_uint8 bypassed)
+  - tilt_fit_crop  (ecc_utils)            : the exact ECC input crop
+  - ecc_align / sg_ncc_align              : the per-channel estimator
+  - _frame_result_from_per_channel (cps)  : the exact MAD-outlier + mean
+                                            aggregation, imported and reused
 
-For each method we:
-  1. drive compute_pos_shifts.main() -> pos_shifts_<tag>.json
-  2. drive grid_subtract.main()      -> crop_sub_<tag>/  (final subtracted crops)
+Shift convention matches what grid_subtract consumes: shift_x_avg/shift_y_avg
+are the shift of each frame relative to grid(0,0) (= pass-1 of compute_pos_shifts).
+grid_subtract then picks the nearest grid (xi,yi) and applies the residual warp,
+exactly as in production. The only difference from production is the 2nd/3rd
+incremental ECC refinement pass, negligible for this drift-corrected data
+(<1px for all but the first ~2 startup frames) and applied identically to every
+arm, so any visible difference is attributable to the estimator alone.
 
-No new warp / crop / subtract code is written here -- the math is 100% the
-existing pipeline; only the translation estimator differs between arms, so any
-visible difference in the subtractions is attributable to the estimator alone.
+Estimator inputs (mirror the bench numbers 49 / 9 / 5 nm):
+  ecc       : uint8 (current production input)         -> ECC X-RMSE ~49 nm
+  sg        : float32 + NCC + SG subpixel peak (Qiita) -> ~9 nm, isotropic
+  ecc_float : float32 (uint8 quantization bypassed)    -> ~5 nm
 
-Sign note: ecc_align(ref, mov) returns (+shift); the SG-NCC adapter negates its
-raw peak offset to match that convention. A self-test asserts the two agree on
-a known shift before any pipeline run (no silent sign flip).
+Outputs go to an isolated root (<save_dir>/../ecc_sg_ab) -- NOT into the
+production crop_sub tree, and nothing is written into the production/grid dirs.
 
 Usage
 -----
-    python scripts/bench_subtract_ab.py --n-frames 30 --start 0 --methods ecc sg
-    python scripts/bench_subtract_ab.py --n-frames 30 --methods ecc sg ecc_float
+    python scripts/bench_subtract_ab.py --n-frames 300 --methods ecc sg ecc_float
 """
 
 from __future__ import annotations
@@ -35,28 +43,28 @@ import argparse
 import json
 import shutil
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import cv2
 import numpy as np
+import tifffile
 
 sys.path.insert(0, str(Path(__file__).parent))
-from ecc_utils import ecc_align, to_uint8
+from ecc_utils import ecc_align, to_uint8, tilt_fit_crop
 from bench_ecc_vs_sgpeak import sg_peak_subpix, SG_WIN
 
 DEFAULT_CONFIG = r"C:\Users\QPI\Documents\QPI_Omni\drift_session\drift_config.json"
-NCC_MARGIN = 8  # search half-window for matchTemplate (px)
+SG_MARGIN = 14   # NCC search half-window; must exceed the largest real shift (~10px startup)
 
 
 # ==========================================================================
-# SG-NCC adapter: drop-in replacement for ecc_utils.ecc_align
-# Signature/sign match ecc_align: (ref_u8, tl_u8) -> (tx, ty, corr)
-# tx = X(col) shift, ty = Y(row) shift, same sign as ecc_align.
+# SG-NCC estimator -- same (tx, ty, corr) convention/sign as ecc_align
 # ==========================================================================
 
-def sg_ncc_align(ref_u8, tl_u8, margin=NCC_MARGIN):
-    ref = ref_u8.astype(np.float32)
-    mov = tl_u8.astype(np.float32)
+def sg_ncc_align(ref, mov, margin=SG_MARGIN):
+    ref = np.asarray(ref, dtype=np.float32)
+    mov = np.asarray(mov, dtype=np.float32)
     m = margin
     th, tw = mov.shape[0] - 2 * m, mov.shape[1] - 2 * m
     if th < SG_WIN or tw < SG_WIN:
@@ -70,69 +78,99 @@ def sg_ncc_align(ref_u8, tl_u8, margin=NCC_MARGIN):
         return None
     corr = float(surf.max())
     py, px = sg_peak_subpix(surf.astype(np.float32))
-    # Zero-shift peak sits at (m, m); raw offset = peak - m is -(true shift),
-    # so negate to match ecc_align's (+shift) convention.
-    tx = -(px - m)
-    ty = -(py - m)
-    return float(tx), float(ty), corr
+    # zero-shift peak at (m, m); raw offset = -(true shift) -> negate to match ecc_align (+shift)
+    return float(-(px - m)), float(-(py - m)), corr
 
 
 def selftest_sign(ref_u8):
-    """Assert sg_ncc_align matches ecc_align sign/value on a known shift."""
+    """Lock the sign convention: each estimator must recover a known shift."""
     H, W = ref_u8.shape
-    M = np.float32([[1, 0, 1.7], [0, 1, -1.3]])  # shift content by (+1.7 col, -1.3 row)
+    gt_tx, gt_ty = 1.7, -1.3
+    M = np.float32([[1, 0, gt_tx], [0, 1, gt_ty]])
     mov_u8 = cv2.warpAffine(ref_u8, M, (W, H), flags=cv2.INTER_CUBIC,
                             borderMode=cv2.BORDER_REFLECT)
-    e = ecc_align(ref_u8, mov_u8)
-    s = sg_ncc_align(ref_u8, mov_u8)
-    if e is None or s is None:
-        raise RuntimeError("sign self-test: estimator returned None")
-    print(f"  self-test  ecc=({e[0]:+.3f},{e[1]:+.3f})  "
-          f"sg-ncc=({s[0]:+.3f},{s[1]:+.3f})  (expect ~(+1.7,-1.3))")
-    if np.sign(e[0]) != np.sign(s[0]) or np.sign(e[1]) != np.sign(s[1]):
-        raise RuntimeError("sign self-test FAILED: ecc and sg-ncc disagree on sign")
-    if abs(e[0] - s[0]) > 0.3 or abs(e[1] - s[1]) > 0.3:
-        raise RuntimeError(f"sign self-test FAILED: ecc/sg-ncc differ > 0.3px {e[:2]} vs {s[:2]}")
+    for name, fn, a, b in [("ecc", ecc_align, ref_u8, mov_u8),
+                           ("sg-ncc", sg_ncc_align,
+                            ref_u8.astype(np.float32), mov_u8.astype(np.float32))]:
+        r = fn(a, b)
+        if r is None:
+            raise RuntimeError(f"sign self-test: {name} returned None")
+        tx, ty = r[0], r[1]
+        print(f"  self-test  {name}=({tx:+.3f},{ty:+.3f})  (expect ~(+1.7,-1.3))")
+        if np.sign(tx) != np.sign(gt_tx) or np.sign(ty) != np.sign(gt_ty):
+            raise RuntimeError(f"sign self-test FAILED: {name} sign wrong")
+        if abs(tx - gt_tx) > 0.5 or abs(ty - gt_ty) > 0.5:
+            raise RuntimeError(f"sign self-test FAILED: {name} off truth >0.5px")
+
+
+# tag: (estimator, use_float_input, min_corr)
+METHODS = {
+    "ecc":       (ecc_align,    False, 0.50),
+    "sg":        (sg_ncc_align, True,  0.30),
+    "ecc_float": (ecc_align,    True,  0.50),
+}
 
 
 # ==========================================================================
-# Pipeline drivers (mirror batch_pipeline_all_pos step2 / step3)
+# Per-frame shift computation (in-process; reuses cps aggregation verbatim)
 # ==========================================================================
 
-def configure_cps(cps, cfg, pos, channels_dir, rois_json, n_frames, out_json,
-                  ecc_min_corr):
-    grid_dir = cfg["grid_dir"]
-    cps.CHANNELS_DIR = str(channels_dir)
-    cps.CHANNEL_ROIS_JSON = str(rois_json)
-    cps.GRID_DIR = grid_dir
-    cps.GRID_BASE_LABEL = f"Pos{pos}"
-    cps.POS_SPLIT = cfg["pos_split"]
-    cps.GRID_Z_INDEX = cfg["raw_grid_z_index"]
-    cps.GRID_CALIBRATION_JSON = str(Path(grid_dir) / f"grid_calibration_Pos{pos}.json")
-    cps.ECC_CROP_H = cfg["ecc_crop_h"]
-    cps.TILT_CROP_H = cfg["tilt_crop_h"]
-    cps.USE_SLOPE_CORRECTION = True
-    cps.USE_GRID_REFERENCE = True
-    cps.USE_INCREMENTAL_TRACKING = True
-    cps.USE_SECOND_PASS_ECC = True
-    cps.USE_THIRD_PASS_ECC = True
-    cps.OUTLIER_MAD_THRESH = 5.0
-    cps.OUTLIER_TIMESERIES_THRESH = 0.0
-    cps.ECC_MIN_CORR = ecc_min_corr  # estimator-appropriate (NCC corr scale differs)
-    cps.VMIN, cps.VMAX = cfg["ecc_vmin"], cfg["ecc_vmax"]
-    cps.MAX_FRAMES = n_frames
-    cps.N_WORKERS = 8
-    cps.TL_Z_INDEX = 0
-    cps.SHIFT_SIGN_X = 1
-    cps.SHIFT_SIGN_Y = 1
-    cps.OUTPUT_JSON = out_json
-    cps.SAVE_CORR_DATA = False
-    cps.APPLY_BACKSUB_TO_GRID_REF = True
-    cps.TILT_FIT_RIGHT = pos >= cfg["pos_split"]
+def build_ref_crops(grid_img, rois, cfg, fit_right, use_float):
+    """Per-channel grid(0,0) tilt-corrected reference crops (None if OOB)."""
+    out = []
+    for roi in rois:
+        g = tilt_fit_crop(grid_img, roi["cy"], roi["cx"], roi["crop_w"],
+                          cfg["ecc_crop_h"], cfg["tilt_crop_h"], fit_right=fit_right)
+        if g is None:
+            out.append(None)
+        else:
+            out.append(g.astype(np.float32) if use_float
+                       else to_uint8(g, cfg["ecc_vmin"], cfg["ecc_vmax"]))
+    return out
 
 
-def configure_gs(gs, cfg, pos, tl_pos_dir, channels_dir, rois_json, shifts_json,
-                 out_dir, n_frames):
+def compute_shifts(tag, cfg, rois, ref_crops, phase_paths, fit_right):
+    """Return frame_results list (cps schema) for the given estimator."""
+    import compute_pos_shifts as cps
+    cps.OUTLIER_MAD_THRESH = 5.0  # same as production aggregation
+    estimator, use_float, min_corr = METHODS[tag]
+
+    def proc(t):
+        img = tifffile.imread(str(phase_paths[t])).astype(np.float64)
+        per_channel = []
+        for ch, roi in enumerate(rois):
+            ref = ref_crops[ch]
+            rec = {"channel": ch, "shift_x": 0.0, "shift_y": 0.0,
+                   "corr": 0.0, "excluded": True, "exclude_reason": "oob"}
+            if ref is not None:
+                c = tilt_fit_crop(img, roi["cy"], roi["cx"], roi["crop_w"],
+                                  cfg["ecc_crop_h"], cfg["tilt_crop_h"], fit_right=fit_right)
+                if c is not None:
+                    mov = c.astype(np.float32) if use_float else to_uint8(
+                        c, cfg["ecc_vmin"], cfg["ecc_vmax"])
+                    r = estimator(ref, mov)
+                    if r is not None:
+                        tx, ty, corr = r
+                        excl = corr < min_corr
+                        rec = {"channel": ch, "shift_x": tx, "shift_y": ty,
+                               "corr": corr, "excluded": excl,
+                               "exclude_reason": "low_corr" if excl else None}
+            per_channel.append(rec)
+        fr, _, _ = cps._frame_result_from_per_channel(t, per_channel)
+        return t, fr
+
+    results = [None] * len(phase_paths)
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        for t, fr in ex.map(proc, range(len(phase_paths))):
+            results[t] = fr
+    return results
+
+
+# ==========================================================================
+# grid_subtract driver (mirror batch_pipeline_all_pos step3)
+# ==========================================================================
+
+def run_grid_subtract(gs, cfg, pos, tl_pos_dir, rois_json, shifts_json, out_dir):
     grid_dir = cfg["grid_dir"]
     crop = cfg["crop_before"] if pos < cfg["pos_split"] else cfg["crop_after"]
     gs.TIMELAPSE_DIR = str(tl_pos_dir)
@@ -144,7 +182,7 @@ def configure_gs(gs, cfg, pos, tl_pos_dir, channels_dir, rois_json, shifts_json,
     gs.OUTPUT_DIR = str(out_dir)
     gs.TL_Z_INDEX = 0
     gs.GRID_Z_INDEX = cfg["raw_grid_z_index"]
-    gs.MAX_FRAMES = n_frames
+    gs.MAX_FRAMES = None
     gs.PICK_FRAMES = None
     gs.APPLY_SUBPIXEL_CORRECTION = True
     gs.APPLY_INVERSE_SHIFT = False
@@ -161,60 +199,18 @@ def configure_gs(gs, cfg, pos, tl_pos_dir, channels_dir, rois_json, shifts_json,
     gs.SHIFT_SIGN_Y = -1
     gs.X_STEP = cfg["crop_sub_x_step_um"]
     gs.Y_STEP = cfg["crop_sub_y_step_um"]
-
-
-METHODS = {
-    # tag: (patch_ecc_align, patch_to_uint8_passthrough, ecc_min_corr)
-    "ecc":       (None,         False, 0.50),
-    "sg":        (sg_ncc_align, False, 0.30),
-    "ecc_float": (None,         True,  0.50),
-}
-
-
-def run_method(tag, cfg, pos, tl_pos_dir, channels_dir, rois_json, n_frames, out_root):
-    import importlib
-    import compute_pos_shifts as cps
-    import grid_subtract as gs
-    importlib.reload(cps)  # fresh module globals per arm
-    importlib.reload(gs)
-
-    patch_align, patch_float, ecc_min_corr = METHODS[tag]
-    # pos_shifts json (small file) stays next to phase in channels/.
-    # crop_sub output folders go to a separate benchmark root, NOT inside the
-    # production crop_sub tree (per user constraint).
-    shifts_json = channels_dir / f"pos_shifts_{tag}.json"
-    out_dir = out_root / f"Pos{pos}" / f"crop_sub_{tag}"
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    configure_cps(cps, cfg, pos, channels_dir, rois_json, n_frames,
-                  out_json=shifts_json.name, ecc_min_corr=ecc_min_corr)
-    if patch_align is not None:
-        cps.ecc_align = patch_align
-    if patch_float:
-        # Feed float32 to ecc_align instead of uint8 (isolate quantization).
-        cps.to_uint8 = lambda img, vmin=None, vmax=None: img.astype(np.float32)
-
-    print(f"\n=== [{tag}] compute_pos_shifts ({n_frames} frames) ===")
-    cps.main()
-
-    print(f"\n=== [{tag}] grid_subtract -> {out_dir.name} ===")
-    configure_gs(gs, cfg, pos, tl_pos_dir, channels_dir, rois_json,
-                 shifts_json, out_dir, n_frames)
     gs.main()
-    return out_dir
 
 
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--config", default=DEFAULT_CONFIG)
     p.add_argument("--pos", type=int, default=1)
-    p.add_argument("--zsub", default="z000", help="z subdir under PosN (z-stack)")
-    p.add_argument("--n-frames", type=int, default=30)
-    p.add_argument("--methods", nargs="+", default=["ecc", "sg"],
+    p.add_argument("--zsub", default="z000")
+    p.add_argument("--n-frames", type=int, default=300)
+    p.add_argument("--methods", nargs="+", default=["ecc", "sg", "ecc_float"],
                    choices=list(METHODS))
-    p.add_argument("--out-root", default=None,
-                   help="benchmark output root (default: <save_dir>/../ecc_sg_ab). "
-                        "crop_sub folders are written here, NOT in the production tree.")
+    p.add_argument("--out-root", default=None)
     return p.parse_args()
 
 
@@ -223,44 +219,63 @@ def main():
     cfg = json.loads(Path(args.config).read_text(encoding="utf-8"))
     pos = args.pos
     grid_dir = Path(cfg["grid_dir"])
+    fit_right = pos >= cfg["pos_split"]
 
     tl_pos_dir = Path(cfg["save_dir"]) / f"Pos{pos}" / args.zsub
-    channels_dir = tl_pos_dir / "output_phase" / "channels"
-    channels_dir.mkdir(parents=True, exist_ok=True)
-    out_root = Path(args.out_root) if args.out_root else Path(cfg["save_dir"]).parent / "ecc_sg_ab"
+    phase_dir = tl_pos_dir / "output_phase"
+    phase_paths = sorted(phase_dir.glob("img_*_ph_000_phase.tif"))[:args.n_frames]
+    if not phase_paths:
+        raise FileNotFoundError(f"no timelapse phase frames in {phase_dir}")
 
-    # channel_rois.json must come from the grid (per project convention).
+    # channel_rois.json from the grid (per project convention).
     grid_rois = grid_dir / f"Pos{pos}_x+0_y+0" / "output_phase" / "channels" / "channel_rois.json"
-    if not grid_rois.exists():
-        raise FileNotFoundError(f"grid channel_rois.json not found: {grid_rois}")
-    rois_json = channels_dir / "channel_rois.json"
+    rois = json.loads(grid_rois.read_text(encoding="utf-8"))
+
+    # grid(0,0) reference image (same z plane production ECC uses).
+    grid_ref_path = (grid_dir / f"Pos{pos}_x+0_y+0" / "output_phase"
+                     / f"img_000000000_ph_{cfg['raw_grid_z_index']:03d}_phase.tif")
+    grid_img = tifffile.imread(str(grid_ref_path)).astype(np.float64)
+
+    # Isolated output root: nothing written to production or grid dirs.
+    out_root = (Path(args.out_root) if args.out_root
+                else Path(cfg["save_dir"]).parent / "ecc_sg_ab") / f"Pos{pos}"
+    iso_channels = out_root / "channels"
+    iso_channels.mkdir(parents=True, exist_ok=True)
+    rois_json = iso_channels / "channel_rois.json"
     shutil.copyfile(grid_rois, rois_json)
 
-    phase_dir = tl_pos_dir / "output_phase"
-    n_avail = len(list(phase_dir.glob("img_*_ph_000_phase.tif")))
-    print(f"Timelapse: {tl_pos_dir}")
-    print(f"  phase frames available: {n_avail},  using first {args.n_frames}")
-    print(f"  channel_rois (from grid): {grid_rois}")
-    print(f"  methods: {args.methods}")
+    print(f"Timelapse: {tl_pos_dir}  ({len(phase_paths)} frames)")
+    print(f"Grid ref:  {grid_ref_path.name}  (z index {cfg['raw_grid_z_index']})")
+    print(f"Channels:  {len(rois)}   fit_right={fit_right}")
+    print(f"Output (isolated): {out_root}")
+    print(f"Methods:   {args.methods}\n")
 
-    # Sign self-test on a real tilt-corrected uint8 crop.
-    import tifffile
-    from ecc_utils import tilt_fit_crop
-    rois = json.loads(rois_json.read_text(encoding="utf-8"))
-    img0 = tifffile.imread(str(sorted(phase_dir.glob("img_*_ph_000_phase.tif"))[0])).astype(np.float64)
-    crop0 = tilt_fit_crop(img0, rois[5]["cy"], rois[5]["cx"], rois[5]["crop_w"],
-                          cfg["ecc_crop_h"], cfg["tilt_crop_h"])
-    if crop0 is None:
-        crop0 = tilt_fit_crop(img0, rois[0]["cy"], rois[0]["cx"], rois[0]["crop_w"],
-                              cfg["ecc_crop_h"], cfg["tilt_crop_h"])
     print("Sign self-test:")
+    crop0 = tilt_fit_crop(grid_img, rois[5]["cy"], rois[5]["cx"], rois[5]["crop_w"],
+                          cfg["ecc_crop_h"], cfg["tilt_crop_h"], fit_right=fit_right)
     selftest_sign(to_uint8(crop0, cfg["ecc_vmin"], cfg["ecc_vmax"]))
 
-    print(f"  output root (isolated): {out_root}")
+    import grid_subtract as gs
     outputs = {}
     for tag in args.methods:
-        outputs[tag] = run_method(tag, cfg, pos, tl_pos_dir, channels_dir,
-                                   rois_json, args.n_frames, out_root)
+        _, use_float, _ = METHODS[tag]
+        print(f"\n=== [{tag}] computing shifts ({len(phase_paths)} frames) ===")
+        ref_crops = build_ref_crops(grid_img, rois, cfg, fit_right, use_float)
+        frame_results = compute_shifts(tag, cfg, rois, ref_crops, phase_paths, fit_right)
+        n_ok = sum(1 for fr in frame_results if fr and fr["shift_x_avg"] is not None)
+        sx = [fr["shift_x_avg"] for fr in frame_results[:4] if fr]
+        print(f"  shifts ok: {n_ok}/{len(frame_results)}   shift_x[:4]={[round(v,3) if v is not None else None for v in sx]}")
+
+        shifts_json = iso_channels / f"pos_shifts_{tag}.json"
+        shifts_json.write_text(json.dumps(
+            {"n_frames": len(frame_results), "frame_results": frame_results},
+            ensure_ascii=False), encoding="utf-8")
+
+        out_dir = out_root / f"crop_sub_{tag}"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        print(f"=== [{tag}] grid_subtract -> {out_dir.name} ===")
+        run_grid_subtract(gs, cfg, pos, tl_pos_dir, rois_json, shifts_json, out_dir)
+        outputs[tag] = out_dir
 
     print("\n==== DONE ====")
     for tag, out in outputs.items():
