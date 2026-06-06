@@ -110,11 +110,24 @@ def main():
     auc_free_high = (ranks[:len(free)].sum() - len(free) * (len(free) + 1) / 2) / (len(free) * len(cell))
     auc = float(auc_free_high)  # P(free > cell) = cell-detection AUC
 
+    # Filename-safe tag from the score name.
+    tag = (args.score.lower().replace(" ", "_").replace("(", "").replace(")", "")
+           .replace("/", "_").replace("-", "_").replace("__", "_").strip("_"))
+
+    # Threshold sweep -- the core decision table (drop if score < t).
+    lo = max(0.90, float(np.floor(min(cell.min(), free.min()) * 50) / 50))
+    ts = np.linspace(lo, 0.9999, 400)
+    fp_s = np.array([float((free < tt).mean()) for tt in ts])       # cell-free dropped
+    fn_s = np.array([float((cell >= tt).mean()) for tt in ts])      # cell kept (leak)
+    ba_s = np.array([0.5 * (float((cell < tt).mean()) + float((free >= tt).mean())) for tt in ts])
+    t_best = float(ts[np.argmax(ba_s)])
+
     print(f"npz: {npz_path.name}")
     print(f"score: {args.score}   n_free={len(free)}  n_cell={len(cell)}  AUC={auc:.4f}")
     print(f"@ chosen t={t}:  FP(false-drop free)={r['fp']*100:.1f}%  "
           f"FN(cell leak)={r['fn']*100:.1f}%  BA={r['ba']:.3f}")
     print(f"@ prev   t={tprev}: FP={rp['fp']*100:.1f}%  FN={rp['fn']*100:.1f}%  BA={rp['ba']:.3f}")
+    print(f"best-BA threshold = {t_best:.4f}")
 
     # ----- publication style -----
     plt.rcParams.update({
@@ -127,7 +140,6 @@ def main():
 
     # ===== Panel A: score distributions + FP/FN tails =====
     ax = axes[0]
-    lo = max(0.90, np.floor(min(cell.min(), free.min()) * 50) / 50)
     bins = np.linspace(lo, 1.0, 60)
     hf, _ = np.histogram(free, bins=bins, density=True)
     hc, _ = np.histogram(cell, bins=bins, density=True)
@@ -153,15 +165,10 @@ def main():
 
     # ===== Panel B: error-rate trade-off vs threshold =====
     ax = axes[1]
-    ts = np.linspace(lo, 0.9999, 400)
-    fp = np.array([(free < tt).mean() for tt in ts])
-    fn = np.array([(cell >= tt).mean() for tt in ts])
-    ba = np.array([0.5 * ((cell < tt).mean() + (free >= tt).mean()) for tt in ts])
-    t_best = float(ts[np.argmax(ba)])
-    ax.plot(ts, fp * 100, color=C_FREE, lw=2.0, label="FP: cell-free dropped")
-    ax.plot(ts, fn * 100, color=C_CELL, lw=2.0, label="FN: cell kept (leak)")
+    ax.plot(ts, fp_s * 100, color=C_FREE, lw=2.0, label="FP: cell-free dropped")
+    ax.plot(ts, fn_s * 100, color=C_CELL, lw=2.0, label="FN: cell kept (leak)")
     ax2 = ax.twinx()
-    ax2.plot(ts, ba, color="k", lw=1.6, ls="-.", label="balanced accuracy")
+    ax2.plot(ts, ba_s, color="k", lw=1.6, ls="-.", label="balanced accuracy")
     ax2.set_ylabel("balanced accuracy")
     ax2.set_ylim(0.5, 1.0)
     ax.axvline(t, color=C_CHOSEN, lw=2.0)
@@ -208,23 +215,65 @@ def main():
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_png = out_dir / "threshold_decision.png"
+    out_png = out_dir / f"threshold_decision_{tag}.png"
     fig.savefig(out_png, dpi=300, bbox_inches="tight")
-    fig.savefig(out_dir / "threshold_decision.pdf", bbox_inches="tight")
+    fig.savefig(out_dir / f"threshold_decision_{tag}.pdf", bbox_inches="tight")
     print(f"Saved: {out_png}")
+
+    # ---- Human-readable numeric exports (necessary + sufficient to replot) ----
+    import csv
+    # 1. Raw pooled scores (the source of truth -- regenerates every panel).
+    sweep_csv = out_dir / f"threshold_sweep_{tag}.csv"
+    with open(sweep_csv, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["threshold", "FP_cellfree_dropped", "FN_cell_kept_leak",
+                    "balanced_accuracy", "TP_cell_dropped", "TPR=cell_dropped",
+                    "FPR=cellfree_dropped"])
+        for tt, fpv, fnv, bav in zip(ts, fp_s, fn_s, ba_s):
+            tpr_v = float((cell < tt).mean())
+            fpr_v = float((free < tt).mean())
+            w.writerow([f"{tt:.5f}", f"{fpv:.5f}", f"{fnv:.5f}", f"{bav:.5f}",
+                        f"{tpr_v:.5f}", f"{tpr_v:.5f}", f"{fpr_v:.5f}"])
+    scores_csv = out_dir / f"scores_pooled_{tag}.csv"
+    with open(scores_csv, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["group", "score"])
+        for v in free:
+            w.writerow(["cell_free", f"{v:.6f}"])
+        for v in cell:
+            w.writerow(["cell", f"{v:.6f}"])
+    # 2. Per-channel score matrix (frame x channel), for full reproducibility.
+    perchan_npz = out_dir / f"scores_per_channel_{tag}.npz"
+    np.savez_compressed(perchan_npz, scores=arr, cell_idx=np.array(cell_idx),
+                        free_idx=np.array(free_idx), score_name=args.score)
+    print(f"Saved data: {sweep_csv.name}, {scores_csv.name}, {perchan_npz.name}")
 
     save_figure(
         fig,
-        params={"score": args.score, "threshold": t, "prev": tprev,
+        params={"score": args.score, "score_tag": tag, "threshold": t, "prev": tprev,
                 "fp_at_t": r["fp"], "fn_at_t": r["fn"], "ba_at_t": r["ba"],
-                "fp_at_prev": rp["fp"], "fn_at_prev": rp["fn"], "auc": auc,
-                "best_ba_threshold": t_best, "n_free": len(free), "n_cell": len(cell)},
+                "tp_at_t": r["tp"], "tn_at_t": r["tn"],
+                "fp_at_prev": rp["fp"], "fn_at_prev": rp["fn"], "ba_at_prev": rp["ba"],
+                "auc": auc, "best_ba_threshold": t_best,
+                "n_free": len(free), "n_cell": len(cell),
+                "cell_channels": cell_idx, "free_channels": free_idx,
+                "source_npz": npz_path.name},
         description=(
-            "Decision figure for the cell/cell-free channel threshold ecc_min_corr. "
-            "(A) score distributions with FP/FN tails shaded, (B) FP/FN/balanced-"
-            "accuracy vs threshold, (C) ROC with operating points. Justifies "
-            f"raising the threshold to {t}."),
-        data={"cell_scores": cell, "free_scores": free, "roc_fpr": fpr, "roc_tpr": tpr},
+            "Decision figure for the cell/cell-free channel threshold ecc_min_corr "
+            f"using the {args.score} alignment score. (A) score distributions with "
+            "FP/FN tails shaded, (B) FP/FN/balanced-accuracy vs threshold, (C) ROC. "
+            "Saved data is necessary+sufficient to replot: raw pooled cell/cell-free "
+            "scores, the per-channel score matrix, the full threshold sweep "
+            "(FP/FN/BA/TPR/FPR), and the ROC curve."),
+        data={
+            # raw source of truth
+            "cell_scores": cell, "free_scores": free,
+            "scores_per_channel": arr,
+            "cell_idx": np.array(cell_idx), "free_idx": np.array(free_idx),
+            # derived (for convenience)
+            "sweep_threshold": ts, "sweep_fp": fp_s, "sweep_fn": fn_s, "sweep_ba": ba_s,
+            "roc_fpr": fpr, "roc_tpr": tpr, "roc_threshold": roc_t,
+        },
     )
     plt.close(fig)
     print("Done.")
