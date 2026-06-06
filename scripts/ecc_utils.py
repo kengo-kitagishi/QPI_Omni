@@ -32,7 +32,7 @@ from channel_crop import extract_rect_roi  # noqa: F401  (re-export)
 # collapses to the cell-free channels.  Every script imports this default;
 # JSON configs (drift_config.json) carry their own copy that compute_drift_online
 # reads at runtime, so update those separately.
-ECC_MIN_CORR = 0.99
+ECC_MIN_CORR = 0.994
 
 # ====================================================================
 # Tilt correction
