@@ -27,16 +27,18 @@ from pathlib import Path
 _script_dir = Path(__file__).parent
 sys.path.insert(0, str(_script_dir))
 
+from ecc_utils import ECC_MIN_CORR  # single source (0.99); written into drift_config
+
 # ============================================================
 # Edit per experiment
 # ============================================================
 
 # .pos file consumed by Micro-Manager (the actual time-lapse position list)
-POSITIONS_FILE   = r"C:\260517\timelapse.pos"
+POSITIONS_FILE   = r"C:\260606\hoseikan0p11_Offset308p575.pos"
 
 # Grid acquisition directory (small grid is fine)
-GRID_DIR         = r"E:\260517\grid_2pergluc_2"
-GRID_Z_INDEX     = 8        # z-slice of the grid TIFFs to use as reference
+GRID_DIR         = r"C:\260606\hoseikan_test\0p11_grid_1_1_Offset_304p575_to_312p575_1"
+GRID_Z_INDEX     = 10       # z-slice of the grid TIFFs to use as reference (21-frame grid center)
 
 # channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
 # No single path needed — compute_drift_online.py reads per-pos from grid_dir.
@@ -70,8 +72,8 @@ SHIFT_SIGN_X         = 1
 SHIFT_SIGN_Y         = 1
 
 # EMA / Kalman filter
-CORRECTION_EMA_ALPHA = 0.3
-USE_KALMAN_FILTER    = True
+CORRECTION_EMA_ALPHA = 1.0
+USE_KALMAN_FILTER    = False
 # Measured (2026-04-03): stage sigma_y=49.8nm, sigma_x=93.9nm
 #                        ECC sigma_ty=9.5nm, sigma_tx=16.6nm
 # Q tuned for K~0.80 with beta=0.24 overshoot already absorbed.
@@ -84,7 +86,7 @@ KF_R_TX_NM2          = 274.0
 DRIFT_SAMPLE_INTERVAL = 1      # 1 = every position; N = every Nth (group leader)
 MAX_DRIFT_WORKERS     = 8      # 0 = auto (cpu_count - 4)
 ENABLE_THIRD_PASS     = True   # Run pass 3 (re-select grid after pass 2)
-ECC_MIN_CORR          = 0.99   # ECC correlation threshold (0 disables filter)
+# ECC_MIN_CORR imported from ecc_utils above (single source = 0.99); 0 disables filter
 
 # Optical parameters
 SENSOR_PIXEL_SIZE    = 3.45e-6
@@ -93,7 +95,7 @@ ORIGINAL_DIM         = 2048
 RECONSTRUCTED_DIM    = 511
 
 # Position-dependent crop (matches pipeline_full.py)
-POS_SPLIT    = 53
+POS_SPLIT    = 3
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 
@@ -117,9 +119,9 @@ TILT_CROP_H = 270
 ECC_CROP_H  = 80
 
 # Z-stack parameters (single-z mode: N_Z_SLICES=1, Z_START_UM=0.0)
-N_Z_SLICES            = 1
+N_Z_SLICES            = 21
 Z_STEP_UM             = 0.4
-Z_START_UM            = 1.2
+Z_START_UM            = -4.0
 CLEANUP_RAW_HOLOGRAMS = True
 
 # Crop-subtract / raw-phase Phase B (online crop_sub_rawraw save)
