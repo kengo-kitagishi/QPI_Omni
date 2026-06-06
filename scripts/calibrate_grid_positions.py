@@ -53,6 +53,9 @@ VMAX =  2.0
 TILT_CROP_H = 270   # Big crop width in X direction [px]
 ECC_CROP_H  = 80    # Central crop width used for ECC [px]
 
+# ECC_MIN_CORR imported from ecc_utils (single source = 0.99): channels with ECC
+# score below this are dropped -> cell-free average.
+
 # Optical parameters (for comparison with nominal values only; not used in find_nearest)
 SENSOR_PIXEL_SIZE  = 3.45e-6   # [m]
 MAGNIFICATION      = 40
@@ -75,7 +78,7 @@ N_GRID_THREADS = None
 
 from ecc_utils import (
     tilt_fit_crop, extract_rect_roi, ecc_align,
-    remove_outliers_mad,
+    remove_outliers_mad, ECC_MIN_CORR,
     # Float ECC input (clipped float32, no 8-bit quantisation) aliased to the
     # to_uint8 name; get_crops_u8 now builds float32 crops for ECC.
     to_ecc_input as to_uint8,
@@ -130,7 +133,12 @@ def ecc_relative(ref_crops_u8, cur_crops_u8, n_channels):
             corr_list.append(corr)
     if not dx_list:
         return None
-    return float(np.mean(dx_list)), float(np.mean(dy_list)), float(np.mean(corr_list))
+    dx = np.array(dx_list); dy = np.array(dy_list); corr = np.array(corr_list)
+    # Exclude low-correlation (cell-bearing) channels -> cell-free average.
+    keep = corr >= ECC_MIN_CORR if ECC_MIN_CORR > 0 else np.ones(len(corr), dtype=bool)
+    if not np.any(keep):
+        keep = np.ones(len(corr), dtype=bool)   # all below threshold -> fall back to all
+    return float(np.mean(dx[keep])), float(np.mean(dy[keep])), float(np.mean(corr[keep]))
 
 
 def main():

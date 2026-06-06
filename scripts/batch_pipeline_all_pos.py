@@ -77,6 +77,7 @@ CROP_AFTER  = (0, 2048, 0, 2048)     # Pos >= POS_SPLIT
 # Reconstruction — canonical functions from batch_reconstruction_grid
 from batch_reconstruction_grid import reconstruct_from_holo, reconstruct_image, make_qpi_params
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
+from ecc_utils import ECC_MIN_CORR  # single source (0.99)
 
 # ECC / compute_pos_shifts (confirmed 2026-04-13)
 ECC_CROP_H           = 80
@@ -84,7 +85,7 @@ TILT_CROP_H          = 270
 GRID_Z_INDEX         = 18
 OUTLIER_MAD_THRESH   = 5.0
 OUTLIER_TS_THRESH    = 0.0    # always disabled
-ECC_MIN_CORR         = 0.99   # float ECC input: 0.99 drops cell channels -> cell-free average
+# ECC_MIN_CORR imported from ecc_utils above (0.99 drops cell channels -> cell-free average)
 VMIN, VMAX           = -5.0, 2.0
 
 # grid_subtract (confirmed)

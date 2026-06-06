@@ -26,6 +26,8 @@ from pathlib import Path
 _SD = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SD))
 
+from ecc_utils import ECC_MIN_CORR  # single source (0.99)
+
 # ============================================================
 TL_ROOT       = Path(r"E:\260517\2per_0055per_0per_2per")   # timelapse (z000 nesting)
 GRID_2PER_DIR = Path(r"E:\260517\grid_2pergluc_2")
@@ -36,7 +38,7 @@ GRID_Z_INDEX  = 8       # this dataset's plane (+1.2 um); matches new calibratio
 POS_SPLIT     = 53
 ECC_CROP_H    = 80
 TILT_CROP_H   = 270
-ECC_MIN_CORR  = 0.99
+# ECC_MIN_CORR imported from ecc_utils above (single source = 0.99)
 OUTLIER_MAD_THRESH = 5.0
 OUTLIER_TS_THRESH  = 0.0
 VMIN, VMAX    = -5.0, 2.0

@@ -21,6 +21,7 @@ import re as _re
 
 from ecc_utils import (
     tilt_fit_crop, extract_rect_roi, ecc_align, mad, remove_outliers_mad,
+    ECC_MIN_CORR,
     # Float ECC input: clipped float32, no 8-bit quantisation (removes the
     # uint8 X bias). The local to_uint8 wrapper and *_u8 names are kept, but
     # the data flowing into ecc_align is now float32.
@@ -54,10 +55,9 @@ PERCENTILE_HI       = 95
 OUTLIER_MAD_THRESH = 5.0              # MAD threshold for inter-channel outlier removal
 OUTLIER_TIMESERIES_WINDOW = 11        # Median filter width for timeseries outlier detection (odd)
 OUTLIER_TIMESERIES_THRESH = 0.0       # Timeseries MAD threshold (0 to disable)
-ECC_MIN_CORR = 0.99                   # Exclude channels with ECC score below this
-                                      # (0.99 with float input drops cell-bearing
-                                      # channels -> cell-free average, removing the
-                                      # glucose-dependent cell-channel ECC bias)
+# ECC_MIN_CORR imported from ecc_utils (single source = 0.99). Exclude channels
+# with ECC score below this -> cell-free average, removing the glucose-dependent
+# cell-channel ECC bias. Override via cps.ECC_MIN_CORR = ... in batch drivers.
 OUTPUT_JSON = "pos_shifts_cal.json"
 
 # --- Apply gaussian_backsub to grid reference image ---

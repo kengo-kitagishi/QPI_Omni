@@ -78,6 +78,8 @@ DRIFT_CONFIG = r"C:\Users\QPI\Documents\QPI_Omni\drift_session\drift_config.json
 TILT_CROP_H = 270   # X width for tilt correction [px] (same as compute_pos_shifts.py)
 ECC_CROP_H  = 80    # Crop X width used for ECC [px]
 MAD_THRESH  = 5.0   # Inter-channel MAD outlier threshold
+# ECC_MIN_CORR imported from ecc_utils (single source = 0.99): channels with ECC
+# score below this are dropped -> cell-free average.
 
 # Grid expansion parameters (must match generate_grid_pos.py)
 X_STEP = 0.1   # [um]  stage X -> image Y
@@ -100,7 +102,7 @@ def load_config(path):
 
 from ecc_utils import (
     tilt_fit_crop, extract_rect_roi, ecc_align,
-    mad, remove_outliers_mad,
+    mad, remove_outliers_mad, ECC_MIN_CORR,
     # Float ECC input (clipped float32, no 8-bit quantisation) aliased to to_uint8.
     to_ecc_input as to_uint8,
 )
@@ -241,9 +243,13 @@ def center_ecc(ref_img, calib_img, rois, n_channels, vmin, vmax, fit_right: bool
                            "corr": None, "excluded": True, "reason": "ecc_failed"})
         else:
             tx, ty, corr = res
-            tx_list.append(tx); ty_list.append(ty); corr_list.append(corr)
-            per_ch.append({"ch": ch, "tx": tx, "ty": ty,
-                           "corr": corr, "excluded": False, "reason": None})
+            if ECC_MIN_CORR > 0 and corr < ECC_MIN_CORR:
+                per_ch.append({"ch": ch, "tx": tx, "ty": ty,
+                               "corr": corr, "excluded": True, "reason": "low_corr"})
+            else:
+                tx_list.append(tx); ty_list.append(ty); corr_list.append(corr)
+                per_ch.append({"ch": ch, "tx": tx, "ty": ty,
+                               "corr": corr, "excluded": False, "reason": None})
 
     if not tx_list:
         return None, None, per_ch

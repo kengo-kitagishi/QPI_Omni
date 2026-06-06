@@ -45,7 +45,7 @@ from batch_reconstruction_grid import (
     CROP_AFTER,
     POS_SPLIT,
 )
-from ecc_utils import tilt_fit_crop, ecc_align, remove_outliers_mad
+from ecc_utils import tilt_fit_crop, ecc_align, remove_outliers_mad, ECC_MIN_CORR
 from ecc_utils import to_ecc_input as to_uint8  # float ECC input (no 8-bit quantisation)
 
 # ============================================================
@@ -98,7 +98,7 @@ OUTPUT_SUBDIR = "delta_timelapse"
 # Runs single-pass ECC (grid(0,0) reference) per channel, filters by
 # ECC_MIN_CORR, and averages the remaining shifts.
 RECOMPUTE_ECC = True
-ECC_MIN_CORR = 0.99
+# ECC_MIN_CORR imported from ecc_utils (single source = 0.99).
 ECC_VMIN = -5.0
 ECC_VMAX = 2.0
 TILT_CROP_H = 270
