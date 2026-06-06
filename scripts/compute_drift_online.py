@@ -66,8 +66,12 @@ def kf_step_posonly_nm(z_nm: float, pos_nm: float, P: float,
 
 
 from ecc_utils import (
-    tilt_fit_crop, extract_rect_roi, to_uint8, ecc_align,
+    tilt_fit_crop, extract_rect_roi, ecc_align,
     mad, remove_outliers_mad,
+    # Float ECC input (clipped float32, no 8-bit quantisation) aliased to the
+    # to_uint8 name so every call site below feeds float32 to ecc_align. The
+    # *_u8 variable names are kept. ecc_min_corr comes from drift_config (0.99).
+    to_ecc_input as to_uint8,
 )
 
 

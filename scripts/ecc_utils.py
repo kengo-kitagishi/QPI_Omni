@@ -109,6 +109,20 @@ def to_uint8(img, vmin, vmax):
     return ((clipped - vmin) / (vmax - vmin) * 255).astype(np.uint8)
 
 
+def to_ecc_input(img, vmin, vmax):
+    """Clip *img* to [vmin, vmax] and return float32 (no 8-bit quantisation).
+
+    Float ECC input. Identical to ``to_uint8`` except the final quantisation to
+    256 levels is removed: cv2.findTransformECC accepts single-channel float32
+    (CV_32F) and is affine-intensity invariant, so the [0,255] rescale is
+    unnecessary. The uint8 quantisation introduced a systematic ~+0.087 px X
+    bias (verified by ground-truth bench, scripts/bench_ecc_vs_sgpeak.py);
+    feeding clipped float32 removes it (X RMSE ~0.143 px -> ~0.015 px). The clip
+    is kept for the same outlier robustness as to_uint8.
+    """
+    return np.clip(img, vmin, vmax).astype(np.float32)
+
+
 # ====================================================================
 # ECC alignment
 # ====================================================================

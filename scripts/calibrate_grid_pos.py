@@ -122,8 +122,8 @@ def extract_rect_roi(img, cy, cx, crop_w, crop_h):
 
 
 def to_uint8(img, vmin, vmax):
-    clipped = np.clip(img, vmin, vmax)
-    return ((clipped - vmin) / (vmax - vmin) * 255).astype(np.uint8)
+    # Float ECC input: clip only, no 8-bit quantisation (name kept for callers).
+    return np.clip(img, vmin, vmax).astype(np.float32)
 
 
 def compute_backsub_offset(img, cfg) -> float:

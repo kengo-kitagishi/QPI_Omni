@@ -81,9 +81,9 @@ ECC_CROP_H  = 80              # Crop width for ECC and focus metrics [px]
 # ---------------------------------------------------------------------------
 
 def to_uint8(img: np.ndarray, vmin: float = ECC_VMIN, vmax: float = ECC_VMAX) -> np.ndarray:
-    clipped    = np.clip(img, vmin, vmax)
-    normalized = (clipped - vmin) / (vmax - vmin)
-    return (normalized * 255).astype(np.uint8)
+    # Float ECC input: clip only, no 8-bit quantisation (cv2.findTransformECC
+    # accepts float32; quantisation introduced a systematic X bias). Name kept.
+    return np.clip(img, vmin, vmax).astype(np.float32)
 
 
 def compute_ecc_warp(ref_img: np.ndarray, src_img: np.ndarray):

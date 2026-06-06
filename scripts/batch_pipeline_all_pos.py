@@ -84,7 +84,7 @@ TILT_CROP_H          = 270
 GRID_Z_INDEX         = 18
 OUTLIER_MAD_THRESH   = 5.0
 OUTLIER_TS_THRESH    = 0.0    # always disabled
-ECC_MIN_CORR         = 0.96
+ECC_MIN_CORR         = 0.99   # float ECC input: 0.99 drops cell channels -> cell-free average
 VMIN, VMAX           = -5.0, 2.0
 
 # grid_subtract (confirmed)

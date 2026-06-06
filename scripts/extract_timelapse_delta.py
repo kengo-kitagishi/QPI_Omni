@@ -45,26 +45,33 @@ from batch_reconstruction_grid import (
     CROP_AFTER,
     POS_SPLIT,
 )
-from ecc_utils import tilt_fit_crop, to_uint8, ecc_align, remove_outliers_mad
+from ecc_utils import tilt_fit_crop, ecc_align, remove_outliers_mad
+from ecc_utils import to_ecc_input as to_uint8  # float ECC input (no 8-bit quantisation)
 
 # ============================================================
 # Configuration
 # ============================================================
 
-TIMELAPSE_ROOT = r"E:\260504\0per_gluc"
+TIMELAPSE_ROOT = r"D:\AquisitionData\Kitagishi\260517\0per_gluc"
 
-GRID_2PER_DIR = r"E:\260504\grid_2pergluc_1"
+GRID_2PER_DIR = r"E:\260517\grid_2pergluc_2"
 
 # When raw phase lives under a different root than shifts/output,
 # set SHIFTS_OUTPUT_ROOT to the directory containing PosN with
 # output_phase/channels/ (shifts JSON, channel_rois, output).
 # None -> same as TIMELAPSE_ROOT.
-SHIFTS_OUTPUT_ROOT = r"E:\260504\online_crop_sub_zstack"
+SHIFTS_OUTPUT_ROOT = r"D:\AquisitionData\Kitagishi\260517\online_crop_sub_zstack"
+
+# Output root for delta TIFs (PosN/output_phase/channels/<OUTPUT_SUBDIR>/).
+# None -> same tree as SHIFTS_OUTPUT_ROOT (or TIMELAPSE_ROOT).
+# Set to redirect delta output to a different tree, e.g. the main timelapse
+# crop_sub so correct_0pergluc reads it directly.
+OUTPUT_ROOT = r"E:\260517\2per_0055per_0per_2per_crop_sub"
 
 # Pos range [inclusive]. Pos0 is always BG, skipped.
 # POS_END = None -> auto-detect last Pos.
-POS_START = 1
-POS_END = None
+POS_START = 2
+POS_END = 104
 
 # Per-Pos shifts JSON filename (under PosN/output_phase/channels/)
 SHIFTS_FILENAME = "pos_shifts_cal_online.json"
@@ -75,13 +82,14 @@ SHIFTS_FILENAME = "pos_shifts_cal_online.json"
 # 260416+ grid: 11 slices, -2.0 to +2.0 um, 0.4 um/step, z=5 = 0.0 um
 #
 # 260508: 3-slice timelapse, tl_z=0 = focus = grid_z=5
-Z_PAIRS = [(5, 5)]
+# 260517: 11-slice 0per_gluc z-stack; main timelapse plane = +1.2 um = grid_z=8
+Z_PAIRS = [(8, 8)]
 
 # Minimum frame index to consider (skip early unstable frames).
 MIN_FRAME_INDEX = 5
 
 # Frame index range to search [inclusive, exclusive). None = all frames.
-FRAME_RANGE = (5, 13)
+FRAME_RANGE = (18, 36)
 
 # Output subfolder name (under PosN/output_phase/channels/)
 OUTPUT_SUBDIR = "delta_timelapse"
@@ -384,7 +392,10 @@ def _process_single_pos(pos_label, pos_dir, grid_2per_dir):
         else:
             print(f"  ECC recompute: channel_rois.json not found, using JSON shift")
 
-    out_base = shifts_base if so_dir else pos_dir
+    if OUTPUT_ROOT:
+        out_base = Path(OUTPUT_ROOT) / pos_label
+    else:
+        out_base = shifts_base if so_dir else pos_dir
     out_dir = out_base / "output_phase" / "channels" / OUTPUT_SUBDIR
     out_dir.mkdir(parents=True, exist_ok=True)
 

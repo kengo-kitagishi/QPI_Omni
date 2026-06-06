@@ -74,7 +74,9 @@ MAX_FRAMES = None   # For testing: None = all frames, integer = first N frames o
 
 from ecc_utils import (
     extract_rect_roi,
-    to_uint8 as _to_uint8_shared,
+    # Float ECC input (clipped float32, no 8-bit quantisation); local to_uint8
+    # wrapper keeps its name but now returns float32 for ecc_align.
+    to_ecc_input as _to_uint8_shared,
     ecc_align,
 )
 

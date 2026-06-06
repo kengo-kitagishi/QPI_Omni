@@ -241,7 +241,8 @@ def compute_0per_delta_sums(grid_0per_dir, grid_2per_dir, pos_numbers,
 
     Uses per-channel ECC for alignment, then warp-subtract.
     """
-    from ecc_utils import tilt_fit_crop, to_uint8, ecc_align
+    from ecc_utils import tilt_fit_crop, ecc_align
+    from ecc_utils import to_ecc_input as to_uint8  # float ECC input (no 8-bit quantisation)
     from compute_pos_shifts import compute_backsub_offset
     from grid_subtract import apply_inverse_shift_warp
 

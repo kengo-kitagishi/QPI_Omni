@@ -49,7 +49,8 @@ from grid_subtract import (
 )
 from compute_pos_shifts import compute_backsub_offset
 from optical_config import RAW_CROP as _OPTICAL_RAW_CROP
-from ecc_utils import tilt_fit_crop, apply_2pi_tilt_crop, to_uint8, ecc_align
+from ecc_utils import tilt_fit_crop, apply_2pi_tilt_crop, ecc_align
+from ecc_utils import to_ecc_input as to_uint8  # float ECC input (no 8-bit quantisation)
 
 
 def _grid_prerecon_raw_path(pos_dir, z_index):
@@ -120,28 +121,28 @@ def _load_grid_output_phase(pos_dir, z_index):
 # ============================================================
 
 # grid_subtract.py output directory (contains ch00/, ch01/, ...)
-OUTPUT_DIR = r"D:\AquisitionData\Kitagishi\260405\ph_260405\Pos1\output_phase\channels\crop_sub_rawraw_0per_test"
+OUTPUT_DIR = r"E:\260517\2per_0055per_0per_2per_crop_sub\Pos1\output_phase\channels\crop_sub_rawraw\z000"
 
 # grid_subtract_log.json (for per-frame grid_xi, grid_yi)
-GRID_SUB_LOG = r"D:\AquisitionData\Kitagishi\260405\ph_260405\Pos1\output_phase\channels\grid_subtract_log.json"
+GRID_SUB_LOG = r"E:\260517\2per_0055per_0per_2per_crop_sub\Pos1\output_phase\channels\pos_shifts_cal_online.json"
 
 # channel_rois.json (for cx, cy, crop_w, crop_h)
-CHANNEL_ROIS_JSON = r"D:\AquisitionData\Kitagishi\260405\ph_260405\Pos1\output_phase\channels\channel_rois.json"
+CHANNEL_ROIS_JSON = r"E:\260517\grid_2pergluc_2\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
 
 # Grid directories
-GRID_2PER_DIR = r"E:\260504\grid_2pergluc_1"
-GRID_0PER_DIR = r"E:\260504\0per_gluc"
+GRID_2PER_DIR = r"E:\260517\grid_2pergluc_2"
+GRID_0PER_DIR = r"D:\AquisitionData\Kitagishi\260517\0per_gluc"
 BASE_LABEL    = "Pos1"
 
 # Grid calibration JSON (for (xi,yi) -> (cal_dx, cal_dy) mapping)
-GRID_CALIBRATION_JSON = r"E:\Acuisition\kitagishi\260331\grid_2pergluc_60ms_1\grid_calibration_Pos1.json"
+GRID_CALIBRATION_JSON = r"E:\260517\grid_2pergluc_2\grid_calibration_Pos1.json"
 
 # z-index default (grid_z_index from grid_subtract_log takes priority if available)
-GRID_Z_INDEX = 5
+GRID_Z_INDEX = 8
 
 # 0% glucose frame range [inclusive, exclusive)
-GLUCOSE_0_START = 870    # frame index (inclusive)
-GLUCOSE_0_END   = 1445   # frame index (exclusive)
+GLUCOSE_0_START = 2019    # frame index (inclusive)
+GLUCOSE_0_END   = 2885   # frame index (exclusive)
 
 # raw-raw reconstruction and tilt correction parameters
 RAW_CROP        = _OPTICAL_RAW_CROP
@@ -152,12 +153,17 @@ POS_SPLIT       = 53       # must match compute_pos_shifts.py
 # Output crop height override (None -> use channel_rois.json crop_h)
 OUTPUT_CROP_H = None
 
+# Save the per-Pos before/after profile figure (uploads to the shared Drive,
+# slow). False -> skip the figure in batch runs; data outputs are unaffected.
+SAVE_FIGURE = False
+
 # --- Batch multiple Pos (if empty list, only the single path settings below are used) ---
-PH_SESSION_ROOT = r"D:\AquisitionData\Kitagishi\260508\online_crop_sub_zstack"
+PH_SESSION_ROOT = r"E:\260517\2per_0055per_0per_2per_crop_sub"
 # grid_subtract output subfolder name (assumes same structure as Pos1)
 # If grid_subtract output folder names differ per Pos, align them before running
-CHANNEL_OUTPUT_SUBDIR = "crop_sub_rawraw"
-POS_NUMBERS_TO_RUN = list(range(34, 105))
+# (260517 online crop_sub nests chNN under crop_sub_rawraw/z000/)
+CHANNEL_OUTPUT_SUBDIR = "crop_sub_rawraw/z000"
+POS_NUMBERS_TO_RUN = list(range(1, 105))  # all Pos (offline regen: redo Pos1 too)
 
 # ECC background fit side (None to auto-determine from Pos number and POS_SPLIT)
 FIT_RIGHT = None
@@ -168,7 +174,7 @@ GRID_POINTS_BASE_LABEL = "Pos0"
 # Pre-computed delta TIFs directory (from extract_timelapse_delta.py).
 # When set, load delta_z{grid_z_index:03d}.tif instead of computing from grid_0per.
 # In batch mode, set DELTA_TIFS_SUBDIR instead (per-Pos subdirectory name).
-DELTA_TIFS_DIR = None
+DELTA_TIFS_DIR = r"E:\260517\2per_0055per_0per_2per_crop_sub\Pos1\output_phase\channels\delta_timelapse"
 
 # Per-Pos delta subfolder under PosN/output_phase/channels/ (batch mode only).
 # When set, overrides DELTA_TIFS_DIR for each Pos automatically.
@@ -707,6 +713,11 @@ def run_correct_0pergluc(
     print(f"Saved per-channel delta TIFs: {delta_dir}")
 
     # --- Center horizontal line profile (before vs after) ---
+    # Saving the figure goes to the shared Drive (slow). Skip in batch runs;
+    # data (delta_full.tif, per-ch delta TIFs, log) is still written above.
+    if not SAVE_FIGURE:
+        print("[profile] SAVE_FIGURE=False -> skipping before/after figure")
+        return
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -787,6 +798,11 @@ def main():
             glog = session / label / "output_phase" / "channels" / "grid_subtract_log.json"
             crois = session / label / "output_phase" / "channels" / "channel_rois.json"
             gcal = grid2 / f"grid_calibration_{label}.json"
+            # Resumable + double-correction guard: correct is in-place (img -= delta),
+            # so skip a Pos that already has its correct log (already corrected).
+            if (out / "correct_0pergluc_log.json").exists():
+                print(f"\n  [SKIP] {label}: correct_0pergluc_log.json exists (already corrected)")
+                continue
             if DELTA_TIFS_SUBDIR:
                 per_pos_delta = session / label / "output_phase" / "channels" / DELTA_TIFS_SUBDIR
                 if per_pos_delta.is_dir():

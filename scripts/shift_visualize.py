@@ -287,6 +287,9 @@ def visualize_shifts(
     print(f"[shift_visualize] done: {pos_name}  (n={len(frames)} frames)")
 
 
+SAVE_REDUNDANT_PASS_FIGS = True  # False -> save only fine_ecc (skip pass1/pass2/pass1_vs_pass2)
+
+
 def visualize_2pass_shifts(
     json_path,
     sensor_pixel_size=SENSOR_PIXEL_SIZE,
@@ -421,9 +424,10 @@ def visualize_2pass_shifts(
     ax.set_xlabel(x_label); ax.set_ylabel(f"Shift ({unit})")
     ax.set_ylim(YLIM); ax.set_title(f"[pass1 / 1st ECC: grid(0,0) fixed]  {pos_name}")
     ax.legend(); ax.grid(True)
-    save_figure(fig, params={**base_params, "pass": "pass1"},
-                description=f"shift_timeseries_pass1 {pos_name}",
-                data={"x_values": x_values, "shift_x": p1x, "shift_y": p1y})
+    if SAVE_REDUNDANT_PASS_FIGS:
+        save_figure(fig, params={**base_params, "pass": "pass1"},
+                    description=f"shift_timeseries_pass1 {pos_name}",
+                    data={"x_values": x_values, "shift_x": p1x, "shift_y": p1y})
     plt.close(fig)
 
     # ── Figure 2: pass2 only ──────────────────────────────────
@@ -433,9 +437,10 @@ def visualize_2pass_shifts(
     ax.set_xlabel(x_label); ax.set_ylabel(f"Shift ({unit})")
     ax.set_ylim(YLIM); ax.set_title(f"[pass2 / 2nd ECC: nearest grid, half crop]  {pos_name}  [= final]")
     ax.legend(); ax.grid(True)
-    save_figure(fig, params={**base_params, "pass": "pass2"},
-                description=f"shift_timeseries_pass2 {pos_name}",
-                data={"x_values": x_values, "shift_x": p2x, "shift_y": p2y})
+    if SAVE_REDUNDANT_PASS_FIGS:
+        save_figure(fig, params={**base_params, "pass": "pass2"},
+                    description=f"shift_timeseries_pass2 {pos_name}",
+                    data={"x_values": x_values, "shift_x": p2x, "shift_y": p2y})
     plt.close(fig)
 
     # ── Figure 3: pass1 vs pass2 overlay ────────────────
@@ -451,11 +456,12 @@ def visualize_2pass_shifts(
     axes[0].set_title(f"[pass1 vs pass2]  {pos_name}")
     axes[1].set_xlabel(x_label)
     fig.tight_layout()
-    save_figure(fig, params={**base_params, "pass": "pass1_vs_pass2"},
-                description=f"shift_timeseries_pass1_vs_pass2 {pos_name}",
-                data={"x_values": x_values,
-                      "pass1_shift_x": p1x, "pass1_shift_y": p1y,
-                      "pass2_shift_x": p2x, "pass2_shift_y": p2y})
+    if SAVE_REDUNDANT_PASS_FIGS:
+        save_figure(fig, params={**base_params, "pass": "pass1_vs_pass2"},
+                    description=f"shift_timeseries_pass1_vs_pass2 {pos_name}",
+                    data={"x_values": x_values,
+                          "pass1_shift_x": p1x, "pass1_shift_y": p1y,
+                          "pass2_shift_x": p2x, "pass2_shift_y": p2y})
     plt.close(fig)
 
     # ── Figure 4: pass2 selected grid info + fine2 + distance comparison ──────

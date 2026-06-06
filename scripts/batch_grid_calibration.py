@@ -10,9 +10,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 import calibrate_grid_positions as cgp
 
 # ============================================================
-GRID_DIR      = r"D:\AquisitionData\Kitagishi\260423\grid_2pergluc_1"
-ROIS_JSON     = r"D:\AquisitionData\Kitagishi\260423\grid_2pergluc_1\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
-GRID_Z_INDEX  = 5
+GRID_DIR      = r"E:\260517\grid_2pergluc_2"
+ROIS_JSON     = r"E:\260517\grid_2pergluc_2\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
+GRID_Z_INDEX  = 8
 POS_SPLIT     = 53
 # ============================================================
 

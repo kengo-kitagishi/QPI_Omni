@@ -20,7 +20,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from grid_subtract import apply_inverse_shift_warp
-from ecc_utils import to_uint8, ecc_align
+from ecc_utils import ecc_align
+from ecc_utils import to_ecc_input as to_uint8  # float ECC input (no 8-bit quantisation)
 from compute_pos_shifts import compute_backsub_offset
 
 GRID_0PER_DIR = Path(r"E:\260504\0per_gluc")

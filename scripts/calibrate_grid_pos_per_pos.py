@@ -99,8 +99,10 @@ def load_config(path):
 
 
 from ecc_utils import (
-    tilt_fit_crop, extract_rect_roi, to_uint8, ecc_align,
+    tilt_fit_crop, extract_rect_roi, ecc_align,
     mad, remove_outliers_mad,
+    # Float ECC input (clipped float32, no 8-bit quantisation) aliased to to_uint8.
+    to_ecc_input as to_uint8,
 )
 
 

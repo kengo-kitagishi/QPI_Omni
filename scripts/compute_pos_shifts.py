@@ -21,7 +21,10 @@ import re as _re
 
 from ecc_utils import (
     tilt_fit_crop, extract_rect_roi, ecc_align, mad, remove_outliers_mad,
-    to_uint8 as _to_uint8_fixed,
+    # Float ECC input: clipped float32, no 8-bit quantisation (removes the
+    # uint8 X bias). The local to_uint8 wrapper and *_u8 names are kept, but
+    # the data flowing into ecc_align is now float32.
+    to_ecc_input as _to_uint8_fixed,
 )
 
 # ============================================================
@@ -51,7 +54,10 @@ PERCENTILE_HI       = 95
 OUTLIER_MAD_THRESH = 5.0              # MAD threshold for inter-channel outlier removal
 OUTLIER_TIMESERIES_WINDOW = 11        # Median filter width for timeseries outlier detection (odd)
 OUTLIER_TIMESERIES_THRESH = 0.0       # Timeseries MAD threshold (0 to disable)
-ECC_MIN_CORR = 0.96                   # Exclude channels with ECC score below this
+ECC_MIN_CORR = 0.99                   # Exclude channels with ECC score below this
+                                      # (0.99 with float input drops cell-bearing
+                                      # channels -> cell-free average, removing the
+                                      # glucose-dependent cell-channel ECC bias)
 OUTPUT_JSON = "pos_shifts_cal.json"
 
 # --- Apply gaussian_backsub to grid reference image ---
@@ -87,6 +93,14 @@ SECOND_PASS_HALF       = 'right' # (disabled: unified to full crop)
 USE_THIRD_PASS_ECC     = True    # True for 3rd ECC pass (re-select nearest grid from pass2 result -> half ECC)
 # Save corr/shift data as NPZ + CSV (True recommended: for verifying correspondence with subtracted images)
 SAVE_CORR_DATA         = True
+# Save shift_visualize figures (several uploads to the shared Drive -> slow).
+# Set False for multi-Pos batch runs; regenerate cumulative-drift plots later
+# from pos_shifts_cal.json / *_corr_data.npz.
+SAVE_SHIFT_FIGURES     = True
+# When SAVE_SHIFT_FIGURES is True: save ONLY the fine_ecc figure per Pos
+# (skip shift_timeseries / trajectory / pass1 / pass2 / pass1_vs_pass2 /
+# exclusion). Batch runs use this to keep the one useful figure but stay fast.
+SHIFT_FIGURES_FINE_ONLY = False
 # --- Parallel processing ---
 N_WORKERS = None               # None = os.cpu_count(). 1 = serial (for debugging)
 
@@ -1096,18 +1110,31 @@ def main():
     # Save exclusion summary CSV
     _save_exclusion_summary_csv(frame_results, channels_dir)
 
-    # Visualize with shift_visualize
-    try:
-        sys.path.insert(0, str(Path(__file__).parent))
-        from shift_visualize import visualize_shifts, visualize_2pass_shifts, visualize_exclusion_summary
-        visualize_shifts(str(out_path))
-        if USE_INCREMENTAL_TRACKING and USE_SECOND_PASS_ECC:
-            visualize_2pass_shifts(str(out_path))
-        excl_csv = channels_dir / "pos_shifts_exclusion_summary.csv"
-        if excl_csv.exists():
-            visualize_exclusion_summary(str(excl_csv), str(out_path))
-    except Exception as e:
-        print(f"[shift_visualize] Skipped: {e}")
+    # Visualize with shift_visualize (slow: uploads several figures to the
+    # shared Drive). Skipped in batch runs via SAVE_SHIFT_FIGURES=False.
+    if SAVE_SHIFT_FIGURES:
+        try:
+            sys.path.insert(0, str(Path(__file__).parent))
+            import shift_visualize as _sv
+            from shift_visualize import visualize_shifts, visualize_2pass_shifts, visualize_exclusion_summary
+            if SHIFT_FIGURES_FINE_ONLY:
+                # Save only the fine_ecc figure (the one useful summary).
+                _sv.SAVE_REDUNDANT_PASS_FIGS = False
+                if USE_INCREMENTAL_TRACKING and USE_SECOND_PASS_ECC:
+                    visualize_2pass_shifts(str(out_path))
+                else:
+                    visualize_shifts(str(out_path))
+            else:
+                visualize_shifts(str(out_path))
+                if USE_INCREMENTAL_TRACKING and USE_SECOND_PASS_ECC:
+                    visualize_2pass_shifts(str(out_path))
+                excl_csv = channels_dir / "pos_shifts_exclusion_summary.csv"
+                if excl_csv.exists():
+                    visualize_exclusion_summary(str(excl_csv), str(out_path))
+        except Exception as e:
+            print(f"[shift_visualize] Skipped: {e}")
+    else:
+        print("[shift_visualize] SAVE_SHIFT_FIGURES=False -> skipping figures")
 
 
 

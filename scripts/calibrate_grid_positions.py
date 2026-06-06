@@ -74,8 +74,11 @@ N_GRID_THREADS = None
 
 
 from ecc_utils import (
-    tilt_fit_crop, extract_rect_roi, to_uint8, ecc_align,
+    tilt_fit_crop, extract_rect_roi, ecc_align,
     remove_outliers_mad,
+    # Float ECC input (clipped float32, no 8-bit quantisation) aliased to the
+    # to_uint8 name; get_crops_u8 now builds float32 crops for ECC.
+    to_ecc_input as to_uint8,
 )
 
 
