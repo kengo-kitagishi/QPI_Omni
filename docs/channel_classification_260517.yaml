@@ -107,13 +107,13 @@ positions:
     ch09:
       status: cells
       phase1:
-        outcome: alive
-        notes: null
-      phase2:
-        outcome: never_revived       # 暫定。最終的に死亡したら died_starvation に更新
+        outcome: dead   # 再分類 2026-06-10: phase1 中に分裂停止 → phase1_dead 扱い
         notes: |
-          細胞質密度は上がっているが分裂していない。このまま死ぬ可能性あり。
+          細胞質密度は上がっているが分裂していない。phase1 中に分裂停止 = phase1 死亡判定。
           不思議な <TERM-TBD:レトリー> の仕方をしている  # 「リエントリー」or「リカバリー」or「リトリート」要確認
+      phase2:
+        outcome: n/a
+        notes: null
 
     ch10:
       status: cells
@@ -2946,29 +2946,37 @@ positions:
         outcome: null
         notes: null
     ch01:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived。リピッドドロップレット + 液胞がはっきり見えていかにも
+          死にそうな見た目。
+          2番目以降: revived。2番目はつるっとした見た目。
     ch02:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: |
+          全細胞 revived。
+          典型的な「高密度 → 小さく分裂」パターン: 一気に密度が上がり、サイズはほとんど
+          成長しないまま分裂していく。
     ch03:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: alive
+        notes: 大きい細胞。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目: never_revived
+          3番目: revived
     ch04:
       status: empty
       phase1:
@@ -3010,21 +3018,26 @@ positions:
         outcome: n/a
         notes: null
     ch09:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived。low glucose に移した直後から流動性なし
+          （死亡 precursor が phase2 早期に observed）。
+          2番目, 3番目, 4番目: revived
     ch10:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: alive
+        notes: 大きい細胞。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目: never_revived。約 frame 2500 で溶け出している印象、shrink 様の挙動。
+          3番目, 4番目: revived
     ch11:
       status: empty
       phase1:
@@ -3036,1726 +3049,1937 @@ positions:
 
   Pos29:
     ch00:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目 + 4番目: revived
+          3番目: never_revived
     ch01:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch02:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch03:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 3番目 + 4番目: revived
+          2番目: never_revived
     ch04:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目（implied）: revived
+          3番目, 4番目: never_revived。low glucose 中も全く成長していない →
+          low glucose 期で既に死亡していた可能性。密度の高い領域あり
+          （リピッドドロップレットか凝集体か判別困難）。
     ch05:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch06:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch07:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch08:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: alive
+        notes: 大きい細胞。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived
+          2番目, 3番目: revived
+          観察: 2番目の細胞内に密度勾配が見える。復活時、高密度領域がそのまま高密度を保ち、
+          高密度側が早く分裂しているように見える（intracellular polarity → divisional
+          priority、Pos14 ch05 の密度勾配 TODO の direct evidence）。
     ch09:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch10:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 3番目: never_revived
+          2番目: elongation style で復活する素振りを見せるが、復活したか不明のまま死亡、
+          そして流出。細胞分裂面の密度がはっきり高く見える（綺麗な septum 様）。
     ch11:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          かなり珍しいケース: mother の lag time が累計最長。frame 3400 付近まで lag → ようやく
+          成長し始める（2% 戻しの frame 2893 から約 500 frame ≒ 20 時間後）。
+          ※ 5 min interval なら 500 frame = 41.7 hour なので、このデータセットは
+            frame interval が CLAUDE.md デフォルトと違う可能性あり（要確認）。
+          mother の特徴: 片方に大きい凝集体か lipid droplet、細胞分裂時の septum が弱い、
+          全体的に元気なさそう。
+          2番目, 3番目: 死亡
+          記録: 「こんなラグタイム長い細胞初めて」（ユーザコメント）。
+          要 follow-up: 最終運命がまだ unclear、もう少し観察したかったとのこと。
 
   Pos30:
     ch00:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch01:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch02:
-      status: null            # empty | cells | unused
+      status: dead_at_start
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: n/a
+        notes: 最初から死んでいる細胞。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: n/a
         notes: null
     ch03:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch04:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: dead
+        notes: |
+          phase1 death cascade。約 frame 900 から強い elongation 開始、密度上昇。
+          frame 1300 付近から破裂（lysis）。Pos20 ch06 と同類の catastrophic phase1 死亡。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: n/a
         notes: null
     ch05:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch06:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch07:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: |
+          mother + 2番目 + 3番目: revived。
+          ただし frame 3000 付近から elongation 開始、frame 3150 で破裂（delayed lysis）。
+          revived 判定で記録（一時的にでも分裂・成長を再開した）。
     ch08:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 3番目 + 4番目: revived
+          2番目: never_revived
     ch09:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch10:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: alive
+        notes: とってもちっちゃい細胞。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived
+          2番目, 3番目, 4番目: revived
     ch11:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
 
   Pos31:
     ch00:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch01:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch02:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch03:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: low glucose 中に分裂、その際 mother-side が破裂（lysis at division）。
+          daughter（mother じゃない側）: 生き残り、2% に戻ったら再度分裂。
+          asymmetric outcome at division: mother lysis + daughter survival + 2% で
+          re-division。
     ch04:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch05:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch06:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: dead
+        notes: |
+          約 frame 1100 で死亡。precursor 兆候なし。
+          ユーザ推測（unlikely）: 凝集体が片方の端からもう片方の端に移る際に分裂面の上に
+          来て変な感じになった、かもしれない（仮説、可能性低い）。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: n/a
         notes: null
     ch07:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch08:
-      status: null            # empty | cells | unused
+      status: dead_at_start
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: n/a
+        notes: 最初から死んでいる細胞。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: n/a
         notes: null
     ch09:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived。low glucose 中も成長して見える（やや細い・薄め）。
+          2番目: revived。「頭でっかち」（密度の高い端）が早く分裂している
+          （intracellular polarity → divisional priority、Pos29 ch08 と同類）。
+          3番目, 4番目: never_revived。low glucose 中から lipid droplet と液胞が色濃く
+          見える、成長していない可能性。
     ch10:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch11:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: alive
+        notes: |
+          mother は最初から死んだ細胞（dead_at_start）として入っている。
+          2番目以降は普通の生細胞。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: |
+          mother: 既死亡（dead_at_start、n/a）
+          2番目以降: 全細胞 revived
 
   Pos32:
     ch00:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch01:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch02:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: |
+          mother + 2番目: revived（全細胞 revived）。
+          観察: low glucose 中、mother と 2番目の細胞の分裂面付近の密度が高くなり、
+          分裂しそうな見た目になっていた。
+          しかし 2% 戻し後の実際の分裂は、その「分裂面っぽい場所」ではなく、mother 側の
+          密度の濃い領域から始まった。「分裂面っぽい場所」はそのまま分裂せず。
+          2番目: 密度の低い領域からも分裂している（intracellular polarity ≠ apparent septum）。
     ch03:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived。約 frame 2955 で破裂（2% 戻し直後の osmotic lysis、
+          Pos16 ch05 と同じ機序）。low glucose 中に真ん中の領域が高密度化、リピッド
+          ドロップレットが分裂面近くに集まっている印象。
+          2番目, 3番目: revived
     ch04:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: |
+          全細胞 revived。
+          3番目: elongation して分裂ごとに小さくなっていくタイプに見えるが、すぐに視野外
+          に流出して詳細不明。
     ch05:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: dead
+        notes: 約 frame 500 で死亡。precursor 兆候なし。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: n/a
         notes: null
     ch06:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch07:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 3番目 + 4番目: revived
+          2番目: never_revived
+          ユーザコメント: 2番目だけ生き返らない理由が読み取りづらい case。
     ch08:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch09:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother（とっても大きい）: never_revived
+          2番目, 3番目, 4番目, 5番目（分裂直後でちっちゃい）: revived
+          ユーザコメント: 過去の傾向だと小さい細胞は死亡傾向だが、ここでは死亡せず。
     ch10:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch11:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
 
   Pos33:
     ch00:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch01:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch02:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch03:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch04:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch05:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch06:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch07:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 4番目: revived
+          2番目, 3番目: never_revived。low glucose 中も全く成長せず、リピッドドロップレット
+          と液胞がはっきり見えていかにも死にそうな見た目。
     ch08:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch09:
-      status: null            # empty | cells | unused
+      status: dead_at_start
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: n/a
+        notes: 最初から死んでいる細胞。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: n/a
         notes: null
     ch10:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          全細胞一旦 revived。
+          mother: 2% 戻し後、密度がどんどん高くなるタイプの死亡（delayed post-revival death）。
+          他の細胞: revived のまま生存。
     ch11:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
 
   Pos34:
     ch00:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch01:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目 + 3番目: revived
+          4番目（ちっちゃい）: never_revived。low glucose 中は成長して見えたが結局生き残らず。
     ch02:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: 全細胞 revived
     ch03:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: 全細胞 revived
     ch04:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch05:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch06:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目: never_revived。low glucose 中に液胞らしきもの顕著。
+          3番目, 4番目: revived
+          channel 全体の low glucose 中の挙動: 全細胞が low glucose 中に全く成長していない
+          （non-growing channel パターン）。
     ch07:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: revived（ただし frame 3200 で破裂、delayed lysis）。revived 判定で記録。
+          2番目, 3番目: never_revived
+          4番目: revived
     ch08:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived。low glucose 中も少し成長していたが復活せず。
+          リピッドドロップレット + 液胞が両方見える。
+          2番目, 3番目, 4番目: revived
     ch09:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch10:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch11:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
 
   Pos35:
     ch00:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch01:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch02:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch03:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch04:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch05:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: dead
+        notes: 約 frame 400 で死亡。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: n/a
         notes: null
     ch06:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch07:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: alive
+        notes: 大きい細胞。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目: never_revived。リピッドドロップレットらしい高密度領域が細胞分裂面
+          あたりをうろうろする。2番目にも分裂面様の高密度領域と液胞が見える。
+          3番目, 4番目: revived
     ch08:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch09:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: 全細胞 revived
     ch10:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch11:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived。low glucose 中にチャンネル奥側に非常に高密度の領域が出現
+          （凝集体か？lipid droplet にしては濃すぎる、領域もやや広い）。
+          この高密度領域がどんどん縮小していく見た目。
+          2番目, 3番目: revived
+          4番目: おそらく never_revived
 
   Pos36:
     ch00:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch01:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch02:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch03:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived
+          2番目, 3番目: revived
     ch04:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch05:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: 全細胞 revived
     ch06:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch07:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 3番目 + 4番目: revived
+          2番目（分裂直後の細胞）: never_revived
+          パターン: 分裂直後の細胞は片方死亡・片方生存に分かれる傾向が複数 observed。
     ch08:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目（大きい細胞）: never_revived
+          3番目: revived
+          4番目: おそらく never_revived
     ch09:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch10:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch11:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目: never_revived。2番目は特に密度が低い。
+          mother + 2番目とも low glucose 中でも流動性がない印象 → hypertonic/osmotic
+          shock 死亡の可能性。
+          3番目, 4番目: revived
 
   Pos37:
     ch00:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch01:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother, 2番目, 3番目, 4番目: 全体としては revived。
+          3番目の細胞: low glucose 中に分裂、その際に片方が破裂（lysis at division）、
+          もう片方は普通に revived。Pos26 ch02 と同類の asymmetric outcome at division。
     ch02:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目 + 4番目: revived
+          3番目: never_revived。元々密度高い細胞。frame 2500 付近から非常に大きい
+          vacuole 様（lipid droplet ではない）の低密度領域が出現、low glucose 中に
+          どんどん目立ってくる。giant vacuole formation という新しい死亡 precursor
+          pattern（autophagy 過剰活性化か vacuole rupture の可能性）。
     ch03:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch04:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch05:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch06:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch07:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: |
+          全細胞 revived。
+          チャンネル全体が low glucose 中にはっきりと成長している（channel-wide
+          growth-permissive state）。Pos34 ch06 の non-growing channel と対極。
     ch08:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: dead
+        notes: |
+          約 frame 1200 で死亡。
+          観察: 凝集体が分裂面のタイミングで来ているように見えるが、それ以前から死にそうな
+          挙動。凝集体のタイミングと死亡が関係している可能性。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: n/a
         notes: null
     ch09:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: 全細胞 revived
     ch10:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: revived
+          2番目（大きい細胞）: never_revived
     ch11:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: dead
+        notes: 約 frame 200 で死亡。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: n/a
         notes: null
 
   Pos38:
     ch00:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived
+          2番目, 3番目: revived
+          4番目: 多分 revived（uncertain）
+          QPI 注意: 波状のアーティファクトが乗っている。mother と 2番目付近に明るい領域が
+          あるが、これは artifact っぽい。
     ch01:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch02:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch03:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived。
+          mother と 2番目 size 似ているが、mother のほうが液胞 + lipid droplet 顕著。
+          mother は frame 1500 付近から lysing mode、frame 2450 付近から黒い液胞様の
+          ものが出現、frame 2500 付近で破裂（subtle、強い rupture ではないが「きゅっ」と
+          縮む感じ）。
+          2番目以降: revived
     ch04:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch05:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目: revived
+          3番目, 4番目: 多分 never_revived（成長していない、不確実だが復活していない判定）
     ch06:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch07:
-      status: null            # empty | cells | unused
+      status: dead_at_start
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: n/a
+        notes: 最初から死んでいる細胞。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: n/a
         notes: null
     ch08:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch09:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch10:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: alive
+        notes: 大きい細胞。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目: never_revived
+          観察: リピッドドロップレットが分裂面に集まっているように見える。
+          仮説候補: low glucose 中の vacuole–核 junction 様の現象との類似性？
+            （飢餓中の autophagy/organelle reorganization）
     ch11:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: 全細胞 revived
 
   Pos39:
     ch00:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived
+          2番目, 3番目, 4番目: revived
     ch01:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: 全細胞 revived
     ch02:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch03:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch04:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch05:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: dead
+        notes: 約 frame 600 で死亡。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: n/a
         notes: null
     ch06:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch07:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived。low glucose 期間中、frame 2293 で破裂（lysis）。
+          2番目, 3番目: revived
     ch08:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived
+          2番目: revived
+          3番目: frame 2700 付近で破裂（lysis）
     ch09:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch10:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: revived
+          2番目, 3番目: never_revived。mother と比べて細め。
+          frame 2319 付近で一気に液胞が大きくなったように見える。
+          仮説: 培地変化ストレスがあった可能性（frame 2319 ≒ 0.0055% → 0% の切替
+          タイミング候補、MEDIA_SWITCHES の未確定境界）。
     ch11:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: revived
+          2番目: never_revived
 
   Pos40:
     ch00:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch01:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch02:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch03:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: alive
+        notes: ちっちゃい細胞。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived
+          2番目, 3番目, 4番目: revived
     ch04:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived。frame 2240 付近で mother にでっかい液胞ができ、死にそうな
+          見た目。
+          3番目: おそらく never_revived
+          2番目, 4番目: revived
     ch05:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch06:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: 全細胞 revived
     ch07:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: 全細胞 revived
     ch08:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: alive
+        notes: 分裂直前くらいの細胞。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目: never_revived
+          3番目: revived
+          観察: リピッドドロップレットが分裂面付近に集まる傾向（複数回 observed）。
     ch09:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch10:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch11:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目: revived
+          3番目: never_revived。珍しいことに培地変化の瞬間に分裂しており、辛そう
+          （osmotic stress + cytokinesis の重なり）。
 
   Pos41:
     ch00:
-      status: null            # empty | cells | unused
+      status: dead_at_start
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: n/a
+        notes: 最初から死んでいる細胞。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: n/a
         notes: null
     ch01:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: died_starvation
+        notes: |
+          mother + 2番目 + 3番目: 全細胞死亡。
     ch02:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch03:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目 + 3番目: revived
+          4番目: never_revived
     ch04:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch05:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目 + 4番目: revived
+          3番目: never_revived
     ch06:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch07:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived
+          2番目: never_revived。low glucose 中にどんどん死んでいる印象（progressive death）。
+          3番目: revived
     ch08:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch09:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch10:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch11:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: 全細胞 revived
 
   Pos42:
     ch00:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived
+          2番目, 3番目, 4番目: revived
     ch01:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: dead
+        notes: 約 frame 800 で死亡。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: n/a
         notes: null
     ch02:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目: never_revived
+          3番目, 4番目: revived
+          2番目の細胞は low glucose 中に分裂したが、分裂後の両方とも死亡。
     ch03:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived
+          2番目: revived
+          3番目, 4番目（分裂直後）: never_revived
     ch04:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch05:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch06:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch07:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch08:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch09:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch10:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch11:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived
+          2番目, 3番目, 4番目: revived
 
   Pos43:
     ch00:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: 全細胞 revived
     ch01:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: alive
+        notes: でっかい細胞。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: died_starvation
+        notes: |
+          mother + 2番目: 両方死亡。
     ch02:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch03:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch04:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch05:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch06:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch07:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch08:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch09:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: 全細胞 revived
     ch10:
-      status: null            # empty | cells | unused
+      status: dead_at_start
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: n/a
+        notes: 最初から死んでいる細胞。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: n/a
         notes: null
     ch11:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
 
   Pos44:
     ch00:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch01:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch02:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: 全細胞 revived
     ch03:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived
+          2番目, 3番目, 4番目: revived
     ch04:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch05:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch06:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch07:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch08:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch09:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: 全細胞 revived
     ch10:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: 全細胞 revived
     ch11:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
 
   Pos45:
     ch00:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: dead
+        notes: 約 frame 700 で死亡。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: n/a
         notes: null
     ch01:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: alive
+        notes: |
+          frame 900 付近から凝集体らしきものが見えている。リピッドドロップレットが分裂・
+          流出しつつ、基本的に1つの端に留まる。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 2番目 + 3番目: revived（ちっちゃい細胞、0% で薄くなる感じだが普通に revived）
+          4番目: 多分 never_revived
     ch02:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: dead
+        notes: |
+          約 frame 200 で死亡。分裂面付近に凝集体（or artifact、判別困難）がほんの少し見える。
+          仮説: 分裂面に凝集体が来ると死亡傾向あり（複数 observed）。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: n/a
         notes: null
     ch03:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch04:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: 全細胞 revived
     ch05:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived。low glucose 中に完全に流動性を失った。リピッドドロップレットか
+          凝集体かはっきり見える死亡 precursor。
+          2番目, 3番目, 4番目: revived
     ch06:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch07:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother + 3番目 + 4番目: revived
+          2番目: 0% グルコース期間中に破裂（lysis）
     ch08:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: alive
+        notes: |
+          frame 1400 付近から凝集体出現、frame 1700 付近で反対側に移動。
+          凝集体の存在は phase1 終了まで問題なし。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          2番目, 3番目: low glucose 中に分裂。分裂後、破裂する細胞と破裂しない細胞に分かれる。
+          破裂しなかった細胞は最終的に revived。
+          全体としては mixed（lysis at division + 一部 survival）。
     ch09:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch10:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch11:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
 
   Pos46:
     ch00:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
-        notes: null
+        outcome: alive
+        notes: |
+          QPI 注意: 強いアーティファクトあり。mother 以外のところで約 0.25 radian の phase
+          フォローアップが見える。データ信用低い。
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: revived
+        notes: 全細胞 revived（アーティファクト注意）
     ch01:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived
+          2番目, 3番目, 4番目: revived
     ch02:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch03:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch04:
-      status: null            # empty | cells | unused
+      status: cells
       phase1:
-        outcome: null         # alive | dead
+        outcome: alive
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
-        notes: null
+        outcome: mixed
+        notes: |
+          mother: never_revived
+          2番目: revived
+          3番目: never_revived。frame 2430 で大きい液胞ができ、frame 2690 で潰れる
+          → その後成長せず（vacuole collapse → death pattern）。
     ch05:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch06:
-      status: null            # empty | cells | unused
+      status: empty
       phase1:
-        outcome: null         # alive | dead
+        outcome: null
         notes: null
       phase2:
-        outcome: null         # revived | died_starvation | never_revived | n/a
+        outcome: null
         notes: null
     ch07:
       status: null            # empty | cells | unused
