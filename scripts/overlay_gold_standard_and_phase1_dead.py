@@ -18,12 +18,13 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
-from per_channel_figures import mother_division_frames  # noqa: E402
 from overlay_mother_revived_vs_dead import find_latest_run_for_channel  # noqa: E402
 from figure_logger import save_figure  # noqa: E402
+from qpi_paths import resolve_lineage_csv  # noqa: E402
 
-QUALITY_REVIVED_CSV = Path("/Users/kitak/QPI_Omni/results/260517/quality_check_all_mother_revived.csv")
-QUALITY_PHASE1_DEAD_CSV = Path("/Users/kitak/QPI_Omni/results/260517/phase1_2per_7days/quality_check_division_intervals.csv")
+from qpi_paths import results_dir  # noqa: E402
+QUALITY_REVIVED_CSV = results_dir() / "quality_check_all_mother_revived.csv"
+QUALITY_PHASE1_DEAD_CSV = results_dir() / "phase1_2per_7days" / "quality_check_division_intervals.csv"
 PHASE1_T_MAX = 168.25
 MEDIA_FRAMES_MIN = 5.0
 TIME_INTERVAL_MIN_GLOBAL = 5.0  # min/frame
@@ -35,34 +36,14 @@ BATCH_FIGURES_INBOX_DIRS = [
 
 
 def find_lineage_csv(pos: str, ch: str) -> Path | None:
-    """Locate the latest lineage_data3D.csv for (pos, ch) across both inbox formats.
+    """Latest lineage_data3D.csv for (pos, ch) — corrected when enabled.
 
-    Tries the per_channel_figures style first (one folder per channel), then
-    the batch_figures style (flat folder, file prefixed with `<Pos>_<ch>__`).
+    Delegates to qpi_paths.resolve_lineage_csv, which returns the mask-direct
+    corrected CSV when QPI_USE_CORRECTED=1 (variant via QPI_VOLUME_VARIANT) and
+    otherwise the latest inbox CSV (both per_channel_figures and batch_figures
+    layouts), resolved cross-platform.
     """
-    # per_channel_figures: latest run via find_latest_run_for_channel
-    res = find_latest_run_for_channel(pos, ch)
-    if res is not None:
-        run_dir, _ = res
-        candidate = run_dir / "lineage_data3D.csv"
-        if candidate.exists():
-            return candidate
-    # batch_figures: flat file naming
-    best = None
-    best_mtime = -1.0
-    for inbox in BATCH_FIGURES_INBOX_DIRS:
-        if not inbox.exists():
-            continue
-        for run_dir in inbox.iterdir():
-            if not run_dir.is_dir():
-                continue
-            candidate = run_dir / f"{pos}_{ch}__lineage_data3D.csv"
-            if candidate.exists():
-                m = candidate.stat().st_mtime
-                if m > best_mtime:
-                    best_mtime = m
-                    best = candidate
-    return best
+    return resolve_lineage_csv(pos, ch)
 
 # Channels the user has visually confirmed as bad and wants to drop entirely
 # Edge channels (ch00, ch11) tend to be affected by OOB / channel boundary
@@ -120,43 +101,61 @@ def select_gold_standard() -> list[tuple[str, str]]:
     on the division-interval criterion alone. MANUAL_EXCLUDE entries are
     still dropped (these are channels flagged visually as wrong-blob or
     edge-OOB problems).
+
+    Uses the precomputed quality CSV when present (macOS), otherwise computes
+    the same criterion directly from the lineage data (portable, Windows).
     """
-    df = pd.read_csv(QUALITY_REVIVED_CSV)
-    gold = df[(df["status"] == "ok") & (df["is_gold_standard"] == True)]  # noqa: E712
-    out = []
-    for c in gold["channel"].tolist():
-        pair = parse_channel(c)
-        if pair in MANUAL_EXCLUDE:
-            continue
-        out.append(pair)
-    return out
+    if QUALITY_REVIVED_CSV.exists():
+        df = pd.read_csv(QUALITY_REVIVED_CSV)
+        gold = df[(df["status"] == "ok") & (df["is_gold_standard"] == True)]  # noqa: E712
+        out = []
+        for c in gold["channel"].tolist():
+            pair = parse_channel(c)
+            if pair in MANUAL_EXCLUDE:
+                continue
+            out.append(pair)
+        return out
+    from gold_standard import select_gold_standard as _portable_gold
+    return _portable_gold()
 
 
 def select_all_phase1_dead() -> list[tuple[str, str]]:
-    """All phase1-dead channels with inbox lineage data — minus manual excludes."""
-    df = pd.read_csv(QUALITY_PHASE1_DEAD_CSV)
-    sub = df[df["group"] == "phase1_dead"]
-    out = []
-    for c in sub["channel"].tolist():
-        pair = parse_channel(c)
-        if pair in MANUAL_EXCLUDE:
-            continue
-        out.append(pair)
-    return out
+    """All phase1-dead channels with lineage data — minus manual excludes.
+
+    Uses the quality CSV when present (macOS), otherwise the YAML phase1=dead
+    set (portable, Windows)."""
+    if QUALITY_PHASE1_DEAD_CSV.exists():
+        df = pd.read_csv(QUALITY_PHASE1_DEAD_CSV)
+        sub = df[df["group"] == "phase1_dead"]
+        out = []
+        for c in sub["channel"].tolist():
+            pair = parse_channel(c)
+            if pair in MANUAL_EXCLUDE:
+                continue
+            out.append(pair)
+        return out
+    from gold_standard import phase1_dead_sorted_by_death_proxy
+    return [(p, c) for p, c, _ in phase1_dead_sorted_by_death_proxy()]
 
 
 def select_phase1_dead_sorted_by_death() -> list[tuple[str, str, int]]:
-    """Phase1-dead channels with death_frame, sorted ascending, manual excludes removed."""
-    df = pd.read_csv(QUALITY_PHASE1_DEAD_CSV)
-    sub = df[df["group"] == "phase1_dead"].dropna(subset=["death_frame"])
-    sub = sub.sort_values("death_frame")
-    out = []
-    for c, df_row in zip(sub["channel"], sub.to_dict("records")):
-        pair = parse_channel(c)
-        if pair in MANUAL_EXCLUDE:
-            continue
-        out.append((pair[0], pair[1], int(df_row["death_frame"])))
-    return out
+    """Phase1-dead channels sorted by death frame, manual excludes removed.
+
+    Uses the quality CSV's death_frame when present (macOS), otherwise a
+    lineage-derived death-frame proxy (portable, Windows)."""
+    if QUALITY_PHASE1_DEAD_CSV.exists():
+        df = pd.read_csv(QUALITY_PHASE1_DEAD_CSV)
+        sub = df[df["group"] == "phase1_dead"].dropna(subset=["death_frame"])
+        sub = sub.sort_values("death_frame")
+        out = []
+        for c, df_row in zip(sub["channel"], sub.to_dict("records")):
+            pair = parse_channel(c)
+            if pair in MANUAL_EXCLUDE:
+                continue
+            out.append((pair[0], pair[1], int(df_row["death_frame"])))
+        return out
+    from gold_standard import phase1_dead_sorted_by_death_proxy
+    return phase1_dead_sorted_by_death_proxy()
 
 
 def load_mother_phase1(pos: str, ch: str):
@@ -307,7 +306,7 @@ def main():
         print(f"\nPanel {panel_n}/{n_panels} (death_frame {df_range}): {names}")
         plot_overlay_two_groups(
             gold, dead_pairs, "mean_RI", "mother mean RI",
-            (1.345, 1.385),
+            (1.36, 1.41),
             f"panel{panel_n}of{n_panels}_death_{df_range}_mean_RI",
         )
         plot_overlay_two_groups(

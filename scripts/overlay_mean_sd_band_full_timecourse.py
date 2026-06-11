@@ -28,8 +28,9 @@ from overlay_gold_standard_and_phase1_dead import (  # noqa: E402
     _pick_metric, select_gold_standard, MANUAL_EXCLUDE, find_lineage_csv,
 )
 from figure_logger import save_figure  # noqa: E402
+from qpi_paths import yaml_path as _yaml_path  # noqa: E402
 
-YAML_PATH = Path("/Users/kitak/QPI_Omni/docs/channel_classification_260517.yaml")
+YAML_PATH = _yaml_path()
 
 TIME_ZERO_H = 120.0
 TIME_INTERVAL_MIN = 5.0

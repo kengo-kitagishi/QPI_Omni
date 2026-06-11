@@ -17,9 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from overlay_gold_standard_and_phase1_dead import (  # noqa: E402
     find_lineage_csv, select_gold_standard,
 )
-from analyze_starvation_entry_cell_cycle import (  # noqa: E402
-    rank1_division_frames,
-)
+from gold_standard import rank1_division_frames  # noqa: E402
 from figure_logger import save_figure  # noqa: E402
 
 PHASE1_END_FRAME = 2018

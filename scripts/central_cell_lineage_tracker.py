@@ -44,6 +44,9 @@ import pandas as pd
 import tifffile
 from skimage import measure
 
+sys.path.insert(0, str(Path(__file__).parent))
+from mask_morphology import measure_all_modes  # noqa: E402
+
 from ri_calibration import (
     load_calibration,
     medium_name_at_frame,
@@ -75,13 +78,20 @@ class FrameData:
     area_px: int
     centroid_x: float
     centroid_y: float
-    major_axis_px: float
-    minor_axis_px: float
+    major_axis_px: float           # medial long axis (canonical)
+    minor_axis_px: float           # medial short axis (canonical)
     total_phase: float
     touches_border: bool = False
+    major_axis_skimage_px: float = np.nan   # QC: skimage second-moment fit
+    minor_axis_skimage_px: float = np.nan   # QC
+    volume_profile_px3: float = np.nan      # solid-of-revolution volume (px^3)
+    multi_xsec_frac: float = 0.0            # QC: fraction of body cols with >1 cross-section
     volume_um3_rod: float = np.nan
+    volume_um3_profile: float = np.nan
     mean_ri: float = np.nan
     mass_pg: float = np.nan
+    mean_ri_profile: float = np.nan
+    mass_pg_profile: float = np.nan
     n_medium_used: float = np.nan
     medium_name: str = ""
     is_outlier: bool = False
@@ -169,9 +179,19 @@ def load_phase_image(path: Path) -> Optional[np.ndarray]:
     return arr.astype(np.float32, copy=False)
 
 
+_FRAME_RE = re.compile(r"img_0*(\d+)")
+
+
+def _img_number(name: str) -> Optional[int]:
+    m = _FRAME_RE.search(name)
+    return int(m.group(1)) if m else None
+
+
 def collect_frame_pairs(
     channel_dir: Path,
     bad_timepoints: Optional[set[int]] = None,
+    frame_min: Optional[int] = None,
+    frame_max: Optional[int] = None,
 ) -> list[tuple[int, Path, Optional[Path], bool]]:
     """Return [(timepoint, mask_path, raw_path, is_bad), ...] in timepoint order.
 
@@ -180,6 +200,25 @@ def collect_frame_pairs(
     """
     inference_dir = channel_dir / "inference_out"
     mask_paths = sorted(inference_dir.glob("*_masks.tif"), key=lambda p: natural_key(p.name))
+    # Optional img_NNN range filter. NOTE: `frame` stays the ABSOLUTE img_NNN
+    # number everywhere downstream (NOT re-indexed) so bad-frame matching and
+    # media-RI lookup (keyed on absolute img_NNN) stay correct. Time is re-based
+    # separately: build_long/clist/bad_frames receive time_zero_frame=frame_min
+    # so time_h = (frame - frame_min) * dt / 60, i.e. the first kept frame is
+    # time 0. Example: frame_min=137 -> img_000000137 is at time_h = 0.
+    if frame_min is not None or frame_max is not None:
+        fmin = -1 if frame_min is None else int(frame_min)
+        fmax = float("inf") if frame_max is None else int(frame_max)
+        kept: list[Path] = []
+        for p in mask_paths:
+            n = _img_number(p.name)
+            if n is None:
+                continue
+            if fmin <= n <= fmax:
+                kept.append(p)
+        print(f"[info] frame range filter [{frame_min}, {frame_max}] -> "
+              f"{len(kept)}/{len(mask_paths)} masks kept", file=sys.stderr)
+        mask_paths = kept
     raw_paths = [
         p for p in sorted(channel_dir.glob("*.tif"), key=lambda p: natural_key(p.name))
         if not p.stem.endswith(("_masks", "_binary"))
@@ -255,13 +294,32 @@ def extract_cells_from_frame(
         total_phase = float(np.sum(phase[mask_label == p.label])) if phase is not None else np.nan
         minr, minc, maxr, maxc = p.bbox
         touches = (minr <= 0) or (minc <= 0) or (maxr >= h) or (maxc >= w)
+        sk_major = float(getattr(p, "major_axis_length", np.nan))
+        sk_minor = float(getattr(p, "minor_axis_length", np.nan))
+        # Mask-direct width (medial axis) replaces the skimage second-moment
+        # ellipse fit, which over-estimates rod width in an aspect-ratio-
+        # dependent way. p.image is the cell's cropped boolean mask; pad it by
+        # 6 px (matching the validated recompute crop) so the rotate-and-project
+        # has no edge artefact. Fall back to skimage if the medial degenerates.
+        a = measure_all_modes(np.pad(p.image, 6))
+        if a is not None:
+            major_px = a["medial_long_px"]
+            minor_px = a["medial_short_px"]
+            profile_px3 = a["medial_profile_px3"]
+            multi_xsec = a["multi_xsec_frac"]
+        else:
+            major_px, minor_px, profile_px3, multi_xsec = sk_major, sk_minor, np.nan, 0.0
         rows.append({
             "label": int(p.label),
             "area_px": int(p.area),
             "centroid_y": cy,
             "centroid_x": cx,
-            "major_axis_px": float(getattr(p, "major_axis_length", np.nan)),
-            "minor_axis_px": float(getattr(p, "minor_axis_length", np.nan)),
+            "major_axis_px": major_px,        # medial long axis (canonical)
+            "minor_axis_px": minor_px,        # medial short axis (canonical)
+            "major_axis_skimage_px": sk_major,
+            "minor_axis_skimage_px": sk_minor,
+            "volume_profile_px3": profile_px3,
+            "multi_xsec_frac": multi_xsec,
             "total_phase": total_phase,
             "dist_x": abs(cx - x_center),
             "touches_border": bool(touches),
@@ -306,6 +364,10 @@ def _make_frame_data(row: pd.Series, frame: int, rank: int, is_outlier: bool = F
         centroid_y=float(row["centroid_y"]),
         major_axis_px=float(row["major_axis_px"]),
         minor_axis_px=float(row["minor_axis_px"]),
+        major_axis_skimage_px=float(row.get("major_axis_skimage_px", np.nan)),
+        minor_axis_skimage_px=float(row.get("minor_axis_skimage_px", np.nan)),
+        volume_profile_px3=float(row.get("volume_profile_px3", np.nan)),
+        multi_xsec_frac=float(row.get("multi_xsec_frac", 0.0)),
         total_phase=float(row["total_phase"]),
         touches_border=bool(row.get("touches_border", False)),
         is_outlier=is_outlier,
@@ -444,7 +506,13 @@ def compute_metrics_for_all(
     use_schedule = bool(media_schedule) and bool(media_ri)
     for cell in state.cells.values():
         for f in cell.frames:
+            # rod-formula volume (cylinder + 2 hemispherical caps) from the
+            # medial axes, and the solid-of-revolution volume from the width
+            # profile. Both are kept; RI/mass are computed for each so each
+            # volume column has a self-consistent (volume, RI, mass) set.
             f.volume_um3_rod = calc_rod_volume_um3(f.major_axis_px, f.minor_axis_px, pixel_size_um)
+            if np.isfinite(f.volume_profile_px3):
+                f.volume_um3_profile = f.volume_profile_px3 * pixel_size_um ** 3
             if use_schedule:
                 nm_f = n_medium_at_frame(int(f.frame), media_schedule, media_ri)
                 f.medium_name = medium_name_at_frame(int(f.frame), media_schedule)
@@ -458,6 +526,12 @@ def compute_metrics_for_all(
             )
             f.mean_ri = ri
             f.mass_pg = mass
+            ri_p, _cp, mass_p = calc_optical_metrics(
+                f.total_phase, f.volume_um3_profile, pixel_size_um, wavelength_nm,
+                nm_f, alpha_ri, n_protein_basis=n_milliq,
+            )
+            f.mean_ri_profile = ri_p
+            f.mass_pg_profile = mass_p
 
 
 # =============================================================================
@@ -470,6 +544,7 @@ def build_bad_frames_table(
     media_schedule: Optional[list[tuple[int, str]]] = None,
     media_ri: Optional[dict[str, float]] = None,
     bad_reasons: Optional[dict[int, list[str]]] = None,
+    time_zero_frame: int = 0,
 ) -> pd.DataFrame:
     """Build the lineage_bad_frames.csv table from raw region records.
 
@@ -489,7 +564,7 @@ def build_bad_frames_table(
             r["major_axis_px"], r["minor_axis_px"], pixel_size_um
         )
         t_h = (
-            r["frame"] * (time_interval_min / 60.0)
+            (r["frame"] - time_zero_frame) * (time_interval_min / 60.0)
             if time_interval_min else np.nan
         )
         n_med = (
@@ -541,17 +616,21 @@ def build_long_table(
     time_interval_min: Optional[float],
     pixel_size_um: float,
     n_milliq: float | None = None,
+    time_zero_frame: int = 0,
 ) -> pd.DataFrame:
     """Per-frame long table (data3D style). Outlier frames mask out volume/RI/mass to NaN."""
     rows = []
     n_milliq_val = float(n_milliq) if n_milliq is not None else np.nan
     for cid, cell in state.cells.items():
         for f in cell.frames:
-            t_h = f.frame * (time_interval_min / 60.0) if time_interval_min else np.nan
+            t_h = (f.frame - time_zero_frame) * (time_interval_min / 60.0) if time_interval_min else np.nan
             hide = f.is_outlier or f.touches_border
             v = np.nan if hide else f.volume_um3_rod
+            vp = np.nan if hide else f.volume_um3_profile
             ri = np.nan if hide else f.mean_ri
             mass = np.nan if hide else f.mass_pg
+            ri_p = np.nan if hide else f.mean_ri_profile
+            mass_p = np.nan if hide else f.mass_pg_profile
             rows.append({
                 "cell_id": cid,
                 "parent_id": cell.parent_id if cell.parent_id is not None else -1,
@@ -569,8 +648,14 @@ def build_long_table(
                 "centroid_y_px": f.centroid_y,
                 "total_phase": f.total_phase,
                 "volume_um3_rod": v,
+                "volume_um3_profile": vp,
                 "mean_ri": ri,
                 "mass_pg": mass,
+                "mean_ri_profile": ri_p,
+                "mass_pg_profile": mass_p,
+                "long_axis_skimage_um": f.major_axis_skimage_px * pixel_size_um,
+                "short_axis_skimage_um": f.minor_axis_skimage_px * pixel_size_um,
+                "multi_xsec_frac": f.multi_xsec_frac,
                 "n_medium_used": f.n_medium_used,
                 "medium_name": f.medium_name,
                 "n_milliq_used": n_milliq_val,
@@ -585,7 +670,9 @@ def build_long_table(
             "frame", "time_h", "rank",
             "area_px", "area_um2", "long_axis_um", "short_axis_um",
             "centroid_x_px", "centroid_y_px", "total_phase",
-            "volume_um3_rod", "mean_ri", "mass_pg",
+            "volume_um3_rod", "volume_um3_profile", "mean_ri", "mass_pg",
+            "mean_ri_profile", "mass_pg_profile",
+            "long_axis_skimage_um", "short_axis_skimage_um", "multi_xsec_frac",
             "n_medium_used", "medium_name", "n_milliq_used",
             "is_outlier", "touches_border",
         ])
@@ -622,6 +709,7 @@ def build_clist_table(
     image_height_px: int,
     pixel_size_um: float,
     time_interval_min: Optional[float],
+    time_zero_frame: int = 0,
 ) -> pd.DataFrame:
     """Per-cell summary table (SuperSegger clist style).
 
@@ -670,8 +758,8 @@ def build_clist_table(
             "birth_frame": cell.birth_frame if cell.birth_frame is not None else f_birth.frame,
             "death_frame": cell.death_frame if cell.death_frame is not None else f_death.frame,
             "age_frames": f_death.frame - f_birth.frame,
-            "birth_time_h": (f_birth.frame * time_interval_min / 60.0) if time_interval_min else np.nan,
-            "death_time_h": (f_death.frame * time_interval_min / 60.0) if time_interval_min else np.nan,
+            "birth_time_h": ((f_birth.frame - time_zero_frame) * time_interval_min / 60.0) if time_interval_min else np.nan,
+            "death_time_h": ((f_death.frame - time_zero_frame) * time_interval_min / 60.0) if time_interval_min else np.nan,
             "age_h": ((f_death.frame - f_birth.frame) * time_interval_min / 60.0) if time_interval_min else np.nan,
 
             "long_axis_birth_um": f_birth.major_axis_px * pixel_size_um,
@@ -763,6 +851,8 @@ def run(
     media_schedule_str: Optional[str] = None,
     n_milliq: Optional[float] = None,
     bad_frames: Optional[Path] = None,
+    frame_min: Optional[int] = None,
+    frame_max: Optional[int] = None,
 ) -> None:
     bad_tp: Optional[set[int]] = None
     bad_reasons: dict[int, list[str]] = {}
@@ -777,7 +867,12 @@ def run(
         bad_tp, bad_reasons = load_bad_timepoints(bad_frames, pos_label)
         print(f"[info] {pos_label}: {len(bad_tp)} bad timepoints flagged", file=sys.stderr)
 
-    pairs = collect_frame_pairs(channel_dir, bad_timepoints=bad_tp)
+    pairs = collect_frame_pairs(
+        channel_dir,
+        bad_timepoints=bad_tp,
+        frame_min=frame_min,
+        frame_max=frame_max,
+    )
     if max_frames is not None:
         pairs = pairs[:max_frames]
     if not pairs:
@@ -903,12 +998,20 @@ def run(
     last_mask = load_label_image(pairs[-1][1])
     img_h, img_w = last_mask.shape
 
-    df_long = build_long_table(state, time_interval_min, pixel_size_um, n_milliq=n_milliq_used)
+    # Re-base time so the first kept frame is time 0. With --frame-min N, the
+    # first surviving frame is img_N, so time_zero_frame = N makes time_h = 0
+    # there. Media RI lookup still uses the absolute img_NNN frame, so the
+    # schedule (e.g. 2019/2307/2885) stays correct regardless of this offset.
+    time_zero_frame = int(frame_min) if frame_min is not None else 0
+
+    df_long = build_long_table(state, time_interval_min, pixel_size_um,
+                               n_milliq=n_milliq_used, time_zero_frame=time_zero_frame)
     long_path = out_dir / "lineage_data3D.csv"
     df_long.to_csv(long_path, index=False)
     print(f"[ok] wrote {long_path}  ({len(df_long)} rows)", file=sys.stderr)
 
-    df_clist = build_clist_table(state, img_w, img_h, pixel_size_um, time_interval_min)
+    df_clist = build_clist_table(state, img_w, img_h, pixel_size_um, time_interval_min,
+                                 time_zero_frame=time_zero_frame)
     clist_path = out_dir / "clist.csv"
     df_clist.to_csv(clist_path, index=False)
     print(f"[ok] wrote {clist_path}  ({len(df_clist)} cells)", file=sys.stderr)
@@ -926,6 +1029,7 @@ def run(
         media_schedule=media_schedule,
         media_ri=media_ri,
         bad_reasons=bad_reasons,
+        time_zero_frame=time_zero_frame,
     )
     bad_csv_path = out_dir / "lineage_bad_frames.csv"
     df_bad.to_csv(bad_csv_path, index=False)
@@ -988,6 +1092,9 @@ def run(
                 "n_bad_region_records": len(df_bad),
             } if bad_frames is not None else None
         ),
+        "frame_min": frame_min,
+        "frame_max": frame_max,
+        "time_zero_frame": time_zero_frame,
     }
 
     # dump calibration/schedule next to the CSVs so plotting scripts (which
@@ -1028,6 +1135,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--bad-frames", type=Path, default=None,
                    help="Path to bad_frames.json (from extract_bad_frames.py). "
                         "Bad timepoints for this Pos are excluded from tracking.")
+    p.add_argument("--frame-min", type=int, default=None,
+                   help="Inclusive lower bound on img_NNN in mask filenames. "
+                        "The first surviving frame becomes local frame 0 "
+                        "(i.e. time 0 in plots).")
+    p.add_argument("--frame-max", type=int, default=None,
+                   help="Inclusive upper bound on img_NNN in mask filenames.")
     return p
 
 
@@ -1048,6 +1161,8 @@ def main() -> int:
         media_schedule_str=args.media_schedule,
         n_milliq=args.n_milliq,
         bad_frames=args.bad_frames,
+        frame_min=args.frame_min,
+        frame_max=args.frame_max,
     )
     return 0
 

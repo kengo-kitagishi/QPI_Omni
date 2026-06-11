@@ -22,9 +22,10 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).parent))
 from overlay_mother_revived_vs_dead import find_latest_run_for_channel  # noqa: E402
+from qpi_paths import yaml_path, results_dir  # noqa: E402
 
-YAML_PATH = Path("/Users/kitak/QPI_Omni/docs/channel_classification_260517.yaml")
-OUT_CSV = Path("/Users/kitak/QPI_Omni/results/260517/tracking_coverage_phase2_dead_mother.csv")
+YAML_PATH = yaml_path()
+OUT_CSV = results_dir() / "tracking_coverage_phase2_dead_mother.csv"
 
 TIME_INTERVAL_MIN = 5.0
 PHASE1_END_FRAME = 2019           # frame at end of 2% glucose growth

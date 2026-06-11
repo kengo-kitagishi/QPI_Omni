@@ -25,10 +25,11 @@ from check_phase2_dead_tracking_coverage import (  # noqa: E402
     mother_didnt_revive_in_phase2,
 )
 from figure_logger import save_figure  # noqa: E402
+from qpi_paths import yaml_path  # noqa: E402
 
 import yaml
 
-YAML_PATH = Path("/Users/kitak/QPI_Omni/docs/channel_classification_260517.yaml")
+YAML_PATH = yaml_path()
 TIME_INTERVAL_MIN = 5.0
 TIME_ZERO_H = 120.0  # original 120 h becomes 0 h on plot axis
 T_END_H_RAW = 3748 * TIME_INTERVAL_MIN / 60.0

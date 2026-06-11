@@ -90,7 +90,7 @@ def main():
     print(f"Elongation pair: {[(p, c) for p, c, _, _ in ELONGATION_PAIR]}")
     plot_one_metric(gold, "volume", r"mother volume [$\mu m^3$]",
                     (0, 300), "volume")
-    plot_one_metric(gold, "mean_RI", "mother mean RI", (1.345, 1.385),
+    plot_one_metric(gold, "mean_RI", "mother mean RI", (1.36, 1.41),
                     "mean_RI")
     plot_one_metric(gold, "mass", "mother dry mass [pg]", (0, 80),
                     "mass")
