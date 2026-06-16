@@ -34,7 +34,7 @@ from ecc_utils import ECC_MIN_CORR  # single source (0.99); written into drift_c
 # ============================================================
 
 # .pos file consumed by Micro-Manager (the actual time-lapse position list)
-POSITIONS_FILE   = r"C:\260606\hoseikan0p11_Offset308p575.pos"
+POSITIONS_FILE   = r"C:\260606\hoseikan0p11_Offset308p575_resetXY.pos"
 
 # Grid acquisition directory (small grid is fine)
 GRID_DIR         = r"C:\260606\hoseikan_test\0p11_grid_1_1_Offset_304p575_to_312p575_1"
@@ -47,14 +47,14 @@ GRID_Z_INDEX     = 10       # z-slice of the grid TIFFs to use as reference (21-
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"E:\260517\2per_0055per_0per_2per"
+SAVE_DIR         = r"D:\AquisitionData\Kitagishi\260606\0p11_zstack_1"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
 
 # Micro-Manager acquisition parameters
-N_TIMEPOINTS     = 50000
-INTERVAL_SEC     = 300        # Time-lapse interval [s]
+N_TIMEPOINTS     = 15840      # 11 days @ 60s interval
+INTERVAL_SEC     = 60         # Time-lapse interval [s]
 EXPOSURE_MS      = 60.0
 SETTLE_MS        = 150        # Stage settle time after move [ms]
 PFS_SETTLE_MS    = 0          # PFS continuously tracks; no extra settle needed
@@ -86,7 +86,7 @@ KF_R_TX_NM2          = 274.0
 DRIFT_SAMPLE_INTERVAL = 1      # 1 = every position; N = every Nth (group leader)
 MAX_DRIFT_WORKERS     = 8      # 0 = auto (cpu_count - 4)
 ENABLE_THIRD_PASS     = True   # Run pass 3 (re-select grid after pass 2)
-# ECC_MIN_CORR imported from ecc_utils above (single source = 0.99); 0 disables filter
+# ECC_MIN_CORR imported from ecc_utils above (single source = 0.994); 0 disables filter
 
 # Optical parameters
 SENSOR_PIXEL_SIZE    = 3.45e-6
@@ -127,12 +127,12 @@ CLEANUP_RAW_HOLOGRAMS = True
 # Crop-subtract / raw-phase Phase B (online crop_sub_rawraw save)
 # Step values are nominal fallback only; grid_calibration_*.json (measured)
 # wins when present.
-RAW_TL_Z_INDEX        = 0
+RAW_TL_Z_INDEX        = 10
 CROP_SUB_X_STEP_UM    = 0.1
 CROP_SUB_Y_STEP_UM    = 0.1
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"E:\260517\2per_0055per_0per_2per_crop_sub"
-CROP_SUB_MAX_SECONDS  = 150.0
+CROP_SUB_ROOT         = r"D:\AquisitionData\Kitagishi\260606\0p11_zstack_1_crop_sub"
+CROP_SUB_MAX_SECONDS  = 40.0
 CROP_SUB_MAX_WORKERS  = 4
 CROP_SUB_MIN_FREE_GB  = 2.0
 ECC_THREADS_PER_POS   = 4
