@@ -535,8 +535,8 @@ def step3_grid_subtract(pos_num, pos_dir):
 
     gs.SHIFT_SIGN_X = SHIFT_SIGN_X
     gs.SHIFT_SIGN_Y = SHIFT_SIGN_Y
-    gs.X_STEP = 0.1
-    gs.Y_STEP = 0.1
+    gs.X_STEP = 0.05
+    gs.Y_STEP = 0.05
 
     print(f"  Running grid_subtract (raw-raw, crop={crop})...")
     try:
@@ -611,8 +611,8 @@ def _synthesize_grid_subtract_log(online_json_path: Path, pos_num: int,
         "grid_dir": str(GRID_2PER_DIR),
         "grid_z_index": RAW_GRID_Z_INDEX,
         "tl_z_index": RAW_TL_Z_INDEX,
-        "x_step_um": 0.1,
-        "y_step_um": 0.1,
+        "x_step_um": 0.05,
+        "y_step_um": 0.05,
         "shift_sign_x": SHIFT_SIGN_X,
         "shift_sign_y": SHIFT_SIGN_Y,
         "apply_subpixel_correction": True,

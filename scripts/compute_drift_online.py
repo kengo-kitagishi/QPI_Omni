@@ -1056,8 +1056,8 @@ def _save_crop_sub_one_pos(args):
         xi, yi, dist_um, dx_um, dy_um, cal_dx, cal_dy, residual_x, residual_y = gs.select_grid(
             sx, sy, pos_map, grid_cal,
             pixel_scale_um=cfg["pixel_scale_um"],
-            x_step=cfg.get("crop_sub_x_step_um", 0.1),
-            y_step=cfg.get("crop_sub_y_step_um", 0.1),
+            x_step=cfg.get("crop_sub_x_step_um", 0.05),
+            y_step=cfg.get("crop_sub_y_step_um", 0.05),
             shift_sign_x=-1, shift_sign_y=-1,
         )
 
@@ -1170,8 +1170,8 @@ def _append_online_pos_shifts(crop_sub_root, pos_label, frame_entry, cfg):
         "grid_dir": cfg.get("grid_dir", ""),
         "grid_z_index": int(cfg.get("raw_grid_z_index", 18)),
         "tl_z_index": int(cfg.get("raw_tl_z_index", 0)),
-        "x_step_um": float(cfg.get("crop_sub_x_step_um", 0.1)),
-        "y_step_um": float(cfg.get("crop_sub_y_step_um", 0.1)),
+        "x_step_um": float(cfg.get("crop_sub_x_step_um", 0.05)),
+        "y_step_um": float(cfg.get("crop_sub_y_step_um", 0.05)),
         "shift_sign_x": int(cfg.get("shift_sign_x", -1)),
         "shift_sign_y": int(cfg.get("shift_sign_y", -1)),
         "apply_subpixel_correction": True,

@@ -72,8 +72,8 @@ BACKSUB_SMOOTH_WINDOW = 20
 # --- Incremental tracking mode ---
 # When True, select nearest grid(xi,yi) as reference based on previous frame's shift
 USE_INCREMENTAL_TRACKING   = True    # Default True (overridden by pipeline later)
-X_STEP                     = 0.1    # Grid step [um]
-Y_STEP                     = 0.1    # Grid step [um]
+X_STEP                     = 0.05   # Grid step [um]
+Y_STEP                     = 0.05   # Grid step [um]
 SHIFT_SIGN_X               = 1      # Shift sign (1 or -1)
 SHIFT_SIGN_Y               = 1
 JUMP_THRESH_UM             = 1.0   # Outlier if shift diff from previous frame exceeds this [um] (0 to disable)

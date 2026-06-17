@@ -52,8 +52,8 @@ SENSOR_PIXEL_SIZE = 3.45e-6
 MAGNIFICATION     = 40
 ORIGINAL_DIM      = 2048
 RECONSTRUCTED_DIM = 511
-X_STEP = 0.1   # Grid step [um] (MicroManager setting, 0p1 in grid_0p5_0p5_0p1)
-Y_STEP = 0.1
+X_STEP = 0.05   # Grid step [um] (match generate_grid_pos.py)
+Y_STEP = 0.05
 
 # ---- Backsub parameters ----
 BACKSUB_MIN_PHASE    = -1.1

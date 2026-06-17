@@ -61,8 +61,8 @@ SENSOR_PIXEL_SIZE  = 3.45e-6   # [m]
 MAGNIFICATION      = 40
 ORIGINAL_DIM       = 2048
 RECONSTRUCTED_DIM  = 511
-X_STEP             = 0.1       # Grid step [um]
-Y_STEP             = 0.1
+X_STEP             = 0.05      # Grid step [um]
+Y_STEP             = 0.05
 SHIFT_SIGN_X       = -1
 SHIFT_SIGN_Y       = -1
 POS_SPLIT          = 53    # Pos < POS_SPLIT: left 1/3 fit, Pos >= POS_SPLIT: right 1/3 fit

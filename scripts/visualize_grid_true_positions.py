@@ -63,8 +63,8 @@ ORIGINAL_DIM      = 2048
 RECONSTRUCTED_DIM = 511
 
 # Grid step
-X_STEP       = 0.1   # [um]
-Y_STEP       = 0.1   # [um]
+X_STEP       = 0.05   # [um]
+Y_STEP       = 0.05   # [um]
 SHIFT_SIGN_X = -1
 SHIFT_SIGN_Y = -1
 

@@ -128,8 +128,8 @@ CLEANUP_RAW_HOLOGRAMS = True
 # Step values are nominal fallback only; grid_calibration_*.json (measured)
 # wins when present.
 RAW_TL_Z_INDEX        = 10
-CROP_SUB_X_STEP_UM    = 0.1
-CROP_SUB_Y_STEP_UM    = 0.1
+CROP_SUB_X_STEP_UM    = 0.05
+CROP_SUB_Y_STEP_UM    = 0.05
 ENABLE_CROP_SUB_SAVE  = True
 CROP_SUB_ROOT         = r"D:\AquisitionData\Kitagishi\260606\0p20_zstack_1_crop_sub"
 CROP_SUB_MAX_SECONDS  = 40.0

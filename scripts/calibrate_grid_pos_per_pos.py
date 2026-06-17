@@ -82,10 +82,10 @@ MAD_THRESH  = 5.0   # Inter-channel MAD outlier threshold
 # score below this are dropped -> cell-free average.
 
 # Grid expansion parameters (must match generate_grid_pos.py)
-X_STEP = 0.1   # [um]  stage X -> image Y
-Y_STEP = 0.1   # [um]  stage Y -> image X
-X_HALF = 4     # -> total 9 points/axis -> 81 points/Pos
-Y_HALF = 4
+X_STEP = 0.05   # [um]  stage X -> image Y
+Y_STEP = 0.05   # [um]  stage Y -> image X
+X_HALF = 5     # -> total 11 points/axis -> 121 points/Pos
+Y_HALF = 5
 
 # BG pos correction copy settings
 # Key: BG LABEL, Value: sample pos LABEL to copy correction from

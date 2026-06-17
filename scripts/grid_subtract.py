@@ -49,8 +49,8 @@ TL_Z_INDEX   = 0
 GRID_Z_INDEX = 18
 
 # Grid step [um] (match X_STEP / Y_STEP from generate_grid_pos.py)
-X_STEP = 0.1
-Y_STEP = 0.1
+X_STEP = 0.05
+Y_STEP = 0.05
 
 # Coordinate transformation (same values as shift_visualize.py)
 SENSOR_PIXEL_SIZE  = 3.45e-6  # [m]

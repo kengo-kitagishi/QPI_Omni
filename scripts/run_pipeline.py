@@ -86,8 +86,8 @@ SHIFTS_TIMESERIES_THRESH    = 3.0
 # ============================================================
 GRID_DIR             = r"E:\Acuisition\kitagishi\260301\multipos_test_1"
 Z_INDEX              = 2
-X_STEP               = 0.1
-Y_STEP               = 0.1
+X_STEP               = 0.05
+Y_STEP               = 0.05
 SENSOR_PIXEL_SIZE    = 3.45e-6
 MAGNIFICATION        = 40
 ORIGINAL_DIM         = 2048
