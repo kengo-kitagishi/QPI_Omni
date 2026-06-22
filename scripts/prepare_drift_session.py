@@ -118,16 +118,17 @@ VMAX =  2.0
 TILT_CROP_H = 270
 ECC_CROP_H  = 80
 
-# Z-stack parameters (single-z mode: N_Z_SLICES=1, Z_START_UM=0.0)
-N_Z_SLICES            = 11
+# Z parameters. Single-z mode: N_Z_SLICES=1 captures one plane at baseZ+Z_START_UM.
+# Here Z_START_UM=-1.2 puts that single plane at the focus (grid z-index 2 = -1.2um).
+N_Z_SLICES            = 1
 Z_STEP_UM             = 0.4
-Z_START_UM            = -2.0
+Z_START_UM            = -1.2
 CLEANUP_RAW_HOLOGRAMS = True
 
 # Crop-subtract / raw-phase Phase B (online crop_sub_rawraw save)
 # Step values are nominal fallback only; grid_calibration_*.json (measured)
 # wins when present.
-RAW_TL_Z_INDEX        = 2
+RAW_TL_Z_INDEX        = 0    # single captured plane is index 0 (= grid z-index 2, -1.2um)
 CROP_SUB_X_STEP_UM    = 0.05
 CROP_SUB_Y_STEP_UM    = 0.05
 ENABLE_CROP_SUB_SAVE  = True
