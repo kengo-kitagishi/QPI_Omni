@@ -52,25 +52,27 @@ from ecc_utils import to_ecc_input as to_uint8  # float ECC input (no 8-bit quan
 # Configuration
 # ============================================================
 
-TIMELAPSE_ROOT = r"D:\AquisitionData\Kitagishi\260517\0per_gluc"
+TIMELAPSE_ROOT = r"E:\260617\2per_corr_zstack_1"
 
-GRID_2PER_DIR = r"E:\260517\grid_2pergluc_2"
+GRID_2PER_DIR = r"E:\260617\0per_grid_0p05um_1"
 
 # When raw phase lives under a different root than shifts/output,
 # set SHIFTS_OUTPUT_ROOT to the directory containing PosN with
 # output_phase/channels/ (shifts JSON, channel_rois, output).
 # None -> same as TIMELAPSE_ROOT.
-SHIFTS_OUTPUT_ROOT = r"D:\AquisitionData\Kitagishi\260517\online_crop_sub_zstack"
+SHIFTS_OUTPUT_ROOT = r"E:\260617\2per_corr_zstack_1_crop_sub"
 
 # Output root for delta TIFs (PosN/output_phase/channels/<OUTPUT_SUBDIR>/).
 # None -> same tree as SHIFTS_OUTPUT_ROOT (or TIMELAPSE_ROOT).
 # Set to redirect delta output to a different tree, e.g. the main timelapse
 # crop_sub so correct_0pergluc reads it directly.
-OUTPUT_ROOT = r"E:\260517\2per_0055per_0per_2per_crop_sub"
+# For now -> None puts delta in the current crop_sub tree (SHIFTS_OUTPUT_ROOT);
+# copy to the production timelapse folder later.
+OUTPUT_ROOT = None
 
 # Pos range [inclusive]. Pos0 is always BG, skipped.
 # POS_END = None -> auto-detect last Pos.
-POS_START = 2
+POS_START = 1
 POS_END = 104
 
 # Per-Pos shifts JSON filename (under PosN/output_phase/channels/)
@@ -83,13 +85,14 @@ SHIFTS_FILENAME = "pos_shifts_cal_online.json"
 #
 # 260508: 3-slice timelapse, tl_z=0 = focus = grid_z=5
 # 260517: 11-slice 0per_gluc z-stack; main timelapse plane = +1.2 um = grid_z=8
-Z_PAIRS = [(8, 8)]
+# 260617: tl and grid are both 11-slice, -2.0..+2.0 um -> tl z = grid z (1:1, all z)
+Z_PAIRS = [(z, z) for z in range(11)]
 
 # Minimum frame index to consider (skip early unstable frames).
 MIN_FRAME_INDEX = 5
 
 # Frame index range to search [inclusive, exclusive). None = all frames.
-FRAME_RANGE = (18, 36)
+FRAME_RANGE = None     # all frames; tune once drift behavior is known post-run
 
 # Output subfolder name (under PosN/output_phase/channels/)
 OUTPUT_SUBDIR = "delta_timelapse"

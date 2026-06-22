@@ -195,7 +195,9 @@ def _process_leader_task(args):
     kf_st = load_per_pos_kf_state(kf_path, label, kf_R)
     ld = _wk['leader_data'][idx]
     pos_split = _wk['cfg'].get("pos_split", 3)
-    bg_phase = _wk['bg_phases']["after" if idx >= pos_split else "before"]
+    # Crop side is decided by the Pos LABEL number (not .pos order/index), to
+    # match the grid reference; sparse/reordered .pos would otherwise mismatch.
+    bg_phase = _wk['bg_phases']["after" if _pos_index_from_label(label) >= pos_split else "before"]
     pre_phase = _wk.get('pre_phases', {}).get(idx)
     pos_rois = _wk['per_pos_rois'][idx]
     return _process_one_position(
@@ -718,7 +720,7 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
     tilt_crop_h = cfg.get("tilt_crop_h", 0)
     ecc_crop_h = cfg.get("ecc_crop_h", 0)
     pos_split = cfg.get("pos_split", 3)
-    fit_right = pos_idx >= pos_split
+    fit_right = _pos_index_from_label(pos_label) >= pos_split   # crop side by label, not .pos index
     ema_alpha = cfg.get("correction_ema_alpha", 1.0)
     use_kalman = cfg.get("use_kalman_filter", False)
 
@@ -741,7 +743,7 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
         return fail_result
     else:
         try:
-            phase_raw = _reconstruct_phase_raw(raw_path, cfg, pos_idx)
+            phase_raw = _reconstruct_phase_raw(raw_path, cfg, _pos_index_from_label(pos_label))
         except Exception as ex:
             print(f"  [{pos_label}] ERROR: phase reconstruction failed: {ex}")
             return fail_result
@@ -1389,9 +1391,11 @@ def main():
     # Reconstructed here (in main) so every worker does not redo the BG FFT +
     # unwrap_phase on each sample position (saves one BG reconstruction per
     # Pos per timepoint).  When GPU is available, get_field uses CuPy FFT.
-    leader_indices = [ld["index"] for ld in group_leaders]
+    # BG crop-variant selection uses label-based crop numbers (same rule as the
+    # per-pos crop side) so a sparse .pos still builds the needed BG variant.
+    leader_crop_nums = [_pos_index_from_label(ld["label"]) for ld in group_leaders]
     t_bg_start = datetime.now()
-    bg_phases = reconstruct_bg_phase_variants(bg_raw, cfg, leader_indices)
+    bg_phases = reconstruct_bg_phase_variants(bg_raw, cfg, leader_crop_nums)
     if bg_raw is not None:
         variants = [k for k, v in bg_phases.items() if v is not None]
         gpu_tag = " (GPU)" if _use_gpu else ""
@@ -1408,7 +1412,7 @@ def main():
         if raw_path.exists():
             leader_specs.append({
                 "raw_path": str(raw_path),
-                "pos_index": leader["index"],
+                "pos_index": _pos_index_from_label(leader["label"]),  # crop side by label
                 "key": leader["index"],
             })
     pre_phases = _gpu_cpu_recon_pipeline(leader_specs, cfg)

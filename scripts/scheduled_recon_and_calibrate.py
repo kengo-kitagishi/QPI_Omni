@@ -14,8 +14,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 PYTHON = sys.executable
 SCRIPT_DIR = Path(__file__).resolve().parent
-GRID_DIR = Path(r"C:\260617")
-OUTPUT_DIR = Path(r"E:\260617")
+GRID_DIR = Path(r"C:\260617\0per_grid_0p05um_1")
+OUTPUT_DIR = Path(r"E:\260617\0per_grid_0p05um_1")
 Z_INDEX = 5
 POS_SPLIT = 53
 N_WORKERS_DETECT = 20

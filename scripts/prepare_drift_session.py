@@ -34,11 +34,11 @@ from ecc_utils import ECC_MIN_CORR  # single source (0.99); written into drift_c
 # ============================================================
 
 # .pos file consumed by Micro-Manager (the actual time-lapse position list)
-POSITIONS_FILE   = r"C:\260606\hoseikan0p20_Offset295.4_resetXY.pos"
+POSITIONS_FILE   = r"C:\260617\timelapse.pos"
 
 # Grid acquisition directory (small grid is fine)
-GRID_DIR         = r"C:\260606\hoseikan_test\0p20_grid_1_1_Offset_291p4_to_299p4_1"
-GRID_Z_INDEX     = 10       # z-slice of the grid TIFFs to use as reference (21-frame grid center)
+GRID_DIR         = r"E:\260617\0per_grid_0p05um_1"
+GRID_Z_INDEX     = 2        # z-slice of the grid used as ECC reference (focus = index2 = -1.2um)
 
 # channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
 # No single path needed — compute_drift_online.py reads per-pos from grid_dir.
@@ -47,14 +47,14 @@ GRID_Z_INDEX     = 10       # z-slice of the grid TIFFs to use as reference (21-
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"D:\AquisitionData\Kitagishi\260606\0p20_zstack_1"
+SAVE_DIR         = r"E:\260617\2per_corr_zstack_3"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
 
 # Micro-Manager acquisition parameters
-N_TIMEPOINTS     = 15840      # 11 days @ 60s interval
-INTERVAL_SEC     = 60         # Time-lapse interval [s]
+N_TIMEPOINTS     = 3168       # 11 days @ 300s (5 min) interval
+INTERVAL_SEC     = 300        # Time-lapse interval [s] (5 min)
 EXPOSURE_MS      = 60.0
 SETTLE_MS        = 150        # Stage settle time after move [ms]
 PFS_SETTLE_MS    = 0          # PFS continuously tracks; no extra settle needed
@@ -95,7 +95,7 @@ ORIGINAL_DIM         = 2048
 RECONSTRUCTED_DIM    = 511
 
 # Position-dependent crop (matches pipeline_full.py)
-POS_SPLIT    = 3
+POS_SPLIT    = 53
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 
@@ -119,19 +119,19 @@ TILT_CROP_H = 270
 ECC_CROP_H  = 80
 
 # Z-stack parameters (single-z mode: N_Z_SLICES=1, Z_START_UM=0.0)
-N_Z_SLICES            = 21
+N_Z_SLICES            = 11
 Z_STEP_UM             = 0.4
-Z_START_UM            = -4.0
+Z_START_UM            = -2.0
 CLEANUP_RAW_HOLOGRAMS = True
 
 # Crop-subtract / raw-phase Phase B (online crop_sub_rawraw save)
 # Step values are nominal fallback only; grid_calibration_*.json (measured)
 # wins when present.
-RAW_TL_Z_INDEX        = 10
+RAW_TL_Z_INDEX        = 2
 CROP_SUB_X_STEP_UM    = 0.05
 CROP_SUB_Y_STEP_UM    = 0.05
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"D:\AquisitionData\Kitagishi\260606\0p20_zstack_1_crop_sub"
+CROP_SUB_ROOT         = r"E:\260617\2per_corr_zstack_3_crop_sub"
 CROP_SUB_MAX_SECONDS  = 40.0
 CROP_SUB_MAX_WORKERS  = 4
 CROP_SUB_MIN_FREE_GB  = 2.0
@@ -326,13 +326,28 @@ def main():
         f.write("TIMEPOINT=-1\n")
     print(f"drift_state initialised: {state_path}")
 
-    # ---- 6. drift_log.json (archive previous run) ----
+    # ---- 6. drift_log.json (archive previous run, named by ITS start time) ----
     log_path = session_dir / f"drift_log{suffix}.json"
     if log_path.exists():
-        timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+        # Name the archive by the previous run's START time (first log entry's
+        # timestamp), so old runs are identifiable by when they began -- not by
+        # the moment they happen to be archived. Fall back to file creation time
+        # for an empty/unparseable log.
+        start_ts = None
+        try:
+            prev = json.loads(log_path.read_text(encoding="utf-8"))
+            if isinstance(prev, list) and prev and prev[0].get("timestamp"):
+                start_ts = datetime.fromisoformat(prev[0]["timestamp"])
+        except Exception:
+            start_ts = None
+        if start_ts is None:
+            # Empty/aborted log with no real entry: use last-write time (mtime),
+            # not creation time -- on Windows in-place truncation keeps a stale ctime.
+            start_ts = datetime.fromtimestamp(log_path.stat().st_mtime)
+        timestamp = start_ts.strftime("%Y%m%dT%H%M%S")
         archive_path = session_dir / f"drift_log_{timestamp}.json"
         shutil.copy2(log_path, archive_path)
-        print(f"Previous drift_log archived: {archive_path}")
+        print(f"Previous drift_log archived (by run start {timestamp}): {archive_path}")
     with open(log_path, "w", encoding="utf-8") as f:
         json.dump([], f)
     print(f"drift_log initialised: {log_path}")
