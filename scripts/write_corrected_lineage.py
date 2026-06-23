@@ -38,10 +38,11 @@ from gold_standard import (  # noqa: E402
     select_gold_standard, list_phase1_survivors, figure_cohort,
 )
 
-# variant -> (volume_src_col, ri_src_col, mass_src_col) in the recompute CSV
+# variant -> (short_src, long_src, volume_src, ri_src, mass_src) in recompute CSV
 VARIANT_SRC = {
-    "rod":     ("volume_um3_rod",     "mean_ri",         "mass_pg"),
-    "profile": ("volume_profile_um3", "mean_ri_profile", "mass_pg_profile"),
+    "rod":     ("short_axis_um",     "long_axis_um",     "volume_um3_rod",     "mean_ri",         "mass_pg"),
+    "profile": ("short_axis_um",     "long_axis_um",     "volume_profile_um3", "mean_ri_profile", "mass_pg_profile"),
+    "efd":     ("short_axis_efd_um", "long_axis_efd_um", "volume_efd_um3",     "mean_ri_efd",     "mass_pg_efd"),
 }
 
 
@@ -57,7 +58,7 @@ def correct_one(pos: str, ch: str, method: str, variant: str,
     if rec.empty:
         return "no_mode"
 
-    vol_src, ri_src, mass_src = VARIANT_SRC[variant]
+    short_src, long_src, vol_src, ri_src, mass_src = VARIANT_SRC[variant]
     out = lin.copy()
     is_mother = out["rank"] == 1
 
@@ -70,8 +71,8 @@ def correct_one(pos: str, ch: str, method: str, variant: str,
         idx = out.index[is_mother][ok]
         out.loc[idx, dst_col] = mapped.dropna().to_numpy()
 
-    _apply("short_axis_um", "short_axis_um")
-    _apply("long_axis_um", "long_axis_um")
+    _apply("short_axis_um", short_src)
+    _apply("long_axis_um", long_src)
     _apply("volume_um3_rod", vol_src)
     _apply("mean_ri", ri_src)
     _apply("mass_pg", mass_src)
@@ -111,11 +112,15 @@ def main():
     ap.add_argument("--channels", nargs="+")
     ap.add_argument("--method", default="medial_axis",
                     choices=["medial_axis", "supersegger_adaptive", "skimage_legacy"])
-    ap.add_argument("--variant", default="both", choices=["rod", "profile", "both"])
+    ap.add_argument("--variant", default="both",
+                    choices=["rod", "profile", "efd", "both"])
+    ap.add_argument("--rec-dir", default=None,
+                    help="recompute CSV dir (default results/260517/recomputed_axes; "
+                         "use recomputed_axes_efd for the efd variant)")
     args = ap.parse_args()
 
     channels = resolve_channels(args)
-    rec_dir = results_dir() / "recomputed_axes"
+    rec_dir = Path(args.rec_dir) if args.rec_dir else results_dir() / "recomputed_axes"
     variants = ["rod", "profile"] if args.variant == "both" else [args.variant]
     for variant in variants:
         base_out = results_dir() / f"corrected_lineage_{variant}"

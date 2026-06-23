@@ -293,7 +293,15 @@ def _scatter_by_epoch(ax, df, xcol, ycol):
                    label=f"{ep} (n={len(sub)})")
 
 
-def fig_homeostasis(cycles: list[dict]) -> plt.Figure | None:
+def fig_homeostasis(cycles: list[dict], by_quantity: bool = False) -> plt.Figure | None:
+    """Birth-vs-added scatter, 3 panels (volume / dry mass / mean RI).
+
+    by_quantity=False (default): colour points by birth epoch (pre/starv/rec),
+        for multi-epoch experiments (e.g. 260405 media switch).
+    by_quantity=True: one colour per panel (volume=blue, mass=orange, RI=green),
+        matching fig_aligned_trajectories and the within-cycle figure. Use this
+        for single-epoch (phase1-only) cohorts where epoch colour is redundant.
+    """
     if len(cycles) < 3:
         print("  [homeostasis] n_cycles < 3, skipping", file=sys.stderr)
         return None
@@ -309,14 +317,18 @@ def fig_homeostasis(cycles: list[dict]) -> plt.Figure | None:
                              constrained_layout=True)
     panels = [
         ("birth_volume_um3", "added_volume_um3",
-         r"birth volume [µm$^3$]", r"added volume [µm$^3$]"),
+         r"birth volume [µm$^3$]", r"added volume [µm$^3$]", OI["blue"]),
         ("birth_mass_pg", "added_mass_pg",
-         "birth dry mass [pg]", "added dry mass [pg]"),
+         "birth dry mass [pg]", "added dry mass [pg]", OI["orange"]),
         ("birth_ri", "added_ri",
-         "birth mean RI", "Δ mean RI"),
+         "birth mean RI", "Δ mean RI", OI["green"]),
     ]
-    for ax, (xc, yc, xl, yl) in zip(axes, panels):
-        _scatter_by_epoch(ax, df, xc, yc)
+    for ax, (xc, yc, xl, yl, color) in zip(axes, panels):
+        if by_quantity:
+            ax.scatter(df[xc], df[yc], color=color, alpha=0.30, s=8,
+                       edgecolor="white", linewidth=0.2, rasterized=True)
+        else:
+            _scatter_by_epoch(ax, df, xc, yc)
         r, p = pearsonr(df[xc], df[yc])
         z = np.polyfit(df[xc], df[yc], 1)
         xline = np.linspace(df[xc].min(), df[xc].max(), 50)
@@ -414,6 +426,41 @@ def fig_ri_distribution(m_df: pd.DataFrame, max_frame: int | None = None) -> plt
     ax.set_xlabel("mean RI")
     ax.set_ylabel("probability density")
     ax.set_title(f"mother RI distribution (n={len(ri)}, CV={cv:.3f})")
+    ax.legend(frameon=False)
+    return fig
+
+
+def fig_conc_distribution(m_df: pd.DataFrame, max_frame: int | None = None) -> plt.Figure | None:
+    """Dry-mass concentration [mg/mL] = 1000 * mass[pg] / volume[um^3] histogram
+    + Gaussian fit (the mg/mL twin of fig_ri_distribution; concentration is the
+    physical density that the mean RI encodes)."""
+    sub = m_df[~(m_df["is_outlier"] | m_df["touches_border"])]
+    if max_frame is not None:
+        sub = sub[sub["frame"] <= max_frame]
+    sub = sub[(sub["mass_pg"] >= 10.0) & (sub["volume_um3_rod"] > 0)]
+    conc = (1000.0 * sub["mass_pg"] / sub["volume_um3_rod"]).dropna().to_numpy()
+    if len(conc) < 20:
+        return None
+    mu, sd = float(np.mean(conc)), float(np.std(conc))
+    cv = sd / mu
+
+    fig, ax = plt.subplots(figsize=(89/25.4, 65/25.4), constrained_layout=True)
+    counts, edges, _ = ax.hist(conc, bins=50, density=True,
+                                color=OI["purple"], edgecolor="white",
+                                linewidth=0.3, alpha=0.8)
+    centers = 0.5 * (edges[:-1] + edges[1:])
+    try:
+        popt, _ = curve_fit(_gaussian, centers, counts,
+                            p0=[counts.max(), mu, sd])
+        xfit = np.linspace(conc.min(), conc.max(), 200)
+        ax.plot(xfit, _gaussian(xfit, *popt), color=OI["vermilion"], lw=1.0,
+                label=f"µ={popt[1]:.1f}, σ={popt[2]:.1f} mg/mL")
+    except RuntimeError:
+        pass
+    ax.set_xlabel("dry-mass concentration [mg/mL]")
+    ax.set_ylabel("probability density")
+    ax.set_xlim(np.percentile(conc, 0.2), np.percentile(conc, 99.8))
+    ax.set_title(f"mother concentration distribution (n={len(conc)}, CV={cv:.3f})")
     ax.legend(frameon=False)
     return fig
 

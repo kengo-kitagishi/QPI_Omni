@@ -144,7 +144,7 @@ def use_corrected() -> bool:
 
 def volume_variant() -> str:
     v = os.environ.get("QPI_VOLUME_VARIANT", "rod").strip().lower()
-    return v if v in {"rod", "profile"} else "rod"
+    return v if v in {"rod", "profile", "efd"} else "rod"
 
 
 def corrected_run_dir(pos: str, ch: str, variant: str | None = None) -> Path | None:

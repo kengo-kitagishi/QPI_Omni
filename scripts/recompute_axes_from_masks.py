@@ -49,6 +49,7 @@ from mask_morphology import (  # noqa: E402
     extract_cell_morphology, measure_single_cell_medial, cross_section_quality,
     measure_all_modes,
 )
+from mask_volume_schematic import efd_section_geometry  # noqa: E402
 from central_cell_lineage_tracker import (  # noqa: E402
     calc_rod_volume_um3, calc_optical_metrics,
 )
@@ -189,6 +190,21 @@ def recompute_channel(pos: str, ch: str, modes: list[str],
             n_missing += 1
             return
         multi_frac, max_xsec = a["multi_xsec_frac"], a["max_xsec"]
+        # EFD-contour-intersection volume (adopted method): EFD K=6 smoothed
+        # contour + one midpoint update, solid-of-revolution integral. One extra
+        # geometry pass on the same crop; identical for every mode, so the same
+        # efd columns are attached to each mode's row.
+        geo_efd = efd_section_geometry(binary, pixel_size_um=px)
+        if geo_efd is not None and geo_efd.volume_um3 > 0:
+            vol_efd = geo_efd.volume_um3
+            ri_efd, _ce, mass_efd = calc_optical_metrics(
+                total_phase, vol_efd, px, wl, n_medium, alpha, basis,
+            )
+            _w = geo_efd.w_perp_px
+            short_efd = float(np.median(_w[_w > 0])) * px if np.any(_w > 0) else np.nan
+            long_efd = geo_efd.long_axis_px * px
+        else:
+            vol_efd = ri_efd = mass_efd = short_efd = long_efd = np.nan
         per_mode = {
             "skimage_legacy": (a["sk_minor_px"], a["sk_major_px"], a["area_px"], 0.0),
             "supersegger_adaptive": (a["adaptive_short_px"], a["adaptive_long_px"],
@@ -219,6 +235,9 @@ def recompute_channel(pos: str, ch: str, modes: list[str],
                 "area_px": area_px, "total_phase": total_phase,
                 "mean_ri": mean_ri, "mass_pg": mass,
                 "mean_ri_profile": ri_p, "mass_pg_profile": mass_p,
+                "volume_efd_um3": vol_efd, "mean_ri_efd": ri_efd,
+                "mass_pg_efd": mass_efd, "short_axis_efd_um": short_efd,
+                "long_axis_efd_um": long_efd,
                 "time_h": float(r["time_h"]),
                 "multi_xsec_frac": multi_frac, "max_xsec": max_xsec,
             })

@@ -155,7 +155,7 @@ def main():
     }
 
     plots = [
-        (MCC.fig_homeostasis(all_cycles),
+        (MCC.fig_homeostasis(all_cycles, by_quantity=True),
          "gold-standard phase1 homeostasis (birth vs added volume/mass/RI)"),
         (MCC.fig_interval_hist(all_cycles),
          "gold-standard phase1 division interval histogram"),
@@ -163,6 +163,8 @@ def main():
          "gold-standard phase1 cycle-aligned volume/mass/RI"),
         (MCC.fig_ri_distribution(pooled, max_frame=PHASE1_END_FRAME),
          "gold-standard phase1 RI distribution"),
+        (MCC.fig_conc_distribution(pooled, max_frame=PHASE1_END_FRAME),
+         "gold-standard phase1 dry-mass concentration (mg/mL) distribution"),
         (MCC.fig_density_homeostasis(all_cycles),
          "gold-standard phase1 density homeostasis"),
         (MCC.fig_growth_rate(all_traces),

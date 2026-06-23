@@ -43,6 +43,7 @@ CURVES = {
     "rod_corrected":        ("rod-corrected (theory)", "#1a1a1a", "-"),
     "supersegger_adaptive": ("supersegger adaptive (measured)", "#009E73", "-"),
     "medial_axis":          ("medial axis (measured)", "#D55E00", "-"),
+    "efd":                  ("EFD contour-section (measured)", "#CC79A7", "-"),
 }
 PANELS = [
     ("short", "short axis [μm]"),
@@ -62,6 +63,7 @@ def collect_cycles(channels):
     # rows[curve][metric] = list of per-cycle interpolated arrays
     rows = {c: {m: [] for m, _ in PANELS} for c in CURVES}
     rec_dir = results_dir() / "recomputed_axes"
+    rec_dir_efd = results_dir() / "recomputed_axes_efd"
     n_ch = 0
     for pos, ch in channels:
         rec_path = rec_dir / f"{pos}_{ch}.csv"
@@ -87,7 +89,18 @@ def collect_cycles(channels):
         md = rec[rec["mode"] == "medial_axis"].set_index("frame")
         if sk.empty or ad.empty or md.empty:
             continue
-        frames = sorted(set(sk.index) & set(ad.index) & set(md.index))
+        # EFD contour-section recompute (optional 5th curve)
+        efd = None
+        efd_path = rec_dir_efd / f"{pos}_{ch}.csv"
+        if efd_path.exists():
+            edf = pd.read_csv(efd_path)
+            edf = edf[edf["mode"] == "medial_axis"].set_index("frame")
+            if not edf.empty and "volume_efd_um3" in edf.columns:
+                efd = edf
+        base = set(sk.index) & set(ad.index) & set(md.index)
+        if efd is not None:
+            base &= set(efd.index)
+        frames = sorted(base)
         frames = [f for f in frames if f not in bad_frames]
         if not frames:
             continue
@@ -116,6 +129,12 @@ def collect_cycles(channels):
                 "volume": md.loc[frames, "volume_um3_rod"].to_numpy(),
             },
         }
+        if efd is not None:
+            series["efd"] = {
+                "short": efd.loc[frames, "short_axis_efd_um"].to_numpy(),
+                "long": efd.loc[frames, "long_axis_efd_um"].to_numpy(),
+                "volume": efd.loc[frames, "volume_efd_um3"].to_numpy(),
+            }
         # cycle-align each interval
         used = False
         for i in range(len(divs) - 1):
@@ -127,6 +146,8 @@ def collect_cycles(channels):
                 continue
             t_rel = (fidx[sel] - f0) / (f1 - f0)
             for curve in CURVES:
+                if curve not in series:
+                    continue
                 for metric, _ in PANELS:
                     y = series[curve][metric][sel]
                     rows[curve][metric].append(np.interp(rel, t_rel, y))
