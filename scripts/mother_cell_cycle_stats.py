@@ -338,6 +338,18 @@ def fig_homeostasis(cycles: list[dict], by_quantity: bool = False) -> plt.Figure
         ax.set_xlabel(xl)
         ax.set_ylabel(yl)
         ax.set_title(f"r={r:.2f}, p={p:.2e}")
+        # Equal units-per-data-length: match the x and y half-span and use a
+        # square box, so the regression slope can be read against the y=x
+        # (45-degree) line. set_aspect('equal') alone would distort the panel
+        # because birth size and its change differ by orders of magnitude.
+        xv = df[xc].to_numpy(); yv = df[yc].to_numpy()
+        cx = 0.5 * (float(xv.min()) + float(xv.max()))
+        cy = 0.5 * (float(yv.min()) + float(yv.max()))
+        half = 0.5 * max(float(xv.max() - xv.min()),
+                         float(yv.max() - yv.min())) * 1.05
+        ax.set_xlim(cx - half, cx + half)
+        ax.set_ylim(cy - half, cy + half)
+        ax.set_box_aspect(1)
     axes[0].legend(loc="best", frameon=False)
     return fig
 

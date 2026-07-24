@@ -133,6 +133,16 @@ def main():
         ax.tick_params(labelsize=7)
         ax.legend(loc="best", frameon=False, fontsize=6)
         ax.spines[["top", "right"]].set_visible(False)
+        # Equal units-per-data-length: match the x and y half-span and use a
+        # square box, so the regression slope reads against the y=x 45-degree
+        # line (companion fig4 uses the same treatment in mother_cell_cycle_stats).
+        cx = 0.5 * (float(x.min()) + float(x.max()))
+        cy = 0.5 * (float(y.min()) + float(y.max()))
+        half = 0.5 * max(float(x.max() - x.min()),
+                         float(y.max() - y.min())) * 1.05
+        ax.set_xlim(cx - half, cx + half)
+        ax.set_ylim(cy - half, cy + half)
+        ax.set_box_aspect(1)
 
         # birth-to-birth (fig4) regression for the side-by-side comparison
         zb = np.polyfit(x, yb, 1)
