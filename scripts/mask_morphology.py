@@ -7,7 +7,7 @@ extraction using the SuperSegger-style rotate-and-project algorithm.
 Usage:
     from mask_morphology import extract_all_cells, morphology_to_dataframe
 
-    morphs = extract_all_cells(labeled_mask, pixel_size_um=0.348)
+    morphs = extract_all_cells(labeled_mask, pixel_size_um=0.346)
     df = morphology_to_dataframe(morphs, frame_index=0)
 
 Algorithm reference:
@@ -78,7 +78,7 @@ def smooth_mask(
     ----------
     binary_mask : 2-D bool or uint8 array
     closing_radius : int
-        Disk radius for closing (~1 µm at 0.348 µm/px with default 3).
+        Disk radius for closing (~1 µm at 0.346 µm/px with default 3).
     opening_radius : int
         Disk radius for opening. 1 removes single-pixel protrusions.
     fill_holes : bool
@@ -120,7 +120,7 @@ def smooth_mask(
 def extract_cell_morphology(
     binary_mask: np.ndarray,
     label: int = 1,
-    pixel_size_um: float = 0.348,
+    pixel_size_um: float = 0.34567514677103717,  # 0.08625*2048/511 (511x511) ~= 0.346; was 0.348 (507 assumption)
     endcap_trim_frac: float | str = 0.10,
 ) -> CellMorphology:
     """Extract long/short axis and width profile from a single-cell mask.
@@ -614,7 +614,7 @@ def smooth_labeled_mask(
 
 def extract_all_cells(
     labeled_mask: np.ndarray,
-    pixel_size_um: float = 0.348,
+    pixel_size_um: float = 0.34567514677103717,  # 0.08625*2048/511 (511x511) ~= 0.346; was 0.348 (507 assumption)
     smooth: bool = True,
     margin: int = 5,
     min_area_px: int = 20,

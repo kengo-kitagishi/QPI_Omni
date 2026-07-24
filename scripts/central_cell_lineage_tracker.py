@@ -25,7 +25,7 @@ Output (under <channel_dir>/inference_out/lineage_out/):
 Example:
     python3 central_cell_lineage_tracker.py \\
         --indir /Volumes/2604/260405/ph_260405/Pos9/output_phase/channels/crop_sub_rawraw/ch00 \\
-        --pixel-size-um 0.348 --time-interval-min 5
+        --pixel-size-um 0.346 --time-interval-min 5
 """
 
 from __future__ import annotations
@@ -1109,7 +1109,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--indir", type=Path, required=True,
                    help="Channel directory containing phase TIFs and inference_out/*_masks.tif")
-    p.add_argument("--pixel-size-um", type=float, default=0.348)
+    p.add_argument("--pixel-size-um", type=float, default=0.34567514677103717)  # 0.08625*2048/511 (511x511 reconstruction) ~= 0.346 um/px; was 0.348 (507 assumption)
     p.add_argument("--time-interval-min", type=float, default=5.0,
                    help="Minutes per frame (set to 0 or negative to disable time axis)")
     p.add_argument("--wavelength-nm", type=float, default=658.0)
