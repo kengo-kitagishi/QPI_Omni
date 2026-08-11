@@ -56,7 +56,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 # Configuration parameters
 # ============================================================
 # Must match GRID_DIR in pipeline_full.py
-GRID_DIR = r"C:\260617\0per_grid_0p05um_1"
+GRID_DIR = r"D:\AquisitionData\Kitagishi\260810\grid_ye_1"
 
 # Base label used as BG (pipeline_full: GRID_BG_BASE_LABEL)
 BG_BASE_LABEL = "Pos0"
@@ -71,7 +71,7 @@ TARGET_COORDS = None
 
 # Filter z indices (None = process all, list = only those indices)
 # e.g.: Z_INDICES = [5]  -> only z=5
-Z_INDICES = None
+Z_INDICES = [6]
 
 # QPI optical parameters
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
@@ -80,7 +80,7 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 # pos_number < POS_SPLIT -> right side (400:2448)  sensor width 2448
 # pos_number >= POS_SPLIT -> left side (0:2048)
 # Note: BG (Pos0) uses the crop determined by the target's pos_number (not always right)
-POS_SPLIT    = 53
+POS_SPLIT    = 51
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 

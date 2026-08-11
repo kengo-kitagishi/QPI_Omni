@@ -34,11 +34,11 @@ from ecc_utils import ECC_MIN_CORR  # single source (0.99); written into drift_c
 # ============================================================
 
 # .pos file consumed by Micro-Manager (the actual time-lapse position list)
-POSITIONS_FILE   = r"C:\260617\timelapse.pos"
+POSITIONS_FILE   = r"C:\260810\timelapse.pos"
 
 # Grid acquisition directory (small grid is fine)
-GRID_DIR         = r"E:\260617\0per_grid_0p05um_1"
-GRID_Z_INDEX     = 2        # z-slice of the grid used as ECC reference (focus = index2 = -1.2um)
+GRID_DIR         = r"E:\260810\grid_b1_pos0_71"
+GRID_Z_INDEX     = 6  # z-slice of the grid used as ECC reference (index6 = +0.4um, measured focus)
 
 # channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
 # No single path needed — compute_drift_online.py reads per-pos from grid_dir.
@@ -47,7 +47,7 @@ GRID_Z_INDEX     = 2        # z-slice of the grid used as ECC reference (focus =
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"E:\260617\2per_corr_zstack_3"
+SAVE_DIR         = r"C:\260810\ph_zstack_1"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
@@ -95,7 +95,7 @@ ORIGINAL_DIM         = 2048
 RECONSTRUCTED_DIM    = 511
 
 # Position-dependent crop (matches pipeline_full.py)
-POS_SPLIT    = 53
+POS_SPLIT    = 51
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 
@@ -119,24 +119,39 @@ TILT_CROP_H = 270
 ECC_CROP_H  = 80
 
 # Z parameters. Single-z mode: N_Z_SLICES=1 captures one plane at baseZ+Z_START_UM.
-# Here Z_START_UM=-1.2 puts that single plane at the focus (grid z-index 2 = -1.2um).
+# Here Z_START_UM=+0.8 puts that single plane at grid z-index 7 (+0.8um).
 N_Z_SLICES            = 1
 Z_STEP_UM             = 0.4
-Z_START_UM            = -1.2
+Z_START_UM            = 0.4    # single plane at +0.4 um = the measured focus (grid z-index 6)
 CLEANUP_RAW_HOLOGRAMS = True
 
 # Crop-subtract / raw-phase Phase B (online crop_sub_rawraw save)
 # Step values are nominal fallback only; grid_calibration_*.json (measured)
 # wins when present.
-RAW_TL_Z_INDEX        = 0    # single captured plane is index 0 (= grid z-index 2, -1.2um)
+RAW_TL_Z_INDEX        = 0    # only one plane is captured, so it is index 0 (= grid z-index 6)
 CROP_SUB_X_STEP_UM    = 0.05
 CROP_SUB_Y_STEP_UM    = 0.05
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"E:\260617\2per_corr_zstack_3_crop_sub"
-CROP_SUB_MAX_SECONDS  = 40.0
+CROP_SUB_ROOT         = r"C:\260810\online_crop_sub_zstack"
+CROP_SUB_MAX_SECONDS  = 150.0
 CROP_SUB_MAX_WORKERS  = 4
 CROP_SUB_MIN_FREE_GB  = 2.0
 ECC_THREADS_PER_POS   = 4
+
+# Fluorescence second pass (right port, consumed by realtime_drift_mda_fluo.bsh).
+# QPI (ph/Basler/left) drives ECC; fluo is a passive extra channel captured at
+# the same drift-corrected XY with a global absolute PFS offset.
+FLUO_ENABLED          = False
+FLUO_CHANNEL          = "mNeonGreen"   # TiChannel preset (right port / Hamamatsu)
+FLUO_EXPOSURE_MS      = 5000.0         # fluorescence exposure [ms]
+FLUO_Z_OFFSET_UM      = 391.5          # global absolute TIPFSOffset for right port [um]
+FLUO_EVERY_N          = 1              # capture fluo every Nth timepoint (limit photodamage; 1 = every tp)
+FLUO_POS_STRIDE       = 10             # capture fluo every Nth position (QPI still every pos; 1 = every pos)
+FLUO_BINNING          = "2x2"          # Hamamatsu binning for fluo (2x2 = 4x signal/px; "" = 1x1)
+# Excitation gate = fluorescence cube on TIFilterBlock2 (epi lamp not shutter-gated).
+# Cube IN (excitation on) only during the fluo snap; OUT (=phase position) otherwise.
+FLUO_FB2_IN           = "2------"      # TIFilterBlock2 label: fluorescence cube IN
+FLUO_FB2_OUT          = "1------"      # TIFilterBlock2 label: cube OUT (phase position)
 
 # ============================================================
 
@@ -305,6 +320,17 @@ def main():
         "n_z_slices":         N_Z_SLICES,
         "z_step_um":          Z_STEP_UM,
         "z_start_um":         Z_START_UM,
+
+        # Fluorescence second pass (realtime_drift_mda_fluo.bsh)
+        "fluo_enabled":       FLUO_ENABLED,
+        "fluo_channel":       FLUO_CHANNEL,
+        "fluo_exposure_ms":   FLUO_EXPOSURE_MS,
+        "fluo_z_offset_um":   FLUO_Z_OFFSET_UM,
+        "fluo_every_n":       FLUO_EVERY_N,
+        "fluo_pos_stride":    FLUO_POS_STRIDE,
+        "fluo_binning":       FLUO_BINNING,
+        "fluo_fb2_in":        FLUO_FB2_IN,
+        "fluo_fb2_out":       FLUO_FB2_OUT,
 
         # EMA / Kalman
         "correction_ema_alpha": CORRECTION_EMA_ALPHA,

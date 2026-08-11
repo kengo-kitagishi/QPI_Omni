@@ -65,7 +65,12 @@ X_STEP             = 0.05      # Grid step [um]
 Y_STEP             = 0.05
 SHIFT_SIGN_X       = -1
 SHIFT_SIGN_Y       = -1
-POS_SPLIT          = 53    # Pos < POS_SPLIT: left 1/3 fit, Pos >= POS_SPLIT: right 1/3 fit
+POS_SPLIT          = 51    # Pos < POS_SPLIT: left 1/3 fit, Pos >= POS_SPLIT: right 1/3 fit
+
+# Save the error / correlation heatmaps. Off for many-Pos batch runs: the
+# figures go to the shared Google Drive inbox and cost ~45 s per Pos, which
+# dominates the calibration step. All numbers are kept in the output JSON.
+SAVE_FIGURES = False
 
 # None -> GRID_DIR/grid_calibration.json
 OUTPUT_JSON = None
@@ -324,7 +329,10 @@ def main():
     print(f"\nSaved: {out_path}")
 
     # ---- Figures ----
-    _save_calibration_figures(results, pixel_scale_um, BASE_LABEL)
+    if SAVE_FIGURES:
+        _save_calibration_figures(results, pixel_scale_um, BASE_LABEL)
+    else:
+        print(f"SAVE_FIGURES=False: skipped calibration figures for {BASE_LABEL}")
 
 
 def _save_calibration_figures(results, pixel_scale_um, base_label):
