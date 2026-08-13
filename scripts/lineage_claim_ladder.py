@@ -245,6 +245,13 @@ def build_cycles(tag: str, clist: pd.DataFrame, data3D: pd.DataFrame,
                 "V_mean": float(vcyc["volume_um3_rod"].mean()) if len(vcyc) else np.nan,
                 "M_mean": float(vcyc["mass_pg"].mean()) if len(vcyc) else np.nan,
             }
+            # within-cycle exponential rates gamma [1/h] from log-linear fits
+            for gname, gcol in (("gamma_V", "volume_um3_rod"), ("gamma_M", "mass_pg")):
+                y = vcyc[gcol].to_numpy()
+                th = (vcyc["frame"].to_numpy() - f0) * cfg.frame_h
+                mfin = np.isfinite(y) & (y > 0)
+                row[gname] = (float(np.polyfit(th[mfin], np.log(y[mfin]), 1)[0])
+                              if mfin.sum() >= 5 else np.nan)
             # dry-mass density in mg/mL: 1 pg/um^3 = 1000 mg/mL
             with np.errstate(invalid="ignore", divide="ignore"):
                 row["rho_birth"] = 1000.0 * row["M_birth"] / row["V_birth"]
@@ -686,6 +693,101 @@ def analysis_division(cycles: pd.DataFrame, raw_by_medium: dict, out: Path,
     vs.to_csv(out / "claim6_variance_split.csv", index=False)
 
 
+# ------------------------------------------------------- mechanism (correction)
+
+def analysis_mechanism(cycles: pd.DataFrame, out: Path) -> None:
+    """How the correction is implemented. Three views:
+    (a) growth differential gamma_M - gamma_V against birth-density deviation
+        (nemati Fig.3b idiom, volumetric here): negative slope = cells born
+        dense divert growth away from mass relative to volume.
+    (b) cycle duration against birth-density deviation: does timing absorb it.
+    (c) sister pairs (same mother, same channel, same clock time): difference
+        in growth differential against difference in birth density. The paired
+        design cancels environment and lineage, leaving the intrinsic response.
+    """
+    df = cycles[cycles["pass_qc"]].copy()
+    df["rho_dev"] = dev_within(df["rho_birth"], df["source"])
+    df["gdiff"] = df["gamma_M"] - df["gamma_V"]
+    rng = np.random.default_rng(4)
+    rows = []
+
+    fig, axes = plt.subplots(1, 3, figsize=(9.4, 2.9))
+    for med, g in df.groupby("medium"):
+        c = medium_color(med)
+        m = np.isfinite(g["rho_dev"] + g["gdiff"])
+        b, lo, hi = _slope_ci(g.loc[m, "rho_dev"].to_numpy(),
+                              g.loc[m, "gdiff"].to_numpy(), rng=rng)
+        axes[0].plot(g["rho_dev"], g["gdiff"], "o", ms=2, alpha=0.3, color=c)
+        xr = np.linspace(g["rho_dev"].min(), g["rho_dev"].max(), 2)
+        axes[0].plot(xr, b * xr + np.nanmean(g.loc[m, "gdiff"]), color=c, lw=1.4,
+                     label=f"{med} {b*100:+.2f}e-2 /(mg/mL)")
+        rows.append({"medium": med, "relation": "gdiff_vs_rho_birth",
+                     "slope": b, "ci_lo": lo, "ci_hi": hi, "n": int(m.sum())})
+        print(f"  [{med}] (gamma_M - gamma_V) vs rho_birth: "
+              f"{b:+.4f} [{lo:+.4f},{hi:+.4f}] /h/(mg/mL), n={int(m.sum())}")
+        m = np.isfinite(g["rho_dev"] + g["duration_h"])
+        b2, lo2, hi2 = _slope_ci(g.loc[m, "rho_dev"].to_numpy(),
+                                 g.loc[m, "duration_h"].to_numpy(), rng=rng)
+        axes[1].plot(g["rho_dev"], g["duration_h"], "o", ms=2, alpha=0.3, color=c,
+                     label=f"{med} {b2*60:+.2f} min/(mg/mL)")
+        rows.append({"medium": med, "relation": "duration_vs_rho_birth",
+                     "slope": b2, "ci_lo": lo2, "ci_hi": hi2, "n": int(m.sum())})
+        print(f"  [{med}] duration vs rho_birth: {b2*60:+.2f} "
+              f"[{lo2*60:+.2f},{hi2*60:+.2f}] min/(mg/mL)")
+    axes[0].set_xlabel("birth-density deviation [mg/mL]")
+    axes[0].set_ylabel("$\\gamma_M - \\gamma_V$ [1/h]")
+    axes[1].set_xlabel("birth-density deviation [mg/mL]")
+    axes[1].set_ylabel("cycle duration [h]")
+
+    # (c) sister pairs: child's first cycle vs parent's next cycle at same event
+    ok = df.set_index(["medium", "source", "cell_id", "birth_frame"])
+    pair_rows = []
+    for (med, src, pid, f0), cyc in df.groupby(["medium", "source", "cell_id", "birth_frame"]):
+        cyc = cyc.iloc[0]
+        cid = int(cyc["child_at_end"])
+        if cid < 0:
+            continue
+        f = int(cyc["div_frame"])
+        try:
+            old_next = ok.loc[(med, src, cyc["cell_id"], f)]
+            new_first = ok.loc[(med, src, cid, f)]
+        except KeyError:
+            continue
+        if isinstance(old_next, pd.DataFrame):
+            old_next = old_next.iloc[0]
+        if isinstance(new_first, pd.DataFrame):
+            new_first = new_first.iloc[0]
+        pair_rows.append({
+            "medium": med, "source": src, "div_frame": f,
+            "d_rho_birth": new_first["rho_birth"] - old_next["rho_birth"],
+            "d_gdiff": (new_first["gamma_M"] - new_first["gamma_V"])
+                       - (old_next["gamma_M"] - old_next["gamma_V"]),
+            "d_duration_h": new_first["duration_h"] - old_next["duration_h"]})
+    pr = pd.DataFrame(pair_rows)
+    if len(pr):
+        for med, g in pr.groupby("medium"):
+            c = medium_color(med)
+            m = np.isfinite(g["d_rho_birth"] + g["d_gdiff"])
+            if m.sum() >= 8:
+                b3, lo3, hi3 = _slope_ci(g.loc[m, "d_rho_birth"].to_numpy(),
+                                         g.loc[m, "d_gdiff"].to_numpy(), rng=rng)
+                axes[2].plot(g["d_rho_birth"], g["d_gdiff"], "o", ms=2, alpha=0.35,
+                             color=c, label=f"{med} {b3*100:+.2f}e-2 (n={int(m.sum())})")
+                rows.append({"medium": med, "relation": "sister_dgdiff_vs_drho",
+                             "slope": b3, "ci_lo": lo3, "ci_hi": hi3, "n": int(m.sum())})
+                print(f"  [{med}] sisters d(gamma_M-gamma_V) vs d(rho_birth): "
+                      f"{b3:+.4f} [{lo3:+.4f},{hi3:+.4f}], n={int(m.sum())}")
+    axes[2].set_xlabel("sister $\\Delta$ birth density [mg/mL]")
+    axes[2].set_ylabel("sister $\\Delta(\\gamma_M-\\gamma_V)$ [1/h]")
+    for ax in axes:
+        ax.axhline(0, color="0.6", lw=0.5) if ax is not axes[1] else None
+        ax.legend(frameon=False, fontsize=6)
+        style_ax(ax)
+    save_fig_csv(fig, pd.DataFrame(rows), out, "mechanism_correction")
+    if len(pr):
+        pr.to_csv(out / "mechanism_sister_pairs.csv", index=False)
+
+
 # ---------------------------------------------------------------- claim 7
 
 def analysis_range(cycles: pd.DataFrame, out: Path, top_pct: float = 5.0) -> None:
@@ -778,7 +880,7 @@ def analysis_death(cycles: pd.DataFrame, raw_by_medium: dict, out: Path,
 
 # ---------------------------------------------------------------- main
 
-STEPS = ("media", "phase", "memory", "control", "division", "range", "death")
+STEPS = ("media", "phase", "memory", "control", "division", "mechanism", "range", "death")
 
 
 def main() -> None:
@@ -827,6 +929,8 @@ def main() -> None:
             analysis_control(cycles, out)
         elif s == "division":
             analysis_division(cycles, raw_by_medium, out, cfgs)
+        elif s == "mechanism":
+            analysis_mechanism(cycles, out)
         elif s == "range":
             analysis_range(cycles, out)
         elif s == "death":
