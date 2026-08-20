@@ -78,7 +78,7 @@ CELL_THRESH = 0.5     # rad, relative to fit-side background median
 DILATION    = 2       # cell-mask dilation (px)
 MIN_BG      = 100     # min background pixels; else leave frame unchanged
 VALID_ERODE_PX = 1    # erode valid mask at OOB boundary (drop reconstruction edge)
-POS_SPLIT   = 53
+POS_SPLIT   = 51
 FIT_RIGHT_OVERRIDE = None   # None -> auto from Pos number vs POS_SPLIT
 
 RECON_DIM = gs.RECONSTRUCTED_DIM   # 511

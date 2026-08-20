@@ -13,7 +13,7 @@ import calibrate_grid_positions as cgp
 GRID_DIR      = r"E:\260517\grid_2pergluc_2"
 ROIS_JSON     = r"E:\260517\grid_2pergluc_2\Pos1_x+0_y+0\output_phase\channels\channel_rois.json"
 GRID_Z_INDEX  = 8
-POS_SPLIT     = 53
+POS_SPLIT     = 51
 # ============================================================
 
 def main():

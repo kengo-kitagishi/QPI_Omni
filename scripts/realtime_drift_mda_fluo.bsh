@@ -1,0 +1,650 @@
+// ============================================================
+// realtime_drift_mda_fluo.bsh
+// Micro-Manager 1.4 real-time drift correction timelapse
+// with single-z QPI acquisition + fluorescence second pass.
+//
+// Based on realtime_drift_mda_zstack.bsh. Per timepoint:
+//   1. Acquire all positions on the LEFT port (ph / Basler), n_z_slices
+//      (single-z here). ECC drift correction runs on raw_tl_z_index.
+//   2. Switch ONCE to the RIGHT port (mNeonGreen / Hamamatsu), set a
+//      global absolute PFS offset, and capture every position at the
+//      drift-corrected XY. Saved to {Pos}/fluo/img_{t}_fluo.tif.
+//   3. Switch back to ph.
+// Fluorescence images are a passive extra channel: never used for ECC.
+//
+// Usage:
+//   1. Run: python prepare_drift_session.py  (once before starting)
+//   2. Open this file in MM Script Panel
+//   3. Set CONFIG_FILE below to the drift_config_zstack.json path
+//   4. Review the fluorescence constants block
+//   5. Click Run
+//   6. Click Stop to abort
+// ============================================================
+
+import java.io.*;
+import java.util.*;
+import java.text.*;
+import ij.*;
+import ij.process.*;
+import ij.io.*;
+import org.json.*;
+
+// ============================================================
+// Change only this: path to drift_config_zstack.json
+// ============================================================
+String CONFIG_FILE = "C:/Users/QPI/Documents/QPI_Omni/drift_session/drift_config_zstack.json";
+
+// Resume to a different save directory (leave empty to use config's save_dir)
+String RESUME_SAVE_DIR = "";
+
+// Set to true to force start from T=0 even if previous state exists.
+boolean FORCE_FRESH_START = true;
+
+// ---- Fluorescence pass constants (right port) ----
+// Read from config when present; otherwise these defaults are used.
+boolean FLUO_ENABLED_DEFAULT     = true;
+String  FLUO_CHANNEL_DEFAULT     = "mNeonGreen";  // TiChannel preset (right port)
+double  FLUO_EXPOSURE_MS_DEFAULT = 2000.0;         // fluorescence exposure [ms]
+double  FLUO_Z_OFFSET_UM_DEFAULT = 394.12;         // global absolute TIPFSOffset [um]
+int     FLUO_EVERY_N_DEFAULT     = 1;              // capture fluo every Nth timepoint (1 = every tp)
+int     FLUO_POS_STRIDE_DEFAULT  = 1;              // capture fluo every Nth position (1 = every pos)
+long    FLUO_PORT_SETTLE_MS       = 0;             // extra settle after port switch (0 = rely on waitForConfig)
+long    FLUO_PFS_SETTLE_MS        = 0;             // extra settle after PFS jump (0 = rely on waitForDevice)
+// Excitation-arming: the mNeonGreen preset selects the excitation via this
+// Arduino-Switch state. We keep it OFF during the (slow) port switch / settle
+// / z-move and set it ON only for the fluo snap, so the LED is energised for
+// the exposure only -- independent of how slow the port change is.
+String  FLUO_SWITCH_DEVICE        = "Arduino-Switch";
+String  FLUO_SWITCH_PROP          = "State";
+String  FLUO_SWITCH_ON            = "1";           // mNeonGreen excitation on
+String  FLUO_SWITCH_OFF           = "0";           // excitation off (ph / dark)
+String  FLUO_BINNING_DEFAULT      = "2x2";         // Hamamatsu binning for fluo ("" = leave preset 1x1)
+// Real excitation gate on this scope: the epi lamp is NOT gated by the
+// Arduino-Shutter -- it reaches the sample only when the fluorescence cube
+// (TIFilterBlock2 position 2) is in the light path. So we move the cube IN
+// only for the fluo snap and OUT (=phase position 1) otherwise. This both
+// produces the signal (the mNeonGreen preset leaves the cube OUT) and blanks
+// the excitation between exposures.
+String  FLUO_FB2_DEVICE           = "TIFilterBlock2";
+String  FLUO_FB2_IN_DEFAULT       = "2------";     // cube IN  (excitation on sample)
+String  FLUO_FB2_OUT_DEFAULT      = "1------";     // cube OUT (excitation blanked; = phase position)
+long    FLUO_FB2_SETTLE_MS        = 0;             // extra settle after cube move (0 = rely on waitForDevice)
+// ============================================================
+
+
+// ---- Helper: zero-pad integer to given width ----
+String padLeft(int n, int width) {
+    String s = "" + n;
+    while (s.length() < width) s = "0" + s;
+    return s;
+}
+
+// ---- Helper: format double to N decimal places ----
+String fmtD(double v, int decimals) {
+    double factor = Math.pow(10, decimals);
+    long rounded = Math.round(v * factor);
+    String s = "" + Math.abs(rounded);
+    while (s.length() <= decimals) s = "0" + s;
+    String intPart  = s.substring(0, s.length() - decimals);
+    String fracPart = s.substring(s.length() - decimals);
+    String sign = (v < 0) ? "-" : "";
+    return sign + intPart + "." + fracPart;
+}
+
+
+// ---- Load JSON config ----
+print("Loading config: " + CONFIG_FILE);
+BufferedReader cfgReader = new BufferedReader(new FileReader(CONFIG_FILE));
+StringBuilder cfgSb = new StringBuilder();
+String cfgLine;
+while ((cfgLine = cfgReader.readLine()) != null) cfgSb.append(cfgLine);
+cfgReader.close();
+JSONObject cfg = new JSONObject(cfgSb.toString());
+
+String PYTHON_EXE     = cfg.getString("python_exe");
+String SCRIPT_DIR     = cfg.getString("script_dir");
+String SAVE_DIR       = cfg.getString("save_dir");
+if (RESUME_SAVE_DIR != null && !RESUME_SAVE_DIR.trim().isEmpty()) {
+    SAVE_DIR = RESUME_SAVE_DIR.trim();
+    print("Save dir overridden: " + SAVE_DIR);
+}
+String POSITIONS_CSV  = cfg.getString("positions_csv");
+String STATE_FILE     = cfg.getString("state_file");
+String LOG_FILE       = cfg.getString("log_file");
+int    N_TIMEPOINTS   = cfg.getInt("n_timepoints");
+long   INTERVAL_MS    = (long)(cfg.getDouble("interval_sec") * 1000);
+long   SETTLE_MS      = (long)cfg.getDouble("settle_ms");
+long   PFS_SETTLE_MS  = (long)cfg.getDouble("pfs_settle_ms");
+double EXPOSURE_MS    = cfg.getDouble("exposure_ms");
+int    BG_POS_INDEX   = cfg.getInt("bg_pos_index");
+String XY_STAGE       = cfg.getString("xy_stage_device");
+String Z_DEVICE       = cfg.getString("z_offset_device");
+String CHANNEL_NAME   = cfg.getString("channel_name");
+String CHANNEL_GROUP  = "TiChannel";
+String COMPUTE_SCRIPT = SCRIPT_DIR + "/compute_drift_online.py";
+
+// ---- Z-stack parameters (backward-compat defaults: single slice) ----
+int    N_Z_SLICES  = cfg.optInt("n_z_slices", 1);
+double Z_STEP_UM   = cfg.optDouble("z_step_um", 0.4);
+double Z_START_UM  = cfg.optDouble("z_start_um", 0.0);
+
+// ---- Fluorescence parameters (config overrides constants above) ----
+boolean FLUO_ENABLED    = cfg.optBoolean("fluo_enabled", FLUO_ENABLED_DEFAULT);
+String  FLUO_CHANNEL    = cfg.optString("fluo_channel", FLUO_CHANNEL_DEFAULT);
+double  FLUO_EXPOSURE_MS = cfg.optDouble("fluo_exposure_ms", FLUO_EXPOSURE_MS_DEFAULT);
+double  FLUO_Z_OFFSET_UM = cfg.optDouble("fluo_z_offset_um", FLUO_Z_OFFSET_UM_DEFAULT);
+int     FLUO_EVERY_N     = cfg.optInt("fluo_every_n", FLUO_EVERY_N_DEFAULT);
+if (FLUO_EVERY_N < 1) FLUO_EVERY_N = 1;
+int     FLUO_POS_STRIDE  = cfg.optInt("fluo_pos_stride", FLUO_POS_STRIDE_DEFAULT);
+if (FLUO_POS_STRIDE < 1) FLUO_POS_STRIDE = 1;
+String  FLUO_BINNING     = cfg.optString("fluo_binning", FLUO_BINNING_DEFAULT);
+String  FLUO_FB2_IN      = cfg.optString("fluo_fb2_in", FLUO_FB2_IN_DEFAULT);
+String  FLUO_FB2_OUT     = cfg.optString("fluo_fb2_out", FLUO_FB2_OUT_DEFAULT);
+
+print("Config loaded: N=" + N_TIMEPOINTS + " interval=" + (INTERVAL_MS/1000) + "s");
+print("Z-stack: " + N_Z_SLICES + " slices, start=" + fmtD(Z_START_UM, 1) +
+      "um, step=" + fmtD(Z_STEP_UM, 1) + "um");
+if (FLUO_ENABLED) {
+    print("Fluorescence: " + FLUO_CHANNEL + " @ " + fmtD(FLUO_EXPOSURE_MS, 0) +
+          "ms, absolute z=" + fmtD(FLUO_Z_OFFSET_UM, 2) + "um, every " +
+          FLUO_EVERY_N + " tp, every " + FLUO_POS_STRIDE + " pos, binning=" +
+          (FLUO_BINNING == null || FLUO_BINNING.trim().isEmpty() ? "1x1" : FLUO_BINNING));
+} else {
+    print("Fluorescence: DISABLED");
+}
+
+// ---- Load positions.csv ----
+// Format: index,label,x,y,z_offset
+ArrayList posLabels = new ArrayList();
+double[]  baseX     = null;
+double[]  baseY     = null;
+double[]  baseZ     = null;
+
+BufferedReader csvReader = new BufferedReader(new FileReader(POSITIONS_CSV));
+String csvLine;
+csvReader.readLine();  // skip header
+ArrayList rows = new ArrayList();
+while ((csvLine = csvReader.readLine()) != null) {
+    String[] parts = csvLine.split(",");
+    rows.add(parts);
+}
+csvReader.close();
+
+int nPositions = rows.size();
+baseX = new double[nPositions];
+baseY = new double[nPositions];
+baseZ = new double[nPositions];
+
+for (int i = 0; i < nPositions; i++) {
+    String[] parts = (String[])rows.get(i);
+    posLabels.add(parts[1].trim());
+    baseX[i] = Double.parseDouble(parts[2].trim());
+    baseY[i] = Double.parseDouble(parts[3].trim());
+    baseZ[i] = Double.parseDouble(parts[4].trim());
+    print("  Pos[" + i + "] " + parts[1].trim() +
+          " x=" + baseX[i] + " y=" + baseY[i] + " z=" + baseZ[i]);
+}
+print("Positions loaded: " + nPositions);
+
+// ---- Corrected positions (base + cumulative correction) ----
+double[] corrX = Arrays.copyOf(baseX, nPositions);
+double[] corrY = Arrays.copyOf(baseY, nPositions);
+
+// ---- Device timeout ----
+mmc.setTimeoutMs(20000);
+print("Device timeout set: 20000 ms");
+
+// ---- Camera setup ----
+mmc.setExposure(EXPOSURE_MS);
+print("Exposure set: " + EXPOSURE_MS + " ms");
+
+// AutoShutter ON: snapImage() opens the Arduino-Shutter only during exposure
+// and closes it afterwards. Both ph (transmitted) and mNeonGreen (excitation)
+// presets route through Arduino-Shutter, so the sample is illuminated ONLY
+// during each snap -- never during port switching, the 93um PFS jump, or the
+// inter-timepoint wait. Critical to limit mNeonGreen photobleaching/toxicity
+// over the multi-day run.
+mmc.setAutoShutter(true);
+print("AutoShutter: ON (shutter open only during each snap)");
+
+int bytesPerPx = (int)mmc.getBytesPerPixel();
+print("Camera bit depth: " + (bytesPerPx * 8) + " bit");
+
+// ---- Helper: move stage and wait ----
+void moveToPosition(int posIdx) {
+    mmc.setXYPosition(XY_STAGE, corrX[posIdx], corrY[posIdx]);
+    mmc.waitForDevice(XY_STAGE);
+    Thread.sleep(SETTLE_MS);
+    if (PFS_SETTLE_MS > 0) {
+        Thread.sleep(PFS_SETTLE_MS);
+    }
+}
+
+// ---- Helper: set channel to ph preset ----
+void setChannelPh() {
+    mmc.setConfig(CHANNEL_GROUP, CHANNEL_NAME);
+    mmc.waitForConfig(CHANNEL_GROUP, CHANNEL_NAME);
+}
+
+// ---- Helper: snap image and save as TIFF ----
+// bytesPerPixel is read per snap so the same helper works across the
+// two cameras (Basler / Hamamatsu) that the ph / fluo presets select.
+void snapAndSave(String savePath) {
+    mmc.snapImage();
+    Object rawImg = mmc.getImage();
+    int width  = (int)mmc.getImageWidth();
+    int height = (int)mmc.getImageHeight();
+    int bpp    = (int)mmc.getBytesPerPixel();
+    ImageProcessor ip;
+    if (bpp == 1) {
+        ip = new ByteProcessor(width, height, (byte[])rawImg, null);
+    } else {
+        ip = new ShortProcessor(width, height, (short[])rawImg, null);
+    }
+    ImagePlus imp = new ImagePlus("", ip);
+    new FileSaver(imp).saveAsTiff(savePath);
+}
+
+// ---- Helper: read drift_state.txt (key=value format) ----
+HashMap readState(String stateFile) {
+    HashMap m = new HashMap();
+    try {
+        BufferedReader br = new BufferedReader(new FileReader(stateFile));
+        String ln;
+        while ((ln = br.readLine()) != null) {
+            ln = ln.trim();
+            if (ln.startsWith("#") || !ln.contains("=")) continue;
+            String[] kv = ln.split("=", 2);
+            m.put(kv[0].trim(), kv[1].trim());
+        }
+        br.close();
+    } catch (Exception e) {
+        print("[WARN] Failed to read state file: " + e.getMessage());
+    }
+    return m;
+}
+
+// ---- Helper: call Python subprocess with timeout ----
+int callPython(String[] cmd, long timeoutMs) {
+    Process p = Runtime.getRuntime().exec(cmd);
+
+    final StringBuilder outBuf = new StringBuilder();
+    final StringBuilder errBuf = new StringBuilder();
+    Thread tOut = new Thread(new Runnable() {
+        public void run() {
+            try {
+                BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()));
+                String l;
+                while ((l = r.readLine()) != null) outBuf.append(l).append("\n");
+            } catch (Exception e) {}
+        }
+    });
+    Thread tErr = new Thread(new Runnable() {
+        public void run() {
+            try {
+                BufferedReader r = new BufferedReader(new InputStreamReader(p.getErrorStream()));
+                String l;
+                while ((l = r.readLine()) != null) errBuf.append(l).append("\n");
+            } catch (Exception e) {}
+        }
+    });
+    tOut.start();
+    tErr.start();
+
+    long start = System.currentTimeMillis();
+    boolean done = false;
+    int exitCode = -1;
+    while (!done && System.currentTimeMillis() - start < timeoutMs) {
+        Thread.sleep(500);
+        try {
+            exitCode = p.exitValue();
+            done = true;
+        } catch (IllegalThreadStateException e) {
+            // still running
+        }
+    }
+    if (!done) {
+        p.destroy();
+        print("[WARN] Python timeout (" + (timeoutMs/1000) + "s)");
+        exitCode = -2;
+    }
+    tOut.join(2000);
+    tErr.join(2000);
+
+    if (outBuf.length() > 0) print("[Python stdout]\n" + outBuf.toString());
+    if (errBuf.length() > 0) print("[Python stderr]\n" + errBuf.toString());
+    return exitCode;
+}
+
+
+// ============================================================
+// Main acquisition loop
+// ============================================================
+print("\n========================================");
+print(" Real-time drift correction timelapse (QPI + fluo)");
+print(" N=" + N_TIMEPOINTS + "  interval=" + (INTERVAL_MS/1000) + "s");
+print(" Z-stack: " + N_Z_SLICES + " slices (" +
+      fmtD(Z_START_UM, 1) + " to " +
+      fmtD(Z_START_UM + (N_Z_SLICES - 1) * Z_STEP_UM, 1) + " um)");
+print("========================================\n");
+
+String bgLabel  = (String)posLabels.get(BG_POS_INDEX);
+print("BG Pos:  [" + BG_POS_INDEX + "] " + bgLabel);
+
+double totalCorrX = 0.0;
+double totalCorrY = 0.0;
+int consecutiveFailures = 0;
+int MAX_CONSECUTIVE_FAILURES = 5;
+
+// ---- Resume detection ----
+int startT = 0;
+File stateFileObj = new File(STATE_FILE);
+if (!FORCE_FRESH_START && stateFileObj.exists()) {
+    HashMap resumeState = readState(STATE_FILE);
+    String status = (String)resumeState.get("STATUS");
+    String tpStr  = (String)resumeState.get("TIMEPOINT");
+    if (tpStr != null && !"idle".equals(status)) {
+        int lastTP = Integer.parseInt(tpStr);
+        if (lastTP >= -1 && lastTP < N_TIMEPOINTS - 1) {
+            startT = lastTP + 1;
+            double fallbackDx = 0.0, fallbackDy = 0.0;
+            try {
+                fallbackDx = Double.parseDouble((String)resumeState.get("CUMULATIVE_DX_UM"));
+                fallbackDy = Double.parseDouble((String)resumeState.get("CUMULATIVE_DY_UM"));
+            } catch (Exception e) {}
+            int nRestored = 0;
+            double sumDx = 0.0, sumDy = 0.0;
+            int nSample = 0;
+            for (int i = 0; i < nPositions; i++) {
+                double cdx = fallbackDx, cdy = fallbackDy;
+                String sx = (String)resumeState.get("CUMULATIVE_DX_UM_" + i);
+                String sy = (String)resumeState.get("CUMULATIVE_DY_UM_" + i);
+                if (sx != null && sy != null) {
+                    try {
+                        cdx = Double.parseDouble(sx);
+                        cdy = Double.parseDouble(sy);
+                        nRestored++;
+                    } catch (Exception e) {}
+                }
+                corrX[i] = baseX[i] - cdx;
+                corrY[i] = baseY[i] - cdy;
+                if (i != BG_POS_INDEX) {
+                    sumDx += cdx;
+                    sumDy += cdy;
+                    nSample++;
+                }
+            }
+            if (nSample > 0) {
+                totalCorrX = -(sumDx / nSample);
+                totalCorrY = -(sumDy / nSample);
+            } else {
+                totalCorrX = -fallbackDx;
+                totalCorrY = -fallbackDy;
+            }
+            print("[RESUME] Resuming from T=" + startT +
+                  "  per-Pos restored=" + nRestored + "/" + nPositions +
+                  "  avgCum=(" + fmtD(-totalCorrX,3) + "," + fmtD(-totalCorrY,3) + ")um");
+            print("[RESUME] Save dir: " + SAVE_DIR);
+        }
+    }
+}
+// ---- Ensure position subdirectories exist ----
+for (int i = 0; i < nPositions; i++) {
+    String pl = (String)posLabels.get(i);
+    for (int z = 0; z < N_Z_SLICES; z++) {
+        new File(SAVE_DIR + "/" + pl + "/z" + padLeft(z, 3)).mkdirs();
+    }
+    if (FLUO_ENABLED && (i % FLUO_POS_STRIDE == 0) && (i != BG_POS_INDEX)) {
+        new File(SAVE_DIR + "/" + pl + "/fluo").mkdirs();
+    }
+}
+
+for (int t = startT; t < N_TIMEPOINTS; t++) {
+    long tpStart = System.currentTimeMillis();
+
+    print("\n-- Timepoint " + t + " / " + (N_TIMEPOINTS-1) + " ----------------");
+    print("  Start: " + new SimpleDateFormat("HH:mm:ss").format(new Date()));
+
+    // ---- Acquire all positions: QPI + fluo back-to-back PER POSITION ----
+    // For each Pos: capture QPI (ph / Basler / left port), then immediately
+    // switch to the right port and capture fluorescence at the SAME drift-
+    // corrected XY, then switch back to ph before moving to the next Pos.
+    // The optics route light to left OR right (not both), so this per-Pos
+    // interleave is the closest to a simultaneous QPI/fluo pair per cell.
+    // ECC drift correction still uses only the QPI (ph) frame.
+    setChannelPh();
+    boolean doFluo = FLUO_ENABLED && (t % FLUO_EVERY_N == 0);
+    long fluoAccumMs = 0;
+    int  fluoCount = 0;
+    for (int i = 0; i < nPositions; i++) {
+        String posLabel = (String)posLabels.get(i);
+        moveToPosition(i);
+
+        // -- QPI (left port, Basler) --
+        for (int z = 0; z < N_Z_SLICES; z++) {
+            double zTarget = baseZ[i] + Z_START_UM + z * Z_STEP_UM;
+            mmc.setPosition(Z_DEVICE, zTarget);
+            mmc.waitForDevice(Z_DEVICE);
+
+            String frameFile = "img_" + padLeft(t, 9) + "_ph_" + padLeft(z, 3) + ".tif";
+            String savePath = SAVE_DIR + "/" + posLabel + "/z" + padLeft(z, 3) + "/" + frameFile;
+            snapAndSave(savePath);
+        }
+
+        // -- Fluorescence (right port, Hamamatsu) at the same Pos --
+        // QPI is acquired at EVERY Pos; fluo only at every FLUO_POS_STRIDE-th
+        // Pos (and every FLUO_EVERY_N-th timepoint) to limit photodamage/time.
+        // Excitation-safety: the Arduino-Switch line is blanked whenever the
+        // Arduino-Shutter is closed (standard MM Arduino adapter). We ALSO
+        // force the shutter closed explicitly around every switch/move so the
+        // mNeonGreen LED can be physically lit ONLY during the fluo snap, no
+        // matter how slow the port change is.
+        if (doFluo && (i % FLUO_POS_STRIDE == 0) && (i != BG_POS_INDEX)) {
+            long fluoStart = System.currentTimeMillis();
+
+            mmc.setShutterOpen(false);                    // enforce dark before switching
+            mmc.setConfig(CHANNEL_GROUP, FLUO_CHANNEL);   // right port / Hamamatsu (Switch=1 set by preset)
+            mmc.waitForConfig(CHANNEL_GROUP, FLUO_CHANNEL);
+            mmc.setProperty(FLUO_SWITCH_DEVICE, FLUO_SWITCH_PROP, FLUO_SWITCH_OFF); // DISARM excitation during settle
+            if (FLUO_BINNING != null && !FLUO_BINNING.trim().isEmpty()) {
+                mmc.setProperty(mmc.getCameraDevice(), "Binning", FLUO_BINNING);    // e.g. 2x2 -> 4x signal/px
+            }
+            mmc.setExposure(FLUO_EXPOSURE_MS);
+            Thread.sleep(FLUO_PORT_SETTLE_MS);            // mechanical port/filter settle (DARK, excitation OFF)
+            mmc.setPosition(Z_DEVICE, FLUO_Z_OFFSET_UM);  // global absolute PFS offset (DARK)
+            mmc.waitForDevice(Z_DEVICE);
+            Thread.sleep(FLUO_PFS_SETTLE_MS);             // (DARK)
+
+            // Excitation gate = fluorescence cube (TIFilterBlock2). Move it IN
+            // only for this snap, then OUT immediately. This is the ONLY thing
+            // that blanks the epi excitation on this scope (the Arduino-Shutter
+            // does not gate the epi lamp).
+            String fluoFile = "img_" + padLeft(t, 9) + "_fluo.tif";
+            String fluoPath = SAVE_DIR + "/" + posLabel + "/fluo/" + fluoFile;
+            mmc.setProperty(FLUO_SWITCH_DEVICE, FLUO_SWITCH_PROP, FLUO_SWITCH_ON);  // arm Arduino line (if wired)
+            mmc.setProperty(FLUO_FB2_DEVICE, "Label", FLUO_FB2_IN);                 // CUBE IN -> excitation ON
+            mmc.waitForDevice(FLUO_FB2_DEVICE);
+            Thread.sleep(FLUO_FB2_SETTLE_MS);             // turret settle
+            snapAndSave(fluoPath);
+            mmc.setProperty(FLUO_FB2_DEVICE, "Label", FLUO_FB2_OUT);                // CUBE OUT -> excitation OFF
+            mmc.waitForDevice(FLUO_FB2_DEVICE);
+            mmc.setProperty(FLUO_SWITCH_DEVICE, FLUO_SWITCH_PROP, FLUO_SWITCH_OFF); // disarm Arduino line
+            mmc.setShutterOpen(false);                    // (phase path) enforce dark
+
+            // -- Back to ph (left port / Basler) before the next Pos --
+            mmc.setConfig(CHANNEL_GROUP, CHANNEL_NAME);
+            mmc.waitForConfig(CHANNEL_GROUP, CHANNEL_NAME);
+            mmc.setExposure(EXPOSURE_MS);
+            Thread.sleep(FLUO_PORT_SETTLE_MS);            // settle after switching back to left (DARK)
+            fluoAccumMs += System.currentTimeMillis() - fluoStart;
+            fluoCount++;
+        }
+
+        print("  [T=" + t + "] " + posLabel + " -> " + N_Z_SLICES + " z + " +
+              ((doFluo && (i % FLUO_POS_STRIDE == 0) && (i != BG_POS_INDEX)) ? "fluo" : "no-fluo"));
+    }
+    moveToPosition(0);
+    print("  Returned to Pos[0] (standby)");
+    if (doFluo) {
+        print("  fluo total this timepoint: " + fmtD(fluoAccumMs/1000.0, 1) +
+              "s (" + fluoCount + " pos @ " + fmtD(FLUO_EXPOSURE_MS, 0) +
+              "ms, z=" + fmtD(FLUO_Z_OFFSET_UM, 2) + "um)");
+    }
+
+
+    // ---- Drift computation (per-Pos corrections) ----
+    if (t == 0) {
+        print("  T=0: initializing reference frame...");
+        String[] cmd = {
+            PYTHON_EXE, COMPUTE_SCRIPT,
+            "--timepoint", "0",
+            "--config", CONFIG_FILE
+        };
+        int exitCode0 = callPython(cmd, 600000L);
+        if (exitCode0 == 0) {
+            HashMap state0 = readState(STATE_FILE);
+            boolean anyJump0 = "true".equals(state0.get("JUMP_DETECTED"));
+            int nValid0 = 0, nFail0 = 0;
+            double sumDx0 = 0.0, sumDy0 = 0.0;
+            for (int i = 0; i < nPositions; i++) {
+                if (i == BG_POS_INDEX) continue;
+                boolean vi = "true".equals(state0.get("CORRECTION_VALID_" + i));
+                if (vi) {
+                    try {
+                        double cdx = Double.parseDouble((String)state0.get("CUMULATIVE_DX_UM_" + i));
+                        double cdy = Double.parseDouble((String)state0.get("CUMULATIVE_DY_UM_" + i));
+                        corrX[i] = baseX[i] - cdx;
+                        corrY[i] = baseY[i] - cdy;
+                        sumDx0 += cdx; sumDy0 += cdy;
+                        nValid0++;
+                    } catch (Exception e) { nFail0++; }
+                } else {
+                    nFail0++;
+                }
+            }
+            if (nValid0 > 0) {
+                double avgDx = sumDx0 / nValid0;
+                double avgDy = sumDy0 / nValid0;
+                corrX[BG_POS_INDEX] = baseX[BG_POS_INDEX] - avgDx;
+                corrY[BG_POS_INDEX] = baseY[BG_POS_INDEX] - avgDy;
+                totalCorrX = -avgDx;
+                totalCorrY = -avgDy;
+                print("  T=0: per-Pos pre-correction applied  valid=" + nValid0 +
+                      "/" + (nPositions-1) + " fail=" + nFail0 +
+                      "  avgCum=(" + fmtD(avgDx,3) + "," + fmtD(avgDy,3) + ")um");
+            } else {
+                print("  T=0: reference initialized (no valid Pos, jump=" + anyJump0 + ", no correction)");
+            }
+        } else {
+            print("  T=0: reference initialized (Python failed, no correction)");
+        }
+
+    } else {
+        print("  Python drift computation...");
+        String[] cmd = {
+            PYTHON_EXE, COMPUTE_SCRIPT,
+            "--timepoint", String.valueOf(t),
+            "--config",     CONFIG_FILE
+        };
+        int exitCode = callPython(cmd, 600000L);
+
+        if (exitCode == 0) {
+            HashMap state = readState(STATE_FILE);
+
+            int nValid = 0, nFail = 0, nJump = 0;
+            double sumDx = 0.0, sumDy = 0.0;
+            double sumStepDx = 0.0, sumStepDy = 0.0;
+            double sumCorr = 0.0;
+            for (int i = 0; i < nPositions; i++) {
+                if (i == BG_POS_INDEX) continue;
+                String validStr = (String)state.get("CORRECTION_VALID_" + i);
+                boolean vi = "true".equals(validStr);
+                if (vi) {
+                    try {
+                        double cdx = Double.parseDouble((String)state.get("CUMULATIVE_DX_UM_" + i));
+                        double cdy = Double.parseDouble((String)state.get("CUMULATIVE_DY_UM_" + i));
+                        corrX[i] = baseX[i] - cdx;
+                        corrY[i] = baseY[i] - cdy;
+                        sumDx += cdx; sumDy += cdy;
+                        try {
+                            sumStepDx += Double.parseDouble((String)state.get("DX_UM_" + i));
+                            sumStepDy += Double.parseDouble((String)state.get("DY_UM_" + i));
+                            sumCorr   += Double.parseDouble((String)state.get("ECC_CORRELATION_" + i));
+                        } catch (Exception e) {}
+                        nValid++;
+                    } catch (Exception e) { nFail++; }
+                } else {
+                    nFail++;
+                    // Per-Pos failure: keep previous corrX[i]/corrY[i]
+                }
+            }
+
+            if (nValid > 0) {
+                double avgDx = sumDx / nValid;
+                double avgDy = sumDy / nValid;
+                corrX[BG_POS_INDEX] = baseX[BG_POS_INDEX] - avgDx;
+                corrY[BG_POS_INDEX] = baseY[BG_POS_INDEX] - avgDy;
+                totalCorrX = -avgDx;
+                totalCorrY = -avgDy;
+                double avgStepDx = sumStepDx / nValid;
+                double avgStepDy = sumStepDy / nValid;
+                double avgCorr   = sumCorr   / nValid;
+                consecutiveFailures = 0;
+                print("  [OK] valid=" + nValid + "/" + (nPositions-1) +
+                      " fail=" + nFail +
+                      "  avgStep=(" + fmtD(avgStepDx,3) + "," + fmtD(avgStepDy,3) + ")um" +
+                      "  avgCorr=" + fmtD(avgCorr,3));
+                print("  avgCumulative: x=" + fmtD(totalCorrX,3) + "um  y=" + fmtD(totalCorrY,3) + "um");
+            } else {
+                consecutiveFailures++;
+                print("  [FAIL] All positions failed ECC (fail=" + nFail + ")");
+            }
+
+            if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                print("  [WARN] " + consecutiveFailures + " consecutive failures - check optics/sample");
+            }
+
+        } else {
+            consecutiveFailures++;
+            print("  [FAIL] Python exit code: " + exitCode);
+        }
+    }
+
+    // ---- Wait for next timepoint ----
+    long elapsed    = System.currentTimeMillis() - tpStart;
+    long waitTimeMs = INTERVAL_MS - elapsed;
+    if (waitTimeMs > 0) {
+        print("  Waiting " + fmtD(waitTimeMs / 1000.0, 1) + "s until T=" + (t+1));
+
+        long waitUntil = System.currentTimeMillis() + waitTimeMs;
+        boolean shownCountdown = false;
+        while (System.currentTimeMillis() < waitUntil) {
+            long remaining = waitUntil - System.currentTimeMillis();
+            if (remaining < 10000 && !shownCountdown) {
+                shownCountdown = true;
+            }
+            if (shownCountdown && remaining % 1000 < 100) {
+                print("    " + (remaining / 1000 + 1) + "s remaining...");
+            }
+            Thread.sleep(200);
+        }
+    } else {
+        print("  [WARN] Processing overran interval by " + (-waitTimeMs/1000) + "s");
+    }
+
+    print("  Timepoint " + t + " done (" + fmtD(elapsed/1000.0,1) + "s)");
+}
+
+// ============================================================
+// Done
+// ============================================================
+print("\n========================================");
+print(" Timelapse complete (QPI + fluo mode)");
+print(" Total: " + N_TIMEPOINTS + " timepoints x " + N_Z_SLICES + " z-slices");
+if (FLUO_ENABLED) {
+    print(" Fluorescence: " + FLUO_CHANNEL + " @ " + fmtD(FLUO_EXPOSURE_MS, 0) +
+          "ms per timepoint per position");
+}
+print(" Final avg cumulative correction (per-Pos mean): x=" + fmtD(totalCorrX,3) + "um  y=" + fmtD(totalCorrY,3) + "um");
+print(" Saved to: " + SAVE_DIR);
+print("========================================");

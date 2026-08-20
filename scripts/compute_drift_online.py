@@ -1065,6 +1065,10 @@ def _save_crop_sub_one_pos(args):
 
         grid_pos_dir = pos_map.get((xi, yi))
         tilt_h = cfg.get("tilt_crop_h_raw", 270)
+        # Width of the rectangle actually written out. The tilt fit keeps the
+        # full tilt_h window; this is a centred sub-crop of it. Falls back to
+        # tilt_h so configs without the key behave as before.
+        out_h = cfg.get("crop_sub_output_crop_h") or tilt_h
         out_base = (crop_sub_root / pos_label / "output_phase" /
                     "channels" / "crop_sub_rawraw")
 
@@ -1104,7 +1108,7 @@ def _save_crop_sub_one_pos(args):
                 tl_img, sx, sy, rois,
                 cal_dx, cal_dy, residual_x, residual_y,
                 grid_img,
-                output_crop_h_override=tilt_h,
+                output_crop_h_override=out_h,
                 tilt_crop_h_raw=tilt_h,
                 use_raw_phase=True,
                 apply_subpixel_correction=True,

@@ -118,6 +118,11 @@ VMAX =  2.0
 TILT_CROP_H = 270
 ECC_CROP_H  = 80
 
+# Width of the rectangle actually written by the online crop_sub save. The tilt
+# fit still uses the full TILT_CROP_H window; this is a centred sub-crop of it,
+# so it must be <= TILT_CROP_H. None -> same as TILT_CROP_H (previous behaviour).
+CROP_SUB_OUTPUT_CROP_H = 240
+
 # Z parameters. Single-z mode: N_Z_SLICES=1 captures one plane at baseZ+Z_START_UM.
 # Here Z_START_UM=+0.8 puts that single plane at grid z-index 7 (+0.8um).
 N_Z_SLICES            = 1
@@ -156,7 +161,16 @@ FLUO_FB2_OUT          = "1------"      # TIFilterBlock2 label: cube OUT (phase p
 # ============================================================
 
 
+def _check_crop_sizes():
+    if CROP_SUB_OUTPUT_CROP_H is not None and CROP_SUB_OUTPUT_CROP_H > TILT_CROP_H:
+        raise SystemExit(
+            f"CROP_SUB_OUTPUT_CROP_H ({CROP_SUB_OUTPUT_CROP_H}) must be <= "
+            f"TILT_CROP_H ({TILT_CROP_H}): the saved crop is a centred sub-crop "
+            f"of the tilt-fit window.")
+
+
 def main():
+    _check_crop_sizes()
     session_dir = Path(SESSION_DIR)
     session_dir.mkdir(parents=True, exist_ok=True)
     print(f"Session directory: {session_dir}")
@@ -308,6 +322,7 @@ def main():
         "crop_sub_x_step_um": CROP_SUB_X_STEP_UM,
         "crop_sub_y_step_um": CROP_SUB_Y_STEP_UM,
         "tilt_crop_h_raw":    TILT_CROP_H,
+        "crop_sub_output_crop_h": CROP_SUB_OUTPUT_CROP_H,
         "enable_crop_sub_save": ENABLE_CROP_SUB_SAVE,
         "crop_sub_root":      CROP_SUB_ROOT,
         "crop_sub_max_seconds": CROP_SUB_MAX_SECONDS,
