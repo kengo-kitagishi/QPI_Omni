@@ -6,7 +6,7 @@ import cv2
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-GRID_DIR = Path(r"E:\260810\grid_b2_pos72_102")
+GRID_DIR = Path(r"E:\260819\grid_ye_1")
 Z_INDEX = 6
 POS_SPLIT = 51
 N_WORKERS = 4

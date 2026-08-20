@@ -56,7 +56,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 # Configuration parameters
 # ============================================================
 # Must match GRID_DIR in pipeline_full.py
-GRID_DIR = r"D:\AquisitionData\Kitagishi\260810\grid_ye_1"
+GRID_DIR = r"D:\AquisitionData\Kitagishi\260819\grid_ye_1"
 
 # Base label used as BG (pipeline_full: GRID_BG_BASE_LABEL)
 BG_BASE_LABEL = "Pos0"
@@ -71,7 +71,7 @@ TARGET_COORDS = None
 
 # Filter z indices (None = process all, list = only those indices)
 # e.g.: Z_INDICES = [5]  -> only z=5
-Z_INDICES = [6]
+Z_INDICES = None
 
 # QPI optical parameters
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
