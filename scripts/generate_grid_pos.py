@@ -13,8 +13,8 @@ import json
 import copy
 
 # ---- Parameters ----
-INPUT_POS  = r"C:\260810\timelapse.pos"
-OUTPUT_POS = r"C:\260810\grid.pos"
+INPUT_POS  = r"C:\260819\timelapse.pos"
+OUTPUT_POS = r"C:\260819\grid.pos"
 X_STEP = 0.05   # um
 Y_STEP = 0.05   # um
 X_HALF = 5    # Half-range -> total 11 points (stage X -> image Y, +-0.25 um coverage)
