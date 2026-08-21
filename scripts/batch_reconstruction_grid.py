@@ -56,7 +56,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 # Configuration parameters
 # ============================================================
 # Must match GRID_DIR in pipeline_full.py
-GRID_DIR = r"D:\AquisitionData\Kitagishi\260819\grid_ye_2"
+GRID_DIR = r"D:\AquisitionData\Kitagishi\260819\grid_ye_3"
 
 # Base label used as BG (pipeline_full: GRID_BG_BASE_LABEL)
 BG_BASE_LABEL = "Pos0"
