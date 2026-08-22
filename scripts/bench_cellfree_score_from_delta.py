@@ -52,6 +52,9 @@ for _stream in (sys.stdout, sys.stderr):
 from ecc_utils import ECC_MIN_CORR, tilt_fit_crop, to_ecc_input, ecc_align
 from figure_logger import save_figure
 
+# A production timelapse is running on this machine; leave it CPU headroom.
+cv2.setNumThreads(2)
+
 ECC_VMIN, ECC_VMAX = -5.0, 2.0
 ECC_CROP_H = 80
 TILT_CROP_H = 270

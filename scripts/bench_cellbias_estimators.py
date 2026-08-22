@@ -50,6 +50,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import cv2
 import numpy as np
 import tifffile
 
@@ -68,6 +69,9 @@ from bench_subpix_methods import (
     build_estimators, calibrate_sign, center_crop_cols,
 )
 from figure_logger import save_figure
+
+# A production timelapse is running on this machine; leave it CPU headroom.
+cv2.setNumThreads(2)
 
 ECC_VMIN, ECC_VMAX = -5.0, 2.0
 PIXEL_SCALE_UM = 0.34567514677103717
