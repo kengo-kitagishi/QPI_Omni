@@ -33,7 +33,7 @@ String CONFIG_FILE = "C:/Users/QPI/Documents/QPI_Omni/drift_session/drift_config
 String RESUME_SAVE_DIR = "";
 
 // Set to true to force start from T=0 even if previous state exists.
-boolean FORCE_FRESH_START = true;
+boolean FORCE_FRESH_START = false;
 // ============================================================
 
 
