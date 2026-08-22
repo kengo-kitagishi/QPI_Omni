@@ -34,11 +34,11 @@ from ecc_utils import ECC_MIN_CORR  # single source (0.99); written into drift_c
 # ============================================================
 
 # .pos file consumed by Micro-Manager (the actual time-lapse position list)
-POSITIONS_FILE   = r"C:\260810\timelapse.pos"
+POSITIONS_FILE   = r"C:\260819\timelapse_pos0_5.pos"
 
 # Grid acquisition directory (small grid is fine)
-GRID_DIR         = r"E:\260810\grid_b1_pos0_71"
-GRID_Z_INDEX     = 6  # z-slice of the grid used as ECC reference (index6 = +0.4um, measured focus)
+GRID_DIR         = r"E:\260819\grid_ye_1"
+GRID_Z_INDEX     = 6  # grid z-slice used as ECC reference (index6 = +0.4um; grid spans -2.0..+2.0um)
 
 # channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
 # No single path needed — compute_drift_online.py reads per-pos from grid_dir.
@@ -47,14 +47,14 @@ GRID_Z_INDEX     = 6  # z-slice of the grid used as ECC reference (index6 = +0.4
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"C:\260810\ph_zstack_1"
+SAVE_DIR         = r"D:\AquisitionData\Kitagishi\260819\ph_zstack_1_focus"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
 
 # Micro-Manager acquisition parameters
-N_TIMEPOINTS     = 3168       # 11 days @ 300s (5 min) interval
-INTERVAL_SEC     = 300        # Time-lapse interval [s] (5 min)
+N_TIMEPOINTS     = 720        # 12 h @ 60s interval (focus-check run; stop when satisfied)
+INTERVAL_SEC     = 60         # Time-lapse interval [s] (1 min)
 EXPOSURE_MS      = 60.0
 SETTLE_MS        = 150        # Stage settle time after move [ms]
 PFS_SETTLE_MS    = 0          # PFS continuously tracks; no extra settle needed
@@ -123,21 +123,22 @@ ECC_CROP_H  = 80
 # so it must be <= TILT_CROP_H. None -> same as TILT_CROP_H (previous behaviour).
 CROP_SUB_OUTPUT_CROP_H = 240
 
-# Z parameters. Single-z mode: N_Z_SLICES=1 captures one plane at baseZ+Z_START_UM.
-# Here Z_START_UM=+0.8 puts that single plane at grid z-index 7 (+0.8um).
-N_Z_SLICES            = 1
+# Z parameters. The stack starts at baseZ+Z_START_UM and steps by Z_STEP_UM.
+# Focus-check run: the timelapse stack spans the SAME range as the grid
+# (-2.0..+2.0 um, 11 planes), so timelapse z-index i == grid z-index i.
+N_Z_SLICES            = 11
 Z_STEP_UM             = 0.4
-Z_START_UM            = 0.4    # single plane at +0.4 um = the measured focus (grid z-index 6)
+Z_START_UM            = -2.0   # -2.0..+2.0 um, matching the grid z-stack
 CLEANUP_RAW_HOLOGRAMS = True
 
 # Crop-subtract / raw-phase Phase B (online crop_sub_rawraw save)
 # Step values are nominal fallback only; grid_calibration_*.json (measured)
 # wins when present.
-RAW_TL_Z_INDEX        = 0    # only one plane is captured, so it is index 0 (= grid z-index 6)
+RAW_TL_Z_INDEX        = 6    # timelapse index 6 = +0.4 um = grid z-index 6
 CROP_SUB_X_STEP_UM    = 0.05
 CROP_SUB_Y_STEP_UM    = 0.05
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"C:\260810\online_crop_sub_zstack"
+CROP_SUB_ROOT         = r"D:\AquisitionData\Kitagishi\260819\online_crop_sub_zstack_focus"
 CROP_SUB_MAX_SECONDS  = 150.0
 CROP_SUB_MAX_WORKERS  = 4
 CROP_SUB_MIN_FREE_GB  = 2.0
