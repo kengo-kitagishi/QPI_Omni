@@ -81,6 +81,13 @@ def parse_args():
                    help="directory holding the timelapse img_*_phase.tif at the ECC z plane")
     p.add_argument("--grid-z", type=int, default=6)
     p.add_argument("--pos-split", type=int, default=51)
+    p.add_argument("--wide-crop", type=int, default=120,
+                   help="width returned by tilt_fit_crop; must exceed ECC_CROP_H by "
+                        "enough margin to absorb the applied shift. The tilt FIT still "
+                        "uses the production tilt_crop_h window, so preprocessing is "
+                        "unchanged.")
+    p.add_argument("--edge-margin", type=int, default=10,
+                   help="drop channels whose crop comes closer than this to the image edge")
     p.add_argument("--n-shifts", type=int, default=10)
     p.add_argument("--max-shift", type=float, default=1.5)
     p.add_argument("--methods", default="ECC-uint8,ECC-float,SG-2D,Gaussian-2D",
@@ -127,15 +134,23 @@ def main():
     print(f"methods   : {list(estimators)}")
 
     # Wide cell-free reference crops, one per channel (None where OOB).
+    if args.wide_crop <= ECC_CROP_H:
+        raise ValueError(f"--wide-crop must exceed ECC_CROP_H ({ECC_CROP_H})")
+    h_img = ref_img.shape[0]
     wide_refs = []
     for roi in rois:
         wide_refs.append(tilt_fit_crop(ref_img, roi["cy"], roi["cx"], roi["crop_w"],
-                                       ecc_crop_h=TILT_CROP_H, tilt_crop_h=TILT_CROP_H,
+                                       ecc_crop_h=args.wide_crop, tilt_crop_h=TILT_CROP_H,
                                        fit_right=fit_right))
-    usable = [i for i, w in enumerate(wide_refs) if w is not None]
+    def _edge_gap(roi):
+        hw = roi["crop_w"] // 2
+        return min(roi["cy"] - hw, (h_img - 1) - (roi["cy"] + hw))
+    edge = [i for i, roi in enumerate(rois) if _edge_gap(roi) < args.edge_margin]
+    usable = [i for i, w in enumerate(wide_refs) if w is not None and i not in edge]
+    print(f"edge channels dropped (<{args.edge_margin}px from the image edge): {edge}")
     if not usable:
-        raise RuntimeError("all channels OOB for the wide bench window "
-                           f"(needs cx +-{TILT_CROP_H // 2} inside the image)")
+        raise RuntimeError("no usable channel: all are OOB for the "
+                           f"{args.wide_crop}px window or dropped as edge channels")
     print(f"usable channels for the wide window: {usable}")
 
     print("\nSign calibration:")
@@ -151,7 +166,7 @@ def main():
         for c in usable:
             roi = rois[c]
             wide_mov = tilt_fit_crop(mov_img, roi["cy"], roi["cx"], roi["crop_w"],
-                                     ecc_crop_h=TILT_CROP_H, tilt_crop_h=TILT_CROP_H,
+                                     ecc_crop_h=args.wide_crop, tilt_crop_h=TILT_CROP_H,
                                      fit_right=fit_right)
             if wide_mov is None:
                 continue
@@ -265,6 +280,8 @@ def main():
         fig,
         params={"pos": args.pos, "grid_z": args.grid_z, "n_frames": len(mov_paths),
                 "n_shifts": args.n_shifts, "max_shift": args.max_shift,
+                "wide_crop": args.wide_crop, "edge_margin": args.edge_margin,
+                "edge_channels": edge,
                 "methods": names, "ecc_min_corr": ECC_MIN_CORR,
                 "cellfree_channels": cellfree, "cell_channels": cellful,
                 "grid_dir": str(grid_dir), "tl_phase_dir": args.tl_phase_dir},
