@@ -27,7 +27,7 @@ from pathlib import Path
 _script_dir = Path(__file__).parent
 sys.path.insert(0, str(_script_dir))
 
-from ecc_utils import ECC_MIN_CORR  # single source (0.99); written into drift_config
+from ecc_utils import get_aligner  # single source for the estimator score threshold
 
 # ============================================================
 # Edit per experiment
@@ -86,7 +86,16 @@ KF_R_TX_NM2          = 274.0
 DRIFT_SAMPLE_INTERVAL = 1      # 1 = every position; N = every Nth (group leader)
 MAX_DRIFT_WORKERS     = 8      # 0 = auto (cpu_count - 4)
 ENABLE_THIRD_PASS     = True   # Run pass 3 (re-select grid after pass 2)
-# ECC_MIN_CORR imported from ecc_utils above (single source = 0.994); 0 disables filter
+# Drift estimator: "ecc_float" or "gaussian2d". Measured on 260819 (37 Pos):
+# gaussian2d has 4.3 nm ground-truth precision vs 5.2 nm, and 178 nm cell-content
+# bias vs 248 nm. The channel-selection threshold differs per estimator and comes
+# from ecc_utils.get_aligner, so it is never hand-copied here.
+ESTIMATOR    = "gaussian2d"
+# Constant added to the channel average when EVERY channel scored below the
+# threshold (i.e. all of them hold cells, so no cell-free reference is left in
+# the frame). Magnitude measured over 303 cell-bearing channels; the sign is
+# mirrored at POS_SPLIT by compute_drift_online. 0 disables the correction.
+CELL_BIAS_NM = 181.0
 
 # Optical parameters
 SENSOR_PIXEL_SIZE    = 3.45e-6
@@ -160,6 +169,10 @@ FLUO_FB2_OUT          = "1------"      # TIFilterBlock2 label: cube OUT (phase p
 
 # ============================================================
 
+
+# Resolved from ESTIMATOR so the config can never carry a threshold that does
+# not belong to the estimator actually in use.
+_ALIGN_FN, MIN_SCORE = get_aligner(ESTIMATOR)
 
 def _check_crop_sizes():
     if CROP_SUB_OUTPUT_CROP_H is not None and CROP_SUB_OUTPUT_CROP_H > TILT_CROP_H:
@@ -288,7 +301,9 @@ def main():
         "drift_sample_interval": DRIFT_SAMPLE_INTERVAL,
         "max_drift_workers":  MAX_DRIFT_WORKERS,
         "enable_third_pass":  ENABLE_THIRD_PASS,
-        "ecc_min_corr":       ECC_MIN_CORR,
+        "ecc_min_corr":       MIN_SCORE,
+        "estimator":          ESTIMATOR,
+        "cell_bias_nm":       CELL_BIAS_NM,
 
         # Reconstruction
         "pos_split":          POS_SPLIT,

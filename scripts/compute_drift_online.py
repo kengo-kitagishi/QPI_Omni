@@ -66,7 +66,7 @@ def kf_step_posonly_nm(z_nm: float, pos_nm: float, P: float,
 
 
 from ecc_utils import (
-    tilt_fit_crop, extract_rect_roi, ecc_align,
+    tilt_fit_crop, extract_rect_roi, ecc_align, get_aligner,
     mad, remove_outliers_mad,
     # Float ECC input (clipped float32, no 8-bit quantisation) aliased to the
     # to_uint8 name so every call site below feeds float32 to ecc_align. The
@@ -709,7 +709,14 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
     n_channels = len(rois)
     vmin = cfg.get("ecc_vmin", -5.0)
     vmax = cfg.get("ecc_vmax", 2.0)
-    ecc_min_corr = cfg.get("ecc_min_corr", 0.0)
+    # Estimator is swappable: "ecc_float" (default) or "gaussian2d". Both return
+    # (tx, ty, score) in the same sign convention, but each needs its own score
+    # threshold, so fall back to the estimator's own default rather than to 0.0
+    # (which would silently disable channel filtering).
+    estimator = cfg.get("estimator", "ecc_float")
+    align, default_min_score = get_aligner(estimator)
+    ecc_min_corr = cfg.get("ecc_min_corr", default_min_score)
+    cell_bias_nm = cfg.get("cell_bias_nm", 0.0)
     jump_thresh = cfg.get("jump_thresh_um", 1.0)
     max_total = cfg.get("max_total_corr_um", 15.0)
     pixel_scale_um = cfg.get("pixel_scale_um", 0.3462)
@@ -800,7 +807,7 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
         cur_u8 = to_uint8(cur_crop, vmin, vmax)
 
         # Pass 1: grid(0,0)
-        result1 = ecc_align(ref_u8_p1, cur_u8)
+        result1 = align(ref_u8_p1, cur_u8)
         if result1 is None:
             return (ch_idx, None, None, None,
                     {"ch": ch_idx, "outlier": True, "status": "pass1_failed"})
@@ -819,7 +826,7 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
         if ref_u8_p2 is None:
             result2 = None
         else:
-            result2 = ecc_align(ref_u8_p2, cur_u8)
+            result2 = align(ref_u8_p2, cur_u8)
         if result2 is None:
             detail.update({"xi": xi2, "yi": yi2, "tx2": shift1_x, "ty2": shift1_y,
                            "corr2": corr1, "status": "pass2_ecc_failed"})
@@ -846,7 +853,7 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
                 if ref_u8_p3 is None:
                     result3 = None
                 else:
-                    result3 = ecc_align(ref_u8_p3, cur_u8)
+                    result3 = align(ref_u8_p3, cur_u8)
                 if result3 is not None:
                     fine3_x, fine3_y, corr3 = result3
                     final_shift_x = fine3_x + offset_x3
@@ -917,6 +924,19 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
     tx_avg = float(np.mean(tx_arr[used_idx]))
     ty_avg = float(np.mean(ty_arr[used_idx]))
     corr_avg = float(np.mean(corr_arr[used_idx]))
+
+    # Every channel scored below the threshold, so the average above is taken
+    # over cell-bearing channels and carries their content bias. Measured on
+    # 260819 over 37 Pos / 303 cell-bearing channels: 178 nm for gaussian2d
+    # (248 nm for ecc_float), constant in magnitude across Pos (mean residual
+    # 27 nm) and mirrored in sign at pos_split, where the channel layout flips.
+    # It is a per-Pos mean correction only -- per channel the bias scatters by
+    # ~73 nm and is not predictable from any available score.
+    cell_bias_applied_nm = 0.0
+    if cell_bias_nm and len(used_idx) == n_ch_raw and bool(np.all(low_corr_mask)):
+        sign = -1.0 if _pos_index_from_label(pos_label) >= pos_split else 1.0
+        cell_bias_applied_nm = sign * cell_bias_nm
+        tx_avg += cell_bias_applied_nm / (pixel_scale_um * 1000.0)
 
     # ---- EMA filter ----
     prev_ema_tx = prev_state["ema_tx_px"]
@@ -1000,6 +1020,8 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
         "kf_update": kf_update,
         "channel_details": sorted(channel_details, key=lambda x: x["ch"]),
         "n_channels_used": len(used_idx),
+        "cell_bias_applied_nm": cell_bias_applied_nm,
+        "estimator": estimator,
         "n_channels_raw": n_ch_raw,
         "tx_avg_px": tx_avg,
         "ty_avg_px": ty_avg,
