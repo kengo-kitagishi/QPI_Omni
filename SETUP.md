@@ -80,11 +80,6 @@ mkdir "$env:USERPROFILE\.cursor"
       "env": {
         "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer <NOTION_TOKEN>\", \"Notion-Version\": \"2022-06-28\"}"
       }
-    },
-    "clickup": {
-      "env": {
-        "CLICKUP_API_TOKEN": "<CLICKUP_TOKEN>"
-      }
     }
   }
 }
@@ -92,7 +87,7 @@ mkdir "$env:USERPROFILE\.cursor"
 
 > **注意**: `@notionhq/notion-mcp-server`（公式パッケージ）には既知のバグがあります。必ず `@mieubrisse/notion-mcp-server`（修正済みフォーク）を使用してください。
 
-`<NOTION_TOKEN>` と `<CLICKUP_TOKEN>` は管理者（研究室の先輩）から受け取ってください。
+`<NOTION_TOKEN>` は管理者（研究室の先輩）から受け取ってください。
 
 ---
 
@@ -105,7 +100,7 @@ MCP設定を反映させるため、Cursor を完全に再起動（終了→再�
 ## 7. 動作確認
 
 - Cursorのチャットで「明日10時にアラームを入れて」→ Google Calendar MCP が動作
-- 「PDMSのカット実験の予定を入れて」→ ClickUp にタスク作成
+- 「PDMSのカット実験の予定を入れて」→ Notion Tasks にタスク作成
 - 「〇〇はいずれ実装したい」→ GitHub Issues に自動登録
 - 「notionにまとめて」→ Notion に研究ノートを保存
 
@@ -116,7 +111,6 @@ MCP設定を反映させるため、Cursor を完全に再起動（終了→再�
 | ファイル | 役割 |
 |---|---|
 | `scripts/figure_logger.py` | 図の保存 + EXPERIMENT_LOG.md への自動追記 |
-| `scripts/clickup_helper.py` | ClickUp タスク作成ユーティリティ |
 | `.cursor/rules/task-routing.mdc` | Cursor の AIルーティングルール |
 | `docs/EXPERIMENT_LOG.md` | 実験ログ（figure_logger.py が自動更新） |
 
@@ -125,7 +119,6 @@ MCP設定を反映させるため、Cursor を完全に再起動（終了→再�
 ## トークンの取得方法（引き継ぎ用メモ）
 
 - **Notion トークン**: [https://www.notion.so/my-integrations](https://www.notion.so/my-integrations) → 「QPI Research」インテグレーション → Internal Integration Key
-- **ClickUp トークン**: ClickUp 設定 → Apps → API Token
 - **GitHub**: `gh auth login` でブラウザ認証（トークン不要）
 
 ---
@@ -173,11 +166,6 @@ notepad "$env:USERPROFILE\.cursor\mcp.json"
       "env": {
         "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer <NOTION_TOKEN>\", \"Notion-Version\": \"2022-06-28\"}"
       }
-    },
-    "clickup": {
-      "env": {
-        "CLICKUP_API_TOKEN": "<CLICKUP_TOKEN>"
-      }
     }
   }
 }
@@ -189,7 +177,7 @@ Cursor を完全に終了してから再起動してください。
 
 ### 5. 動作確認
 
-- 「PDMSのカット実験の予定を入れて」→ ClickUp にタスク作成
+- 「PDMSのカット実験の予定を入れて」→ Notion Tasks にタスク作成
 - 「notionにまとめて」→ Notion に研究ノートを保存
 
 VSCode + Claude 拡張を使う場合は、下記「Claude Code CLI のセットアップ」を参照してください。
@@ -245,11 +233,6 @@ mkdir -p ~/.cursor
       "env": {
         "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer <NOTION_TOKEN>\", \"Notion-Version\": \"2022-06-28\"}"
       }
-    },
-    "clickup": {
-      "env": {
-        "CLICKUP_API_TOKEN": "<CLICKUP_TOKEN>"
-      }
     }
   }
 }
@@ -304,6 +287,6 @@ claude
 
 ### 5. 動作確認
 
-- 「PDMSのカット実験の予定を入れて」→ ClickUp にタスク作成
+- 「PDMSのカット実験の予定を入れて」→ Notion Tasks にタスク作成
 - 「notionにまとめて」→ Notion に研究ノートを保存
 - 「〇〇はいずれ実装したい」→ GitHub Issues に自動登録
