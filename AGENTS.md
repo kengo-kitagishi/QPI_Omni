@@ -11,80 +11,82 @@
 
 ### ルール
 - この時間帯に他のタスクを入れない
-- Notion・Google Calendar APIを使って部活タスクを**移動・変更・削除しない**
-- 手動での変更はユーザー自身が Notion 上で行う
-- 「昨日の予定を今日に移す」などの一括操作でも、部活タスクは対象外とする
+- Notion API（Notion MCP）を使って部活タスクを**移動・変更・削除しない**
+- 手動での変更はユーザー自身が Notion（Tasks DB）上で行う
+- 「昨日の予定を今日に移す」などの一括操作（リスケ・期限の一括変更を含む）でも、部活タスクおよび繰り返しテンプレート由来の固定タスク（部活・jog 等）は常に対象外とする
 
 ---
 
 # タスク・スケジュール管理ルール
 
-## 大原則：予定・タスク管理はすべてNotionを使う
+## 大原則：予定・タスク管理はすべて Notion を使う
 
-**ClickUpは使用しない（2026-09-04 に ClickUp 運用を終了）。**
-タスク・予定の追加・変更・削除・確認は、すべて **Notion MCP** を使って
-`タスク管理（GTD）> Tasks` データベースに対して行う。
+**Google Calendar MCP は使用しない。**
+予定・タスクの追加・変更・確認・整理はすべて **Notion MCP** で、GTD の **Tasks DB** に対して行う（ClickUp はもう使わない）。**予定はすべてこの Tasks DB に入れる。**
 
-- Tasks DB: <https://app.notion.com/p/82b434bf5057464e888a6b3be2bc9e87>
-  （data source: `collection://7fb3f2db-e277-4883-b686-b364b2be9df7`）
-- その日の予定は **朝の秘書（morning brief / `/morning`）が出したもの**に従う。
-  こちらで勝手に別の時間割を組み直さない。
-- Google Calendar は **参照のみ**（既に入っている固定予定を読むため）。
-  予定の正本は Notion Tasks。
+- Tasks DB: https://www.notion.so/82b434bf5057464e888a6b3be2bc9e87
+- **data_source_id: `7fb3f2db-e277-4883-b686-b364b2be9df7`**（ページ作成時の parent に必ず指定）
+- 毎日の入口は「☀️ Today」ページ → https://www.notion.so/Today-36feda96228e8191be78efdb26b825a4
 
-## Notion にタスクを作るトリガー
+## タスク作成のトリガー
 
-以下のキーワードが含まれる場合は Notion MCP でタスクを作成する：
+以下のキーワードが含まれる場合は **Notion MCP（notion-create-pages）** で Tasks DB にタスク（ページ）を作成する：
 - 「予定を入れて」「予定を追加して」
 - 「タスクを入れて」「タスクを追加して」
 - 「スケジュールして」「ToDo」
 - 「やること」「やるべきこと」
 - 「実験の計画を入れて」「実験予定」
-- 「〇〇しましょう」「〇〇しよう」（明日・今日・来週など日付が伴う場合）
-- 「調べましょう」「調べよう」「調べておきたい」「リサーチしたい」
 
-## Tasks DB のプロパティの埋め方
+## 分類（Tag プロパティ）
 
-| プロパティ | 型 | 埋め方 |
-|---|---|---|
-| `Name` | title | タスク名（端的に） |
-| `Status` | select | 日時が決まっているものは `Remind`、決まっていなければ `Inbox` |
-| `期限` | date | 日付＋時刻。終了時刻がある場合は end に入れる |
-| `Tag` | multi_select | 内容で振り分け（下表） |
-| `優先度` | select | 高 / 中 / 低（判断できなければ 中） |
-| `固定` | checkbox | 動かしてはいけない予定（部活・授業・会議・発表）は ON |
-| `Project` | relation | 該当プロジェクトがあれば紐付ける |
-
-### Tag の振り分け（旧 ClickUp リストの置き換え）
+ClickUp のリストの代わりに Tasks DB の **Tag**（複数選択）で振り分ける：
 
 | 内容 | Tag |
 |------|-----|
-| 実験・測定・試料作製（PDMS, Bonding, 光学系など） | `実験` + `QPI` |
-| コード・解析・スクリプト作業 | `QPI` |
-| 計画・方針検討 | `QPI` |
+| 実験・測定・試料作製（PDMS, Bonding, 光学系 等） | `実験` |
 | 論文・原稿作業 | `原稿` |
+| コード・解析・計画などその他の研究 | `QPI` |
 | 勉強・論文読み | `STUDY` |
 | ミーティング・発表 | `MEETING` |
-| 事務・申請・連絡 | `ADMIN` |
-| 部活・jog・体重 | `部活` / `jog` / `weight` |
-| その他私生活 | `プライベート` または `OTHERs` |
+| 就活・応募 | `JOB APPLICATION` |
+| 事務・雑務 | `ADMIN` |
+| 陸上 | `部活` / `T&F` / `jog` / `weight` |
+| その他私生活 | `プライベート` / `OTHERs` |
 
-判断が難しい場合は `QPI` をデフォルトとして使う。
+判断が難しい場合は `QPI` をデフォルトにする。
 
-## タスクの時間設定
+## Status（GTD の状態）
 
-- 時間の指定がない場合: **12:00開始・2時間（14:00まで）**
-- 「午前」と言われた場合: 9:00開始・3時間（12:00まで）
-- 「午後」と言われた場合: 13:00開始・3時間（16:00まで）
-- 時間が明示された場合（例: 「10時から」）: その時間を使う
+- 日時が決まった予定 → `Remind` ＋ `期限` をセット
+- 今日やる → `NextAction` ／ とりあえず放り込む → `Inbox`
+- 待ち → `Waiting` ／ いつか → `WishList` ／ 完了 → `Done`
+
+迷ったら「日時あり = `Remind`」「日時なし = `Inbox`」。
+
+## 時間設定（期限プロパティ）
+
+`期限` は展開プロパティで指定する（`date:期限:start` に ISO-8601、時刻ありは `date:期限:is_datetime` = 1）。
+
+- 時間の指定がない場合: **12:00開始**
+- 「午前」: 9:00 開始 ／ 「午後」: 13:00 開始
+- 時間が明示された場合（例: 「10時から」）: その時刻
+- 終日でよい場合は is_datetime=0（日付のみ）
+
+## 空き時間を答えるとき
+
+「いつ空いてる？」「来週いける日は？」と聞かれたら、**Notion Tasks と Google Calendar の両方を読む**。
+どちらか片方だけでは予定が抜ける：
+
+- Notion にしかないもの: utelecon の勤務、実験・原稿などの作業枠
+- Google Calendar にしかないもの: labmeeting、group meeting、ご飯、起きる
+
+読むだけで、この確認のためにタスクは作らない。
 
 ## 判断が曖昧な場合
 
-- 「明日〇〇して」→ Notion Tasks（`Status = Remind`、期限に日時）
-- 「明日〇時に〇〇の通知」「アラーム」「リマインド」→ Siri に設定するよう案内する
-- 予定そのものの確認（「来週いつ空いてる？」など）→ Google Calendar と Tasks を読んで答える。タスクは作らない
-
----
+- 「明日〇〇して」→ Notion（Tasks DB にタスク。日時なしは `Inbox`）
+- 「明日〇時に〇〇の通知」→ Google Calendar（アラーム）
+- 両方が求められている場合は両方に作成する
 
 ## GitHub Issues（「いずれやること」の自動登録）
 
@@ -100,7 +102,7 @@
 - 「〜はTODO」「〜をissueに挙げて」（明示的な指示）
 
 ### トリガーにしない（Issueを作らない）
-- 今すぐやること → Notion Tasks または直接実装
+- 今すぐやること → Notion（Tasks DB）または直接実装
 - 研究の思考・気づき → Notionの思考メモ
 - 過去形の発言
 
@@ -120,6 +122,154 @@ Issue作成後は以下の1行だけ報告する（長い説明不要）：
 ```
 Issue作成: #番号「タイトル」→ URL
 ```
+
+---
+
+## figure_logger JSONサイドカーへの自動コンテキスト注記
+
+`figure_logger.py` を使うスクリプトを実行し、結果の解釈を会話で提示した後、**確認なしに自動で**対応するJSONサイドカーファイルに `context` フィールドをpatchする。
+
+### patchする内容
+
+```json
+{
+  "context": {
+    "objective": "ユーザーが何を見たかったか（会話から読み取る）",
+    "method": "どのスクリプトをどのデータで実行したか",
+    "result": "主要な数値結果",
+    "interpretation": "その数値が何を意味するか（会話での解釈をそのまま）"
+  }
+}
+```
+
+### JSONサイドカーの場所
+
+```
+G:\共有ドライブ\wakamotolab_meeting\kitagishi\figure-hub\inbox\YYYY-MM-DD\<script>\<run_id>\<basename>.json
+```
+
+実行ログに `inbox saved:` として表示されたパスの `.json` ファイル（`.png` と同じbasenamで拡張子が `.json`）。
+
+### patchの方法
+
+```python
+import json
+from pathlib import Path
+
+p = Path(r"<JSONサイドカーのパス>")
+meta = json.loads(p.read_text(encoding="utf-8"))
+meta["context"] = {
+    "objective": "...",
+    "method": "...",
+    "result": "...",
+    "interpretation": "..."
+}
+p.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+```
+
+### タイミング
+
+結果を会話でまとめた直後に実行する。同じ実行セッションで複数の図が保存された場合は、まとめてpatchする。報告は1行でよい：
+
+```
+JSONコンテキスト注記: <script> <run_id>（N件）
+```
+
+---
+
+## 図への後付けメモ（figure inbox notes）
+
+図を生成した後に気づいた解釈・仮説を figure inbox JSON の `notes` フィールドに追記する。
+
+### トリガー
+会話中に「〇〇スクリプトの〇〇時の図」＋ 解釈・気づきが含まれる発言。
+
+例：
+- 「14時ごろのshift_visualizeの図、飢餓期のシフト増加は細胞変形かも」
+- 「昨日の36の図、背景差し引きが不完全な可能性がある」
+
+### Claudeが行う手順
+
+1. **特定**: `~/Documents/Obsidian Vault/00_Inbox/figure_inbox/` 内のJSONを検索
+   - スクリプト名（部分一致）でフィルタ
+   - `created_at_utc` を JST（UTC+9）に変換して時刻照合
+   - 複数候補 → ファイル名リストを提示してユーザーに確認
+
+2. **追記**: JSON の `notes` フィールドに追加
+```json
+"notes": [
+  {
+    "added_at": "YYYY-MM-DDTHH:MM:SS+09:00",
+    "text": "ユーザーの言葉をそのまま記載"
+  }
+]
+```
+   - `notes` フィールドが存在しない場合は新規追加
+   - 既存の場合は配列に append
+
+3. **報告**: 1行のみ
+```
+メモ追記: 2026-03-11_shift_visualize_...f005.json → 「飢餓期のシフト...」
+```
+
+4. **Notion 思考メモにも保存**（研究内容を含む場合）: 通常の思考メモルールに従う
+
+---
+
+## 図を作る/保存する時（必ず）— FIGURE_SPEC 準拠
+
+QPI_Omni の `docs/FIGURE_SPEC.md` に従う。**最低限ここで担保**（詳細・型別実例・標準対応は FIGURE_SPEC.md を読む）:
+1. 図は必ず **source-data（実数値 csv/npz）と caption を一緒に保存**する（任意にしない）
+2. caption に各プロット量の **「操作的定義（生データからの計算法。軸ラベルではない）」を必ず**書く
+3. caption に **誤差バーの定義・n（単位付き）・統計検定名・条件（株/培地/温度/phase）** を書く
+
+満たす標準: FAIR / journal Source Data / Ten Simple Rules / Cumming-Vaux 誤差報告 / MDAR。
+
+---
+
+## 図の品質ルール（最重要）
+
+**図を生成するときは常に論文品質（publication-ready）にすること。**
+品質は「努力目標」ではなく**3層のインフラで担保する**。手書きで rcParams を散発的に設定しない。
+
+### 第1層: 見た目の地（自動・忘れ防止の本体）
+
+- スクリプト冒頭で **`import figure_logger`（または `from figure_logger import save_figure`）すれば、`paper.mplstyle` が import 時に自動適用される**（フォント7pt・Arial/Helvetica・上右spine除去・内向きティック・Okabe-Ito・pdf.fonttype=42・figsize 89mm）。
+- 実体: `~/QPI_Omni/scripts/paper.mplstyle`。手動なら `plt.style.use("paper")` でも可。
+- **`subplots()` より前に import すること**（rcParams は図の生成時に焼き付くため）。
+
+### 第2層: 色の意味（生の #xxxxxx を書かない）
+
+- 色は必ず **`qpi_colors`** から取る。同じ条件はどの図でも同じ色にする。
+  - `fate_color("divided")` / `fate_palette(...)`（survivor=青 / non_survivor=朱 / no_data=灰、同義語を自動吸収）
+  - `PHASE_COLORS`（growth/starvation/recovery）, `SEQUENTIAL="cividis"`（連続量 dry mass/RI）
+- jet/rainbow は禁止。
+
+### 第3層: 種類別の作法（素の ax.scatter / ax.bar を書かない）
+
+散布図・バー・lineage は **`qpi_plots` の関数を使う**（設計判断が内蔵済み）:
+- `qp.scatter_fate(ax, x, y, fate)` … alpha・小マーカー・rasterize・白フチ・2群凡例
+- `qp.bar_with_points(ax, {群:値})` … 0始まり・SEM/95%CI明示・個別点重ね
+- `qp.lineage_traces(ax, t, traces, groups=)` … 薄い個別線＋濃い平均±CI帯
+- `qp.add_phase_spans(ax, MEDIA_SWITCHES)`, `qp.panel_label(ax,"a")`, `qp.two_legends(...)`, `qp.new_figure("single"|"double")`
+
+### 共通の必須事項
+
+- **サイズ**: 単幅 89mm / 両幅 183mm。指定なければ単幅（`qp.new_figure` が実寸固定）。
+- **保存**: PDF/SVG 優先（`save_figure(..., fmt="pdf")`）。PNG は 300 DPI 以上（save_figure 既定=300）。
+- **エラー表示**: データがあれば SEM か 95%CI を必ず入れ、どちらか明記。
+- **軸ラベル**: 単位を必ず含める（例: 時間 [h]、RI、dry mass [pg]）。
+- 異なる凡例のデータは**まずパネルを分ける**。1軸に重ねるなら色=変数A・形/線種=変数Bにして `two_legends`。
+
+### 自己検証（報告前に必ず実行・ループを閉じる）
+
+図を生成したら、**完了報告の前に出力画像を Read して**目視チェックする。1つでも✗なら直してから報告する：
+1. 上・右の spine が消えているか
+2. フォント・線幅が揃い matplotlib デフォルト感がないか
+3. 散布: 重なり処理（alpha/小マーカー/rasterize）されているか
+4. バー: 0 から始まり、誤差バーと個別点があるか
+5. 凡例が適切（枠なし・過不足なし、複数なら整理）か
+6. 色が `qpi_colors` の意味どおりか（条件と色が一致）
 
 ---
 
@@ -144,13 +294,20 @@ save_figure(fig, params={"key": value, ...}, description="この図が何を示�
 ```bash
 # 修正した図を新バージョンとして登録（SVG/PDFペア対応）
 python3 ~/Desktop/figure-hub/scripts/fig_register.py --id fig_xxx --src /path/to/fig.svg --note "修正内容"
+# → fig_register.py 実行時に route-sync が自動実行され、登録済みの配布先に最新版が届く
 
-# lock更新して project に反映（lock → sync）
+# 配布先を新規登録（初回のみ）
+python3 ~/Desktop/figure-hub/scripts/figure_hub.py route-add \
+  --id fig_xxx \
+  --root /path/to/destination/folder \
+  --dest figure/fig_xxx.pdf
+
+# 手動で全図を配布先に同期
+python3 ~/Desktop/figure-hub/scripts/figure_hub.py route-sync
+
+# 特定の版を固定したい場合のみ use + sync（thesis提出など）
 python3 ~/Desktop/figure-hub/scripts/figure_hub.py use --project thesis_overleaf --id fig_xxx --version latest --dest "figure/xxx.pdf"
 python3 ~/Desktop/figure-hub/scripts/figure_hub.py sync --project thesis_overleaf --project-root "/Users/kitak/History-dependent-survival-and-adaptation-to-glucose-starvation-in-fission-yeast"
-
-# 図ごとに複数フォルダへ配布（lockは変更しない）
-python3 ~/Desktop/figure-hub/scripts/fig_project.py deliver --id-item "fig_xxx::figure/xxx.pdf" --project-root "/path/to/dst1" --project-root "/path/to/dst2"
 
 # 必要なら Drive に mirror
 python3 ~/Desktop/figure-hub/scripts/figure_hub.py push-drive
@@ -159,11 +316,11 @@ python3 ~/Desktop/figure-hub/scripts/figure_hub.py push-drive
 ### 図修正依頼のルール（重要）
 
 **修正依頼の起点はユーザーの発言のみ。**
-AIが図を見て気になる点を発見しても、Obsidianへの記録・Notionへのタスク化は一切行わない。
+AIが図を見て気になる点を発見しても、Obsidianへの記録・Notion へのタスク化は一切行わない。
 
 **ユーザーが「この図を直したい」と言ったとき：**
 1. ユーザーの言葉をもとに以下フォーマットで整形し、Obsidianの修正依頼ファイルに追記する
-2. 「記録しました」と報告するだけ。Notionタスク化はしない
+2. 「記録しました」と報告するだけ。Notion タスク化はしない
 
 ```markdown
 - fig_id: fig_xxx
@@ -175,16 +332,16 @@ AIが図を見て気になる点を発見しても、Obsidianへの記録・Noti
 
 記録先: `~/Documents/Obsidian Vault/00_Inbox/figures/figure_fix_inbox.md`
 
-**Notionタスク化の自動トリガー（確認不要、自動で実行）：**
+**Notion タスク化の自動トリガー（確認不要、自動で実行）：**
 
-会話の冒頭で `figure_fix_inbox.md` を読み、以下の条件に該当する項目があれば自動で Notion Tasks（`Tag = 原稿`）にタスクを作成し、ユーザーに報告する：
+会話の冒頭で `figure_fix_inbox.md` を読み、以下の条件に該当する項目があれば自動で Tasks DB（Tag=`原稿`、Status=`NextAction`、`期限`=締め切り）にタスクを作成し、ユーザーに報告する：
 
 | 条件 | タイミング |
 |---|---|
 | `status: open` の項目が記録されてから **7日以上**経過 | 週1回相当で自然に発火 |
 | その図が使われている学会・提出締め切りが **2週間以内** | 締め切りベースで優先化 |
 
-タスク作成後、`figure_fix_inbox.md` の該当項目に `notion_task_url: https://...` を追記する。
+Notion タスク作成後、`figure_fix_inbox.md` の該当項目に `notion_task_url: <作成したNotionページURL>` を追記する。
 
 **図を修正・registerしたとき：**
 ユーザーが `register` コマンドを実行したとき、またはCursorが代わりに実行したとき、
@@ -197,9 +354,9 @@ AIが図を見て気になる点を発見しても、Obsidianへの記録・Noti
   note: vXXX としてregister済み（YYYY-MM-DD）
 ```
 
-これをしないと、修正済みの図に対して再びNotionタスクが作られてしまう。
+これをしないと、修正済みの図に対して再び Notion タスクが作られてしまう。
 
-**`clickup-sync` コマンドは使わない（ClickUp運用は終了）。`recommend` の自動実行も禁止。** ユーザーが明示的に依頼した時のみ実行する。
+**`recommend` コマンドの自動実行は禁止。** ユーザーが明示的に依頼した時のみ実行する。
 
 ### プロジェクトとバージョンの考え方
 
@@ -234,26 +391,26 @@ figure-hub のプロジェクト名は以下の規則で統一する。
 
 ### 用途別ロックポリシー
 
-**全用途でuse + syncを使う。**直コピーは追跡できないので使わない。
+**日常運用は route-sync が主軸。**`use + sync` は特定バージョンを固定したいときだけ使う。直コピーは追跡できないので使わない。
 
-| 用途 | project-root の場所 | 終了後 |
-|------|---------------------|--------|
-| 修論 | `/Users/kitak/History-dependent-survival-and-adaptation-to-glucose-starvation-in-fission-yeast` | git push したらそのまま |
-| グループミーティング | 都度ユーザーに確認 | freeze で固定 |
-| 学会・poster | 都度ユーザーに確認 | freeze で固定 |
-| progress / journal club | 都度ユーザーに確認 | freeze で固定 |
-| academic application | 都度ユーザーに確認 | freeze で固定 |
+| 用途 | 配布方法 | 終了後 |
+|------|----------|--------|
+| グループミーティング | `route-add` で配布先登録 → `route-sync`（自動）| `freeze-root` で固定 |
+| 学会・poster | `route-add` で配布先登録 → `route-sync`（自動）| `freeze-root` で固定 |
+| progress / journal club | `route-add` で配布先登録 → `route-sync`（自動）| `freeze-root` で固定 |
+| academic application | `route-add` で配布先登録 → `route-sync`（自動）| `freeze-root` で固定 |
+| 修論（バージョン固定） | `use + sync`（thesis_overleaf、特定版を固定） | git push したらそのまま |
 
-**use・sync のプロジェクト指定は毎回ユーザーに確認する。**`thesis_overleaf` 以外は project-root が毎回異なるため、自動で決め打ちしない。
+**配布先の登録は初回だけ。以降は `fig_register.py` 実行時に自動で `route-sync` が走る。**
 
-**終了後の freeze：**
+**発表終了後の freeze：**
 ```bash
-python3 ~/Desktop/figure-hub/scripts/figure_hub.py freeze \
-  --project <project_name> \
-  --snapshot <project_name>_done
+python3 ~/Desktop/figure-hub/scripts/figure_hub.py freeze-root \
+  --root /path/to/presentation/folder
+# → FIGURES.md と sources/ を生成し、以後 route-sync の対象外になる
 ```
 
-### 図修正の手順（register → use → sync）
+### 図修正の手順（register → route-sync）
 
 **自動検出トリガー：**
 - ファイルパス（`.pdf` / `.png` / `.svg` / `.afdesign`）が会話に登場した
@@ -268,31 +425,33 @@ python3 ~/Desktop/figure-hub/scripts/fig_register.py \
   --id <fig_id> \
   --src <書き出したファイルのパス> \
   --note "<修正内容>"
+  # オプション: --data /path/to/data.npz  --code /path/to/generate.py
 ```
 
 - SVG を渡した場合: SVG→`{fig_id}_svg` + PDF自動書き出し→`{fig_id}` を同時 register、staging から削除
 - 非 SVG の場合: `{fig_id}` として register、staging から削除
+- **register 完了時に `route-sync` が自動実行**され、登録済みの全配布先に最新版が届く
 
-**Step 2. use と sync（ユーザーに確認してから実行）**
+**Step 2. 配布先が未登録の場合のみ route-add（ユーザーに確認してから）**
 
-```
-どのプロジェクトに反映しますか？（例: thesis_overleaf / groupmeeting_2026-03-05 / ...）
-```
-
-と聞いてから実行する。`thesis_overleaf` の場合は project-root が固定なので確認不要。
+新しい発表フォルダへの配布が必要な場合は、route-addで配布先を登録する。
 
 ```bash
-# use
-python3 ~/Desktop/figure-hub/scripts/figure_hub.py use \
-  --project <project_name> \
+python3 ~/Desktop/figure-hub/scripts/figure_hub.py route-add \
   --id <fig_id> \
-  --version latest \
-  --dest "<figure/内のファイル名.pdf>"
+  --root <発表フォルダのルートパス> \
+  --dest "figure/<ファイル名.pdf>"
+```
 
-# sync
+登録後は次回以降 register するたびに自動で届く。
+
+**thesis_overleaf にバージョン固定で反映する場合のみ use + sync：**
+```bash
+python3 ~/Desktop/figure-hub/scripts/figure_hub.py use \
+  --project thesis_overleaf --id <fig_id> --version latest --dest "figure/<ファイル名.pdf>"
 python3 ~/Desktop/figure-hub/scripts/figure_hub.py sync \
-  --project <project_name> \
-  --project-root "<発表資料などのルートディレクトリ>"
+  --project thesis_overleaf \
+  --project-root "/Users/kitak/History-dependent-survival-and-adaptation-to-glucose-starvation-in-fission-yeast"
 ```
 
 **Step 3. thesis_overleaf の場合のみ git push**
@@ -308,14 +467,14 @@ git push origin master
 
 **Step 5. figure-hub 側の自動記録を使う（確認不要・自動）**
 
-`figure_hub.py sync` 実行後に `figure-hub` 側で以下を自動実行する（手動の Notion MCP 投稿はしない）:
+`route-sync` 実行後に `figure-hub` 側で以下を自動実行する（手動の Notion MCP 投稿はしない）:
 
 - `reports/sync_post/events/*.json` に変更前後の差分を保存
 - `reports/sync_post/summaries/*.md` に人間向けサマリを保存
 - `sync_post_hook` が設定されていれば Notion 投稿を自動実行
 
 **Step 6. 完了報告**
-「fig_xxx vXXX を登録・<project_name> に反映しました」と1行で報告する。
+「fig_xxx vXXX を登録・全配布先に route-sync しました」と1行で報告する。
 
 ---
 
@@ -550,7 +709,12 @@ week_label = today.strftime("%Y-W%V")
 
 **Step 2: 情報収集（以下の順で読む）**
 
-1. **週次索引**（`python3 scripts/weekly_report_hub.py` 出力）を読む。索引に列挙されたファイルを Read する。
+【重大ルール】索引ファイルは 10,000〜20,000 行になることがある。**絶対に冒頭だけ読んで省略してはならない。**
+行数を `wc -l` で確認し、3000 行超なら 2500 行ずつ Task agents を並列実行して全行読む。
+
+1. **週次索引**（`python3 scripts/weekly_report_hub.py --week YYYY-Www` 出力）を全行読む。
+   - 行数確認 → 3000行超の場合は 2500行ずつ並列 Task agents で分割読み
+   - 索引に列挙されたセッション .md は**全文**読む（先頭 N 行だけではない）
 2. **Obsidian notion_sync** を読む:
    ```bash
    ls ~/Documents/Obsidian\ Vault/00_Inbox/notion_sync/api/YYYY-MM-DD/
@@ -571,7 +735,9 @@ claude_sessions .md のタイムライン（Edit/Bash の順）と figure inbox 
 
 - **トピック（内容）単位**でまとめる。セッション単位で区切らない
 - 各トピックで「設計 → 実行 → 図 → 次にこう変更」の**因果の流れ**を記述
-- 1まとまりあたり **Qiita 記事相当の厚み**（背景・手順・コード抜粋・結果・学び）
+- 1まとまりあたり **最低 2000 日本語文字以上、目安 3000〜5000 字**（Qiita 記事相当）
+  - 「2000字」= 日本語文字で 2000 文字（ASCII 換算ではない）。もっと長くていい
+  - 情報を落とさない。短くまとめようとしない
 - 編集・Bash・図の時刻から因果を推論し、その順で記述
 - 「まとめ」「結論」などの形式張った見出しは使わない
 - **タスクリスト形式にしない**
@@ -582,7 +748,7 @@ claude_sessions .md のタイムライン（Edit/Bash の順）と figure inbox 
 **Step 4: Obsidian に保存**
 
 ```bash
-# ファイルが既に存在する場合は上書き確認をユーザーに求める
+# ファイルが既に存在する場合も確認なしで上書きする
 ~/Documents/Obsidian\ Vault/04_WeeklyReports/YYYY-Www.md
 ```
 
@@ -591,12 +757,239 @@ claude_sessions .md のタイムライン（Edit/Bash の順）と figure inbox 
 週次レポート作成: YYYY-Www（MM/DD–MM/DD）
 保存先: ~/Documents/Obsidian Vault/04_WeeklyReports/YYYY-Www.md
 トピック数: N
+総文字数（概算）: N 字
 ```
 
 ### Quality Gate（保存前に確認）
 
+- [ ] 索引を全行読んだ（冒頭だけで省略していない）
+- [ ] セッションファイルを全文読んだ（先頭 N 行だけではない）
 - [ ] 各トピックに因果の流れ（設計→実行→結果→次の一手）がある
+- [ ] 各トピックが最低 2000 日本語文字以上ある
 - [ ] コード・コマンドの抜粋がある（再現できる程度）
 - [ ] 図を適切に参照している（ある場合）
 - [ ] タスクリスト形式になっていない
 - [ ] 定量的な記述または「解析中」の明記がある
+- [ ] Obsidian 保存はユーザー確認なしで自動実行した
+
+---
+
+# 研究背景・実験の種類・解析フロー
+
+## 研究の目的
+
+**ラベルフリーQPI（定量位相イメージング）で酵母細胞の乾燥質量（dry mass）を測定し、栄養飢餓からの回復における細胞の運命決定を調べる。**
+
+具体的な問い：
+- 栄養回復後に**分裂を再開できる細胞**と**再開できない細胞**は、飢餓時点で乾燥質量・細胞サイズがどう違うのか
+- どのような細胞が生き残り、どのような細胞が生き残らないのか
+- 乾燥質量の違いが生存・非生存の群の違いをどの程度説明できるか
+
+**使用生物**: 分裂酵母（*Schizosaccharomyces pombe*）
+
+## 測定原理
+
+QPI（オフアクシス干渉計）で位相シフトを測定 → 屈折率（RI）を算出 → dry mass に換算
+
+```
+dry mass ∝ ∫∫ Δn(x,y) dA
+Δn = n_cell - n_medium
+```
+
+- 位相シフト（ラジアン）から積分すると乾燥質量に比例する量が得られる
+- 細胞ごとにセグメンテーション → ROI内で積分
+
+## 実験の種類
+
+### タイプA: 2% → 0% → 2%（標準飢餓・回復実験）
+
+```
+[増殖期]    → [飢餓]      → [回復期]
+2% glucose    0% glucose    2% glucose
+（wo_2）      （wo_0）      （wo_2）
+```
+
+- 最もよく使う主力実験
+- MEDIA_SWITCHES の典型例: `(0,"wo_2"), (288,"wo_0"), (576,"wo_2")`
+
+### タイプB: 2% → Low% → 0% → 2%（段階的飢餓）
+
+```
+[増殖期] → [中間濃度] → [飢餓] → [回復期]
+2%          0.0055/0.01/0.04%    0%    2%
+```
+
+- `wo_0.0055`, `wo_0.01`, `wo_0.04` を追加使用
+- 段階的にグルコースを下げてから0%にする
+
+### 焦点確認・光学調整（単発撮影）
+
+- 目的: 焦点が合っているか・アライメントが正しいかを確認
+- スクリプト: `01_realtime_visibility_monitor.py`, `34_align_and_subtract_simple.py`
+- 解析パイプラインは走らせない
+
+### スナップショット
+
+- 目的: 光学系の安定性確認・セットアップ確認
+- 解析パイプラインは基本走らせない
+
+## 解析パイプライン（タイムラプス）
+
+```
+生データ (img_*.tif)
+    ↓ 10_batch_reconstruction_new.py
+位相再構成 (output_phase/*.tif, float32, radian)
+    ↓ 19_gaussian_backsub.py
+背景補正 (bg_corr/*.tif)
+    ↓ 36_align_and_subtract_timelapse.py
+アライメント + 空チャンネル差し引き (subtracted/*.tif)
+    ↓ 07_segmentation.py (Omnisegger)
+セグメンテーション (inference_out/*_masks.tif)
+    ↓ 32_simple_ellipse_ri.py
+細胞ごとのRI・サイズ時系列 (Results.csv → 楕円近似)
+    ↓ qpi_fig_*.py / Omnisegger
+図生成・キモグラフ・統計解析
+```
+
+## 最終アウトプット
+
+1. **細胞ごとのRI（屈折率）時系列** → dry mass の代理指標
+2. **細胞サイズ（Major/Minor軸）時系列**
+3. **分裂再開群 vs 非再開群の比較**:
+   - 飢餓前・飢餓中・回復期ごとの統計的違い
+   - キモグラフ（Omnisegger経由）
+   - 生存・非生存を分ける予測因子としての乾燥質量・サイズ
+
+## Omnisegger との連携
+
+- マスク（`*_masks.tif`）と位相差し引き画像を渡す
+- キモグラフ生成・細胞追跡・可視化に使用
+
+## 用語整理
+
+| 用語 | 意味 |
+|------|------|
+| `ph_1` | 細胞のタイムラプス本体フォルダ |
+| `wo_*` | 培地（without cells）の空チャンネル |
+| `Pos0` | 常に背景参照ポジション（細胞なし） |
+| dry mass | 乾燥質量。位相シフトの積分から算出 |
+| RI | 屈折率（refractive index）。dry massと線形関係 |
+| アライメント | フレーム間のずれ補正（ECC法） |
+| 背景差し引き | `wo_*` を引いて培地由来の位相を除去 |
+| 分裂再開群 | 栄養回復後に分裂を再開した細胞 |
+| 非分裂群 | 栄養回復後も分裂しなかった細胞 |
+
+---
+
+# データフォルダ構造・命名規則
+
+## 生データ（Micromanager出力）
+
+```
+E:\Acquisition\kitagishi\YYMMDD\{experiment_name}\
+├── Pos0/          ← 必ず空チャンネル（細胞なし・背景参照用）
+├── Pos1/          ← 測定ポジション（細胞あり）
+├── Pos2/
+└── PosN/
+```
+
+各 Pos フォルダ内のファイル命名：
+```
+img_000000004_ph_000.tif
+img_000000004_Default_001.tif
+```
+- 中間の長いゼロ列はMicromanager固有のID
+- 末尾3〜5桁がフレーム番号（0-indexed）
+- モード: `ph`（位相） or `Default`
+
+## タイムラプス実験のフォルダ構造
+
+```
+YYMMDD\{experiment_name}\
+├── Pos0/          ← 空チャンネル
+├── ph_1/          ← メイン計測（細胞あり・タイムラプス）
+│   ├── Pos1/
+│   ├── Pos2/
+│   └── ...
+├── wo_0/          ← 空チャンネル（0% グルコース培地）
+│   ├── Pos1/
+│   └── ...
+├── wo_2/          ← 空チャンネル（2% グルコース培地）
+│   ├── Pos1/
+│   └── ...
+├── wo_0.0055/     ← 中間濃度（実験タイプBのみ）
+├── wo_0.01/
+└── wo_0.04/
+```
+
+- `ph_1` = 細胞のタイムラプス
+- `wo_*` = 培地ごとの空チャンネル（背景差し引き・RI補正に使用）
+- 空チャンネルと細胞チャンネルは同一ポジションで対応
+
+## パイプライン出力フォルダ（自動生成）
+
+```
+Pos{N}/
+├── output_phase/          ← 位相再構成画像（float32, ラジアン）
+│   └── img_*_phase.tif
+├── output_colormap/       ← カラーマップ可視化（オプション）
+├── bg_corr/               ← ガウス背景補正後
+│   └── *_bg_corr.tif
+└── {timelapse_dir}/
+    ├── aligned/           ← アライメント後
+    ├── subtracted/        ← 背景差し引き後
+    │   └── *_subtracted.tif
+    └── subtracted_colored/ ← 可視化
+```
+
+アライメントメタデータ：`alignment_transforms.json`（shift_x, shift_y, correlation含む）
+
+## セグメンテーション出力
+
+```
+{timelapse_dir}/
+└── inference_out/
+    ├── *_masks.tif         (uint16, ラベルID)
+    ├── *_binary.tif        (uint8)
+    └── *_overlay.tif       (RGB)
+```
+
+## グルコース濃度と wo_* の対応
+
+| フォルダ名 | グルコース濃度 | 使用場面 |
+|-----------|--------------|---------|
+| `wo_2`    | 2%           | 増殖期・回復期 |
+| `wo_0`    | 0%           | 飢餓期 |
+| `wo_0.0055` | 0.0055%   | 実験タイプB中間 |
+| `wo_0.01` | 0.01%        | 実験タイプB中間 |
+| `wo_0.04` | 0.04%        | 実験タイプB中間 |
+
+## MEDIA_SWITCHES（タイムライン定義）
+
+```python
+MEDIA_SWITCHES = [
+    (0,   "wo_2"),   # 0フレーム〜: 2%グルコース
+    (288, "wo_0"),   # 288フレーム〜: 0%（飢餓）
+    (576, "wo_2"),   # 576フレーム〜: 2%（回復）
+]
+# フレーム数 = 時間(h) × 12（5分間隔 = 12枚/h）
+```
+
+## 光学定数（optical_config.py）
+
+```python
+WAVELENGTH = 658e-9          # 658nm レーザー
+NA = 0.95                    # 対物レンズ NA
+PIXELSIZE = 3.45e-6 / 40    # m/px（センサ3.45µm, 40x対物）
+CROP_REGION = (0, 2048, 208, 2256)  # (y_start, y_end, x_start, x_end)
+OFFAXIS_CENTER = (1710, 644) # オフアクシス干渉縞の中心（定期更新）
+```
+
+## ImageJ ROI解析 CSV（Results.csv）
+
+```
+Label, Major, Minor, X, Y, Angle, Slice, Area, ...
+```
+- `Major`, `Minor`: 楕円近似の長径・短径（ピクセル）
+- `X`, `Y`: 重心座標
+- `Slice`: フレーム番号（1-indexed）
