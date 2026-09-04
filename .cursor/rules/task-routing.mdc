@@ -49,8 +49,8 @@ alwaysApply: true
 
 ## 空き時間を答えるとき
 
-**Notion Tasks と Google Calendar の両方を読む。** 勤務や作業枠は Notion にしかなく、
-labmeeting・group meeting・ご飯は Google Calendar にしかない。この確認でタスクは作らない。
+**Notion Tasks だけを読む。Google Calendar は見ない。** 予定はすべて Tasks DB にある前提で答え、
+Tasks DB に無いものは「無い」として扱う。この確認でタスクは作らない。
 
 ## 固定予定
 

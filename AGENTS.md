@@ -74,18 +74,14 @@ ClickUp のリストの代わりに Tasks DB の **Tag**（複数選択）で振
 
 ## 空き時間を答えるとき
 
-「いつ空いてる？」「来週いける日は？」と聞かれたら、**Notion Tasks と Google Calendar の両方を読む**。
-どちらか片方だけでは予定が抜ける：
-
-- Notion にしかないもの: utelecon の勤務、実験・原稿などの作業枠
-- Google Calendar にしかないもの: labmeeting、group meeting、ご飯、起きる
-
+「いつ空いてる？」「来週いける日は？」と聞かれたら、**Notion Tasks だけを読む。Google Calendar は見ない。**
+予定はすべて Tasks DB に入っている前提で答え、Tasks DB に無いものは「無い」として扱う。
 読むだけで、この確認のためにタスクは作らない。
 
 ## 判断が曖昧な場合
 
 - 「明日〇〇して」→ Notion（Tasks DB にタスク。日時なしは `Inbox`）
-- 「明日〇時に〇〇の通知」→ Google Calendar（アラーム）
+- 「明日〇時に〇〇の通知」「アラーム」「リマインド」→ Siri に設定するよう案内する（Google Calendar は使わない）
 - 両方が求められている場合は両方に作成する
 
 ## GitHub Issues（「いずれやること」の自動登録）

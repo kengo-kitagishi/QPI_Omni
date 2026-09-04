@@ -21,8 +21,8 @@ claude.ai の設定 → 個人設定 に貼る本文。dotfiles の `CLAUDE.md` 
        ミーティング・発表→MEETING ／ 就活→JOB APPLICATION ／ 事務・雑務→ADMIN ／
        陸上→部活・T&F・jog・weight ／ 私生活→プライベート・OTHERs（迷ったら QPI）
 - 時間未指定→12:00開始。「午前」→9:00開始。「午後」→13:00開始。
-- 「いつ空いてる？」と聞かれたら Notion Tasks と Google Calendar の両方を読む。
-  勤務・作業枠は Notion に、labmeeting・ご飯は Google Calendar にしかない。確認だけならタスクは作らない。
+- 「いつ空いてる？」と聞かれたら Notion Tasks だけを読む。Google Calendar は見ない。
+  Tasks DB に無い予定は「無い」として扱う。確認だけならタスクは作らない。
 - その日の動き方は朝の秘書（morning brief）が出した予定に従う。勝手に組み直さない。
 - 固定が ON の予定（部活・授業・会議・発表）は自動で動かさない。
 - 「アラーム」「通知して」「リマインド」→ Siri に設定するよう案内する。
