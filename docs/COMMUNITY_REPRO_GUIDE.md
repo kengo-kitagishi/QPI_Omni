@@ -1,4 +1,4 @@
-# Claude Code + Claude.ai + Codex + ClickUp + Notion + Obsidian + Google Drive
+# Claude Code + Claude.ai + Codex + Notion + Obsidian + Google Drive
 # 研究自動化システム 完全再現手順（macOS基準）
 
 最終更新: 2026-02-27 (JST)
@@ -7,7 +7,7 @@
 
 ## 0. この手順で再現できるもの
 
-- Cursor / Claude Code から ClickUp・Notion を呼ぶ MCP 構成
+- Cursor / Claude Code から Notion を呼ぶ MCP 構成
 - QPI_Omni の作業ログ標準（`WORKLOG_SPEC.md`）
 - Notion -> Obsidian の定期同期（launchd / 24時間）
 - Obsidian・プレゼン資料・thesis を Google Drive に定期ミラー（launchd / 24時間）
@@ -61,7 +61,6 @@ ls -la "$REPO_DIR/dist/community_automation_bundle.tgz"
 - 必須アプリ: Cursor, Obsidian, Google Drive for Desktop, Terminal
 - APIトークン:
   - Notion Internal Integration Token
-  - ClickUp API Token
 
 > 注意: 本書では機密値を `<...>` として記載。実値は貼らないこと。
 
@@ -142,7 +141,7 @@ gh auth login
 
 ---
 
-## 5. Cursor MCP 設定（Notion + ClickUp）
+## 5. Cursor MCP 設定（Notion）
 
 ### Step 5-1. `~/.cursor/mcp.json` を作成
 
@@ -156,11 +155,6 @@ cat > "$USER_HOME/.cursor/mcp.json" <<'JSON'
       "args": ["-y", "@mieubrisse/notion-mcp-server"],
       "env": {
         "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer <NOTION_TOKEN>\", \"Notion-Version\": \"2022-06-28\"}"
-      }
-    },
-    "clickup": {
-      "env": {
-        "CLICKUP_API_TOKEN": "<CLICKUP_TOKEN>"
       }
     }
   }

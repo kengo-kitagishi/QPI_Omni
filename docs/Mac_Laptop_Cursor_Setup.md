@@ -1,5 +1,9 @@
 # Mac Laptop - Cursor環境セットアップ完了
 
+> **注記（2026-09-04）**: この作業ログは当時の記録です。ClickUp 運用は 2026-09-04 に終了し、
+> 予定・タスク管理は Notion（タスク管理（GTD） > Tasks）に一本化しました。
+> `clickup_helper.py` も削除済みです。**セットアップ手順としては使わないでください**（`SETUP.md` を参照）。
+
 **日付**: 2026年2月26日  
 **スクリプト**: clickup_helper.py, .cursor/mcp.json
 
