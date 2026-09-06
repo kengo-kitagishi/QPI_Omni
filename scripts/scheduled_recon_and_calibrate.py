@@ -14,16 +14,16 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 PYTHON = sys.executable
 SCRIPT_DIR = Path(__file__).resolve().parent
-GRID_DIR = Path(r"E:\260819\grid_ye_1")
-OUTPUT_DIR = Path(r"E:\260819\grid_ye_1")
-Z_INDEX = 3
+GRID_DIR = Path(r"C:\260906\grid_YE_0p05_1")
+OUTPUT_DIR = Path(r"D:\AquisitionData\Kitagishi\260906\grid_YE_0p05_1")
+Z_INDEX = 5
 POS_SPLIT = 50
 N_WORKERS_DETECT = 20
 N_WORKERS_CALIBRATE = 4
 N_GRID_THREADS = 7
 # Set True when reconstruction is already done and the raw data is gone
 # (Step 1 needs GRID_DIR raw; Steps 2-3 only need OUTPUT_DIR).
-SKIP_RECON = True
+SKIP_RECON = False
 
 pattern_re = re.compile(r"^(Pos\d+)_x\+0_y\+0$")
 
