@@ -53,7 +53,7 @@ BATCHES = [
 GRID_HALF     = 5       # 11 x 11 = 121 points per Pos
 N_Z           = 11      # z-slices per point
 Z_INDEX       = 6       # focus plane used for calibration / channel detect
-POS_SPLIT     = 51      # unchanged from the previous session; Pos0..Pos35 all
+POS_SPLIT     = 50      # unchanged from the previous session; Pos0..Pos35 all
                         # fall on crop_before
 # z planes to reconstruct. None = all N_Z. The raw here is deleted after
 # verification, so every plane must be reconstructed -- a focus-only recon would

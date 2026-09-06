@@ -148,7 +148,7 @@ GLUCOSE_0_END   = 2885   # frame index (exclusive)
 RAW_CROP        = _OPTICAL_RAW_CROP
 TILT_CROP_H_RAW = 270
 ECC_CROP_H      = 80       # must match compute_pos_shifts.py
-POS_SPLIT       = 51       # must match compute_pos_shifts.py
+POS_SPLIT       = 50       # must match compute_pos_shifts.py
 
 # Output crop height override (None -> use channel_rois.json crop_h)
 OUTPUT_CROP_H = None

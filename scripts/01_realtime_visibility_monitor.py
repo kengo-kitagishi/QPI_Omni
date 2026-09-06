@@ -12,7 +12,7 @@ from threading import Lock
 
 from optical_config import OFFAXIS_CENTER, WAVELENGTH as WAVELENGHTH, NA, PIXELSIZE
 
-WATCH_FOLDER = r"D:\AquisitionData\Kitagishi\basler_image_seq\vis_1\Pos0"
+WATCH_FOLDER = r"D:\AquisitionData\Kitagishi\basler_image_seq\vis_2\Pos0"
 # Basler aca2440 has max 2048 rows, so MicroManager CROP_REGION is not used
 CROP_REGION = (0, 2048, 208, 2256)
 

@@ -19,7 +19,7 @@ from pathlib import Path
 SD = Path(__file__).resolve().parent
 PY = sys.executable
 GRID = Path(r"E:\260617\0per_grid_0p05um_1")
-POS_SPLIT = 53
+POS_SPLIT = 50
 PATTERN = "*_ph_005_phase.tif"
 RIGHT_CX = (350, 420)   # Pos <  POS_SPLIT : wall near ~390
 LEFT_CX = (80, 180)     # Pos >= POS_SPLIT : wall near ~110

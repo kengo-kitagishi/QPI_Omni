@@ -15,7 +15,7 @@ Do not modify WAVELENGTH / NA / PIXELSIZE unless hardware changes.
 # Parameters to update before experiments
 # ============================================================
 
-OFFAXIS_CENTER = (1617, 418)   # (row, col) -- updated 2026-08-10 (crop 400:2448 right channel)
+OFFAXIS_CENTER = (1580, 383)   # (row, col) -- updated 2026-09-05 (crop 400:2448 right channel)
 
 # Crop region (row_start, row_end, col_start, col_end)
 # Update when camera position changes
@@ -44,6 +44,7 @@ PIXELSIZE    = 3.45e-6 / 40     # m/px  (sensor 3.45 um, 40x objective)
 # Add new entries at the top for each experiment
 
 OFFAXIS_HISTORY = [
+    {"date": "2026-09-05", "center": (1580,  383), "note": "after optical realignment; measured from basler_image_seq vis_1/Pos0, stable within 1 px over 5 frames (crop 400:2448)"},
     {"date": "2026-08-10", "center": (1617,  418), "note": "re-measured from basler_image_seq vis_1/Pos0 (crop 400:2448)"},
     {"date": "2026-07-29", "center": (1638,  439), "note": "re-measured from 260729 ye_grid_0p05um_1 raw (crop 400:2448)"},
     {"date": "2026-05-17", "center": (1632,  444), "note": "re-measured for new experiment session (crop 400:2448)"},

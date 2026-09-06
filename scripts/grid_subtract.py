@@ -112,7 +112,7 @@ TILT_CROP_H_RAW  = 270
 
 # Pos split threshold for which side to take background 1/3 (same as compute_pos_shifts.py).
 # Pos number < POS_SPLIT -> fit with left 1/3. Pos number >= POS_SPLIT -> fit with right 1/3.
-POS_SPLIT        = 51
+POS_SPLIT        = 50
 
 # Erode the valid (non-OOB) mask by this many px at the OOB boundary before
 # zeroing.  valid_out (warp-ones > 0.999) keeps the first in-frame column, but

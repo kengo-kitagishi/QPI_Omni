@@ -18,7 +18,7 @@ PYTHON = sys.executable
 RAW = Path(r"C:\260617\0per_grid_0p05um_2")
 OUT = Path(r"E:\260617\0per_grid_0p05um_1")
 Z_INDEX = 5
-POS_SPLIT = 53
+POS_SPLIT = 50
 TARGETS = [f"Pos{n}" for n in range(31, 36)]  # Pos31..Pos35
 
 
