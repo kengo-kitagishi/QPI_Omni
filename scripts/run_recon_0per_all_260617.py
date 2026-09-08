@@ -27,7 +27,7 @@ RAW2 = Path(r"C:\260617\0per_grid_0p05um_2")
 RAW3 = Path(r"C:\260617\0per_grid_0p05um_3")
 OUT = Path(r"E:\260617\0per_grid_0p05um_1")
 Z_INDEX = 5
-POS_SPLIT = 50
+POS_SPLIT = 51
 BG_LABEL = "Pos0"
 
 

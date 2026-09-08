@@ -48,7 +48,7 @@ BATCHES = [
 GRID_HALF     = 5       # 11 x 11 = 121 points per Pos
 N_Z           = 11      # z-slices per point
 Z_INDEX       = 6       # focus plane used for calibration / channel detect
-POS_SPLIT     = 50      # unchanged; Pos71..Pos102 fall on crop_after
+POS_SPLIT     = 51      # unchanged; Pos71..Pos102 fall on crop_after
 # z planes to reconstruct. None = all N_Z. The raw here is deleted after
 # verification, so every plane must be reconstructed -- a focus-only recon would
 # throw the rest away permanently. ~23 MB/point x 3993 points = ~92 GB.

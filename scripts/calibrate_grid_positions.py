@@ -65,7 +65,7 @@ X_STEP             = 0.05      # Grid step [um]
 Y_STEP             = 0.05
 SHIFT_SIGN_X       = -1
 SHIFT_SIGN_Y       = -1
-POS_SPLIT          = 50    # Pos < POS_SPLIT: left 1/3 fit, Pos >= POS_SPLIT: right 1/3 fit
+POS_SPLIT          = 51    # Pos < POS_SPLIT: left 1/3 fit, Pos >= POS_SPLIT: right 1/3 fit
 
 # Save the error / correlation heatmaps. Off for many-Pos batch runs: the
 # figures go to the shared Google Drive inbox and cost ~45 s per Pos, which

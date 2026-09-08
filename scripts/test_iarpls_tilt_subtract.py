@@ -58,7 +58,7 @@ CAL_JSON        = r"E:\260517\grid_2pergluc_2\grid_calibration_Pos75.json"
 GRID_Z_INDEX = 8
 TILT_CROP_H  = 270
 POS_NUM      = 75
-POS_SPLIT    = 50
+POS_SPLIT    = 51
 FIT_RIGHT    = POS_NUM >= POS_SPLIT  # True for Pos75
 
 # Output OUTSIDE the crop_sub tree (user request)

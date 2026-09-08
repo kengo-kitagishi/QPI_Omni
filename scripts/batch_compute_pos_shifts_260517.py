@@ -35,7 +35,7 @@ POS_START     = 1
 POS_END       = 104
 
 GRID_Z_INDEX  = 8       # this dataset's plane (+1.2 um); matches new calibration
-POS_SPLIT     = 50
+POS_SPLIT     = 51
 ECC_CROP_H    = 80
 TILT_CROP_H   = 270
 # ECC_MIN_CORR imported from ecc_utils above (single source = 0.99)

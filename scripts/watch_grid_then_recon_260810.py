@@ -64,7 +64,7 @@ BATCHES = [
 GRID_HALF     = 5       # 11 x 11 = 121 points per Pos
 N_Z           = 11      # z-slices per point
 Z_INDEX       = 6       # focus plane, measured: 0-based index 6 = +0.4 um
-POS_SPLIT     = 50
+POS_SPLIT     = 51
 # z planes to reconstruct. None = all N_Z. Only the focus plane is consumed by
 # calibration / channel detect / the online timelapse ECC, so restricting this
 # cuts reconstruction ~11x. Safe for batch 2 only, whose raw is kept on D: and

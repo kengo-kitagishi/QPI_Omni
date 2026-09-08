@@ -7,7 +7,7 @@ Batch 2 of the 260906 grid session (batch 1 = Pos0..Pos35, raw already deleted).
           Pos0 (BG) + Pos36..Pos57 (2783 points)
   output  D:\AquisitionData\Kitagishi\260906\grid_YE_0p05_2
 
-This batch straddles POS_SPLIT=50: Pos36..49 reconstruct on crop_before, Pos50..57
+This batch straddles POS_SPLIT=51: Pos36..50 reconstruct on crop_before, Pos51..57
 on crop_after. batch_reconstruction_grid switches per Pos, so no special handling
 is needed here.
 
@@ -59,7 +59,7 @@ N_Z           = 11      # z-slices per point
 # the grid_calibration_*.json and channel_rois.json, set Z_INDEX, re-run
 # scheduled_recon_and_calibrate.py with SKIP_RECON=True.
 Z_INDEX       = 5
-POS_SPLIT     = 50      # this batch straddles it: Pos36-49 before, Pos50-57 after
+POS_SPLIT     = 51      # this batch straddles it: Pos36-50 before, Pos51-57 after
 # z planes to reconstruct. None = all N_Z. The raw is deleted after verification,
 # so every plane must be reconstructed. ~23 MB/point x 4356 points = ~100 GB.
 RECON_Z_INDICES = None

@@ -54,7 +54,7 @@ N_Z           = 11      # z-slices per point
 # the grid_calibration_*.json and channel_rois.json, set Z_INDEX, re-run
 # scheduled_recon_and_calibrate.py with SKIP_RECON=True.
 Z_INDEX       = 5
-POS_SPLIT     = 50      # Pos0..Pos35 all fall on crop_before
+POS_SPLIT     = 51      # Pos0..Pos35 all fall on crop_before
 # z planes to reconstruct. None = all N_Z. The raw is deleted after verification,
 # so every plane must be reconstructed. ~23 MB/point x 4356 points = ~100 GB.
 RECON_Z_INDICES = None
