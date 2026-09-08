@@ -52,7 +52,7 @@ DIRECT_RUN_CONFIG = {
     "align_major_axis": True,
     "flip_horizontal": False,
     "panel_count": 6,
-    "pixel_size_um": 0.348,
+    "pixel_size_um": 0.34567514677103717,  # 0.08625*2048/511 (511x511) ~= 0.346; was 0.348 (507 assumption)
     "time_interval_min": None,
     "scalebar_um": 2.0,
     "wavelength_nm": 658.0,
@@ -223,8 +223,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--pixel-size-um",
         type=float,
-        default=0.348,
-        help="Pixel size in micrometers for scale bars and metric conversion. Default: 0.348.",
+        default=0.34567514677103717,
+        help="Pixel size in micrometers for scale bars and metric conversion. Default: 0.346 (0.08625*2048/511, 511x511).",
     )
     parser.add_argument(
         "--time-interval-min",

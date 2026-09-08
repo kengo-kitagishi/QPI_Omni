@@ -649,7 +649,7 @@ python scripts/32_simple_ellipse_ri.py
 ```bash
 python scripts/central_cell_lineage_tracker.py \
   --indir /Volumes/2604/260423/ph_1/Pos9/output_phase/channels/crop_sub_rawraw_0per_corr/ch00 \
-  --pixel-size-um 0.348 \
+  --pixel-size-um 0.346 \
   --time-interval-min 5
 ```
 
