@@ -5,7 +5,7 @@ volume_trace-style series on one figure (labels: PosN_chXX).
 
 Examples:
   cd scripts
-  python batch_volume_trace_overlay.py --ph-root F:/path/to/ph_260405 --mass-ylim 0 40000
+  python batch_volume_trace_overlay.py --ph-root F:/path/to/ph_260405 --mass-ylim 0 40
   python batch_volume_trace_overlay.py --ph-root ... --pos Pos1
   python batch_volume_trace_overlay.py --ph-root ... --quick-list   # fast filesystem scan only
   python batch_volume_trace_overlay.py --ph-root ... --list-only    # full volume validation, slow
@@ -127,13 +127,14 @@ def make_volume_trace_overlay(
 
         volume = df["volume_um3_rod"].to_numpy(dtype=float)
         mean_ri = df["mean_ri"].to_numpy(dtype=float)
-        mass_pg = df["mass_pg"].to_numpy(dtype=float)
+        # Display scale: divide by 1000 (suspected upstream factor-of-1000 in mass calc)
+        mass_disp = df["mass_pg"].to_numpy(dtype=float) / 1000.0
 
         axes[0].plot(x, volume, color=color, lw=1.0, label=label, alpha=0.9)
         if np.isfinite(mean_ri).any():
             axes[1].plot(x, mean_ri, color=color, lw=1.0, alpha=0.9)
-        if np.isfinite(mass_pg).any():
-            axes[2].plot(x, mass_pg, color=color, lw=1.0, alpha=0.9)
+        if np.isfinite(mass_disp).any():
+            axes[2].plot(x, mass_disp, color=color, lw=1.0, alpha=0.9)
 
     axes[0].set_title("A  Rod volume estimate (all Pos / ch)", loc="left")
     axes[0].set_ylabel("Volume [um^3]")
@@ -324,7 +325,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--volume-ylim", nargs=2, type=float, default=[0.0, 400.0])
     p.add_argument("--mean-ri-ylim", nargs=2, type=float, default=[1.34, 1.37])
-    p.add_argument("--mass-ylim", nargs=2, type=float, default=[0.0, 40000.0])
+    p.add_argument("--mass-ylim", nargs=2, type=float, default=[0.0, 40.0])
     p.add_argument(
         "--vline-frames",
         nargs="+",

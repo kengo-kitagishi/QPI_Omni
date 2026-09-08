@@ -41,6 +41,8 @@ MANUAL_EXCLUDE = {
     ("Pos44", "ch09"), ("Pos46", "ch00"), ("Pos39", "ch00"), ("Pos40", "ch03"),
     ("Pos38", "ch00"), ("Pos42", "ch00"), ("Pos23", "ch01"), ("Pos32", "ch02"),
     ("Pos30", "ch07"), ("Pos7", "ch06"), ("Pos32", "ch03"),
+    # User-requested removal from the phase1-dead swelling analysis (2026-06-25).
+    ("Pos26", "ch08"), ("Pos2", "ch08"), ("Pos37", "ch08"),
 }
 
 

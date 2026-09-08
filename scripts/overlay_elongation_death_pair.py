@@ -29,15 +29,16 @@ TIME_INTERVAL_MIN = 5.0
 
 
 def plot_one_metric(gold, metric: str, ylabel: str, ylim, out_label: str):
-    fig, ax = plt.subplots(figsize=(7.20, 3.60))
-    # gold-standard background (thin gray lines)
-    for pos, ch in gold:
+    fig, ax = plt.subplots(figsize=(140 / 25.4, 52 / 25.4))
+    # gold-standard survivors as thin gray spaghetti (individual trajectories)
+    for j, (pos, ch) in enumerate(gold):
         traj = load_mother_phase1(pos, ch)
         if traj is None:
             continue
         t, y = _pick_metric(traj, metric)
-        ax.plot(t, y, color="#4a4a4a", linewidth=0.15, alpha=0.18,
-                zorder=1, solid_capstyle="butt")
+        ax.plot(t, y, color="#9a9a9a", linewidth=0.3, alpha=0.35,
+                zorder=1, solid_capstyle="butt",
+                label=(f"surviving lineages (n={len(gold)})" if j == 0 else None))
     palette = ["#56B4E9", "#D55E00"]  # blue, orange-red
     for i, (pos, ch, death_frame, note) in enumerate(ELONGATION_PAIR):
         traj = load_mother_phase1(pos, ch)
@@ -45,7 +46,7 @@ def plot_one_metric(gold, metric: str, ylabel: str, ylim, out_label: str):
             continue
         t, y = _pick_metric(traj, metric)
         color = palette[i]
-        ax.plot(t, y, color=color, linewidth=0.8, alpha=0.9,
+        ax.plot(t, y, color=color, linewidth=1.1, alpha=0.95,
                 zorder=10 + i, solid_capstyle="butt",
                 label=f"{pos}_{ch} ({note})")
         # vertical line at YAML-reported death frame
@@ -57,19 +58,17 @@ def plot_one_metric(gold, metric: str, ylabel: str, ylim, out_label: str):
     ax.set_xlabel("time [h]", fontsize=8)
     ax.set_ylabel(ylabel, fontsize=8)
     ax.tick_params(labelsize=7)
+    for s in ("top", "right"):
+        ax.spines[s].set_visible(False)
     metric_pretty = {
-        "mean_RI": "refractive index",
+        "mean_RI": "mean RI",
         "volume": "volume",
         "mass": "dry mass",
     }.get(metric, metric)
-    ax.legend(loc="upper right", fontsize=7, frameon=False,
-              title=f"elongation-cascade death (surviving n={len(gold)})",
-              title_fontsize=7)
-    ax.set_title(
-        f"Mother cell {metric_pretty}: two lineages undergoing "
-        f"elongation-cascade death vs surviving lineages",
-        fontsize=8,
-    )
+    ax.legend(loc="upper left", fontsize=6, frameon=False,
+              handlelength=1.4, labelspacing=0.3)
+    ax.set_title(f"Mother {metric_pretty}: elongation-cascade death vs survivors",
+                 fontsize=8)
     fig.tight_layout()
     save_figure(
         fig,

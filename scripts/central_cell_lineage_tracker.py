@@ -192,6 +192,7 @@ def collect_frame_pairs(
     bad_timepoints: Optional[set[int]] = None,
     frame_min: Optional[int] = None,
     frame_max: Optional[int] = None,
+    raw_dir: Optional[Path] = None,
 ) -> list[tuple[int, Path, Optional[Path], bool]]:
     """Return [(timepoint, mask_path, raw_path, is_bad), ...] in timepoint order.
 
@@ -220,7 +221,7 @@ def collect_frame_pairs(
               f"{len(kept)}/{len(mask_paths)} masks kept", file=sys.stderr)
         mask_paths = kept
     raw_paths = [
-        p for p in sorted(channel_dir.glob("*.tif"), key=lambda p: natural_key(p.name))
+        p for p in sorted((raw_dir or channel_dir).glob("*.tif"), key=lambda p: natural_key(p.name))
         if not p.stem.endswith(("_masks", "_binary"))
     ]
     raw_map = {p.stem: p for p in raw_paths}
@@ -853,6 +854,7 @@ def run(
     bad_frames: Optional[Path] = None,
     frame_min: Optional[int] = None,
     frame_max: Optional[int] = None,
+    raw_dir: Optional[Path] = None,
 ) -> None:
     bad_tp: Optional[set[int]] = None
     bad_reasons: dict[int, list[str]] = {}
@@ -872,6 +874,7 @@ def run(
         bad_timepoints=bad_tp,
         frame_min=frame_min,
         frame_max=frame_max,
+        raw_dir=raw_dir,
     )
     if max_frames is not None:
         pairs = pairs[:max_frames]
@@ -1108,7 +1111,9 @@ def run(
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--indir", type=Path, required=True,
-                   help="Channel directory containing phase TIFs and inference_out/*_masks.tif")
+                   help="Channel directory containing inference_out/*_masks.tif (and phase TIFs, unless --raw-dir given). lineage_out is written under indir/inference_out.")
+    p.add_argument("--raw-dir", type=Path, default=None,
+                   help="Directory of phase TIFs, if separate from --indir (e.g. masks on D:, phase on H:). Default: same as --indir.")
     p.add_argument("--pixel-size-um", type=float, default=0.348)
     p.add_argument("--time-interval-min", type=float, default=5.0,
                    help="Minutes per frame (set to 0 or negative to disable time axis)")
@@ -1163,6 +1168,7 @@ def main() -> int:
         bad_frames=args.bad_frames,
         frame_min=args.frame_min,
         frame_max=args.frame_max,
+        raw_dir=args.raw_dir,
     )
     return 0
 

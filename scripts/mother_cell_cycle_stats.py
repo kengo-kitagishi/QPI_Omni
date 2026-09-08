@@ -293,7 +293,9 @@ def _scatter_by_epoch(ax, df, xcol, ycol):
                    label=f"{ep} (n={len(sub)})")
 
 
-def fig_homeostasis(cycles: list[dict], by_quantity: bool = False) -> plt.Figure | None:
+def fig_homeostasis(cycles: list[dict], by_quantity: bool = False,
+                    xlims: list[tuple] | None = None,
+                    ylims: list[tuple] | None = None) -> plt.Figure | None:
     """Birth-vs-added scatter, 3 panels (volume / dry mass / mean RI).
 
     by_quantity=False (default): colour points by birth epoch (pre/starv/rec),
@@ -301,6 +303,10 @@ def fig_homeostasis(cycles: list[dict], by_quantity: bool = False) -> plt.Figure
     by_quantity=True: one colour per panel (volume=blue, mass=orange, RI=green),
         matching fig_aligned_trajectories and the within-cycle figure. Use this
         for single-epoch (phase1-only) cohorts where epoch colour is redundant.
+
+    xlims / ylims: optional per-panel (lo, hi) limits in panel order
+        [volume, mass, ri]; when given, the panel axes are fixed to these so the
+        figure can share a scale with the within-cycle companion (fig5).
     """
     if len(cycles) < 3:
         print("  [homeostasis] n_cycles < 3, skipping", file=sys.stderr)
@@ -323,7 +329,7 @@ def fig_homeostasis(cycles: list[dict], by_quantity: bool = False) -> plt.Figure
         ("birth_ri", "added_ri",
          "birth mean RI", "Δ mean RI", OI["green"]),
     ]
-    for ax, (xc, yc, xl, yl, color) in zip(axes, panels):
+    for i, (ax, (xc, yc, xl, yl, color)) in enumerate(zip(axes, panels)):
         if by_quantity:
             ax.scatter(df[xc], df[yc], color=color, alpha=0.30, s=8,
                        edgecolor="white", linewidth=0.2, rasterized=True)
@@ -338,6 +344,10 @@ def fig_homeostasis(cycles: list[dict], by_quantity: bool = False) -> plt.Figure
         ax.set_xlabel(xl)
         ax.set_ylabel(yl)
         ax.set_title(f"r={r:.2f}, p={p:.2e}")
+        if xlims is not None:
+            ax.set_xlim(*xlims[i])
+        if ylims is not None:
+            ax.set_ylim(*ylims[i])
     axes[0].legend(loc="best", frameon=False)
     return fig
 

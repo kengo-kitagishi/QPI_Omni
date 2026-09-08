@@ -153,7 +153,7 @@ if _epochs:
     save_figure(
         fig,
         params={"lr": lr_value, "n_epochs": n_epochs, "normalize": True,
-                "tyx": str(crop_size), "pretrained": os.path.basename(pretrained_model)},
+                "tyx": str(crop_size), "pretrained": os.path.basename(pretrained_model) if pretrained_model else "scratch"},
         description="Omnipose training loss curve with 50-epoch moving average"
     )
     plt.close(fig)

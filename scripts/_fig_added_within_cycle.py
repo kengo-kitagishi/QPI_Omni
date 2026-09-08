@@ -35,9 +35,8 @@ import pandas as pd
 from scipy.stats import pearsonr
 
 sys.path.insert(0, str(Path(__file__).parent))
-from overlay_gold_standard_and_phase1_dead import select_gold_standard  # noqa: E402
 from gold_standard_phase1_homeostasis import (  # noqa: E402
-    load_mother_cycles_csv, PHASE1_END_FRAME,
+    collect_added_table, shared_axes, fit_stats, caption_stats, PHASE1_END_FRAME,
 )
 from figure_logger import save_figure  # noqa: E402
 
@@ -51,71 +50,19 @@ PANELS = [
      "within-cycle Δ mean RI",            "#009E73"),
 ]
 BIRTH_KEY = {"volume": "birth_volume_um3", "mass": "birth_mass_pg", "ri": "birth_ri"}
-B2B_ADDED = {"volume": "added_volume_um3", "mass": "added_mass_pg", "ri": "added_ri"}
-
-
-def within_cycle_end(m_df_sorted: pd.DataFrame, f_birth: int, f_div: int,
-                     col: str) -> float | None:
-    """Value at the last valid frame in [f_birth, f_div-1].
-
-    Mirrors extract_cycle_traces: validity = ~(is_outlier | touches_border),
-    and rel=1 lands on the last such frame (np.interp clamp). Returns None if
-    fewer than 4 valid frames (the same guard the trace builder uses)."""
-    win = m_df_sorted[(m_df_sorted["frame"] >= f_birth)
-                      & (m_df_sorted["frame"] <= f_div - 1)]
-    win = win[~(win["is_outlier"] | win["touches_border"])]
-    if len(win) < 4:
-        return None
-    return float(win.iloc[-1][col])
-
-
-def collect() -> tuple[pd.DataFrame, int]:
-    """Pool gold-standard phase1 cycles; per cycle store birth value, the
-    birth-to-birth added (fig4) and the within-cycle added (fig4b)."""
-    gold = select_gold_standard()
-    rows: list[dict] = []
-    sources: set[str] = set()
-    for pos, ch in gold:
-        res = load_mother_cycles_csv(pos, ch, max_frame=PHASE1_END_FRAME)
-        if res is None:
-            continue
-        m_df, cycles = res
-        if not cycles:
-            continue
-        m_df = m_df.sort_values("frame")
-        for c in cycles:
-            ev = within_cycle_end(m_df, c["birth_frame"], c["div_frame"], "volume_um3_rod")
-            em = within_cycle_end(m_df, c["birth_frame"], c["div_frame"], "mass_pg")
-            er = within_cycle_end(m_df, c["birth_frame"], c["div_frame"], "mean_ri")
-            if ev is None or em is None or er is None:
-                continue
-            sources.add(f"{pos}/{ch}")
-            rows.append({
-                "source": f"{pos}/{ch}",
-                "birth_volume_um3": c["birth_volume_um3"],
-                "birth_mass_pg":    c["birth_mass_pg"],
-                "birth_ri":         c["birth_ri"],
-                # birth-to-birth (fig4)
-                "b2b_volume": c["added_volume_um3"],
-                "b2b_mass":   c["added_mass_pg"],
-                "b2b_ri":     c["added_ri"],
-                # within-cycle (fig4b)
-                "wc_volume":  ev - c["birth_volume_um3"],
-                "wc_mass":    em - c["birth_mass_pg"],
-                "wc_ri":      er - c["birth_ri"],
-            })
-    return pd.DataFrame(rows), len(sources)
 
 
 def main():
-    df, n_mothers = collect()
+    df, n_mothers = collect_added_table()      # shared cohort with fig4
     n = len(df)
     print(f"n_mothers={n_mothers} n_cycles={n}")
+    rng = shared_axes(df)                       # union(fig4 b2b, fig5 wc) + 5%
 
     fig, axes = plt.subplots(1, 3, figsize=(183 / 25.4, 65 / 25.4),
                              constrained_layout=True)
     data_out: dict[str, np.ndarray] = {}
     summary: dict[str, dict] = {}
+    wstats: dict[str, dict] = {}
     for ax, (key, col, xl, yl, color) in zip(axes, PANELS):
         x = df[BIRTH_KEY[key]].to_numpy()
         y = df[f"wc_{key}"].to_numpy()
@@ -123,28 +70,49 @@ def main():
 
         ax.scatter(x, y, s=10, alpha=0.35, color=color, edgecolor="none",
                    rasterized=True)
-        z = np.polyfit(x, y, 1)
-        r, p = pearsonr(x, y)
+        sw = fit_stats(x, y)                     # within-cycle, with uncertainty
+        wstats[key] = sw
         xline = np.linspace(float(x.min()), float(x.max()), 50)
-        ax.plot(xline, np.polyval(z, xline), color="#333", lw=1.0, ls="--",
-                label=f"slope={z[0]:.2g}\nr={r:.2f}, p={p:.1e}\n(n_cycles={n})")
+        ax.plot(xline, sw["slope"] * xline + (y.mean() - sw["slope"] * x.mean()),
+                color="#333", lw=1.0, ls="--",
+                label=f"slope={sw['slope']:.2g}±{sw['slope_se']:.2g}\n"
+                      f"r={sw['r']:.2f}, p={sw['p']:.1e}\n(n_cycles={n})")
         ax.set_xlabel(xl, fontsize=8)
         ax.set_ylabel(yl, fontsize=8)
         ax.tick_params(labelsize=7)
         ax.legend(loc="best", frameon=False, fontsize=6)
         ax.spines[["top", "right"]].set_visible(False)
+        ax.set_xlim(*rng[key]["xlim"])          # common x with fig4
+        ax.set_ylim(*rng[key]["ylim_wc"])       # same y-SPAN as fig4, own centering
 
-        # birth-to-birth (fig4) regression for the side-by-side comparison
-        zb = np.polyfit(x, yb, 1)
-        rb, pb = pearsonr(x, yb)
-        print(f"{key:6s}  fig4(b2b)     slope={zb[0]:.4g} r={rb:.3f} p={pb:.2e}  | "
-              f"fig4b(within) slope={z[0]:.4g} r={r:.3f} p={p:.2e}")
-        summary[key] = {"b2b": (float(zb[0]), float(rb), float(pb)),
-                        "within": (float(z[0]), float(r), float(p))}
+        sb = fit_stats(x, yb)                     # birth-to-birth, for comparison
+        print(f"{key:6s}  fig4(b2b)     slope={sb['slope']:.4g}±{sb['slope_se']:.2g} "
+              f"r={sb['r']:.3f}  | fig5(within) slope={sw['slope']:.4g}±"
+              f"{sw['slope_se']:.2g} r={sw['r']:.3f}")
+        summary[key] = {"b2b": sb, "within": sw}
 
         data_out[f"birth_{key}"] = x
         data_out[f"within_added_{key}"] = y
         data_out[f"b2b_added_{key}"] = yb
+        data_out[f"xlim_{key}"] = np.array(rng[key]["xlim"])
+        data_out[f"ylim_{key}"] = np.array(rng[key]["ylim_wc"])
+    caption = (
+        f"Within-cycle size addition in normally dividing mother cells "
+        f"(n = {n} cell cycles, {n_mothers} mothers; phase1 2% glucose growth, "
+        f"gold-standard cohort, EFD-corrected geometry). Each point is one cell "
+        f"cycle. y-axis = within-cycle added = value at the last frame before "
+        f"division (the peak just before splitting) − value at birth; x-axis = "
+        f"the birth size. This is the classic within-cycle adder (growth "
+        f"accumulated over one cycle), the companion to the birth-to-birth "
+        f"generational return map (fig4). Panels left→right: cell volume [µm³], "
+        f"dry mass [pg], mean RI (dimensionless). Points are individual cycles "
+        f"(no error bars); dashed line = ordinary-least-squares fit; slope ± "
+        f"standard error, r with a 95% CI (Fisher z) and two-sided p from a "
+        f"Pearson correlation ({caption_stats(wstats)}). "
+        f"The y-axis SPAN (height) is matched to the birth-to-birth figure "
+        f"(fig4) — each figure is centred on its own data with an identical "
+        f"vertical scale (units per length) — and the x-axis (birth size) is "
+        f"common, so the two figures can be compared directly.")
 
     save_figure(
         fig,
@@ -153,11 +121,12 @@ def main():
                 "phase1_end_frame": PHASE1_END_FRAME,
                 "n_mothers": int(n_mothers), "n_cycles": int(n),
                 "volume_variant": "efd",
-                "slopes": summary},
+                "shared_axes_with": "fig4 (gold_standard_phase1_homeostasis)",
+                "axis_margin": 0.05, "slopes": summary},
         description="within-cycle added vs birth (volume / dry mass / mean RI), "
                     "added = last frame before division minus birth, EFD-corrected "
-                    "volume, alpha scatter + dashed regression",
-        data=data_out,
+                    "volume, alpha scatter + dashed regression; axes shared with fig4",
+        caption=caption, data=data_out,
     )
     plt.close(fig)
 

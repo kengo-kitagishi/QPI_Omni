@@ -58,6 +58,8 @@ def process_channel(
     media_schedule: str | None,
     n_milliq: float | None,
     bad_frames: str | None = None,
+    frame_min: int | None = None,
+    frame_max: int | None = None,
 ) -> bool:
     print(f"\n{'='*60}\n=== {ch_dir.name} ===\n{'='*60}", flush=True)
 
@@ -66,6 +68,10 @@ def process_channel(
                "--indir", str(ch_dir)]
         if model_path:
             cmd += ["--model-path", model_path]
+        if frame_min is not None:
+            cmd += ["--frame-min", str(frame_min)]
+        if frame_max is not None:
+            cmd += ["--frame-max", str(frame_max)]
         rc = run(cmd)
         if rc != 0:
             print(f"!! 07_segmentation.py failed for {ch_dir.name} (rc={rc})", flush=True)
@@ -90,6 +96,10 @@ def process_channel(
         tracker_cmd += ["--n-milliq", str(n_milliq)]
     if bad_frames:
         tracker_cmd += ["--bad-frames", bad_frames]
+    if frame_min is not None:
+        tracker_cmd += ["--frame-min", str(frame_min)]
+    if frame_max is not None:
+        tracker_cmd += ["--frame-max", str(frame_max)]
     rc = run(tracker_cmd)
     if rc != 0:
         print(f"!! central_cell_lineage_tracker.py failed for {ch_dir.name} (rc={rc})", flush=True)
@@ -142,6 +152,15 @@ def main() -> int:
     p.add_argument("--bad-frames", default=None,
                    help="Path to bad_frames.json (from extract_bad_frames.py). "
                         "Bad timepoints for each Pos are excluded from tracking.")
+
+    # img_NNN-based frame window. Re-indexing happens in the tracker, so the
+    # lowest surviving frame becomes local frame 0 (time 0 in plots).
+    p.add_argument("--frame-min", type=int, default=None,
+                   help="Inclusive lower bound on img_NNN to include "
+                        "(applied to both segmentation and tracker).")
+    p.add_argument("--frame-max", type=int, default=None,
+                   help="Inclusive upper bound on img_NNN to include.")
+
     p.add_argument("--skip-batch-figures", action="store_true",
                    help="Skip the final cross-channel pooled overlay step.")
     p.add_argument("--ch-workers", type=int, default=1,
@@ -174,6 +193,8 @@ def main() -> int:
         media_schedule=args.media_schedule,
         n_milliq=args.n_milliq,
         bad_frames=args.bad_frames,
+        frame_min=args.frame_min,
+        frame_max=args.frame_max,
     )
 
     if args.ch_workers <= 1:

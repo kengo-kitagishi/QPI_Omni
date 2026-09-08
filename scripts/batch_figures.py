@@ -150,10 +150,11 @@ def _add_media_vlines(
     media_schedule: list[tuple[int, str]],
     media_ri: dict[str, float],
     time_interval_min: Optional[float],
+    time_zero_frame: int = 0,
 ) -> None:
     if not media_schedule:
         return
-    to_x = (lambda f: f * (time_interval_min / 60.0)) if time_interval_min else float
+    to_x = (lambda f: (f - time_zero_frame) * (time_interval_min / 60.0)) if time_interval_min else float
     for f_switch, name in media_schedule:
         if f_switch <= 0:
             continue
@@ -178,6 +179,7 @@ def overlay_figure(
     media_ri: dict[str, float],
     time_interval_min: Optional[float],
     title: str,
+    time_zero_frame: int = 0,
 ) -> Optional[plt.Figure]:
     """One thin line per channel + thick pooled mean."""
     sub = pooled.dropna(subset=[value_col]) if value_col in pooled.columns else pd.DataFrame()
@@ -187,7 +189,7 @@ def overlay_figure(
         return None
 
     fig, ax = plt.subplots(figsize=(140/25.4, 70/25.4), constrained_layout=True)
-    _add_media_vlines(ax, media_schedule, media_ri, time_interval_min)
+    _add_media_vlines(ax, media_schedule, media_ri, time_interval_min, time_zero_frame)
 
     sources = sorted(sub["source"].unique())
     x_key = "time_h" if "time_h" in sub.columns else "frame"
@@ -263,6 +265,10 @@ def run(channel_dirs: list[Path]) -> None:
         (m.get("time_interval_min") for m in metas if m.get("time_interval_min")),
         None,
     )
+    time_zero_frame = next(
+        (int(m.get("time_zero_frame")) for m in metas if m.get("time_zero_frame")),
+        0,
+    )
 
     params = {
         "n_channels": len(m_dfs),
@@ -270,6 +276,7 @@ def run(channel_dirs: list[Path]) -> None:
         "media_schedule": metas[0].get("media_schedule") if metas else None,
         "calibration_id": metas[0].get("calibration_id") if metas else None,
         "time_interval_min": time_interval_min,
+        "time_zero_frame": time_zero_frame,
     }
     data_source = {"raw_files": raw_files}
 
@@ -284,7 +291,7 @@ def run(channel_dirs: list[Path]) -> None:
     for col, ylab, color, title, desc in panels:
         fig = overlay_figure(pooled, col, ylab, color,
                              media_schedule, media_ri, time_interval_min,
-                             title)
+                             title, time_zero_frame)
         if fig is None:
             continue
         # Copy every channel's lineage_data3D.csv / clist.csv /
