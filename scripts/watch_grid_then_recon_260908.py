@@ -4,7 +4,7 @@ watch_grid_then_recon_260908.py
 Driver for the 260908 grid session.
 
   raw     C:\260908\ye_grid_0p05_2
-  output  D:\AquisitionData\Kitagishi\260908\ye_grid_0p05_2
+  output  E:\260908\ye_grid_0p05_2
 
 Waits for the acquisition to finish, then runs reconstruction, channel
 detection and grid calibration. All 11 z planes are reconstructed.
@@ -38,7 +38,7 @@ SESSION_DIR = Path(r"C:\260908")
 
 # The acquisition this script waits for before doing anything.
 WATCH_DIR = Path(r"C:\260908\ye_grid_0p05_2")
-OUTPUT_DIR = Path(r"D:\AquisitionData\Kitagishi\260908\ye_grid_0p05_2")
+OUTPUT_DIR = Path(r"E:\260908\ye_grid_0p05_2")
 
 # Pos list is discovered from disk at run time (see discover_complete_pos).
 BATCHES = [

@@ -26,7 +26,7 @@ from datetime import datetime
 from pathlib import Path
 
 RAW_DIR = Path(r"C:\260908\ye_grid_0p05_2")
-OUT_DIR = Path(r"D:\AquisitionData\Kitagishi\260908\ye_grid_0p05_2")
+OUT_DIR = Path(r"E:\260908\ye_grid_0p05_2")
 N_Z = 11
 N_POINTS = 121
 POLL_SECONDS = 120
