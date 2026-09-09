@@ -37,8 +37,8 @@ from pathlib import Path
 SESSION_DIR = Path(r"C:\260908")
 
 # The acquisition this script waits for before doing anything.
-WATCH_DIR = Path(r"C:\260908\ye_grid_0p05_2")
-OUTPUT_DIR = Path(r"E:\260908\ye_grid_0p05_2")
+WATCH_DIR = Path(r"C:\260908\ye_grid_0p05_3")
+OUTPUT_DIR = Path(r"E:\260908\ye_grid_0p05_3")
 
 # Pos list is discovered from disk at run time (see discover_complete_pos).
 BATCHES = [
@@ -362,6 +362,22 @@ def run_batch(batch, dry_run):
     return True
 
 
+def bg_already_reconstructed():
+    """True when Pos0's BG phase is in the output tree.
+
+    Reconstruction subtracts the BG from output_phase_raw, not from the raw
+    hologram, so a batch whose Pos0 raw was already deleted still reconstructs
+    as long as that BG survives.
+    """
+    n_z = N_Z if RECON_Z_INDICES is None else len(RECON_Z_INDICES)
+    for xi in range(-GRID_HALF, GRID_HALF + 1):
+        for yi in range(-GRID_HALF, GRID_HALF + 1):
+            d = OUTPUT_DIR / f"Pos0_x{xi:+d}_y{yi:+d}" / "output_phase_raw"
+            if not d.is_dir() or len(list(d.glob("img_*_ph_*_phase.tif"))) < n_z:
+                return False
+    return True
+
+
 def parse_pos_spec(spec):
     """'0-17', '0-17,40', '5' -> sorted list of Pos numbers."""
     out = set()
@@ -406,9 +422,13 @@ def main():
     if not complete:
         alert(f"no complete Pos in {WATCH_DIR}. Nothing to reconstruct.")
         sys.exit(5)
-    if 0 not in complete:
-        alert("Pos0 (the BG) is not complete. Reconstruction needs it. Aborting.")
+    if 0 not in complete and not bg_already_reconstructed():
+        alert("Pos0 (the BG) has neither raw nor a reconstruction in the output. "
+              "Reconstruction needs one of them. Aborting.")
         sys.exit(6)
+    if 0 not in complete:
+        log("Pos0 raw is gone, but its reconstructed BG is in the output tree; "
+            "reconstruction reads the BG from there.")
     if args.pos:
         wanted = set(parse_pos_spec(args.pos)) | {0}
         missing = sorted(pos for pos in wanted if pos not in complete)
