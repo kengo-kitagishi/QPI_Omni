@@ -68,7 +68,8 @@ RECON_Z_INDICES = None
 IDLE_MINUTES  = 30      # quiet time that ends the wait. Longer than the 260906
                         # value of 15: completion here is idle-only (no expected
                         # point count), so a pause must not trigger recon early.
-POLL_MINUTES  = 5
+POLL_MINUTES  = 10      # every poll walks the tree on a HDD the
+                        # acquisition is writing to; keep it infrequent
 MIN_FREE_GB_OUT = 200   # recon output is ~23 MB/point
 MIN_FREE_GB_RAW = 60    # alert when C: gets this low during acquisition
 
@@ -132,6 +133,12 @@ def point_names(pos_list):
                 yield f"Pos{pos}_x{xi:+d}_y{yi:+d}"
 
 
+# Point folders already confirmed to hold images. C: is a HDD and the
+# acquisition is writing to it: opening all ~12000 point folders every poll
+# competes with Micro-Manager's saving, so each folder is inspected once.
+_CONFIRMED = {}
+
+
 def scan_points(grid_dir):
     """Point folders that hold raw images, grouped by Pos, plus newest mtime.
 
@@ -143,13 +150,16 @@ def scan_points(grid_dir):
         m = POINT_RE.match(d.name) if d.is_dir() else None
         if not m:
             continue
-        try:
-            if not any(f.name.startswith("img_") for f in d.iterdir()):
+        mt = _CONFIRMED.get(d.name)
+        if mt is None:
+            try:
+                if not any(f.name.startswith("img_") for f in d.iterdir()):
+                    continue
+                mt = d.stat().st_mtime
+            except OSError:
                 continue
-        except OSError:
-            continue
+            _CONFIRMED[d.name] = mt
         by_pos.setdefault(int(m.group(1)), set()).add((m.group(2), m.group(3)))
-        mt = d.stat().st_mtime
         if mt > newest:
             newest = mt
     return by_pos, newest
