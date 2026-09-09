@@ -341,11 +341,30 @@ def run_batch(batch, dry_run):
 
     log(f"batch {name}: verification passed")
     if batch["delete_raw"]:
-        after = delete_raw(grid_dir, batch["pos_list"])
+        to_delete = batch["pos_list"]
+        if batch.get("keep_bg_raw"):
+            to_delete = [pos for pos in to_delete if pos != 0]
+            log("  keeping Pos0 raw (BG for the remaining chunks)")
+        after = delete_raw(grid_dir, to_delete)
         alert(f"batch {name} done; raw deleted, {grid_dir.anchor} now {after:.0f} GB free")
     else:
         alert(f"batch {name} done; raw kept at {grid_dir}")
     return True
+
+
+def parse_pos_spec(spec):
+    """'0-17', '0-17,40', '5' -> sorted list of Pos numbers."""
+    out = set()
+    for part in spec.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            a, b = part.split("-", 1)
+            out.update(range(int(a), int(b) + 1))
+        else:
+            out.add(int(part))
+    return sorted(out)
 
 
 def main():
@@ -356,13 +375,20 @@ def main():
                     help="assume the acquisition is already finished")
     ap.add_argument("--only", choices=[b["name"] for b in BATCHES],
                     help="run a single batch")
+    ap.add_argument("--pos", metavar="SPEC",
+                    help="process only these Pos (e.g. 0-17). Implies --skip-wait: "
+                         "use it to reconstruct and free C: while the acquisition "
+                         "is still running. Pos0 is always added -- it is the BG.")
+    ap.add_argument("--delete-bg", action="store_true",
+                    help="also delete Pos0 raw. Only for the final chunk: every "
+                         "later chunk needs Pos0 to reconstruct the BG.")
     args = ap.parse_args()
 
     log("=" * 70)
     log(f"watch_grid_then_recon_260908  (POS_SPLIT={POS_SPLIT}, Z_INDEX={Z_INDEX})")
     log("=" * 70)
 
-    if not args.skip_wait and not wait_for_acquisition():
+    if not (args.skip_wait or args.pos) and not wait_for_acquisition():
         sys.exit(2)
 
     by_pos, _ = scan_points(WATCH_DIR)
@@ -373,8 +399,22 @@ def main():
     if 0 not in complete:
         alert("Pos0 (the BG) is not complete. Reconstruction needs it. Aborting.")
         sys.exit(6)
+    if args.pos:
+        wanted = set(parse_pos_spec(args.pos)) | {0}
+        missing = sorted(pos for pos in wanted if pos not in complete)
+        complete = [pos for pos in complete if pos in wanted]
+        if missing:
+            log(f"Requested but not complete on disk, skipped: {missing}")
+        if len(complete) < 2:
+            alert(f"--pos {args.pos} selects nothing beyond the BG. Nothing to do.")
+            sys.exit(7)
+
     for b in BATCHES:
         b["pos_list"] = complete
+        # Pos0 is the BG: reconstructing any later chunk needs its raw, so a
+        # partial run keeps it. The acquisition is still writing to this disk,
+        # which is the whole reason for running a chunk early.
+        b["keep_bg_raw"] = bool(args.pos) and not args.delete_bg
     log(f"Pos to process ({len(complete)}): Pos{complete[0]}..Pos{complete[-1]}")
     if partial:
         log(f"Partial Pos left untouched (not reconstructed, not deleted): {partial}")
