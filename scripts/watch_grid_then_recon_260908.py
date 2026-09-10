@@ -61,9 +61,12 @@ N_Z           = 11      # z-slices per point
 # scheduled_recon_and_calibrate.py with SKIP_RECON=True.
 Z_INDEX       = 5
 POS_SPLIT     = 51      # Pos < 51 -> crop_before, Pos >= 51 -> crop_after
-# z planes to reconstruct. None = all N_Z. The raw is deleted after verification,
-# so every plane must be reconstructed. ~23 MB/point.
-RECON_Z_INDICES = None
+# z planes to reconstruct. None = all N_Z.
+# The timelapse runs single-z at the measured focus (grid index 5 = 0.0 um) and
+# reads its ECC reference from that plane only, so reconstructing just that
+# plane is 11x faster. The other planes stay recoverable only while the raw
+# lives: whenever this is not None, run_batch refuses to delete the raw.
+RECON_Z_INDICES = [5]
 
 IDLE_MINUTES  = 30      # quiet time that ends the wait. Longer than the 260906
                         # value of 15: completion here is idle-only (no expected
@@ -350,7 +353,10 @@ def run_batch(batch, dry_run):
         return False
 
     log(f"batch {name}: verification passed")
-    if batch["delete_raw"]:
+    if batch["delete_raw"] and RECON_Z_INDICES is not None:
+        alert(f"batch {name}: only z {RECON_Z_INDICES} reconstructed -- raw KEPT. "
+              f"Deleting it would destroy the other planes for good.")
+    elif batch["delete_raw"]:
         to_delete = batch["pos_list"]
         if batch.get("keep_bg_raw"):
             to_delete = [pos for pos in to_delete if pos != 0]

@@ -40,7 +40,6 @@ if not os.environ.get("CUDA_PATH"):
         os.environ["CUDA_PATH"] = str(_nvrtc)
 
 import tifffile
-from PIL import Image
 from skimage.restoration import unwrap_phase
 from tqdm import tqdm
 import time
@@ -56,7 +55,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 # Configuration parameters
 # ============================================================
 # Must match GRID_DIR in pipeline_full.py
-GRID_DIR = r"C:\260908\ye_grid_0p05_2"
+GRID_DIR = r"C:\260908\ye_grid_0p05_3"
 
 # Base label used as BG (pipeline_full: GRID_BG_BASE_LABEL)
 BG_BASE_LABEL = "Pos0"
@@ -71,7 +70,7 @@ TARGET_COORDS = None
 
 # Filter z indices (None = process all, list = only those indices)
 # e.g.: Z_INDICES = [5]  -> only z=5
-Z_INDICES = None
+Z_INDICES = [5]
 
 # QPI optical parameters
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
@@ -164,7 +163,7 @@ def get_crop(pos_number: int):
 
 def reconstruct_image(img_path: Path, qpi_params, crop):
     """Read a single raw image, crop, phase-reconstruct, and return as ndarray (float64)."""
-    img = np.array(Image.open(str(img_path)))
+    img = tifffile.imread(str(img_path))
     rs, re_, cs, ce = crop
     img = img[rs:re_, cs:ce]
     field = get_field(img, qpi_params)
@@ -178,7 +177,7 @@ def reconstruct_image(img_path: Path, qpi_params, crop):
 
 def make_qpi_params(sample_img_path: Path, crop):
     """Get crop size from a single image and create QPIParameters."""
-    img = np.array(Image.open(str(sample_img_path)))
+    img = tifffile.imread(str(sample_img_path))
     rs, re_, cs, ce = crop
     cropped = img[rs:re_, cs:ce]
     return QPIParameters(
@@ -223,7 +222,7 @@ def _gpu_pipeline(frame_dicts, qpi_params, crop, desc="", bg_cache=None):
             set_backend("cupy")
         for fd in frame_dicts:
             try:
-                img = np.array(Image.open(str(fd["tgt_path"])))
+                img = tifffile.imread(str(fd["tgt_path"]))
                 rs, re_, cs, ce = crop
                 img = img[rs:re_, cs:ce]
                 field = get_field(img, qpi_params)
