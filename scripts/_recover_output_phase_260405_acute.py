@@ -32,7 +32,7 @@ TIMELAPSE_ROOT = Path(r"F:\260405_acute_z18_200h\ph_260405")
 BG_CACHE_BEFORE = TIMELAPSE_ROOT / "Pos0" / "bg_phase_before"
 BG_CACHE_AFTER = TIMELAPSE_ROOT / "Pos0" / "bg_phase_after"
 
-POS_SPLIT = 33
+POS_SPLIT = 51
 CROP_BEFORE = (0, 2048, 400, 2448)   # Pos < POS_SPLIT
 CROP_AFTER = (0, 2048, 0, 2048)      # Pos >= POS_SPLIT
 

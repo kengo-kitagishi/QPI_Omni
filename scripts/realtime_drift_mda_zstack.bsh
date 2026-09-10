@@ -33,7 +33,7 @@ String CONFIG_FILE = "C:/Users/QPI/Documents/QPI_Omni/drift_session/drift_config
 String RESUME_SAVE_DIR = "";
 
 // Set to true to force start from T=0 even if previous state exists.
-boolean FORCE_FRESH_START = true;
+boolean FORCE_FRESH_START = false;
 // ============================================================
 
 
@@ -143,7 +143,8 @@ mmc.setExposure(EXPOSURE_MS);
 print("Exposure set: " + EXPOSURE_MS + " ms");
 
 int bytesPerPx = (int)mmc.getBytesPerPixel();
-print("Camera bit depth: " + (bytesPerPx * 8) + " bit");
+print("Camera bit depth: " + (bytesPerPx * 8) + " bit"
+      + "  (before the ph preset; the actual pixel type is used when saving)");
 
 // ---- Helper: move stage and wait ----
 void moveToPosition(int posIdx) {
@@ -167,11 +168,17 @@ void snapAndSave(String savePath) {
     Object rawImg = mmc.getImage();
     int width  = (int)mmc.getImageWidth();
     int height = (int)mmc.getImageHeight();
+    // Dispatch on what the camera actually returned. bytesPerPx is queried at
+    // startup, before the ph channel preset is applied, so it can disagree with
+    // the live buffer (8 bit at startup, short[] after the preset switches the
+    // camera to its 12-bit-in-16-bit mode).
     ImageProcessor ip;
-    if (bytesPerPx == 1) {
+    if (rawImg instanceof byte[]) {
         ip = new ByteProcessor(width, height, (byte[])rawImg, null);
-    } else {
+    } else if (rawImg instanceof short[]) {
         ip = new ShortProcessor(width, height, (short[])rawImg, null);
+    } else {
+        throw new RuntimeException("Unsupported camera pixel type: " + rawImg.getClass());
     }
     ImagePlus imp = new ImagePlus("", ip);
     new FileSaver(imp).saveAsTiff(savePath);

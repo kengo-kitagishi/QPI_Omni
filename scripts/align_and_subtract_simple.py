@@ -24,10 +24,8 @@ def load_tif_image(path):
 
 
 def to_uint8(img, vmin=-5.0, vmax=2.0):
-    """Convert to uint8 with fixed range (for alignment)"""
-    clipped = np.clip(img, vmin, vmax)
-    normalized = (clipped - vmin) / (vmax - vmin)
-    return (normalized * 255).astype(np.uint8)
+    """Float ECC input: clip only, no 8-bit quantisation (name kept for callers)."""
+    return np.clip(img, vmin, vmax).astype(np.float32)
 
 
 def get_tif_files(directory):
