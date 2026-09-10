@@ -27,16 +27,18 @@ from pathlib import Path
 _script_dir = Path(__file__).parent
 sys.path.insert(0, str(_script_dir))
 
+from ecc_utils import get_aligner  # single source for the estimator score threshold
+
 # ============================================================
 # Edit per experiment
 # ============================================================
 
 # .pos file consumed by Micro-Manager (the actual time-lapse position list)
-POSITIONS_FILE   = r"C:\260517\timelapse.pos"
+POSITIONS_FILE   = r"C:\260908\timelapse_5pos.pos"
 
 # Grid acquisition directory (small grid is fine)
-GRID_DIR         = r"E:\260517\grid_2pergluc_2"
-GRID_Z_INDEX     = 8        # z-slice of the grid TIFFs to use as reference
+GRID_DIR         = r"E:\260908\ye_grid_0p05_2"
+GRID_Z_INDEX     = 5  # grid z-slice used as ECC reference (index3 = -0.8um, measured focus)
 
 # channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
 # No single path needed — compute_drift_online.py reads per-pos from grid_dir.
@@ -45,14 +47,14 @@ GRID_Z_INDEX     = 8        # z-slice of the grid TIFFs to use as reference
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"E:\260517\2per_0055per_0per_2per"
+SAVE_DIR         = r"D:\AquisitionData\Kitagishi\260908\ph_zstack_1"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
 
 # Micro-Manager acquisition parameters
-N_TIMEPOINTS     = 50000
-INTERVAL_SEC     = 300        # Time-lapse interval [s]
+N_TIMEPOINTS     = 3168       # 11 days @ 300s (5 min) interval
+INTERVAL_SEC     = 300        # Time-lapse interval [s] (5 min)
 EXPOSURE_MS      = 60.0
 SETTLE_MS        = 150        # Stage settle time after move [ms]
 PFS_SETTLE_MS    = 0          # PFS continuously tracks; no extra settle needed
@@ -70,8 +72,8 @@ SHIFT_SIGN_X         = 1
 SHIFT_SIGN_Y         = 1
 
 # EMA / Kalman filter
-CORRECTION_EMA_ALPHA = 0.3
-USE_KALMAN_FILTER    = True
+CORRECTION_EMA_ALPHA = 1.0
+USE_KALMAN_FILTER    = False
 # Measured (2026-04-03): stage sigma_y=49.8nm, sigma_x=93.9nm
 #                        ECC sigma_ty=9.5nm, sigma_tx=16.6nm
 # Q tuned for K~0.80 with beta=0.24 overshoot already absorbed.
@@ -84,7 +86,16 @@ KF_R_TX_NM2          = 274.0
 DRIFT_SAMPLE_INTERVAL = 1      # 1 = every position; N = every Nth (group leader)
 MAX_DRIFT_WORKERS     = 8      # 0 = auto (cpu_count - 4)
 ENABLE_THIRD_PASS     = True   # Run pass 3 (re-select grid after pass 2)
-ECC_MIN_CORR          = 0.99   # ECC correlation threshold (0 disables filter)
+# Drift estimator: "ecc_float" or "gaussian2d". Measured on 260819 (37 Pos):
+# gaussian2d has 4.3 nm ground-truth precision vs 5.2 nm, and 178 nm cell-content
+# bias vs 248 nm. The channel-selection threshold differs per estimator and comes
+# from ecc_utils.get_aligner, so it is never hand-copied here.
+ESTIMATOR    = "gaussian2d"
+# Constant added to the channel average when EVERY channel scored below the
+# threshold (i.e. all of them hold cells, so no cell-free reference is left in
+# the frame). Magnitude measured over 303 cell-bearing channels; the sign is
+# mirrored at POS_SPLIT by compute_drift_online. 0 disables the correction.
+CELL_BIAS_NM = 181.0
 
 # Optical parameters
 SENSOR_PIXEL_SIZE    = 3.45e-6
@@ -93,7 +104,7 @@ ORIGINAL_DIM         = 2048
 RECONSTRUCTED_DIM    = 511
 
 # Position-dependent crop (matches pipeline_full.py)
-POS_SPLIT    = 53
+POS_SPLIT    = 51
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 
@@ -116,29 +127,63 @@ VMAX =  2.0
 TILT_CROP_H = 270
 ECC_CROP_H  = 80
 
-# Z-stack parameters (single-z mode: N_Z_SLICES=1, Z_START_UM=0.0)
-N_Z_SLICES            = 1
+# Width of the rectangle actually written by the online crop_sub save. The tilt
+# fit still uses the full TILT_CROP_H window; this is a centred sub-crop of it,
+# so it must be <= TILT_CROP_H. None -> same as TILT_CROP_H (previous behaviour).
+CROP_SUB_OUTPUT_CROP_H = 240
+
+# Z parameters. Single-z mode: N_Z_SLICES=1 captures one plane at baseZ+Z_START_UM.
+# Focus measured on the 260819 focus-check run: -0.8 um = grid z-index 3.
+N_Z_SLICES            = 11
 Z_STEP_UM             = 0.4
-Z_START_UM            = 1.2
+Z_START_UM            = -2.0   # single plane at the measured focus (grid z-index 3)
 CLEANUP_RAW_HOLOGRAMS = True
 
 # Crop-subtract / raw-phase Phase B (online crop_sub_rawraw save)
 # Step values are nominal fallback only; grid_calibration_*.json (measured)
 # wins when present.
-RAW_TL_Z_INDEX        = 0
-CROP_SUB_X_STEP_UM    = 0.1
-CROP_SUB_Y_STEP_UM    = 0.1
+RAW_TL_Z_INDEX        = 5    # only one plane is captured, so it is index 0 (= grid z-index 3)
+CROP_SUB_X_STEP_UM    = 0.05
+CROP_SUB_Y_STEP_UM    = 0.05
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"E:\260517\2per_0055per_0per_2per_crop_sub"
+CROP_SUB_ROOT         = r"D:\AquisitionData\Kitagishi\260908\online_crop_sub_zstack"
 CROP_SUB_MAX_SECONDS  = 150.0
 CROP_SUB_MAX_WORKERS  = 4
 CROP_SUB_MIN_FREE_GB  = 2.0
 ECC_THREADS_PER_POS   = 4
 
+# Fluorescence second pass (right port, consumed by realtime_drift_mda_fluo.bsh).
+# QPI (ph/Basler/left) drives ECC; fluo is a passive extra channel captured at
+# the same drift-corrected XY with a global absolute PFS offset.
+FLUO_ENABLED          = False
+FLUO_CHANNEL          = "mNeonGreen"   # TiChannel preset (right port / Hamamatsu)
+FLUO_EXPOSURE_MS      = 5000.0         # fluorescence exposure [ms]
+FLUO_Z_OFFSET_UM      = 391.5          # global absolute TIPFSOffset for right port [um]
+FLUO_EVERY_N          = 1              # capture fluo every Nth timepoint (limit photodamage; 1 = every tp)
+FLUO_POS_STRIDE       = 10             # capture fluo every Nth position (QPI still every pos; 1 = every pos)
+FLUO_BINNING          = "2x2"          # Hamamatsu binning for fluo (2x2 = 4x signal/px; "" = 1x1)
+# Excitation gate = fluorescence cube on TIFilterBlock2 (epi lamp not shutter-gated).
+# Cube IN (excitation on) only during the fluo snap; OUT (=phase position) otherwise.
+FLUO_FB2_IN           = "2------"      # TIFilterBlock2 label: fluorescence cube IN
+FLUO_FB2_OUT          = "1------"      # TIFilterBlock2 label: cube OUT (phase position)
+
 # ============================================================
 
 
+# Resolved from ESTIMATOR so the config can never carry a threshold that does
+# not belong to the estimator actually in use.
+_ALIGN_FN, MIN_SCORE = get_aligner(ESTIMATOR)
+
+def _check_crop_sizes():
+    if CROP_SUB_OUTPUT_CROP_H is not None and CROP_SUB_OUTPUT_CROP_H > TILT_CROP_H:
+        raise SystemExit(
+            f"CROP_SUB_OUTPUT_CROP_H ({CROP_SUB_OUTPUT_CROP_H}) must be <= "
+            f"TILT_CROP_H ({TILT_CROP_H}): the saved crop is a centred sub-crop "
+            f"of the tilt-fit window.")
+
+
 def main():
+    _check_crop_sizes()
     session_dir = Path(SESSION_DIR)
     session_dir.mkdir(parents=True, exist_ok=True)
     print(f"Session directory: {session_dir}")
@@ -256,7 +301,9 @@ def main():
         "drift_sample_interval": DRIFT_SAMPLE_INTERVAL,
         "max_drift_workers":  MAX_DRIFT_WORKERS,
         "enable_third_pass":  ENABLE_THIRD_PASS,
-        "ecc_min_corr":       ECC_MIN_CORR,
+        "ecc_min_corr":       MIN_SCORE,
+        "estimator":          ESTIMATOR,
+        "cell_bias_nm":       CELL_BIAS_NM,
 
         # Reconstruction
         "pos_split":          POS_SPLIT,
@@ -290,6 +337,7 @@ def main():
         "crop_sub_x_step_um": CROP_SUB_X_STEP_UM,
         "crop_sub_y_step_um": CROP_SUB_Y_STEP_UM,
         "tilt_crop_h_raw":    TILT_CROP_H,
+        "crop_sub_output_crop_h": CROP_SUB_OUTPUT_CROP_H,
         "enable_crop_sub_save": ENABLE_CROP_SUB_SAVE,
         "crop_sub_root":      CROP_SUB_ROOT,
         "crop_sub_max_seconds": CROP_SUB_MAX_SECONDS,
@@ -302,6 +350,17 @@ def main():
         "n_z_slices":         N_Z_SLICES,
         "z_step_um":          Z_STEP_UM,
         "z_start_um":         Z_START_UM,
+
+        # Fluorescence second pass (realtime_drift_mda_fluo.bsh)
+        "fluo_enabled":       FLUO_ENABLED,
+        "fluo_channel":       FLUO_CHANNEL,
+        "fluo_exposure_ms":   FLUO_EXPOSURE_MS,
+        "fluo_z_offset_um":   FLUO_Z_OFFSET_UM,
+        "fluo_every_n":       FLUO_EVERY_N,
+        "fluo_pos_stride":    FLUO_POS_STRIDE,
+        "fluo_binning":       FLUO_BINNING,
+        "fluo_fb2_in":        FLUO_FB2_IN,
+        "fluo_fb2_out":       FLUO_FB2_OUT,
 
         # EMA / Kalman
         "correction_ema_alpha": CORRECTION_EMA_ALPHA,
@@ -324,13 +383,28 @@ def main():
         f.write("TIMEPOINT=-1\n")
     print(f"drift_state initialised: {state_path}")
 
-    # ---- 6. drift_log.json (archive previous run) ----
+    # ---- 6. drift_log.json (archive previous run, named by ITS start time) ----
     log_path = session_dir / f"drift_log{suffix}.json"
     if log_path.exists():
-        timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+        # Name the archive by the previous run's START time (first log entry's
+        # timestamp), so old runs are identifiable by when they began -- not by
+        # the moment they happen to be archived. Fall back to file creation time
+        # for an empty/unparseable log.
+        start_ts = None
+        try:
+            prev = json.loads(log_path.read_text(encoding="utf-8"))
+            if isinstance(prev, list) and prev and prev[0].get("timestamp"):
+                start_ts = datetime.fromisoformat(prev[0]["timestamp"])
+        except Exception:
+            start_ts = None
+        if start_ts is None:
+            # Empty/aborted log with no real entry: use last-write time (mtime),
+            # not creation time -- on Windows in-place truncation keeps a stale ctime.
+            start_ts = datetime.fromtimestamp(log_path.stat().st_mtime)
+        timestamp = start_ts.strftime("%Y%m%dT%H%M%S")
         archive_path = session_dir / f"drift_log_{timestamp}.json"
         shutil.copy2(log_path, archive_path)
-        print(f"Previous drift_log archived: {archive_path}")
+        print(f"Previous drift_log archived (by run start {timestamp}): {archive_path}")
     with open(log_path, "w", encoding="utf-8") as f:
         json.dump([], f)
     print(f"drift_log initialised: {log_path}")

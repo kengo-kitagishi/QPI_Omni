@@ -63,8 +63,8 @@ SHIFT_SIGN_X = 1
 SHIFT_SIGN_Y = 1
 
 # Grid step [um]
-X_STEP = 0.1
-Y_STEP = 0.1
+X_STEP = 0.05
+Y_STEP = 0.05
 
 # BG ROI (same as compute_shifts_bgroi.py)
 BG_CY      = 359   # y center

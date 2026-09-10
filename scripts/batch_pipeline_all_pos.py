@@ -70,13 +70,14 @@ BG_CACHE_AFTER  = TIMELAPSE_ROOT / "Pos0" / "bg_phase_after"
 # ============================================================
 # Confirmed parameters (from drift_config.json + memory)
 # ============================================================
-POS_SPLIT   = 53
+POS_SPLIT   = 51
 CROP_BEFORE = (0, 2048, 400, 2448)   # Pos < POS_SPLIT
 CROP_AFTER  = (0, 2048, 0, 2048)     # Pos >= POS_SPLIT
 
 # Reconstruction — canonical functions from batch_reconstruction_grid
 from batch_reconstruction_grid import reconstruct_from_holo, reconstruct_image, make_qpi_params
 from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
+from ecc_utils import ECC_MIN_CORR  # single source (0.99)
 
 # ECC / compute_pos_shifts (confirmed 2026-04-13)
 ECC_CROP_H           = 80
@@ -84,7 +85,7 @@ TILT_CROP_H          = 270
 GRID_Z_INDEX         = 18
 OUTLIER_MAD_THRESH   = 5.0
 OUTLIER_TS_THRESH    = 0.0    # always disabled
-ECC_MIN_CORR         = 0.96
+# ECC_MIN_CORR imported from ecc_utils above (0.99 drops cell channels -> cell-free average)
 VMIN, VMAX           = -5.0, 2.0
 
 # grid_subtract (confirmed)
@@ -534,8 +535,8 @@ def step3_grid_subtract(pos_num, pos_dir):
 
     gs.SHIFT_SIGN_X = SHIFT_SIGN_X
     gs.SHIFT_SIGN_Y = SHIFT_SIGN_Y
-    gs.X_STEP = 0.1
-    gs.Y_STEP = 0.1
+    gs.X_STEP = 0.05
+    gs.Y_STEP = 0.05
 
     print(f"  Running grid_subtract (raw-raw, crop={crop})...")
     try:
@@ -610,8 +611,8 @@ def _synthesize_grid_subtract_log(online_json_path: Path, pos_num: int,
         "grid_dir": str(GRID_2PER_DIR),
         "grid_z_index": RAW_GRID_Z_INDEX,
         "tl_z_index": RAW_TL_Z_INDEX,
-        "x_step_um": 0.1,
-        "y_step_um": 0.1,
+        "x_step_um": 0.05,
+        "y_step_um": 0.05,
         "shift_sign_x": SHIFT_SIGN_X,
         "shift_sign_y": SHIFT_SIGN_Y,
         "apply_subpixel_correction": True,

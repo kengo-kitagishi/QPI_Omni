@@ -14,13 +14,16 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 PYTHON = sys.executable
 SCRIPT_DIR = Path(__file__).resolve().parent
-GRID_DIR = Path(r"C:\260517\grid_2pergluc_2")
-OUTPUT_DIR = Path(r"E:\260517\grid_2pergluc_2")
+GRID_DIR = Path(r"C:\260908\ye_grid_0p05_3")
+OUTPUT_DIR = Path(r"E:\260908\ye_grid_0p05_3")
 Z_INDEX = 5
-POS_SPLIT = 53
+POS_SPLIT = 51
 N_WORKERS_DETECT = 20
 N_WORKERS_CALIBRATE = 4
 N_GRID_THREADS = 7
+# Set True when reconstruction is already done and the raw data is gone
+# (Step 1 needs GRID_DIR raw; Steps 2-3 only need OUTPUT_DIR).
+SKIP_RECON = False
 
 pattern_re = re.compile(r"^(Pos\d+)_x\+0_y\+0$")
 
@@ -66,13 +69,16 @@ def main():
     print(f"\n{'='*60}")
     print("Step 1: batch_reconstruction_grid")
     print(f"{'='*60}", flush=True)
-    recon_cmd = [PYTHON, str(SCRIPT_DIR / "batch_reconstruction_grid.py")]
-    if OUTPUT_DIR != GRID_DIR:
-        recon_cmd += ["--output-dir", str(OUTPUT_DIR)]
-    result = subprocess.run(recon_cmd, cwd=str(SCRIPT_DIR))
-    if result.returncode != 0:
-        print(f"ERROR: batch_reconstruction_grid exited with code {result.returncode}", flush=True)
-        sys.exit(result.returncode)
+    if SKIP_RECON:
+        print("SKIP_RECON=True, skipping reconstruction", flush=True)
+    else:
+        recon_cmd = [PYTHON, str(SCRIPT_DIR / "batch_reconstruction_grid.py")]
+        if OUTPUT_DIR != GRID_DIR:
+            recon_cmd += ["--output-dir", str(OUTPUT_DIR)]
+        result = subprocess.run(recon_cmd, cwd=str(SCRIPT_DIR))
+        if result.returncode != 0:
+            print(f"ERROR: batch_reconstruction_grid exited with code {result.returncode}", flush=True)
+            sys.exit(result.returncode)
 
     # --- Step 2: channel_crop --detect (parallel) ---
     print(f"\n{'='*60}")

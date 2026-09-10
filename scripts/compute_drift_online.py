@@ -66,8 +66,12 @@ def kf_step_posonly_nm(z_nm: float, pos_nm: float, P: float,
 
 
 from ecc_utils import (
-    tilt_fit_crop, extract_rect_roi, to_uint8, ecc_align,
+    tilt_fit_crop, extract_rect_roi, ecc_align, get_aligner,
     mad, remove_outliers_mad,
+    # Float ECC input (clipped float32, no 8-bit quantisation) aliased to the
+    # to_uint8 name so every call site below feeds float32 to ecc_align. The
+    # *_u8 variable names are kept. ecc_min_corr comes from drift_config (0.99).
+    to_ecc_input as to_uint8,
 )
 
 
@@ -191,7 +195,9 @@ def _process_leader_task(args):
     kf_st = load_per_pos_kf_state(kf_path, label, kf_R)
     ld = _wk['leader_data'][idx]
     pos_split = _wk['cfg'].get("pos_split", 3)
-    bg_phase = _wk['bg_phases']["after" if idx >= pos_split else "before"]
+    # Crop side is decided by the Pos LABEL number (not .pos order/index), to
+    # match the grid reference; sparse/reordered .pos would otherwise mismatch.
+    bg_phase = _wk['bg_phases']["after" if _pos_index_from_label(label) >= pos_split else "before"]
     pre_phase = _wk.get('pre_phases', {}).get(idx)
     pos_rois = _wk['per_pos_rois'][idx]
     return _process_one_position(
@@ -703,7 +709,14 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
     n_channels = len(rois)
     vmin = cfg.get("ecc_vmin", -5.0)
     vmax = cfg.get("ecc_vmax", 2.0)
-    ecc_min_corr = cfg.get("ecc_min_corr", 0.0)
+    # Estimator is swappable: "ecc_float" (default) or "gaussian2d". Both return
+    # (tx, ty, score) in the same sign convention, but each needs its own score
+    # threshold, so fall back to the estimator's own default rather than to 0.0
+    # (which would silently disable channel filtering).
+    estimator = cfg.get("estimator", "ecc_float")
+    align, default_min_score = get_aligner(estimator)
+    ecc_min_corr = cfg.get("ecc_min_corr", default_min_score)
+    cell_bias_nm = cfg.get("cell_bias_nm", 0.0)
     jump_thresh = cfg.get("jump_thresh_um", 1.0)
     max_total = cfg.get("max_total_corr_um", 15.0)
     pixel_scale_um = cfg.get("pixel_scale_um", 0.3462)
@@ -714,7 +727,7 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
     tilt_crop_h = cfg.get("tilt_crop_h", 0)
     ecc_crop_h = cfg.get("ecc_crop_h", 0)
     pos_split = cfg.get("pos_split", 3)
-    fit_right = pos_idx >= pos_split
+    fit_right = _pos_index_from_label(pos_label) >= pos_split   # crop side by label, not .pos index
     ema_alpha = cfg.get("correction_ema_alpha", 1.0)
     use_kalman = cfg.get("use_kalman_filter", False)
 
@@ -737,7 +750,7 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
         return fail_result
     else:
         try:
-            phase_raw = _reconstruct_phase_raw(raw_path, cfg, pos_idx)
+            phase_raw = _reconstruct_phase_raw(raw_path, cfg, _pos_index_from_label(pos_label))
         except Exception as ex:
             print(f"  [{pos_label}] ERROR: phase reconstruction failed: {ex}")
             return fail_result
@@ -794,7 +807,7 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
         cur_u8 = to_uint8(cur_crop, vmin, vmax)
 
         # Pass 1: grid(0,0)
-        result1 = ecc_align(ref_u8_p1, cur_u8)
+        result1 = align(ref_u8_p1, cur_u8)
         if result1 is None:
             return (ch_idx, None, None, None,
                     {"ch": ch_idx, "outlier": True, "status": "pass1_failed"})
@@ -813,7 +826,7 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
         if ref_u8_p2 is None:
             result2 = None
         else:
-            result2 = ecc_align(ref_u8_p2, cur_u8)
+            result2 = align(ref_u8_p2, cur_u8)
         if result2 is None:
             detail.update({"xi": xi2, "yi": yi2, "tx2": shift1_x, "ty2": shift1_y,
                            "corr2": corr1, "status": "pass2_ecc_failed"})
@@ -840,7 +853,7 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
                 if ref_u8_p3 is None:
                     result3 = None
                 else:
-                    result3 = ecc_align(ref_u8_p3, cur_u8)
+                    result3 = align(ref_u8_p3, cur_u8)
                 if result3 is not None:
                     fine3_x, fine3_y, corr3 = result3
                     final_shift_x = fine3_x + offset_x3
@@ -911,6 +924,19 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
     tx_avg = float(np.mean(tx_arr[used_idx]))
     ty_avg = float(np.mean(ty_arr[used_idx]))
     corr_avg = float(np.mean(corr_arr[used_idx]))
+
+    # Every channel scored below the threshold, so the average above is taken
+    # over cell-bearing channels and carries their content bias. Measured on
+    # 260819 over 37 Pos / 303 cell-bearing channels: 178 nm for gaussian2d
+    # (248 nm for ecc_float), constant in magnitude across Pos (mean residual
+    # 27 nm) and mirrored in sign at pos_split, where the channel layout flips.
+    # It is a per-Pos mean correction only -- per channel the bias scatters by
+    # ~73 nm and is not predictable from any available score.
+    cell_bias_applied_nm = 0.0
+    if cell_bias_nm and len(used_idx) == n_ch_raw and bool(np.all(low_corr_mask)):
+        sign = -1.0 if _pos_index_from_label(pos_label) >= pos_split else 1.0
+        cell_bias_applied_nm = sign * cell_bias_nm
+        tx_avg += cell_bias_applied_nm / (pixel_scale_um * 1000.0)
 
     # ---- EMA filter ----
     prev_ema_tx = prev_state["ema_tx_px"]
@@ -994,6 +1020,8 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
         "kf_update": kf_update,
         "channel_details": sorted(channel_details, key=lambda x: x["ch"]),
         "n_channels_used": len(used_idx),
+        "cell_bias_applied_nm": cell_bias_applied_nm,
+        "estimator": estimator,
         "n_channels_raw": n_ch_raw,
         "tx_avg_px": tx_avg,
         "ty_avg_px": ty_avg,
@@ -1052,13 +1080,17 @@ def _save_crop_sub_one_pos(args):
         xi, yi, dist_um, dx_um, dy_um, cal_dx, cal_dy, residual_x, residual_y = gs.select_grid(
             sx, sy, pos_map, grid_cal,
             pixel_scale_um=cfg["pixel_scale_um"],
-            x_step=cfg.get("crop_sub_x_step_um", 0.1),
-            y_step=cfg.get("crop_sub_y_step_um", 0.1),
+            x_step=cfg.get("crop_sub_x_step_um", 0.05),
+            y_step=cfg.get("crop_sub_y_step_um", 0.05),
             shift_sign_x=-1, shift_sign_y=-1,
         )
 
         grid_pos_dir = pos_map.get((xi, yi))
         tilt_h = cfg.get("tilt_crop_h_raw", 270)
+        # Width of the rectangle actually written out. The tilt fit keeps the
+        # full tilt_h window; this is a centred sub-crop of it. Falls back to
+        # tilt_h so configs without the key behave as before.
+        out_h = cfg.get("crop_sub_output_crop_h") or tilt_h
         out_base = (crop_sub_root / pos_label / "output_phase" /
                     "channels" / "crop_sub_rawraw")
 
@@ -1098,7 +1130,7 @@ def _save_crop_sub_one_pos(args):
                 tl_img, sx, sy, rois,
                 cal_dx, cal_dy, residual_x, residual_y,
                 grid_img,
-                output_crop_h_override=tilt_h,
+                output_crop_h_override=out_h,
                 tilt_crop_h_raw=tilt_h,
                 use_raw_phase=True,
                 apply_subpixel_correction=True,
@@ -1166,8 +1198,8 @@ def _append_online_pos_shifts(crop_sub_root, pos_label, frame_entry, cfg):
         "grid_dir": cfg.get("grid_dir", ""),
         "grid_z_index": int(cfg.get("raw_grid_z_index", 18)),
         "tl_z_index": int(cfg.get("raw_tl_z_index", 0)),
-        "x_step_um": float(cfg.get("crop_sub_x_step_um", 0.1)),
-        "y_step_um": float(cfg.get("crop_sub_y_step_um", 0.1)),
+        "x_step_um": float(cfg.get("crop_sub_x_step_um", 0.05)),
+        "y_step_um": float(cfg.get("crop_sub_y_step_um", 0.05)),
         "shift_sign_x": int(cfg.get("shift_sign_x", -1)),
         "shift_sign_y": int(cfg.get("shift_sign_y", -1)),
         "apply_subpixel_correction": True,
@@ -1385,9 +1417,11 @@ def main():
     # Reconstructed here (in main) so every worker does not redo the BG FFT +
     # unwrap_phase on each sample position (saves one BG reconstruction per
     # Pos per timepoint).  When GPU is available, get_field uses CuPy FFT.
-    leader_indices = [ld["index"] for ld in group_leaders]
+    # BG crop-variant selection uses label-based crop numbers (same rule as the
+    # per-pos crop side) so a sparse .pos still builds the needed BG variant.
+    leader_crop_nums = [_pos_index_from_label(ld["label"]) for ld in group_leaders]
     t_bg_start = datetime.now()
-    bg_phases = reconstruct_bg_phase_variants(bg_raw, cfg, leader_indices)
+    bg_phases = reconstruct_bg_phase_variants(bg_raw, cfg, leader_crop_nums)
     if bg_raw is not None:
         variants = [k for k, v in bg_phases.items() if v is not None]
         gpu_tag = " (GPU)" if _use_gpu else ""
@@ -1404,7 +1438,7 @@ def main():
         if raw_path.exists():
             leader_specs.append({
                 "raw_path": str(raw_path),
-                "pos_index": leader["index"],
+                "pos_index": _pos_index_from_label(leader["label"]),  # crop side by label
                 "key": leader["index"],
             })
     pre_phases = _gpu_cpu_recon_pipeline(leader_specs, cfg)

@@ -30,8 +30,8 @@ POS1_LABEL = "Pos1"
 GRID_DIR   = r"E:\Acuisition\kitagishi\260301\multipos_test_1"
 BASE_LABEL = "Pos4"
 
-X_STEP = 0.1   # um
-Y_STEP = 0.1   # um
+X_STEP = 0.05   # um
+Y_STEP = 0.05   # um
 
 SENSOR_PIXEL_SIZE = 3.45e-6
 MAGNIFICATION     = 40

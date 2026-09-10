@@ -28,7 +28,7 @@
   "shifts_grid_z_index": 2,
   "shifts_vmin": -5.0,
   "shifts_vmax": 2.0,
-  "shifts_ecc_min_corr": 0.9,
+  "shifts_ecc_min_corr": 0.99,
 
   "_section_ecc_passes": "--- ECC pass数（試行錯誤する項目）---",
   "shifts_use_incremental_tracking": true,

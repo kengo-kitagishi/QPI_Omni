@@ -6,9 +6,9 @@ import cv2
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-GRID_DIR = Path(r"C:\260517\grid_2pergluc_2")
+GRID_DIR = Path(r"E:\260908\ye_grid_0p05_3")
 Z_INDEX = 5
-POS_SPLIT = 53
+POS_SPLIT = 51
 N_WORKERS = 4
 N_GRID_THREADS = 7   # per-process grid-point threads (N_WORKERS * N_GRID_THREADS ≈ cpu_count)
 
