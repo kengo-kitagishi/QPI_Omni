@@ -62,6 +62,36 @@ def patch(name, value):
                                text, count=1), encoding="utf-8")
 
 
+def ensure_bg_placeholders(raw, out):
+    """Let a batch whose Pos0 raw is gone reconstruct against its saved BG.
+
+    batch_reconstruction_grid only needs the Pos0_x*_y* directory names to
+    exist under the raw tree: with no image files inside, the BG pass reports
+    "all exist, skipped" and every target frame reads its BG phase from
+    <out>/Pos0_.../output_phase_raw. So when the raw Pos0 was deleted after
+    its reconstruction, empty directories stand in for it. Nothing is written
+    into them and the watcher ignores image-less point folders.
+    """
+    raw, out = Path(raw), Path(out)
+    if any(raw.glob("Pos0_x*_y*/img_*.tif")):
+        return 0
+    made = 0
+    for xi in range(-5, 6):
+        for yi in range(-5, 6):
+            name = f"Pos0_x{xi:+d}_y{yi:+d}"
+            bg = out / name / "output_phase_raw"
+            if not any(bg.glob("img_*_ph_*_phase.tif")):
+                raise RuntimeError(f"{name}: no raw and no reconstructed BG in {out}")
+            d = raw / name
+            if not d.exists():
+                d.mkdir()
+                made += 1
+    if made:
+        log(f"  Pos0 raw absent; created {made} empty placeholder dirs so the "
+            f"reconstruction reads the BG from {out}")
+    return made
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
@@ -74,6 +104,7 @@ def main():
         log("=" * 70)
         patch("WATCH_DIR", f'Path(r"{raw}")')
         patch("OUTPUT_DIR", f'Path(r"{out}")')
+        ensure_bg_placeholders(raw, out)
 
         cmd = [sys.executable, str(WATCHER), "--skip-wait"]
         if args.dry_run:
