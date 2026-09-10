@@ -34,11 +34,11 @@ from ecc_utils import get_aligner  # single source for the estimator score thres
 # ============================================================
 
 # .pos file consumed by Micro-Manager (the actual time-lapse position list)
-POSITIONS_FILE   = r"C:\260908\timelapse_5pos.pos"
+POSITIONS_FILE   = r"C:\260908\timelapse.pos"
 
 # Grid acquisition directory (small grid is fine)
 GRID_DIR         = r"E:\260908\ye_grid_0p05_2"
-GRID_Z_INDEX     = 5  # grid z-slice used as ECC reference (index3 = -0.8um, measured focus)
+GRID_Z_INDEX     = 5   # grid z-slice used as ECC reference (index 5 = 0.0 um, chosen on the 260908 focus run)
 
 # channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
 # No single path needed — compute_drift_online.py reads per-pos from grid_dir.
@@ -47,7 +47,7 @@ GRID_Z_INDEX     = 5  # grid z-slice used as ECC reference (index3 = -0.8um, mea
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"D:\AquisitionData\Kitagishi\260908\ph_zstack_1"
+SAVE_DIR         = r"D:\AquisitionData\Kitagishi\260908\ph_zstack_2"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
@@ -134,19 +134,19 @@ CROP_SUB_OUTPUT_CROP_H = 240
 
 # Z parameters. Single-z mode: N_Z_SLICES=1 captures one plane at baseZ+Z_START_UM.
 # Focus measured on the 260819 focus-check run: -0.8 um = grid z-index 3.
-N_Z_SLICES            = 11
+N_Z_SLICES            = 1
 Z_STEP_UM             = 0.4
-Z_START_UM            = -2.0   # single plane at the measured focus (grid z-index 3)
+Z_START_UM            = 0.0   # single plane at the measured focus (grid z-index 5)
 CLEANUP_RAW_HOLOGRAMS = True
 
 # Crop-subtract / raw-phase Phase B (online crop_sub_rawraw save)
 # Step values are nominal fallback only; grid_calibration_*.json (measured)
 # wins when present.
-RAW_TL_Z_INDEX        = 5    # only one plane is captured, so it is index 0 (= grid z-index 3)
+RAW_TL_Z_INDEX        = 0   # only one plane is captured, so it is index 0 (= grid z-index 5)
 CROP_SUB_X_STEP_UM    = 0.05
 CROP_SUB_Y_STEP_UM    = 0.05
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"D:\AquisitionData\Kitagishi\260908\online_crop_sub_zstack"
+CROP_SUB_ROOT         = r"D:\AquisitionData\Kitagishi\260908\online_crop_sub_zstack_2"
 CROP_SUB_MAX_SECONDS  = 150.0
 CROP_SUB_MAX_WORKERS  = 4
 CROP_SUB_MIN_FREE_GB  = 2.0
