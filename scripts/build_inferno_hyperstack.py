@@ -19,8 +19,8 @@ import numpy as np
 import tifffile
 import matplotlib.cm as cm
 
-ROOT = Path(r"D:\AquisitionData\Kitagishi\260819\online_crop_sub_zstack_focus")
-OUT_DIR = Path(r"D:\AquisitionData\Kitagishi\260819\inferno_hyperstacks_focus")
+ROOT = Path(r"D:\AquisitionData\Kitagishi\260908\online_crop_sub_zstack")
+OUT_DIR = Path(r"D:\AquisitionData\Kitagishi\260908\inferno_hyperstacks")
 POSITIONS = None   # None -> all PosN found under ROOT (sorted); or a list of labels
 VMIN, VMAX = 0.15, 1.95
 MIN_FRAME = 4   # drop T=0..3 (initial drift-correction settling)
