@@ -284,9 +284,9 @@ def build_parser() -> argparse.ArgumentParser:
     bg = p.add_mutually_exclusive_group()
     bg.add_argument("--exclude-border", dest="exclude_border", action="store_true")
     bg.add_argument("--allow-border", dest="exclude_border", action="store_false")
-    p.add_argument("--pixel-size-um", type=float, default=0.348)
+    p.add_argument("--pixel-size-um", type=float, default=0.34567514677103717)  # 0.08625*2048/511 (511x511) ~= 0.346 um/px; was 0.348 (507 assumption)
     p.add_argument("--time-interval-min", type=float, default=None)
-    p.add_argument("--wavelength-nm", type=float, default=663.0)
+    p.add_argument("--wavelength-nm", type=float, default=658.0)  # mainline laser is 658 nm; was 663
     p.add_argument("--n-medium", type=float, default=1.333)
     p.add_argument("--alpha-ri", type=float, default=0.00018)
     p.add_argument(

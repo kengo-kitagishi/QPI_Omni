@@ -891,6 +891,7 @@ def save_figure(
     data: Optional[dict] = None,
     source_tifs: Optional[list] = None,
     related: Optional[list] = None,
+    caption: Optional[str] = None,
 ) -> Path:
     """
     Save a matplotlib Figure with inbox-first workflow.
@@ -903,6 +904,10 @@ def save_figure(
         Key parameters for reproducibility.
     description : str
         Human-readable description.
+    caption : str, optional
+        Publication-grade figure legend (see docs/FIGURE_SPEC.md). Stored in the
+        JSON sidecar 'caption' field. If omitted, a warning is emitted and the
+        field is left empty for later patching by the agent/author.
     script_name : str, optional
         Caller script name. Auto-detected if omitted.
     output_dir : path-like, optional
@@ -1099,6 +1104,7 @@ def save_figure(
         "run_id": run_id,
         "figure_index": fig_index,
         "description": description,
+        "caption": caption,
         "params": params,
         "diff_from_last": diff,
         "format": fmt,
@@ -1129,6 +1135,14 @@ def save_figure(
 
     meta_path = inbox_file.with_suffix(".json")
     _json_dump(meta_path, meta)
+
+    if not caption:
+        print(
+            "[figure_logger] WARNING: figure saved without a caption "
+            "(FIGURE_SPEC §5 — caption is mandatory). Write the JSON 'caption' "
+            f"field for {meta_path.name}, or pass caption= to save_figure.",
+            file=sys.stderr,
+        )
 
     _save_history(script, params)
     _append_manifest(meta, manifest_path)

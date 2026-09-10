@@ -121,7 +121,7 @@ def main() -> int:
                    help="Explicit checkpoint to pass to 07_segmentation.py")
 
     # Tracker physical params
-    p.add_argument("--pixel-size-um", type=float, default=0.348)
+    p.add_argument("--pixel-size-um", type=float, default=0.34567514677103717)  # 0.08625*2048/511 (511x511) ~= 0.346 um/px; was 0.348 (507 assumption)
     p.add_argument("--time-interval-min", type=float, default=5.0)
     p.add_argument("--wavelength-nm", type=float, default=658.0)
     p.add_argument("--n-medium", type=float, default=1.333,

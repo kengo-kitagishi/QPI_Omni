@@ -91,12 +91,40 @@ def parse_schedule_str(s: Optional[str]) -> list[tuple[int, str]]:
     return out
 
 
-def mother_division_frames(clist: pd.DataFrame, mother_id: int = 0) -> np.ndarray:
-    """Frame numbers at which the mother divided (= birth frames of her daughters)."""
+def mother_division_frames(
+    clist: pd.DataFrame,
+    lineage: Optional[pd.DataFrame] = None,
+    mother_id: int = 0,
+    exclude_bad_frames: bool = True,
+) -> np.ndarray:
+    """Frame numbers at which the mother divided (= birth frames of her daughters).
+
+    Filter (data-driven, no arbitrary lifetime threshold):
+      - `exclude_bad_frames` (needs `lineage`): drop daughters whose birth row
+        in lineage_data3D has `is_outlier=True` or `touches_border=True`.
+        These come from acquisition mistakes or segmentation failures.
+
+    Spurious divisions that survive this filter (e.g. short-lived segmentation
+    blob splits that are not flagged as outliers) are out of scope here — they
+    should be addressed upstream via `div_area_ratio_min` / `div_sum_tol` in
+    central_cell_lineage_tracker, not via downstream lifetime thresholds.
+    """
     sub = clist[clist["mother_id"] == mother_id]
     if sub.empty:
         return np.array([], dtype=int)
-    return np.sort(sub["birth_frame"].astype(int).to_numpy())
+    birth_frames = sub["birth_frame"].astype(int).to_numpy()
+    if exclude_bad_frames and lineage is not None and len(lineage):
+        daughter_ids = sub["cell_id"].astype(int).to_numpy()
+        bad = []
+        for cid, bf in zip(daughter_ids, birth_frames):
+            row = lineage[(lineage["cell_id"] == cid) & (lineage["frame"] == bf)]
+            if row.empty:
+                continue
+            if bool(row["is_outlier"].iloc[0]) or bool(row["touches_border"].iloc[0]):
+                bad.append(bf)
+        if bad:
+            birth_frames = np.array([f for f in birth_frames if f not in bad])
+    return np.sort(birth_frames)
 
 
 # =============================================================================
@@ -392,8 +420,10 @@ def run(channel_dir: Path) -> None:
     media_schedule = parse_schedule_str(run_meta.get("media_schedule"))
     media_ri = run_meta.get("media_ri") or {}
 
-    div_frames = mother_division_frames(clist)
-    print(f"[info] {label}: n_divisions(mother)={len(div_frames)}", file=sys.stderr)
+    div_frames = mother_division_frames(clist, lineage=data3D, exclude_bad_frames=True)
+    n_div_raw = len(mother_division_frames(clist, exclude_bad_frames=False))
+    print(f"[info] {label}: n_divisions(mother)={len(div_frames)} "
+          f"(raw={n_div_raw}, bad-frame births excluded)", file=sys.stderr)
 
     params = {
         "channel_dir": str(channel_dir),
