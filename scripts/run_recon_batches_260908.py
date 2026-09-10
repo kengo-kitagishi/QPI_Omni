@@ -8,9 +8,9 @@ Each raw folder carries its own Pos0 BG and must therefore reconstruct into
 its own output tree -- the BG is subtracted from the samples acquired
 alongside it, so BGs are never shared across acquisitions.
 
-The D: folder (ye_grid_0p05_1) is not listed: Micro-Manager still holds its
-metadata.txt open, and its disk is the one the timelapse writes to. Run it
-separately once MM has released the files.
+The D: folder (ye_grid_0p05_1) runs last: its disk is the one the timelapse
+writes to. Finished batches are re-verified and skipped, so the driver can
+simply be run again to pick up a batch that was added later.
 
 Run:
     python run_recon_batches_260908.py
@@ -32,6 +32,9 @@ BATCHES = [
     # from every downstream step.
     (r"C:\260908\ye_grid_0p05_3", r"E:\260908\ye_grid_0p05_3"),
     (r"C:\260908\ye_grid_0p05_2", r"E:\260908\ye_grid_0p05_2"),
+    # Pos0 + Pos50-63. Its partial Pos64 is parked in _partial_Pos64. This is
+    # the disk the timelapse writes to, so it goes last.
+    (r"D:\AquisitionData\Kitagishi\260908\ye_grid_0p05_1", r"E:\260908\ye_grid_0p05_1"),
 ]
 
 LOG_PATH = Path(r"C:\260908\run_recon_batches.log")
