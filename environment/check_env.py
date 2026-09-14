@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import os
 import hashlib
 import json
 import sys
@@ -49,6 +50,24 @@ def _ensure_gui_icon() -> None:
             f.write_bytes(base64.b64decode(b64))
 
 
+def _ensure_cuda_dlls_on_path() -> None:
+    """Put the env's bin/ on PATH so NVRTC can load nvrtc-builtins64_*.dll.
+
+    From the second inference on, torch's TorchScript fuser compiles CUDA kernels at run time
+    with NVRTC, and NVRTC finds its builtins DLL through PATH. The conda env keeps that DLL in
+    <env>/bin, which is on PATH only after `conda activate`; the kit starts <env>/python.exe
+    directly, so without this every inference after the first raised "failed to open
+    nvrtc-builtins64_118.dll" (seen 2026-09-15 on the microscope PC). Same helper in
+    environment/check_env.py and scripts/seg_omnipose.py.
+    """
+    prefix = Path(sys.prefix)
+    parts = os.environ.get("PATH", "").split(os.pathsep)
+    for d in (prefix / "Library" / "bin", prefix / "bin"):
+        if d.is_dir() and str(d) not in parts:
+            parts.insert(0, str(d))
+    os.environ["PATH"] = os.pathsep.join(parts)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model", default=None, help="checkpoint path (relative paths resolve from the repo root)")
@@ -57,6 +76,7 @@ def main() -> int:
     ok = True
     print(f"python {sys.version.split()[0]} at {sys.executable}")
     _ensure_gui_icon()
+    _ensure_cuda_dlls_on_path()
     for m, want in PINS.items():
         try:
             mod = __import__(m)
@@ -107,11 +127,14 @@ def main() -> int:
         for cx in (30, 70):
             img[((xx - cx) / 14.0) ** 2 + ((yy - 20) / 5.0) ** 2 <= 1.0] = 1.5
         img += np.random.default_rng(0).normal(0, 0.05, img.shape).astype(np.float32)
-        t0 = time.time()
-        m = model.eval([img], **EVAL)[0][0]
-        n = int(np.asarray(m).max()) if m is not None else 0
-        print(f"inference on a synthetic 40x180 image: {n} mask(s) in {time.time() - t0:.2f}s"
-              + ("" if n else "  (0 masks is not an error on synthetic input; real crops are the test)"))
+        # Three passes: the TorchScript fuser compiles CUDA kernels with NVRTC only from the second
+        # call on, so a single inference passes even when NVRTC cannot load its builtins DLL.
+        for k in range(3):
+            t0 = time.time()
+            m = model.eval([img], **EVAL)[0][0]
+            n = int(np.asarray(m).max()) if m is not None else 0
+            print(f"inference {k + 1}/3 on a synthetic 40x180 image: {n} mask(s) in {time.time() - t0:.2f}s"
+                  + ("" if n else "  (0 masks is not an error on synthetic input; real crops are the test)"))
 
     print("ENVIRONMENT OK" if ok else "ENVIRONMENT CHECK FAILED")
     return 0 if ok else 1
