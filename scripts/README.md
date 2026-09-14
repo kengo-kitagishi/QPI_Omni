@@ -93,6 +93,7 @@ production checkpoints in `models/`.
 - `rollback_drift_state.py`
 - `run_recon_batches_260908.py`
 - `run_recon_cycle.py`
+- `scheduled_recon_and_calibrate.py` — grid recon → channel detect → calibration（watch_grid_then_recon_* と skill batch-recon-calibrate が呼ぶ）
 - `visualize_drift_log.py`
 - `visualize_grid_true_positions.py`
 - `visualize_timelapse_qc.py`

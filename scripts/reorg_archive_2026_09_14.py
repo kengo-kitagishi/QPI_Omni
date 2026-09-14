@@ -67,7 +67,7 @@ GROUPS = {
         wait_grid_recon_then_correct_0pergluc watch_grid_then_recon_260810 watch_grid_then_recon_260819
         watch_grid_then_recon_260819_b2 watch_grid_then_recon_260819_b3 run_recon_0per2_partial_260617
         run_recon_0per_260617 run_recon_0per_all_260617 run_recon_continuation_260617 run_redetect_0per_260617
-        run_260310_grid_and_prepare scheduled_recon_and_calibrate _cleanup_260405_acute_intermediates _fast_grid_cleanup
+        run_260310_grid_and_prepare _cleanup_260405_acute_intermediates _fast_grid_cleanup
         _gen_channel_rois_grid_260405_acute _make_ri_calibration_260405_acute _measure_offaxis_260405 _apply_drift_to_pos
         _compute_0per_delta _prep_0per_correct _reverse_0per_correct _check_grid_actual_dy _analyze_error_dy_pixel_scale
         regenerate_grid_subtract_260508 batch_correct_0pergluc_260508""",
