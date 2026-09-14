@@ -1,0 +1,49 @@
+# 260908 - S. pombe in the mother machine, YE (実験1 retry), single z at 0.0 um.
+# 98 sample Pos (Pos1-98; Pos0 is the BG), 8-12 traps per Pos, 5 min/frame.
+# Stopped by contamination at T=1259 (2026-09-15 02:00): 1260 frames = 4 d 9 h. Read by scripts/run_dataset_pipeline.py.
+dataset: "260908"
+description: "YE, 98 Pos x 8-12 traps, 5 min/frame, single z (0.0 um), contaminated - stopped at img_1259"
+
+paths:
+  raw_root: "D:/AquisitionData/Kitagishi/260908/online_crop_sub_zstack_2"   # online crop_sub from compute_drift_online (HDD)
+  raw_root_overrides: []
+  mask_root: "E:/260908_seg"                                  # NVMe, separate disk from raw
+  channel_rel: "output_phase/channels/crop_sub_rawraw/z000"
+  phase_glob: "img_*_ph_000.tif"                               # online crop_sub has no _phase suffix (260517 offline crops do)
+  consolidated_dir: null
+  master_root: "E:/QPI_master/260908"
+  mirror_root: null                                            # contaminated run: not mirrored to the shared drive
+
+positions: {start: 1, end: 98}
+
+segmentation:
+  model: "models/omni_model_d20_2026_09_07_12_41_31.782047"
+  eval: {diameter: 20, normalize: true, tile: false, omni: true, flow_threshold: 0.11, mask_threshold: 0, min_size: 10, net_avg: false}
+  gate: {phase_hi: 0.7, min_px: 40}
+  workers: 6
+
+tracking:
+  pixel_size_um: 0.34567514677103717
+  time_interval_min: 5.0
+  wavelength_nm: 658.0
+  alpha_ri: 0.00018
+  frame_min: 2
+  # No RI calibration was acquired for 260908 (no MilliQ/EtOH run). The tracker refuses a media schedule
+  # without a calibration, so the schedule is empty and the scalar n_medium default (1.333) is used for
+  # every frame: volume, lineage and divisions are unaffected, absolute RI / dry mass are not YE-referenced.
+  media_schedule: ""
+  ri_calibration: null
+  calibration_id: null
+  bad_frames: null                                             # drift_session/bad_frames.json is 260517's (n_total 3745), not this run
+  production_marker: "volume_um3_efd"
+  workers: 1                                                   # raw_root is a single-spindle HDD
+
+edge_channels: ["ch00", "ch11"]                                # NOTE: traps per Pos vary 8-12 here, so ch11 is not always the edge
+
+inputs_extra: []
+qc_extra: []
+derived: null
+notes:
+  - "contaminated: acquisition stopped at T=1259 (2026-09-15 02:00, MM live mode at 02:06); later frames may already show contamination"
+  - "drift correction healthy to the end: 98/98 Pos valid, score median 0.998 at T=3 and T=74"
+  - "grid: E:/260908/ye_grid_0p05_2 (99 Pos, z=5 only, merged from three acquisitions)"
