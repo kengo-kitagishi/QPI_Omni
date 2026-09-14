@@ -31,15 +31,17 @@
 14. 培地切替（2 → Low → 0 → 2）は手動オペレーション、フレーム番号を必ず記録
 
 [Day 2+]
-15. python correct_0pergluc.py            → 0% 期間 frame に delta を warp 引き算
-16. (任意) Omnipose GUI で training 画像を作成 → 学習
-17. python 07_segmentation.py             → mask
-18. (任意) python calibrate_ri.py         → 培地 RI を MilliQ + EtOH 2点法で校正
-19. ImageJ で細胞 ROI tracking → Results.csv
-20. python 32_simple_ellipse_ri.py        → 細胞 RI / dry mass
-21. python central_cell_lineage_tracker.py → 系譜・dry mass 時系列
-22. python qpi_fig_03_lineage_analysis.py → 解析図
+15. python correct_0pergluc.py            → 0% 期間 frame に delta を warp 引き算（必要なときだけ）
+16. (任意) Omnipose GUI で training 画像を作成 → 08_train.py で学習 → 採用 checkpoint を models/ に置く
+17. (任意) python calibrate_ri.py         → 培地 RI を MilliQ + EtOH 2点法で校正
+18. datasets/<YYMMDD>.yaml を書く          → パス・培地切替 frame・RI 校正・bad frames・model
+19. python scripts/run_dataset_pipeline.py datasets/<YYMMDD>.yaml --plan   → 何が走るか確認
+20. python scripts/run_dataset_pipeline.py datasets/<YYMMDD>.yaml --stages seg,track,qc,consolidate,publish --tag v<YYYYMMDD>_<note>
+    → seg（GPU）→ 全 ch の lineage tracking → 分裂 QC → 集約 → master 公開（<master_root>/<tag>/）
+21. 解析・図は master から読む（qpi_paths.resolve_lineage_csv）。論文用の窓は build_phase1_dataset_260517.py
 ```
+
+Python は `environment/` の pinned env（Windows: `powershell -ExecutionPolicy Bypass -File environment\bootstrap_windows.ps1`）。
 
 ---
 
@@ -512,187 +514,103 @@ python scripts/correct_0pergluc.py
 
 実験ごとに条件（培地・撮影条件・光学系）が変わるので、**実験ごとに学習し直す**方針。
 
-1. `correct_0pergluc.py` 出力（or 補正不要なら ch_subtracted）から代表的な frame を抽出
-2. Omnipose GUI でアノテーション（〜数百〜数千 細胞分の ground truth mask 作成）
-3. 必要なら `12_vertical_flip.py` `26_horizontal_flip.py` でデータ拡張
-4. `08_train.py` で学習（`normalize=False, rescale=False` が重要）
-5. モデルを `C:\Users\QPI\Desktop\train\omni_model\models\` に保存
+1. `correct_0pergluc.py` 出力（補正不要なら `crop_sub_rawraw`）から代表的な frame を抽出する。`sample_train_frames.py` / `_build_trainset_260517.py` が 2% 増殖期・回復期を密に、飢餓期を疎に、複数 Pos × ch から取る（端 trap ch00 / ch11 は入れない）
+2. Omnipose GUI でアノテーション（数百〜数千細胞分）
+3. 必要なら `26_horizontal_flip.py` でデータ拡張
+4. `08_train.py` で学習（`normalize=False, rescale=False`）。checkpoint は `C:\Users\QPI\Desktop\train\omni_model_d20\models\` に出る。`checkpoint_eval.py` / `checkpoint_overlay_runner.py` で epoch を選ぶ
+5. 採用した checkpoint を **`models/`（リポジトリ直下）に短い名前でコピーし、`models/MODELS.json` に sha256・学習日・学習セット・eval を書く**。`datasets/<YYMMDD>.yaml` の `segmentation.model` はこの短い名前を指す
+
+現行（260517、2026-09-07 学習）: `models/omni_model_d20_2026_09_07_12_41_31.782047`
 
 ---
 
-### 9.2 `07_segmentation.py` — Omnipose 推論
+### 9.2 `seg_omnipose.py` — Omnipose 推論（GPU のみ）
 
-**何をするか**:
-1. `indir` 配下の TIF をリストアップ
-2. `CellposeModel(pretrained_model=model_path, omni=True, nchan=1, nclasses=3)` をロード（GPU 使用）
-3. 各 image を `tifffile.imread` → `model.eval()` で mask 推論
-   - `diameter=30, normalize=True, tile=False, omni=True`
-   - `flow_threshold=0.11`（low: 検出点の確保）
-   - `mask_threshold=0`, `min_size=10`
-4. `outdir = indir/inference_out/` に `*_masks.tif`（uint16 ラベル）を保存
-5. エラー frame は空 mask で書く
+`run_dataset_pipeline.py --stages seg` から Pos ごとに起動される。単体でも動く。
 
-**編集箇所** (`scripts/07_segmentation.py`):
-```python
-indir = r"D:\AquisitionData\Kitagishi\260423\ph_1\Pos2\output_phase\channels\crop_sub_rawraw_0per_corr\ch01"
-model_path = r"C:\Users\QPI\Desktop\train\omni_model\models\cellpose_residual_..._2026_04_13_10_54_41.173761"
-USE_GPU = True
+- 入力: `<raw_root>/PosN/<channel_rel>/chNN/img_*_ph_000_phase.tif`（位相 crop、radian）
+- 出力: `<mask_root>/PosN/<channel_rel>/chNN/inference_out/img_*_ph_000_phase_masks.tif`（uint16 ラベル）。**細胞が検出された frame だけ**書く。ch が終わると `_DONE`（再実行時は skip）
+- 空フレーム gate: 位相 > 0.7 rad の画素が 40 未満なら model を呼ばない
+- eval: `diameter=20, normalize=True, tile=False, omni=True, flow_threshold=0.11, mask_threshold=0, min_size=10, net_avg=False`（yaml の `segmentation.eval`）
+- ch 単位の ProcessPool（既定 6 worker、worker ごとに model を 1 回ロード）。**CPU では走らせない**（backend で mask が変わる）
+- 260517 の Pos1〜104 を出した driver は `run_seg_260517_gpu.py` にそのまま残してある（同じ eval・同じ gate）
+
+```powershell
+<env>\python.exe scripts\seg_omnipose.py --raw-root D:\AquisitionData\Kitagishi\YYMMDD\ph_1 --mask-root E:\YYMMDD_seg `
+    --channel-rel output_phase/channels/crop_sub_rawraw --model models\omni_model_d20_2026_09_07_12_41_31.782047 `
+    --pos-start 1 --pos-end 12 --workers 6
 ```
 
-**実行（全 Pos × 全 ch を回す例）**:
-```bash
-for POS in 1 2 3 4 5 6 7 8 9 10 11; do
-  for CH in 00 01 02 03 04 05 06 07 08 09 10 11; do
-    python -c "
-import sys; sys.path.insert(0,'scripts')
-import importlib, runpy
-import os
-os.environ['INDIR'] = rf'D:\AquisitionData\Kitagishi\260423\ph_1\Pos$POS\output_phase\channels\crop_sub_rawraw_0per_corr\ch$CH'
-runpy.run_path('scripts/07_segmentation.py')
-"
-  done
-done
-```
-※ `07_segmentation.py` 側で `indir` を環境変数から読むように1行書き換えると上のループが綺麗になる。
-
-**出力**: `…\chXX\inference_out\*_masks.tif`
+`07_segmentation.py` は 1 ディレクトリを手で切るときの旧 CLI（`--indir --model-path --frame-min/--frame-max`）。
 
 ---
 
-## 10. Phase 9 — 細胞 RI / dry mass
+## 10. Phase 9 — 系譜 tracking と細胞ごとの RI / dry mass / volume
 
-### 10.1 ImageJ での ROI tracking → Results.csv
+### 10.1 `central_cell_lineage_tracker.py`
 
-各細胞を 1-by-1 で trace（Mother Machine のチャネル奥の細胞を継承）し、各 frame で楕円 fit パラメータを取得 → `Results.csv` に書き出す:
+ch ごとに 1 回。`run_dataset_pipeline.py --stages track` が masks のある ch だけを回す（production 済みの ch は skip）。
 
-| 列 | 意味 |
-|---|---|
-| Label | 細胞 ID + frame |
-| Major | 楕円長径 [px] |
-| Minor | 楕円短径 [px] |
-| X, Y | 重心座標 |
-| Angle | 楕円の傾き |
-| Slice | frame index（1-indexed）|
-| Area | mask 面積 [px²] |
+**入力**: `--indir <mask ch>`（`inference_out/*_masks.tif`）、`--raw-dir <phase ch>`（位相 crop。mask と別ディスクでよい。H: のような読み取り専用ディスクには何も書かない）
 
-> 自動 tracking は `central_cell_lineage_tracker.py` でカバーされるが、人手で詳細に追いたい場合や training に使う場合は ImageJ。
+**処理**:
+1. drift session の `bad_frames.json` にある frame を linking の前に除外（測定値は `lineage_bad_frames.csv` に出す）
+2. 画像端に触れる mask を linking から落とす（trap から出た細胞）
+3. 各 frame の mask を trap 奥からの距離で rank 付け（rank 1 = mother）。frame 間の対応は面積で決める: 面積比 > 0.68 なら同一細胞、`|(a+b) − prev| / prev < 0.30` なら分裂（内側が親・外側が娘）、どちらでもなければ `is_outlier=True` の行として残す（ID は切れない。3 frame 規則: 比 < 0.30・> 1.50・< 1/1.8 も outlier）
+4. mother の子孫を系譜木（`in_tree`）に入れる。木の外の細胞も全 frame 測る
+5. 各細胞・各 frame で **黄色輪郭**（`mask_volume_schematic.efd_section_geometry`: mask 境界を EFD K=6 で平滑化し 0.5 px 内側へ縮め、中心線の中点更新を 1 回）から長軸・短軸・体積を取る
+   - `volume_um3_rod`: 黄色の長軸・短軸からのカプセル
+   - `volume_um3_efd`: 黄色の弦の回転体積分 Σπ(w/2)²Δs（**採用**）
+6. RI と dry mass: `--ri-calibration` の JSON と `--media-schedule`（絶対 img 番号 → wo_* の対応）から frame ごとの n_medium を決め、`Δn = Σφ · λ / (2π · V)`、`n_cell = n_medium + Δn`、`m = Δn · V / α`（α = 0.00018 mL/mg）。`mean_ri` / `mass_pg` / `density_pg_um3` は rod 体積、`mean_ri_efd` / `mass_pg_efd` / `density_pg_um3_efd` は efd 体積から
+7. `--frame-min 2` で img_0 / img_1 を落とし、img_2 を time 0 h にする
 
----
+**出力** (`<mask ch>/inference_out/lineage_out/`): `lineage_data3D.csv`（細胞 × frame）、`clist.csv`（細胞ごと）、`lineage_cells.json`、`lineage_bad_frames.csv`、`bad_frames_used.json`、`lineage_run_params.json`。列は `docs/LINEAGE_DATAFRAME_SCHEMA.md`
 
-### 10.2 `32_simple_ellipse_ri.py` — Rod 体積近似で細胞 RI
-
-**何をするか**:
-1. `Results.csv` を読み、ROI ごとに `Slice` から対応する `*_subtracted.tif` をロード
-2. `make_ellipse_mask(X, Y, Major, Minor, Angle)` で楕円マスクを生成
-3. **Rod shape 体積**（カプセル型）を計算:
-   ```
-   length = Major × pixel_size_um
-   width  = Minor × pixel_size_um
-   r = width / 2
-   h = length - 2r
-   V = (4/3)πr³ + πr²·h    (h ≥ 0; h<0 なら球)
-   ```
-4. **位相積分から Δn を算出**:
-   ```
-   Σφ = Σ phase[mask] · pixel_area
-   Δn = (Σφ · λ) / (2π · V)
-   n_cell = n_medium + Δn
-   ```
-5. **dry mass**:
-   ```
-   m = Δn · V / α      (α = 0.18 mL/g = 0.00018 mL/mg)
-   ```
-6. 各 ROI の (n_cell, dry_mass, V, length, width) を時系列で plot → `figure_logger.save_figure()` で保存
-
-**編集箇所** (`scripts/32_simple_ellipse_ri.py`):
-```python
-RESULTS_CSV  = r"D:\AquisitionData\Kitagishi\260423\analysis\Pos2_ch01\Results.csv"
-IMAGE_DIR    = r"D:\AquisitionData\Kitagishi\260423\ph_1\Pos2\output_phase\channels\crop_sub_rawraw_0per_corr\ch01"
-OUTPUT_FILE  = "simple_mean_ri.png"
-
-PIXEL_SIZE_UM = 0.348
-WAVELENGTH_NM = 658
-N_MEDIUM      = 1.333    # ★ calibrate_ri.py の結果 (n_2per) で更新。培地切替で時刻ごとに変えるなら別実装が必要
-ALPHA_RI      = 0.00018  # mL/mg (= 0.18 mL/g)
-```
-
-**実行**:
-```bash
-python scripts/32_simple_ellipse_ri.py
-```
-
-**出力**:
-- `figure_logger` 経由で `results/figures/` + figure inbox JSON
-- 標準出力に各 ROI の RI / dry_mass
+medial-axis・profile・skimage の楕円近似は出さない（2026-09-14 決定）。手法の対比は `_fig_volume_method_comparison_260517.py` の図だけに残す（黄色 efd は旧 medial profile の約 0.80 倍。差は −0.5 px の縮めが全部）。ImageJ の ROI tracking と `32_simple_ellipse_ri.py` は使わない（archive）。
 
 ---
 
-## 11. Phase 10 — 図生成
+### 10.2 `division_qc_260517.py` — 分裂判定の検証
 
-### 11.1 `central_cell_lineage_tracker.py` — Mother machine 系譜トラッキング
+tracker の分裂判定は 1 frame の面積だけなので、一時的な mask 分裂が偽の娘を作る。各候補を親の `mass_pg_efd` / `volume_um3_efd` の前後比で検証する:
 
-**何をするか**:
-1. `--indir` 配下の `*.tif`（生位相）と `inference_out/*_masks.tif`（segmentation）をペアでロード
-2. 各 frame で mask の重心を計算 → 画像 x 中心からの距離で **rank** をつける（rank 0 = 最も中央 = mother）
-3. **2-pointer rank iteration** で frame 間の ID 伝播:
-   - `area_ratio > DIV_AREA_RATIO_MIN` → 同一 ID（continuation）
-   - `curr[r] + curr[r+1] ≈ prev[r_prev]` → 分裂（inner=parent, outer=new daughter）
-   - どれにも該当しない → continuation + `is_outlier` フラグ
-4. mother の子孫だけを系譜木に残す（frame 0 の rank ≥ 2 は bookkeeping のみ）
-5. 各細胞・各 frame で楕円 fit → Major, Minor → Rod 体積 → mean phase → RI / dry mass
-6. 出力:
-   - `lineage_table.csv`: per-frame per-cell metrics
-   - `lineage_cells.json`: per-cell birth/death/parent
-   - `figure_logger` 経由で系譜木 PDF + volume / RI 時系列図
+- ±1 frame に outlier がなければ direct 採用
+- あれば ±8 frame の有効 2〜3 点の中央値で post/pre mass 0.25〜0.78、volume 0.25〜0.85、両比の差 ≤ 0.25 なら rescued
+- 有効点が 2 未満なら insufficient、範囲外なら rejected、検証済みイベントから 12 frame 以内の rescued は duplicate
 
-**実行**:
-```bash
-python scripts/central_cell_lineage_tracker.py \
-  --indir /Volumes/2604/260423/ph_1/Pos9/output_phase/channels/crop_sub_rawraw_0per_corr/ch00 \
-  --pixel-size-um 0.346 \
-  --time-interval-min 5
-```
-
-**出力**:
-```
-…/inference_out/lineage_out/lineage_table.csv
-                            /lineage_cells.json
-results/figures/<figure_id>_lineage_tree.pdf
-                <figure_id>_volume_timeseries.pdf
-                <figure_id>_RI_timeseries.pdf
-```
+出力 `divisions_qc.csv`（per ch: `validated`, `method`, 比）、集約 `all_cells_divisions_qc.csv.gz`。`run_dataset_pipeline.py --stages qc` と consolidate の中で自動実行（`lineage_data3D.csv` より新しい結果があれば skip）。
 
 ---
 
-### 11.2 `qpi_fig_03_lineage_analysis.py` — 系譜解析図
+### 10.3 集約と master 公開 — `run_dataset_pipeline.py`
 
-**何をするか**: ImageJ ROI Results.csv（or `lineage_table.csv`）から以下 10 種の解析:
-1. 個別細胞の area / RI 時系列（分裂イベント検出付き）
-2. 集団 mean ± SEM（area / RI）
-3. Birth size vs Added size（sizer / adder / timer 分類）
-4. Birth RI vs Added RI（dry mass homeostasis）
-5. 分裂間隔ヒストグラム
-6. 分裂間隔 per generation
-7. 細胞周期で揃えた trajectory（Area / RI / Dry mass）
-8. RI 分布ヒストグラム + Gaussian fit
-9. Density homeostasis（birth RI vs ΔRI）
-10. Growth rate（dArea/dt, dMass/dt）
-
-**実行**:
-```bash
-python scripts/qpi_fig_03_lineage_analysis.py
+```powershell
+<env>\python.exe scripts\run_dataset_pipeline.py datasets\<YYMMDD>.yaml --stages consolidate,publish --tag v<YYYYMMDD>_<note>
 ```
 
-各種図を `figure_logger` 経由で保存。
+- consolidate: production 判定（`lineage_run_params.json` の media_schedule / frame_min が yaml と一致し、CSV に `volume_um3_efd` 列がある）を満たす ch を `<mask_root>/_lineage_consolidated/` に連結（`all_cells_lineage_data3D.csv.gz`, `all_cells_clist.csv.gz`, `all_cells_lineage_bad_frames.csv.gz`, `all_cells_divisions_qc.csv.gz`, `channel_index.csv`, `manifest.json`）
+- publish: `<master_root>/<tag>/` に凍結。`consolidated/`、`per_channel/PosN/chNN/`、`inputs/`（RI 校正・bad_frames・dataset yaml・channel classification・model checkpoint）、`code/`（tracker・幾何モジュール・driver・git HEAD）、`qc/`、`MANIFEST.json`、`SHA256SUMS.txt`（LF）、`README.md`、`SCHEMA.md`。全ファイル読み取り専用。`LATEST.txt` を更新。G: のミラーは per_channel 抜き
+- **解析はすべて master から読む**。`qpi_paths.resolve_lineage_csv()` が master を最優先で解決する（`QPI_LINEAGE_MASTER=<tag>` で版固定、`QPI_LINEAGE_SOURCE=inbox` で旧 inbox データ）。作業ツリー `<mask_root>` を直接読む解析は書かない
+
+260517 は固有 chain（`_retrack_260517_newmodel.py` → `_chain_tiltfix_260517.py` → `_finalize_yellow_260517.py` → `publish_master_260517.py`）で公開している。処理は driver と同じで、`datasets/260517.yaml` が同じ設定を記録している。
 
 ---
 
-### 11.3 補助図
+### 10.4 派生パッケージ（論文用の窓）
 
-- `qpi_fig_01_reconstruction_procedure.py`: QPI hologram → 位相再構成プロシージャの 6-panel 教科書図（thesis 用）
-- `qpi_fig_02_visibility.py`: hologram から visibility 計算プロシージャの 6-panel 図（thesis 用）
+`build_phase1_dataset_260517.py` が master から `derived/phase1_img0002-2017/` を生成（publish 時に自動。yaml の `derived`）。窓は **img_2〜img_2017 = 2016 frames = 168 h**。img_2018 は培地切替（予定 img_2019）の光学的影響を既に受けている（母細胞 total_phase +7%、52 Pos 中 41 Pos）ため除外。再 tracking はせず、per-frame 行は master のまま、per-cell 要約だけ窓内で再計算し打ち切りフラグ（`present_at_window_start` / `alive_at_window_end`）を付ける。中身: cells_frames / cells / divisions（`validated` 付き）/ channels（`edge_channel`, `analysis_recommended`）/ excluded_frames / bad_frame_measurements + README / SCHEMA / MANIFEST / SHA256。
 
-これらは「実験ごとに必ず」ではなく、**論文・thesis の section 用に必要時のみ実行**。
+端 trap **ch00 / ch11 は master に残すが解析対象から外す**（`channels.csv: analysis_recommended`。2026-09-14 決定）。
+
+---
+
+## 11. Phase 10 — QC と図
+
+- `_fig_mother_lineage_qc_260517.py`: Pos ごとに全 ch の mother lineage（分裂線つき）を並べ、tracking の破綻を目で見る
+- `_fig_switch_frame_check_260517.py`: 培地切替 frame 前後の mother total_phase / RI（切替の光学的影響が何 frame 前から出るか）
+- `lineage_html_gallery_260517.py --source master`: lineage ごとに mean_ri / 位相積分 mass / volume の 3 段 plot を共通 time 軸で HTML に並べる（有効 = 濃青、outlier = 赤 ×、border = 橙 △、drift 除外 = 紫 ◇、検証済み分裂 = 灰の縦線、cycle ごとの ln(mass) 直線 fit = 赤線。y 範囲 1.37–1.40 / 0–50 pg / 0–120 µm³）
+- 論文図 `_fig_*.py` は黄色 master と `channels.csv: analysis_recommended` から組み直す。図は `figure_logger.save_figure(data=, caption=)` で保存し、JSON サイドカーに context を書く（`docs/FIGURE_SPEC.md`）
+- `qpi_fig_01_reconstruction_procedure.py` / `qpi_fig_02_visibility.py` は thesis の手法図（必要時のみ）
 
 ---
 
@@ -706,12 +624,16 @@ python scripts/qpi_fig_03_lineage_analysis.py
 | 4.5 | grid_calibration_PosN.json | `…\grid_2pergluc_1\` |
 | 5.2 | delta_z{Z:03d}.tif | `…\0per_zstack_1\PosN\output_phase\channels\delta_timelapse\` |
 | 7.1 | drift_config.json + state | `C:\Users\QPI\Documents\QPI_Omni\drift_session\` |
-| 7.3 | ch_subtracted TIF | `…\ph_1\PosN\output_phase\channels\crop_sub_rawraw\chXX\` |
-| 7.3 | drift_log.json | `…\drift_session\` |
+| 7.3 | 位相 crop（ch_subtracted TIF） | `…\ph_1\PosN\output_phase\channels\crop_sub_rawraw\[z000\]chXX\` |
+| 7.3 | drift_log.json / grid_subtract_log.json / bad_frames.json | `…\drift_session\` |
 | 8.1 | 0% 補正済み TIF | `…\PosN\…\crop_sub_rawraw_0per_corr\chXX\` |
-| 9.2 | mask | `…\chXX\inference_out\*_masks.tif` |
-| 10.2 | RI / dry mass 図 + JSON | `results/figures/`, `figure_inbox/` |
-| 11.1 | lineage_table.csv / lineage_cells.json | `…\chXX\inference_out\lineage_out\` |
+| 9.2 | mask + `_DONE` | `<mask_root>\PosN\…\chXX\inference_out\*_masks.tif` |
+| 10.1 | lineage_data3D.csv / clist.csv / lineage_cells.json / lineage_run_params.json | `<mask_root>\PosN\…\chXX\inference_out\lineage_out\` |
+| 10.2 | divisions_qc.csv | 同上 |
+| 10.3 | all_cells_*.csv.gz / channel_index.csv / manifest.json | `<mask_root>\_lineage_consolidated\` |
+| 10.3 | master（読み取り専用） | `<master_root>\<tag>\` + `LATEST.txt`、ミラー `G:\共有ドライブ\wakamotolab_meeting\kitagishi\data_master\<YYMMDD>\<tag>\` |
+| 10.4 | phase-1 パッケージ | `<master_root>\<tag>\derived\phase1_img0002-2017\` |
+| 11 | 図 + JSON サイドカー | `results/figures/`, figure-hub inbox |
 
 ---
 
@@ -735,14 +657,14 @@ m_dry = (1/α) · ∫∫ Δn(x, y) · A_pixel  dxdy
 **細胞内平均 RI**
 ```
 n_cell = n_medium + ΣΔn[mask] · A_pixel / V_total
-V_total: rod shape (capsule) approximation (Phase 10.2)
+V_total: 黄色輪郭の回転体積分 volume_um3_efd（10.1）。volume_um3_rod は同じ輪郭の長軸・短軸からのカプセル
 ```
 
 ---
 
 ## Appendix C — 廃止された旧 doc / 旧パイプライン
 
-このプロトコルへの一本化に伴い、以下を削除:
+このプロトコルへの一本化に伴い、以下を削除（2026-09-09 実施。`docs/README.md`・`scripts/README_VOLUME_TRACKING.md`・`AGENTS.md.bak.*` も同時に削除）:
 
 - `PIPELINE.md` — 旧パイプライン（`channel_crop` → `gaussian_backsub` → `compute_pos_shifts` → `grid_subtract` の分割実行）。`compute_drift_online.py` で統合済み。
 - `docs/USAGE_GUIDE.md` — 旧 24/31/32 系の使い方
@@ -752,15 +674,24 @@ V_total: rod shape (capsule) approximation (Phase 10.2)
 - `docs/COMMUNITY_REPRO_GUIDE.md` — 旧コミュニティ向け再現ガイド
 - `docs/Mac_Laptop_Cursor_Setup.md` — セットアップ作業ログ
 - `docs/workflows/timeseries_volume_tracking_guide.md`, `2025-12-23_timeseries_total_mass.md`, `thickness_map_and_ri_calculation.md`, `micromanager_realtime_visibility.md` — 旧 workflow doc
-- `README.md` — 古く誤情報あり
+- `README.md` — 古く誤情報あり（本 doc を指す短い索引に置き換え）
 
-`gaussian_backsub` 自体（`scripts/19_gaussian_backsub.py`）は比較診断用に残置するが、本番パイプラインでは使わない。tilt_correct（slope+intercept fit、`tilt_utils.tilt_fit_crop`）が標準。
+2026-09-14 に、`19_gaussian_backsub.py`・`32_simple_ellipse_ri.py`・`36_align_and_subtract_timelapse.py`・`10_batch_reconstruction_new.py`・`qpi_fig_03_lineage_analysis.py` を含む 260 本の旧スクリプトを `scripts/archive/2026-09-14_reorg/` へ退避した（索引は `scripts/README.md`、退避理由は archive 側の README）。tilt 補正は `tilt_utils.tilt_fit_crop`（slope + intercept fit）が標準。
 
 ---
 
-## TBD（実験ごとに埋める）
+## 実験ごとに決めること（`datasets/<YYMMDD>.yaml` に書く）
 
-- 各培地段階の **frame 範囲**（Phase 7.4 のメモ + Phase 8 の `GLUCOSE_*_START/END`）
-- 培地切替の正確な **タイミング表**
-- Omnipose model のパス（毎回学習し直すので毎回更新）
-- ImageJ ROI Results.csv の保存先
+- 各培地段階の **frame 範囲**（`tracking.media_schedule`。Phase 7.4 のメモ、`correct_0pergluc.py` の `GLUCOSE_*_START/END` と同じ数値）
+- RI 校正 JSON（`tracking.ri_calibration`、Phase 5.3）と drift session の `bad_frames.json`（`tracking.bad_frames`）
+- Omnipose checkpoint（`segmentation.model`、`models/` の短い名前）と学習セットの記録（`models/MODELS.json`）
+- `raw_root` / `mask_root` / `master_root` / `channel_rel`（z-stack timelapse なら `z000` を含む。0% 補正後なら `crop_sub_rawraw_0per_corr`）
+- tilt fit の側（Pos によって trap の向きが違うなら `batch_grid_subtract_260517.py` の `TILT_POS_SPLIT`。crop の切替 `POS_SPLIT` とは別の境界）
+
+### 260517 の記録
+
+- model: `models/omni_model_d20_2026_09_07_12_41_31.782047`（2026-09-07 学習）。masks `D:\260517_seg\PosN\output_phase\channels\crop_sub_rawraw\z000\chNN\inference_out`、位相 crop は `H:\260517\2per_0055per_0per_2per_crop_sub`（読み取り専用）
+- 培地: `0:wo_2,2019:wo_0p0055,2307:wo_0,2885:wo_2`（0.0055% は 0% の RI を使う）。RI 校正 `H:\260517\grid_2pergluc_2\ri_calibration_results.json`（wo_2 = 1.33503、wo_0 = wo_0p0055 = 1.33274、n_milliq = 1.3312）
+- **tilt fit の側**: Pos ≤52 は開口端が左なので左 1/3、Pos ≥53 は trap が鏡像（細胞が左・開口端が右）なので右 1/3。2026-09-14 に、grid_subtract が `PosN\z000` から Pos 番号を読めず全 Pos を左 fit していたことが判明（Pos ≥53 の背景が −0.1〜−1.7 rad に沈み total_phase / RI / mass が偏る。mask はほぼ不変）。保存 crop は fit 幅 270 そのままなので `refit_tilt_right_260517.py` で右 1/3 に fit し直した結果は元パイプラインの `fit_right=True` と同一。修正後の位相は `D:\260517_tiltfix`（yaml の `raw_root_overrides`）。grid_subtract は Pos 番号が判別できないとき停止するようにした
+- 培地切替の影響: img_2018 で母細胞の total_phase +7〜8%・RI +0.0013（52 Pos 中 41 Pos）。論文用の窓は img_2〜img_2017
+- master: `D:\QPI_master\260517\<tag>\`（`v20260911_newmodel` → tilt fix と黄色幾何を反映した `v20260915_yellow` に置き換え予定）

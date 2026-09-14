@@ -3,14 +3,21 @@
 # 251105
 from cellpose_omni import io
 from cellpose_omni.models import CellposeModel
-import os, sys, argparse, numpy as np, tifffile, traceback
+import os, re, sys, argparse, numpy as np, tifffile, traceback
 
 # ==== Settings (modify as needed) ====
 _parser = argparse.ArgumentParser(add_help=False)
 _parser.add_argument("--indir", default=r"G:\マイドライブ\ch02")
 _parser.add_argument("--model-path", default=None)
 _parser.add_argument("--outdir", default=None)
+_parser.add_argument("--frame-min", type=int, default=None,
+                     help="Inclusive lower bound on the img_NNN number in the filename.")
+_parser.add_argument("--frame-max", type=int, default=None,
+                     help="Inclusive upper bound on the img_NNN number in the filename.")
 _args, _ = _parser.parse_known_args()
+
+# Filename pattern: img_NNNNNNNNN_*.tif — capture the leading digit block as int.
+_FRAME_RE = re.compile(r"img_0*(\d+)")
 indir = _args.indir
 # Output directory (where masks etc. are saved)
 outdir = _args.outdir if _args.outdir else os.path.join(indir, "inference_out")
@@ -61,6 +68,25 @@ for f in files:
 files = proc_files
 
 print(f"Found {len(files)} files for inference")
+
+# Optional img_NNN range filter — keeps only files whose embedded frame number
+# is within [_args.frame_min, _args.frame_max]. The downstream tracker
+# re-indexes from 0 on the sorted survivor list, so e.g. --frame-min 137 makes
+# img_000000137 become local frame 0 (time 0 in plots).
+if _args.frame_min is not None or _args.frame_max is not None:
+    fmin = -1 if _args.frame_min is None else int(_args.frame_min)
+    fmax = float("inf") if _args.frame_max is None else int(_args.frame_max)
+    kept = []
+    for f in files:
+        m = _FRAME_RE.search(os.path.basename(f))
+        if m is None:
+            continue
+        n = int(m.group(1))
+        if fmin <= n <= fmax:
+            kept.append(f)
+    print(f"Frame range filter [{_args.frame_min}, {_args.frame_max}] -> kept {len(kept)}/{len(files)}")
+    files = kept
+
 assert files, "No images found."
 
 # ==== Load model ====

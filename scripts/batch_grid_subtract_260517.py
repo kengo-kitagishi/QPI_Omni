@@ -47,6 +47,11 @@ RAW_GRID_Z_INDEX = 8
 RAW_TL_Z_INDEX   = 0
 TILT_CROP_H_RAW  = 270
 POS_SPLIT        = 51
+# Tilt fit side: traps are mirrored from Pos53 (cells at the left, open end at the right), so the
+# background third is the RIGHT one for Pos >= 53. The crop split stays at 51.
+# (Until 2026-09-14 grid_subtract could not parse the Pos number from the PosN\z000 dir and fitted
+#  every position on the left; Pos53..104 were re-flattened by refit_tilt_right_260517.py.)
+TILT_POS_SPLIT   = 53
 SHIFT_SIGN_X     = -1
 SHIFT_SIGN_Y     = -1
 CROP_BEFORE = (0, 2048, 400, 2448)   # Pos < POS_SPLIT
@@ -103,6 +108,7 @@ def run_pos(pos_num):
     gs.APPLY_SUBPIXEL_CORRECTION = True
     gs.APPLY_INVERSE_SHIFT = False
     gs.OUTPUT_CROP_H = TILT_CROP_H_RAW
+    gs.TILT_POS_SPLIT = TILT_POS_SPLIT   # right-third tilt fit from Pos53 (mirrored traps)
     gs.OUTPUT_SAVE_FULL_FRAME = False
 
     gs.USE_RAW_PHASE = True

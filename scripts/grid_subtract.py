@@ -113,6 +113,9 @@ TILT_CROP_H_RAW  = 270
 # Pos split threshold for which side to take background 1/3 (same as compute_pos_shifts.py).
 # Pos number < POS_SPLIT -> fit with left 1/3. Pos number >= POS_SPLIT -> fit with right 1/3.
 POS_SPLIT        = 51
+# Tilt-side split may differ from the crop split (260517: crops switch at 51, but the traps are
+# mirrored from Pos53). None -> use POS_SPLIT. Batch scripts set this explicitly.
+TILT_POS_SPLIT   = None
 
 # Erode the valid (non-OOB) mask by this many px at the OOB boundary before
 # zeroing.  valid_out (warp-ones > 0.999) keeps the first in-frame column, but
@@ -427,15 +430,32 @@ def main():
             print(f"ERROR: {name} not found: {p}")
             sys.exit(1)
 
-    # Determine tilt fit side from the timelapse Pos number (same rule as compute_pos_shifts.py).
-    _pos_match = re.match(r"Pos(\d+)", tl_dir.name)
-    if _pos_match is None:
-        print(f"WARNING: TIMELAPSE_DIR name {tl_dir.name!r} does not start with PosN; defaulting fit_right=False")
-        _pos_num = 0
-    else:
-        _pos_num = int(_pos_match.group(1))
-    fit_right = _pos_num >= POS_SPLIT
-    print(f"[tilt] Pos{_pos_num}  POS_SPLIT={POS_SPLIT}  fit_right={fit_right}")
+    # Determine the tilt fit side from the Pos number. Prefer BASE_LABEL ("PosN"), then the
+    # timelapse dir name and its parents. 2026-09-14: batch_grid_subtract_260517.py passes
+    # PosN\z000 as TIMELAPSE_DIR, which defeated the old dir-name-only parse and silently fell
+    # back to fit_right=False for every position (Pos53..104 were fitted on the cell side).
+    # An undeterminable Pos number is now an error, never a silent default.
+    _pos_num = None
+    _src = None
+    for _cand, _name in ([(tl_dir.name, "TIMELAPSE_DIR")]
+                         + [(p.name, "TIMELAPSE_DIR parent") for p in tl_dir.parents]):
+        _pos_match = re.match(r"Pos(\d+)$", _cand)
+        if _pos_match is not None:
+            _pos_num, _src = int(_pos_match.group(1)), _name
+            break
+    _bl = re.match(r"Pos(\d+)$", str(globals().get("BASE_LABEL", "") or ""))
+    if _pos_num is None and _bl is not None:
+        _pos_num, _src = int(_bl.group(1)), "BASE_LABEL"
+    elif _pos_num is not None and _bl is not None and int(_bl.group(1)) != _pos_num:
+        print(f"WARNING: Pos number from path ({_pos_num}) differs from BASE_LABEL ({_bl.group(0)}); using the path")
+    if _pos_num is None:
+        print(f"ERROR: cannot determine the Pos number for the tilt fit side "
+              f"(BASE_LABEL={globals().get('BASE_LABEL')!r}, TIMELAPSE_DIR={tl_dir}); refusing to guess")
+        sys.exit(1)
+    print(f"[tilt] Pos number {_pos_num} taken from {_src}")
+    _tilt_split = TILT_POS_SPLIT if TILT_POS_SPLIT is not None else POS_SPLIT
+    fit_right = _pos_num >= _tilt_split
+    print(f"[tilt] Pos{_pos_num}  TILT_POS_SPLIT={_tilt_split}  fit_right={fit_right}")
 
     # channels_dir is the parent directory of rois_json
     channels_dir = rois_json.parent

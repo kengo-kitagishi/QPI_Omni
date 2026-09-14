@@ -125,7 +125,10 @@ subtracted_*.tif
 *.h5
 *.ckpt
 *.safetensors
-models/
+models/*
+!/models/README.md
+!/models/MODELS.json
+!/models/omni_model_*
 checkpoints/
 weights/
 

@@ -306,7 +306,7 @@ python scripts/compute_pos_shifts.py
 - `timelapse_iarpls_bgsub.py`: BG ROI 列平均に **pspline_iarpls** をフィット、左半分のテール傾きで右半分を線形外挿、全列に適用
   - 出力: `PosN/output_phase_iarpls/img_{t}_ph_{z:03d}_phase.tif`（既定 40×440 の crop）
 
-> どちらを採用するかは「画像端の差」と「細胞ピクセルへの影響」で評価する（`docs/ANALYSIS_FLOW_CURRENT.md` フェーズ5 参照）。
+> どちらを採用するかは「画像端の差」と「細胞ピクセルへの影響」で評価する（`docs/PROTOCOL_TIMELAPSE.md` 参照）。
 
 ### Step D-4. QC
 
@@ -359,6 +359,6 @@ python scripts/visualize_timelapse_qc.py
 
 ## 関連ドキュメント
 
-- `docs/ANALYSIS_FLOW_CURRENT.md` — single-z 含むタイムラプス全体の解析フロー
-- `docs/workflows/2025-12-23_timeseries_total_mass.md` — 体積・乾燥質量時系列追跡
+- `docs/PROTOCOL_TIMELAPSE.md` — タイムラプス全体の解析フロー（正本）
+- `docs/LINEAGE_DATAFRAME_SCHEMA.md` — tracker 出力 CSV の列定義
 - 各スクリプトの docstring が一次資料。記載と実装が食い違う場合はスクリプトを正とする。

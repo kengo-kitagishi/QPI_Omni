@@ -135,10 +135,11 @@ def _add_media_vlines(
     media_schedule: list[tuple[int, str]],
     media_ri: dict[str, float],
     time_interval_min: Optional[float],
+    time_zero_frame: int = 0,
 ) -> None:
     if not media_schedule or not media_ri:
         return
-    to_x = (lambda f: f * (time_interval_min / 60.0)) if time_interval_min else float
+    to_x = (lambda f: (f - time_zero_frame) * (time_interval_min / 60.0)) if time_interval_min else float
     for f_switch, name in media_schedule:
         if f_switch <= 0:
             continue
@@ -157,10 +158,11 @@ def _add_division_ticks(
     ax,
     division_frames: np.ndarray,
     time_interval_min: Optional[float],
+    time_zero_frame: int = 0,
 ) -> None:
     if division_frames.size == 0:
         return
-    to_x = (lambda f: f * (time_interval_min / 60.0)) if time_interval_min else float
+    to_x = (lambda f: (f - time_zero_frame) * (time_interval_min / 60.0)) if time_interval_min else float
     for f in division_frames:
         x = to_x(int(f))
         ax.axvline(x, color="#444444", linewidth=0.35, linestyle=":", alpha=0.45, zorder=2)
@@ -176,6 +178,7 @@ def fig_mother_volume(
     media_ri: dict[str, float],
     time_interval_min: Optional[float],
     label: str,
+    time_zero_frame: int = 0,
 ) -> plt.Figure:
     m = data3D[data3D["cell_id"] == 0].sort_values("frame")
     bad = m["is_outlier"].to_numpy(dtype=bool) | m["touches_border"].to_numpy(dtype=bool)
@@ -183,8 +186,8 @@ def fig_mother_volume(
     y = np.where(bad, np.nan, m["volume_um3_rod"].to_numpy(dtype=float))
 
     fig, ax = plt.subplots(figsize=(140/25.4, 70/25.4), constrained_layout=True)
-    _add_division_ticks(ax, division_frames, time_interval_min)
-    _add_media_vlines(ax, media_schedule, media_ri, time_interval_min)
+    _add_division_ticks(ax, division_frames, time_interval_min, time_zero_frame)
+    _add_media_vlines(ax, media_schedule, media_ri, time_interval_min, time_zero_frame)
     ax.plot(t, y, color=OI["vermilion"], linewidth=1.0, zorder=3)
 
     ax.set_xlabel("time [h]" if "time_h" in m.columns else "frame")
@@ -205,6 +208,7 @@ def fig_mother_mean_ri(
     media_ri: dict[str, float],
     time_interval_min: Optional[float],
     label: str,
+    time_zero_frame: int = 0,
 ) -> plt.Figure:
     m = data3D[data3D["cell_id"] == 0].sort_values("frame")
     bad = m["is_outlier"].to_numpy(dtype=bool) | m["touches_border"].to_numpy(dtype=bool)
@@ -212,8 +216,8 @@ def fig_mother_mean_ri(
     y = np.where(bad, np.nan, m["mean_ri"].to_numpy(dtype=float))
 
     fig, ax = plt.subplots(figsize=(140/25.4, 70/25.4), constrained_layout=True)
-    _add_division_ticks(ax, division_frames, time_interval_min)
-    _add_media_vlines(ax, media_schedule, media_ri, time_interval_min)
+    _add_division_ticks(ax, division_frames, time_interval_min, time_zero_frame)
+    _add_media_vlines(ax, media_schedule, media_ri, time_interval_min, time_zero_frame)
     ax.plot(t, y, color=OI["vermilion"], linewidth=1.0, zorder=3)
 
     # If n_medium_used is recorded per frame, overlay it as a faint reference line.
@@ -283,13 +287,14 @@ def fig_lineage_tree(
     data3D: pd.DataFrame,
     time_interval_min: Optional[float],
     label: str,
+    time_zero_frame: int = 0,
 ) -> plt.Figure:
     positions = _assign_tree_x(clist)
     n_cols = max(1, int(max(positions.values())) + 1) if positions else 1
     width_in = max(4.0, min(9.0, 0.045 * n_cols + 3.0))
     fig, ax = plt.subplots(figsize=(width_in, 5.2), constrained_layout=True)
 
-    to_h = (lambda f: f * (time_interval_min / 60.0)) if time_interval_min else float
+    to_h = (lambda f: (f - time_zero_frame) * (time_interval_min / 60.0)) if time_interval_min else float
 
     # fast lookup of per-frame mother / cell data
     d3_idx = data3D.set_index(["cell_id", "frame"], drop=False)
@@ -419,6 +424,7 @@ def run(channel_dir: Path) -> None:
     time_interval_min = run_meta.get("time_interval_min")
     media_schedule = parse_schedule_str(run_meta.get("media_schedule"))
     media_ri = run_meta.get("media_ri") or {}
+    time_zero_frame = int(run_meta.get("time_zero_frame") or 0)
 
     div_frames = mother_division_frames(clist, lineage=data3D, exclude_bad_frames=True)
     n_div_raw = len(mother_division_frames(clist, exclude_bad_frames=False))
@@ -447,20 +453,20 @@ def run(channel_dir: Path) -> None:
     sidecar_files = [p for p in (data3D_path, clist_path, run_meta_path) if p.exists()]
 
     fig_v = fig_mother_volume(data3D, div_frames, media_schedule, media_ri,
-                              time_interval_min, label)
+                              time_interval_min, label, time_zero_frame)
     save_figure(fig_v, params=params, description=f"{label} mother volume vs time",
                 fmt="pdf", data_source=data_source,
                 copy_files=[str(p) for p in sidecar_files])
     plt.close(fig_v)
 
     fig_r = fig_mother_mean_ri(data3D, div_frames, media_schedule, media_ri,
-                               time_interval_min, label)
+                               time_interval_min, label, time_zero_frame)
     save_figure(fig_r, params=params, description=f"{label} mother mean RI vs time",
                 fmt="pdf", data_source=data_source,
                 copy_files=[str(p) for p in sidecar_files])
     plt.close(fig_r)
 
-    fig_t = fig_lineage_tree(clist, data3D, time_interval_min, label)
+    fig_t = fig_lineage_tree(clist, data3D, time_interval_min, label, time_zero_frame)
     save_figure(fig_t, params=params, description=f"{label} lineage tree",
                 fmt="pdf", data_source=data_source,
                 copy_files=[str(p) for p in sidecar_files])

@@ -67,6 +67,11 @@ SMOOTH_WINDOW_FRAC = 0.15
 # cos-theta reproduction above, which must stay at 0.15 to match the pipeline.
 EFD_SMOOTH_WINDOW_FRAC = 0.30
 PIXEL_SIZE_UM_DEFAULT = 0.34567514677103717
+# Adopted 2026-09-07 (visual EFD-vs-inferno 0-1.8 check): shrink the EFD contour
+# 0.5 px inward along its normal before width/volume measurement. The raw Omnipose
+# mask includes boundary pixels that only graze the cell edge (~+0.5 px per side);
+# this trims that. Set to 0.0 to recover the un-shrunk boundary.
+EFD_CONTOUR_OFFSET_PX = 0.5
 
 
 # =========================================================================
@@ -266,6 +271,30 @@ def efd_smooth_contour(contour_xy: np.ndarray, k: int = 6, n_points: int = 512) 
     return _close_contour(np.column_stack([zs.real, zs.imag]))
 
 
+def _offset_contour_inward(contour_xy: np.ndarray, delta_px: float) -> np.ndarray:
+    """Move a closed contour ``delta_px`` inward along its local normal.
+
+    ``delta_px > 0`` shrinks (inward). The normal sign is chosen so the enclosed
+    area always decreases, so it is robust to contour winding direction and to
+    local concavities (e.g. a division neck).
+    """
+    if not delta_px:
+        return contour_xy
+    c = _close_contour(np.asarray(contour_xy, dtype=float))
+    p = c[:-1]
+    tang = np.gradient(p, axis=0)
+    tang /= np.maximum(np.linalg.norm(tang, axis=1, keepdims=True), 1e-9)
+    nrm = np.column_stack([-tang[:, 1], tang[:, 0]])
+
+    def _area(poly: np.ndarray) -> float:
+        x, y = poly[:, 0], poly[:, 1]
+        return 0.5 * abs(float(np.sum(x * np.roll(y, -1) - np.roll(x, -1) * y)))
+
+    if _area(p + delta_px * nrm) > _area(p):   # went outward -> flip to inward
+        nrm = -nrm
+    return _close_contour(p + delta_px * nrm)
+
+
 def _chord_to_contour(contour: np.ndarray, P: np.ndarray, d: np.ndarray):
     """Two contour-intersection points of the infinite line P + t*d straddling
     P (nearest positive and nearest negative t). Returns (p_neg, p_pos) or None.
@@ -294,6 +323,7 @@ def efd_section_geometry(
     pixel_size_um: float = PIXEL_SIZE_UM_DEFAULT,
     efd_k: int = 6,
     smoothing_window_frac: float = EFD_SMOOTH_WINDOW_FRAC,
+    contour_offset_px: float = EFD_CONTOUR_OFFSET_PX,
 ) -> MedialSchematic | None:
     """ADOPTED volume method: EFD-smoothed contour + ONE midpoint update.
 
@@ -318,6 +348,7 @@ def efd_section_geometry(
     if base is None:
         return None
     contour = efd_smooth_contour(max(base.contour_xy, key=len), k=efd_k)
+    contour = _offset_contour_inward(contour, contour_offset_px)   # adopted -0.5 px (grazing-px trim)
 
     # Section directions are perpendicular to the centerline's OWN local tangent
     # (not the regionprops second-moment axis), so the drawn cross-sections are
