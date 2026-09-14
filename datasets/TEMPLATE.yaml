@@ -1,0 +1,42 @@
+# Copy to datasets/<YYMMDD>.yaml and fill every "TODO". Read by scripts/run_dataset_pipeline.py.
+# Paths use forward slashes; relative paths resolve from the repo root.
+dataset: "TODO_YYMMDD"
+description: "TODO e.g. 2per_0per_2per (glucose 2% -> 0% -> 2%), 12 Pos x 12 traps, 5 min/frame, single z"
+
+paths:
+  raw_root: "TODO e.g. D:/AquisitionData/Kitagishi/YYMMDD/ph_1"      # PosN/<channel_rel>/chNN/<phase_glob>
+  raw_root_overrides: []                                             # [{pos_min, pos_max, root, note}] when some Pos live elsewhere
+  mask_root: "TODO e.g. E:/YYMMDD_seg"                               # masks + lineage_out go here (any disk; never under raw_root on a full disk)
+  channel_rel: "output_phase/channels/crop_sub_rawraw"               # add "/z000" for a z-stack timelapse; "crop_sub_rawraw_0per_corr" after correct_0pergluc
+  phase_glob: "img_*_ph_000_phase.tif"
+  consolidated_dir: null                                             # default <mask_root>/_lineage_consolidated
+  master_root: "TODO e.g. D:/QPI_master/YYMMDD"
+  mirror_root: "TODO or null e.g. G:/共有ドライブ/wakamotolab_meeting/kitagishi/data_master/YYMMDD"
+
+positions: {start: 1, end: 12}                                       # Pos0 is the cell-free reference and has no traps
+
+segmentation:
+  model: "models/omni_model_d20_2026_09_07_12_41_31.782047"          # retrain per experiment when optics / medium changed (PROTOCOL 9.1)
+  eval: {diameter: 20, normalize: true, tile: false, omni: true, flow_threshold: 0.11, mask_threshold: 0, min_size: 10, net_avg: false}
+  gate: {phase_hi: 0.7, min_px: 40}
+  workers: 6                                                         # channels segmented in parallel; one model per worker on the GPU
+
+tracking:
+  pixel_size_um: 0.34567514677103717
+  time_interval_min: 5.0
+  wavelength_nm: 658.0
+  alpha_ri: 0.00018
+  frame_min: 2                                                       # first analysed img number (= time 0 h)
+  media_schedule: "TODO e.g. 0:wo_2,288:wo_0,576:wo_2"               # absolute img numbers where the medium changed -> key in the RI calibration
+  ri_calibration: "TODO path to ri_calibration_results.json (calibrate_ri.py)"
+  calibration_id: null                                               # entry id inside the calibration JSON (null = active entry)
+  bad_frames: "TODO path to the drift session bad_frames.json (null if none)"
+  production_marker: "volume_um3_efd"
+  workers: 1                                                         # >1 only when raw_root is on an SSD / RAID
+
+edge_channels: ["ch00", "ch11"]
+
+inputs_extra: []                                                     # extra provenance files copied into <master>/inputs/
+qc_extra: []                                                         # channel-level QC JSONs copied into <master>/qc/
+derived: null                                                        # e.g. {module: build_phase1_dataset_260517, function: build, name: ..., kwargs: {...}}
+notes: []

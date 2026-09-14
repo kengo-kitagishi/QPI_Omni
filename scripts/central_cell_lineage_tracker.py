@@ -45,7 +45,15 @@ import tifffile
 from skimage import measure
 
 sys.path.insert(0, str(Path(__file__).parent))
-from mask_morphology import measure_all_modes  # noqa: E402
+# Cell geometry (2026-09-14): the adopted "yellow contour" method only. Elliptic-Fourier
+# (K=6) smoothing of the mask boundary, shrunk EFD_CONTOUR_OFFSET_PX inward, chords
+# perpendicular to the centerline with ONE midpoint update; long axis = arc length of
+# the updated centerline, short axis = mean body chord width, and two volumes:
+# rod (capsule from those axes) and efd (solid of revolution of the chords).
+# No medial-axis / profile / skimage columns are produced any more.
+from mask_volume_schematic import (  # noqa: E402
+    efd_section_geometry, EFD_CONTOUR_OFFSET_PX, EFD_SMOOTH_WINDOW_FRAC,
+)
 
 from ri_calibration import (
     load_calibration,
@@ -78,23 +86,22 @@ class FrameData:
     area_px: int
     centroid_x: float
     centroid_y: float
-    major_axis_px: float           # medial long axis (canonical)
-    minor_axis_px: float           # medial short axis (canonical)
+    major_axis_px: float           # yellow-contour long axis (arc length of updated centerline)
+    minor_axis_px: float           # yellow-contour short axis (mean body chord width)
     total_phase: float
     touches_border: bool = False
-    major_axis_skimage_px: float = np.nan   # QC: skimage second-moment fit
-    minor_axis_skimage_px: float = np.nan   # QC
-    volume_profile_px3: float = np.nan      # solid-of-revolution volume (px^3)
-    multi_xsec_frac: float = 0.0            # QC: fraction of body cols with >1 cross-section
-    volume_um3_rod: float = np.nan
-    volume_um3_profile: float = np.nan
+    volume_efd_px3: float = np.nan          # yellow-contour section volume (px^3)
+    n_chords: int = 0                       # chords found on the yellow contour (0 -> geometry failed)
+    volume_um3_rod: float = np.nan          # capsule from the yellow axes
+    volume_um3_efd: float = np.nan          # solid of revolution of the yellow chords (adopted)
     mean_ri: float = np.nan
     mass_pg: float = np.nan
-    mean_ri_profile: float = np.nan
-    mass_pg_profile: float = np.nan
+    mean_ri_efd: float = np.nan
+    mass_pg_efd: float = np.nan
     n_medium_used: float = np.nan
     medium_name: str = ""
     is_outlier: bool = False
+    mask_label: int = -1                    # label value in inference_out/*_masks.tif for this frame
 
 
 @dataclass
@@ -258,6 +265,40 @@ def calc_rod_volume_um3(major_px: float, minor_px: float, pixel_size_um: float) 
     return float((4.0 / 3.0) * np.pi * r**3 + np.pi * r**2 * h)
 
 
+def _yellow_axes(geo) -> tuple[float, float, float, int]:
+    """(long_px, short_px, volume_px3, n_chords) from a yellow-contour geometry.
+
+    long  = arc length of the centerline after the midpoint update
+    short = mean chord width over the central body: the caps (about one body
+            radius at each end) are excluded and only chords >= 50 % of the body
+            maximum are averaged, i.e. the same plateau rule the previous
+            medial-axis short axis used, but on the yellow chords.
+    volume_px3 = sum pi (w/2)^2 ds along the updated centerline (adopted).
+    Returns NaNs when fewer than 3 chords exist.
+    """
+    if geo is None:
+        return np.nan, np.nan, np.nan, 0
+    w = np.asarray(geo.w_perp_px, dtype=float)
+    ok = w > 0
+    n_ok = int(ok.sum())
+    if n_ok < 3:
+        return np.nan, np.nan, np.nan, n_ok
+    n = len(w)
+    trim0 = int(0.10 * n)
+    core = w[trim0:n - trim0] if n > 2 * trim0 + 1 else w
+    core = core[core > 0]
+    rough = float(np.mean(core)) if core.size else float(np.mean(w[ok]))
+    cap = int(np.clip(rough / 2.0, 1, max(n // 3, 1)))
+    body = w[cap:n - cap] if n > 2 * cap + 1 else w
+    body = body[body > 0]
+    if body.size == 0:
+        body = w[ok]
+    keep = body >= 0.5 * float(np.max(body))
+    short_px = float(np.mean(body[keep])) if keep.any() else float(np.mean(body))
+    long_px = float(np.sum(np.asarray(geo.arc_step_px, dtype=float)))
+    return long_px, short_px, float(geo.volume_px3), n_ok
+
+
 def calc_optical_metrics(
     total_phase: float, volume_um3: float, pixel_size_um: float,
     wavelength_nm: float, n_medium: float, alpha_ri: float,
@@ -295,32 +336,24 @@ def extract_cells_from_frame(
         total_phase = float(np.sum(phase[mask_label == p.label])) if phase is not None else np.nan
         minr, minc, maxr, maxc = p.bbox
         touches = (minr <= 0) or (minc <= 0) or (maxr >= h) or (maxc >= w)
-        sk_major = float(getattr(p, "major_axis_length", np.nan))
-        sk_minor = float(getattr(p, "minor_axis_length", np.nan))
-        # Mask-direct width (medial axis) replaces the skimage second-moment
-        # ellipse fit, which over-estimates rod width in an aspect-ratio-
-        # dependent way. p.image is the cell's cropped boolean mask; pad it by
-        # 6 px (matching the validated recompute crop) so the rotate-and-project
-        # has no edge artefact. Fall back to skimage if the medial degenerates.
-        a = measure_all_modes(np.pad(p.image, 6))
-        if a is not None:
-            major_px = a["medial_long_px"]
-            minor_px = a["medial_short_px"]
-            profile_px3 = a["medial_profile_px3"]
-            multi_xsec = a["multi_xsec_frac"]
-        else:
-            major_px, minor_px, profile_px3, multi_xsec = sk_major, sk_minor, np.nan, 0.0
+        # Yellow-contour geometry (adopted 2026-09-07). p.image is the cell's cropped
+        # boolean mask; pad it by 6 px so the rotation has no edge artefact. If the
+        # geometry degenerates (tiny / fragmented mask) the axes and volumes are NaN;
+        # there is deliberately no fallback to another measurement method.
+        try:
+            geo = efd_section_geometry(np.pad(p.image, 6), pixel_size_um=1.0)
+        except Exception:
+            geo = None
+        major_px, minor_px, efd_px3, n_chords = _yellow_axes(geo)
         rows.append({
             "label": int(p.label),
             "area_px": int(p.area),
             "centroid_y": cy,
             "centroid_x": cx,
-            "major_axis_px": major_px,        # medial long axis (canonical)
-            "minor_axis_px": minor_px,        # medial short axis (canonical)
-            "major_axis_skimage_px": sk_major,
-            "minor_axis_skimage_px": sk_minor,
-            "volume_profile_px3": profile_px3,
-            "multi_xsec_frac": multi_xsec,
+            "major_axis_px": major_px,        # yellow long axis (px)
+            "minor_axis_px": minor_px,        # yellow short axis (px)
+            "volume_efd_px3": efd_px3,
+            "n_chords": n_chords,
             "total_phase": total_phase,
             "dist_x": abs(cx - x_center),
             "touches_border": bool(touches),
@@ -365,13 +398,12 @@ def _make_frame_data(row: pd.Series, frame: int, rank: int, is_outlier: bool = F
         centroid_y=float(row["centroid_y"]),
         major_axis_px=float(row["major_axis_px"]),
         minor_axis_px=float(row["minor_axis_px"]),
-        major_axis_skimage_px=float(row.get("major_axis_skimage_px", np.nan)),
-        minor_axis_skimage_px=float(row.get("minor_axis_skimage_px", np.nan)),
-        volume_profile_px3=float(row.get("volume_profile_px3", np.nan)),
-        multi_xsec_frac=float(row.get("multi_xsec_frac", 0.0)),
+        volume_efd_px3=float(row.get("volume_efd_px3", np.nan)),
+        n_chords=int(row.get("n_chords", 0)),
         total_phase=float(row["total_phase"]),
         touches_border=bool(row.get("touches_border", False)),
         is_outlier=is_outlier,
+        mask_label=int(row.get("label", -1)),
     )
 
 
@@ -507,13 +539,13 @@ def compute_metrics_for_all(
     use_schedule = bool(media_schedule) and bool(media_ri)
     for cell in state.cells.values():
         for f in cell.frames:
-            # rod-formula volume (cylinder + 2 hemispherical caps) from the
-            # medial axes, and the solid-of-revolution volume from the width
-            # profile. Both are kept; RI/mass are computed for each so each
-            # volume column has a self-consistent (volume, RI, mass) set.
+            # Two volumes from the yellow contour: rod (capsule from the yellow axes)
+            # and efd (solid of revolution of the yellow chords, adopted). RI/mass are
+            # computed for each so every volume column has a self-consistent
+            # (volume, RI, mass, density) set.
             f.volume_um3_rod = calc_rod_volume_um3(f.major_axis_px, f.minor_axis_px, pixel_size_um)
-            if np.isfinite(f.volume_profile_px3):
-                f.volume_um3_profile = f.volume_profile_px3 * pixel_size_um ** 3
+            if np.isfinite(f.volume_efd_px3):
+                f.volume_um3_efd = f.volume_efd_px3 * pixel_size_um ** 3
             if use_schedule:
                 nm_f = n_medium_at_frame(int(f.frame), media_schedule, media_ri)
                 f.medium_name = medium_name_at_frame(int(f.frame), media_schedule)
@@ -527,12 +559,12 @@ def compute_metrics_for_all(
             )
             f.mean_ri = ri
             f.mass_pg = mass
-            ri_p, _cp, mass_p = calc_optical_metrics(
-                f.total_phase, f.volume_um3_profile, pixel_size_um, wavelength_nm,
+            ri_e, _ce, mass_e = calc_optical_metrics(
+                f.total_phase, f.volume_um3_efd, pixel_size_um, wavelength_nm,
                 nm_f, alpha_ri, n_protein_basis=n_milliq,
             )
-            f.mean_ri_profile = ri_p
-            f.mass_pg_profile = mass_p
+            f.mean_ri_efd = ri_e
+            f.mass_pg_efd = mass_e
 
 
 # =============================================================================
@@ -590,6 +622,8 @@ def build_bad_frames_table(
             "centroid_y_px": float(r["centroid_y_px"]),
             "total_phase": float(r["total_phase"]),
             "volume_um3_rod": volume_um3,
+            "volume_um3_efd": (float(r["volume_efd_px3"]) * pixel_size_um ** 3
+                               if np.isfinite(r.get("volume_efd_px3", np.nan)) else np.nan),
             "mean_ri": np.nan,   # intentionally NaN: drift-uncorrected phase
             "mass_pg": np.nan,   # intentionally NaN: depends on mean_ri
             "n_medium_used": n_med,
@@ -602,7 +636,7 @@ def build_bad_frames_table(
             "frame", "time_h", "rank_in_frame", "label",
             "area_px", "area_um2", "long_axis_um", "short_axis_um",
             "centroid_x_px", "centroid_y_px", "total_phase",
-            "volume_um3_rod", "mean_ri", "mass_pg",
+            "volume_um3_rod", "volume_um3_efd", "mean_ri", "mass_pg",
             "n_medium_used", "medium_name", "touches_border", "bad_reason",
         ])
     return (
@@ -627,11 +661,14 @@ def build_long_table(
             t_h = (f.frame - time_zero_frame) * (time_interval_min / 60.0) if time_interval_min else np.nan
             hide = f.is_outlier or f.touches_border
             v = np.nan if hide else f.volume_um3_rod
-            vp = np.nan if hide else f.volume_um3_profile
+            ve = np.nan if hide else f.volume_um3_efd
             ri = np.nan if hide else f.mean_ri
             mass = np.nan if hide else f.mass_pg
-            ri_p = np.nan if hide else f.mean_ri_profile
-            mass_p = np.nan if hide else f.mass_pg_profile
+            ri_e = np.nan if hide else f.mean_ri_efd
+            mass_e = np.nan if hide else f.mass_pg_efd
+            # Dry-mass density (pg/um^3) = mass / volume; NaN whenever either is hidden.
+            dens = mass / v if (np.isfinite(mass) and np.isfinite(v) and v > 0) else np.nan
+            dens_e = mass_e / ve if (np.isfinite(mass_e) and np.isfinite(ve) and ve > 0) else np.nan
             rows.append({
                 "cell_id": cid,
                 "parent_id": cell.parent_id if cell.parent_id is not None else -1,
@@ -641,6 +678,7 @@ def build_long_table(
                 "frame": f.frame,
                 "time_h": t_h,
                 "rank": f.rank,
+                "mask_label": f.mask_label,
                 "area_px": f.area_px,
                 "area_um2": f.area_px * (pixel_size_um ** 2),
                 "long_axis_um": f.major_axis_px * pixel_size_um,
@@ -649,14 +687,13 @@ def build_long_table(
                 "centroid_y_px": f.centroid_y,
                 "total_phase": f.total_phase,
                 "volume_um3_rod": v,
-                "volume_um3_profile": vp,
+                "volume_um3_efd": ve,
                 "mean_ri": ri,
                 "mass_pg": mass,
-                "mean_ri_profile": ri_p,
-                "mass_pg_profile": mass_p,
-                "long_axis_skimage_um": f.major_axis_skimage_px * pixel_size_um,
-                "short_axis_skimage_um": f.minor_axis_skimage_px * pixel_size_um,
-                "multi_xsec_frac": f.multi_xsec_frac,
+                "density_pg_um3": dens,
+                "mean_ri_efd": ri_e,
+                "mass_pg_efd": mass_e,
+                "density_pg_um3_efd": dens_e,
                 "n_medium_used": f.n_medium_used,
                 "medium_name": f.medium_name,
                 "n_milliq_used": n_milliq_val,
@@ -668,12 +705,11 @@ def build_long_table(
         # so downstream code (per_channel_figures, batch_figures) can read it.
         return pd.DataFrame(columns=[
             "cell_id", "parent_id", "in_tree", "birth_frame", "death_frame",
-            "frame", "time_h", "rank",
+            "frame", "time_h", "rank", "mask_label",
             "area_px", "area_um2", "long_axis_um", "short_axis_um",
             "centroid_x_px", "centroid_y_px", "total_phase",
-            "volume_um3_rod", "volume_um3_profile", "mean_ri", "mass_pg",
-            "mean_ri_profile", "mass_pg_profile",
-            "long_axis_skimage_um", "short_axis_skimage_um", "multi_xsec_frac",
+            "volume_um3_rod", "volume_um3_efd", "mean_ri", "mass_pg", "density_pg_um3",
+            "mean_ri_efd", "mass_pg_efd", "density_pg_um3_efd",
             "n_medium_used", "medium_name", "n_milliq_used",
             "is_outlier", "touches_border",
         ])
@@ -945,6 +981,7 @@ def run(
                     "centroid_y_px": float(row["centroid_y"]),
                     "major_axis_px": float(row["major_axis_px"]),
                     "minor_axis_px": float(row["minor_axis_px"]),
+                    "volume_efd_px3": float(row.get("volume_efd_px3", np.nan)),
                     "total_phase": float(row["total_phase"]),
                     "touches_border": bool(row.get("touches_border", False)),
                 })
@@ -1075,6 +1112,17 @@ def run(
         "n_medium": n_medium,
         "alpha_ri": alpha_ri,
         "min_area": min_area,
+        "geometry": {
+            "method": "yellow_contour_efd",
+            "contour": "EFD K=6 smoothing of the mask boundary, shrunk contour_offset_px inward",
+            "contour_offset_px": EFD_CONTOUR_OFFSET_PX,
+            "centerline_smoothing_frac": EFD_SMOOTH_WINDOW_FRAC,
+            "midpoint_updates": 1,
+            "long_axis": "arc length of the updated centerline",
+            "short_axis": "mean chord width over the central body (caps excluded, chords >= 50% of max)",
+            "volumes": {"rod": "capsule from the yellow long/short axes",
+                        "efd": "solid of revolution of the yellow chords (adopted)"},
+        },
         "div_area_ratio_min": DIV_AREA_RATIO_MIN,
         "div_sum_tol": DIV_SUM_TOL,
         "out_prev_low": OUT_PREV_LOW,

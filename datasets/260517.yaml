@@ -1,0 +1,59 @@
+# 260517 - S. pombe in the mother machine, glucose 2% -> 0.0055% -> 0% -> 2%
+# 104 positions x 12 traps, 5 min/frame, single z (z000), about 3748 frames.
+# Read by scripts/run_dataset_pipeline.py. Paths: forward slashes; relative paths resolve from the repo root.
+dataset: "260517"
+description: "2per_0055per_0per_2per (glucose 2% -> 0.0055% -> 0% -> 2%), 104 Pos x 12 traps, 5 min/frame, single z"
+
+paths:
+  raw_root: "H:/260517/2per_0055per_0per_2per_crop_sub"     # phase crops (BUFFALO USB HDD, read-only, 0 B free)
+  raw_root_overrides:                                          # positions whose phase crops live elsewhere
+    - pos_min: 53
+      pos_max: 104
+      root: "D:/260517_tiltfix"
+      note: "mirrored traps; crops re-flattened with the tilt fitted on the right third (refit_tilt_right_260517.py, 2026-09-14)"
+  mask_root: "D:/260517_seg"
+  channel_rel: "output_phase/channels/crop_sub_rawraw/z000"   # PosN/<channel_rel>/chNN
+  phase_glob: "img_*_ph_000_phase.tif"
+  consolidated_dir: null                                       # default <mask_root>/_lineage_consolidated
+  master_root: "D:/QPI_master/260517"
+  mirror_root: "G:/共有ドライブ/wakamotolab_meeting/kitagishi/data_master/260517"
+
+positions: {start: 1, end: 104}
+
+segmentation:
+  model: "models/omni_model_d20_2026_09_07_12_41_31.782047"
+  eval: {diameter: 20, normalize: true, tile: false, omni: true, flow_threshold: 0.11, mask_threshold: 0, min_size: 10, net_avg: false}
+  gate: {phase_hi: 0.7, min_px: 40}                            # frames with < min_px pixels above phase_hi rad skip the model
+  workers: 6
+
+tracking:
+  pixel_size_um: 0.34567514677103717
+  time_interval_min: 5.0
+  wavelength_nm: 658.0
+  alpha_ri: 0.00018
+  frame_min: 2                                                 # img_0/1 dropped; img_2 is time 0 h
+  media_schedule: "0:wo_2,2019:wo_0p0055,2307:wo_0,2885:wo_2"  # absolute img numbers -> medium key in the RI calibration
+  ri_calibration: "H:/260517/grid_2pergluc_2/ri_calibration_results.json"
+  bad_frames: "H:/260517/drift_session_20260521T2142/bad_frames.json"
+  production_marker: "volume_um3_efd"                          # column only the yellow-contour tracker writes
+  workers: 1                                                   # H: is a single-spindle USB HDD: single stream
+
+edge_channels: ["ch00", "ch11"]                                # kept in the master, excluded from analysis cohorts
+
+inputs_extra:                                                  # copied into <master>/inputs/
+  - "docs/channel_classification_260517.yaml"
+qc_extra:                                                      # copied into <master>/qc/ when present
+  - "D:/QPI_master/260517/v20260911_newmodel/qc/short_oob_exclude.json"
+  - "D:/QPI_master/260517/v20260911_newmodel/qc/tree_qc.json"
+  - "D:/QPI_master/260517/v20260911_newmodel/qc/trackability.json"
+
+derived:                                                       # built inside the master after publish (never blocks it)
+  module: "build_phase1_dataset_260517"
+  function: "build"
+  name: "phase1_img0002-2017"                                  # first 7 days in 2% glucose: img_2..img_2017 (2016 frames)
+  kwargs: {end_frame: 2017}
+
+notes:
+  - "2026-09-14 tilt fix: grid_subtract fitted the tilt on the cell side for Pos >= 53; those crops were re-flattened into D:/260517_tiltfix and re-segmented"
+  - "img_2018 is already perturbed by the medium switch (planned img_2019): last clean 2% frame is img_2017"
+  - "the 260517 masters so far were published by the dataset-specific chain (_retrack_260517_newmodel -> _chain_tiltfix_260517 -> _finalize_yellow_260517 -> publish_master_260517); this yaml describes the same run"

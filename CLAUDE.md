@@ -605,8 +605,8 @@ Description: その日の思考メモのまとめ（後から更新）
 ## 解析パイプライン（実行順）
 | 時刻 | スクリプト | 内容 |
 |------|-----------|------|
-| 13:00 | align_and_subtract | アライメント補正・背景引き算 |
-| 13:30 | 32_simple_ellipse_ri | RI計算・図出力 |
+| 13:00 | run_dataset_pipeline | seg → tracking → division QC → consolidate |
+| 13:30 | lineage_html_gallery_260517 | lineage ごとの RI / mass / volume の HTML |
 ```
 
 セッションログが存在しない場合はこのセクションを省略する。
@@ -757,7 +757,7 @@ dry mass ∝ ∫∫ Δn(x,y) dA
 ### 焦点確認・光学調整（単発撮影）
 
 - 目的: 焦点が合っているか・アライメントが正しいかを確認
-- スクリプト: `01_realtime_visibility_monitor.py`, `34_align_and_subtract_simple.py`
+- スクリプト: `01_realtime_visibility_monitor.py`, `focus_check_subtract.py`, `qpi_01_focus_setup.py`
 - 解析パイプラインは走らせない
 
 ### スナップショット
@@ -767,35 +767,41 @@ dry mass ∝ ∫∫ Δn(x,y) dA
 
 ## 解析パイプライン（タイムラプス）
 
+手順の正本は `docs/PROTOCOL_TIMELAPSE.md`。データセット固有の値（パス・培地切替 frame・RI 校正・bad frames・model）は
+`datasets/<YYMMDD>.yaml` に書き、`scripts/run_dataset_pipeline.py` がそれを読んで seg 以降を master 公開まで通す。
+Python は `environment/` の pinned env（`environment/bootstrap_windows.ps1` で作る）。
+
 ```
-生データ (img_*.tif)
-    ↓ 10_batch_reconstruction_new.py
-位相再構成 (output_phase/*.tif, float32, radian)
-    ↓ 19_gaussian_backsub.py
-背景補正 (bg_corr/*.tif)
-    ↓ 36_align_and_subtract_timelapse.py
-アライメント + 空チャンネル差し引き (subtracted/*.tif)
-    ↓ 07_segmentation.py (Omnisegger)
-セグメンテーション (inference_out/*_masks.tif)
-    ↓ 32_simple_ellipse_ri.py
-細胞ごとのRI・サイズ時系列 (Results.csv → 楕円近似)
-    ↓ qpi_fig_*.py / Omnisegger
-図生成・キモグラフ・統計解析
+生 hologram (img_*.tif)                                   [顕微鏡 PC・撮影中]
+    ↓ realtime_drift_mda_*.bsh → compute_drift_online.py
+      （位相再構成・ECC drift 補正・grid 引き算・tilt 補正・trap ごとの crop）
+位相 crop   PosN/output_phase/channels/crop_sub_rawraw/[z000/]chNN/img_*_ph_000_phase.tif
+    ↓ correct_0pergluc.py（0% / Low% 区間に delta を引く。必要なときだけ）
+    ↓ run_dataset_pipeline.py --stages seg          → seg_omnipose.py（GPU、models/ の checkpoint）
+mask        <mask_root>/PosN/.../chNN/inference_out/img_*_masks.tif（細胞ありフレームのみ。ch ごとに _DONE）
+    ↓ run_dataset_pipeline.py --stages track        → central_cell_lineage_tracker.py --indir <mask ch> --raw-dir <phase ch>
+lineage_out/lineage_data3D.csv ほか（全細胞・全 frame: 面積、黄色輪郭の長軸・短軸、volume_um3_rod / volume_um3_efd、mean_ri、mass_pg、density）
+    ↓ run_dataset_pipeline.py --stages qc           → division_qc_260517.py（分裂候補を mass / volume 比で検証 → divisions_qc.csv）
+    ↓ run_dataset_pipeline.py --stages consolidate  → <mask_root>/_lineage_consolidated/all_cells_*.csv.gz + channel_index.csv
+    ↓ run_dataset_pipeline.py --stages publish      → <master_root>/<tag>/（読み取り専用・SHA256・MANIFEST・LATEST.txt）
+MASTER      解析はここから読む（qpi_paths.resolve_lineage_csv が master を最優先）
+    ↓ build_phase1_dataset_260517.py（論文用の窓 img_2..2017 の派生パッケージ）/ _fig_*.py / lineage_html_gallery_260517.py
 ```
+
+- ImageJ の ROI tracking、楕円近似（`32_simple_ellipse_ri`）、`19_gaussian_backsub`、`36_align_and_subtract_timelapse`、
+  `10_batch_reconstruction_new` は使わない（`scripts/archive/2026-09-14_reorg/` に退避済み。索引は `scripts/README.md`）。
+- 体積は黄色輪郭（mask 境界を EFD K=6 で平滑化し 0.5 px 内側に縮めた輪郭）由来の `volume_um3_rod` と `volume_um3_efd`（採用）だけ。
+  medial-axis・profile・skimage の値は出さない。
+- 端 trap ch00 / ch11 は master に残すが解析対象から外す（`channels.csv: analysis_recommended`）。
+- 260517 だけは固有 chain（`_retrack_260517_newmodel.py` → `_chain_tiltfix_260517.py` → `_finalize_yellow_260517.py` →
+  `publish_master_260517.py`）で公開している。処理は driver と同じ。
 
 ## 最終アウトプット
 
-1. **細胞ごとのRI（屈折率）時系列** → dry mass の代理指標
-2. **細胞サイズ（Major/Minor軸）時系列**
-3. **分裂再開群 vs 非再開群の比較**:
-   - 飢餓前・飢餓中・回復期ごとの統計的違い
-   - キモグラフ（Omnisegger経由）
-   - 生存・非生存を分ける予測因子としての乾燥質量・サイズ
-
-## Omnisegger との連携
-
-- マスク（`*_masks.tif`）と位相差し引き画像を渡す
-- キモグラフ生成・細胞追跡・可視化に使用
+1. master の `consolidated/all_cells_lineage_data3D.csv.gz`: 細胞 × frame の RI・dry mass・volume・density（母細胞と娘細胞すべて）
+2. `consolidated/all_cells_divisions_qc.csv.gz`: 検証済みの分裂イベント（分裂間隔・birth size・added mass の元）
+3. 論文用の派生パッケージ `derived/phase1_img0002-2017/`（cells_frames / cells / divisions / channels + README / SCHEMA / SHA256）
+4. 分裂再開群 vs 非再開群の比較図（`_fig_*.py`。黄色 master と `analysis_recommended` から組み直す）
 
 ## 用語整理
 
@@ -806,8 +812,11 @@ dry mass ∝ ∫∫ Δn(x,y) dA
 | `Pos0` | 常に背景参照ポジション（細胞なし） |
 | dry mass | 乾燥質量。位相シフトの積分から算出 |
 | RI | 屈折率（refractive index）。dry massと線形関係 |
-| アライメント | フレーム間のずれ補正（ECC法） |
-| 背景差し引き | `wo_*` を引いて培地由来の位相を除去 |
+| drift 補正 | frame 間のずれを ECC で推定し、撮影中にステージ位置へ戻す（`compute_drift_online.py`） |
+| grid 引き算 | 同じ Pos の周囲 81 点で撮った細胞なしの参照位相を引き、培地・光学系由来の位相を除去 |
+| tilt 補正 | trap crop の開口端側 1/3 に平面を fit して引く（260517: Pos ≤52 は左、Pos ≥53 は右） |
+| 黄色輪郭 | mask 境界を EFD K=6 で平滑化し 0.5 px 内側に縮めた輪郭。長軸・短軸・体積はここから測る |
+| 分裂 QC | tracker の分裂候補を親の mass / volume の前後比で検証したもの（`divisions_qc.csv: validated`） |
 | 分裂再開群 | 栄養回復後に分裂を再開した細胞 |
 | 非分裂群 | 栄養回復後も分裂しなかった細胞 |
 
@@ -818,7 +827,7 @@ dry mass ∝ ∫∫ Δn(x,y) dA
 ## 生データ（Micromanager出力）
 
 ```
-E:\Acquisition\kitagishi\YYMMDD\{experiment_name}\
+D:\AquisitionData\Kitagishi\YYMMDD\<exp_name>\     ← 空きがなければ C:（docs/PROTOCOL_TIMELAPSE.md §1）
 ├── Pos0/          ← 必ず空チャンネル（細胞なし・背景参照用）
 ├── Pos1/          ← 測定ポジション（細胞あり）
 ├── Pos2/
@@ -862,28 +871,29 @@ YYMMDD\{experiment_name}\
 
 ```
 Pos{N}/
-├── output_phase/          ← 位相再構成画像（float32, ラジアン）
-│   └── img_*_phase.tif
-├── output_colormap/       ← カラーマップ可視化（オプション）
-├── bg_corr/               ← ガウス背景補正後
-│   └── *_bg_corr.tif
-└── {timelapse_dir}/
-    ├── aligned/           ← アライメント後
-    ├── subtracted/        ← 背景差し引き後
-    │   └── *_subtracted.tif
-    └── subtracted_colored/ ← 可視化
+└── output_phase/
+    ├── img_*_ph_000_phase.tif                 ← 位相再構成（float32, radian）
+    └── channels/
+        ├── channel_rois.json                  ← trap ごとの ROI（prep_channel_rois.py）
+        ├── crop_sub_rawraw/[z000/]chNN/       ← drift 補正 + grid 引き算 + tilt 補正済みの trap crop（40×180 px）
+        │   └── img_*_ph_000_phase.tif            z-stack timelapse のときだけ z000/ が入る（datasets yaml の channel_rel）
+        └── crop_sub_rawraw_0per_corr/chNN/    ← 0% / Low% 区間に delta を引いたもの（correct_0pergluc.py）
+drift_session/drift_log.json, grid_subtract_log.json, bad_frames.json
+                                               ← frame ごとの補正量・使った grid 点・除外 frame
 ```
 
-アライメントメタデータ：`alignment_transforms.json`（shift_x, shift_y, correlation含む）
+## セグメンテーションと tracking の出力
 
-## セグメンテーション出力
+mask は生データと別ディスクでよい（260517: 位相は H:、mask は D:）。
 
 ```
-{timelapse_dir}/
-└── inference_out/
-    ├── *_masks.tif         (uint16, ラベルID)
-    ├── *_binary.tif        (uint8)
-    └── *_overlay.tif       (RGB)
+<mask_root>/Pos{N}/output_phase/channels/crop_sub_rawraw/[z000/]chNN/inference_out/
+├── img_*_ph_000_phase_masks.tif   (uint16 ラベル。細胞が検出された frame だけ)
+├── _DONE                          (ch 完了マーカー。再開時に skip)
+└── lineage_out/                   (tracker 出力: lineage_data3D.csv, clist.csv, lineage_cells.json,
+                                    lineage_bad_frames.csv, bad_frames_used.json, lineage_run_params.json, divisions_qc.csv)
+<mask_root>/_lineage_consolidated/  (all_cells_*.csv.gz, channel_index.csv, manifest.json)
+<master_root>/<tag>/                (consolidated/ per_channel/ inputs/ code/ qc/ derived/ MANIFEST.json SHA256SUMS.txt README.md)
 ```
 
 ## グルコース濃度と wo_* の対応
@@ -905,6 +915,8 @@ MEDIA_SWITCHES = [
     (576, "wo_2"),   # 576フレーム〜: 2%（回復）
 ]
 # フレーム数 = 時間(h) × 12（5分間隔 = 12枚/h）
+# tracker には同じ内容を絶対 img 番号で渡す: --media-schedule "0:wo_2,288:wo_0,576:wo_2"
+# （datasets/<YYMMDD>.yaml の tracking.media_schedule）。図の帯は qpi_plots.add_phase_spans(ax, MEDIA_SWITCHES)
 ```
 
 ## 光学定数（optical_config.py）
@@ -917,11 +929,9 @@ CROP_REGION = (0, 2048, 208, 2256)  # (y_start, y_end, x_start, x_end)
 OFFAXIS_CENTER = (1710, 644) # オフアクシス干渉縞の中心（定期更新）
 ```
 
-## ImageJ ROI解析 CSV（Results.csv）
+trap crop は 511×511 再構成なので 0.34567514677103717 µm/px（tracker の `--pixel-size-um` の既定値）。
 
-```
-Label, Major, Minor, X, Y, Angle, Slice, Area, ...
-```
-- `Major`, `Minor`: 楕円近似の長径・短径（ピクセル）
-- `X`, `Y`: 重心座標
-- `Slice`: フレーム番号（1-indexed）
+## 細胞ごとの時系列の列定義
+
+lineage_out / master の CSV の列は `docs/LINEAGE_DATAFRAME_SCHEMA.md`。
+ImageJ の Results.csv（Major / Minor の楕円近似）は使わない。

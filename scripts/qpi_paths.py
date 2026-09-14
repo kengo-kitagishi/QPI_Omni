@@ -127,8 +127,83 @@ def build_lineage_index() -> dict:
     return {k: v[1] for k, v in index.items()}
 
 
+# ---------------------------------------------------------------------------
+# MASTER dataset resolution (frozen, versioned; see publish_master_260517.py)
+# ---------------------------------------------------------------------------
+# Since 2026-09 every downstream analysis starts from the published master
+# (D:\QPI_master\260517\<tag>\). Selection:
+#   QPI_LINEAGE_SOURCE=inbox   -> ignore the master, use the figure-hub inbox copies
+#                                 (pre-2026-09 behaviour, e.g. to compare with the
+#                                 June 2026 old-model results)
+#   QPI_LINEAGE_MASTER=<tag>   -> pin a master version (default: LATEST.txt)
+#   QPI_MASTER_ROOT=<dir>      -> master root override (tests / other machines)
+# When a master is active, channels missing from it resolve to None — there is
+# deliberately NO silent fallback to inbox data so datasets never get mixed.
+MASTER_ROOT_DEFAULT = Path(r"D:\QPI_master\260517")
+
+
+def lineage_source() -> str:
+    v = os.environ.get("QPI_LINEAGE_SOURCE", "master").strip().lower()
+    return v if v in {"master", "inbox"} else "master"
+
+
+def master_root() -> Path:
+    return Path(os.environ.get("QPI_MASTER_ROOT") or MASTER_ROOT_DEFAULT)
+
+
+@lru_cache(maxsize=1)
+def master_dir() -> Path | None:
+    """Selected master version directory, or None if no master is published/selected."""
+    if lineage_source() != "master":
+        return None
+    root = master_root()
+    tag = os.environ.get("QPI_LINEAGE_MASTER", "").strip()
+    if not tag or tag.lower() == "latest":
+        latest = root / "LATEST.txt"
+        if not latest.exists():
+            return None
+        tag = latest.read_text(encoding="utf-8").strip()
+    d = root / tag
+    return d if (d / "MANIFEST.json").exists() else None
+
+
+def master_active() -> bool:
+    return master_dir() is not None
+
+
+def find_master_lineage_csv(pos: str, ch: str) -> Path | None:
+    d = master_dir()
+    if d is None:
+        return None
+    p = d / "per_channel" / pos / ch / "lineage_data3D.csv"
+    return p if p.exists() else None
+
+
+def master_all_cells_csv() -> Path | None:
+    """Consolidated all-cell long table (pos, ch, cell_id, frame, ...) of the active master."""
+    d = master_dir()
+    if d is None:
+        return None
+    p = d / "consolidated" / "all_cells_lineage_data3D.csv.gz"
+    return p if p.exists() else None
+
+
+def master_channel_index() -> Path | None:
+    d = master_dir()
+    if d is None:
+        return None
+    p = d / "consolidated" / "channel_index.csv"
+    return p if p.exists() else None
+
+
 def find_lineage_csv(pos: str, ch: str) -> Path | None:
-    """Latest lineage_data3D.csv for (pos, ch), or None if absent."""
+    """lineage_data3D.csv for (pos, ch): from the active master, else the latest inbox copy.
+
+    With a master active this never falls back to the inbox (None if the channel
+    is not in the master), so old- and new-model data cannot be mixed by accident.
+    """
+    if master_active():
+        return find_master_lineage_csv(pos, ch)
     return build_lineage_index().get((pos, ch))
 
 
@@ -161,11 +236,15 @@ def find_corrected_lineage_csv(pos: str, ch: str,
 
 
 def resolve_lineage_csv(pos: str, ch: str) -> Path | None:
-    """Corrected CSV when QPI_USE_CORRECTED=1 and it exists, else the inbox CSV.
+    """Single entry point for downstream scripts.
 
-    This is the single entry point downstream scripts should call so a run can
-    be flipped between raw and corrected data with one env var.
+    Priority: active MASTER (default since 2026-09) > corrected CSV when
+    QPI_USE_CORRECTED=1 (legacy June-2026 toolkit) > figure-hub inbox copy.
+    The master already carries mask-direct axes/volumes, so the corrected layer
+    is only consulted when no master is active (or QPI_LINEAGE_SOURCE=inbox).
     """
+    if master_active():
+        return find_master_lineage_csv(pos, ch)
     if use_corrected():
         c = find_corrected_lineage_csv(pos, ch)
         if c is not None:

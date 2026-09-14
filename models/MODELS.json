@@ -1,0 +1,18 @@
+{
+  "models": [
+    {
+      "file": "omni_model_d20_2026_09_07_12_41_31.782047",
+      "sha256": "3984423bcf0ce842bcfacafbb7d0c7ad899dd6eb5519275f108c74288708962a",
+      "bytes": 26612170,
+      "trained": "2026-09-07",
+      "trainer": "scripts/08_train.py, omnipose 1.0.6, normalize=False rescale=False, diameter 20",
+      "original_name": "cellpose_residual_on_style_on_concatenation_off_omni_abstract_nclasses_3_nchan_1_dim_2_omni_model_d20_2026_09_07_12_41_31.782047",
+      "original_dir": "C:/Users/QPI/Desktop/train/omni_model_d20/models/ (analysis PC)",
+      "train_set": "260517 phase crops (40x180 px trap crops, radian): 2% growth and recovery sampled densely, starvation sparsely, several Pos x ch, edge traps ch00/ch11 excluded; see scripts/_build_trainset_260517.py",
+      "eval": {"diameter": 20, "normalize": true, "tile": false, "omni": true, "flow_threshold": 0.11, "mask_threshold": 0, "min_size": 10, "net_avg": false},
+      "gate": {"phase_hi": 0.7, "min_px": 40},
+      "used_by": ["datasets/260517.yaml"],
+      "masters": ["D:/QPI_master/260517/v20260911_newmodel (inputs/model/)", "G:/共有ドライブ/wakamotolab_meeting/kitagishi/data_master/260517/v20260911_newmodel (inputs/model/)"]
+    }
+  ]
+}

@@ -3,16 +3,19 @@
 #   2%  ->  0.0055%  ->  0%  ->  2%
 #
 # Phase boundary used for classification:
-#   phase1 = first 7 days at 2%  (frames 0 - 2015, inclusive)
-#   phase2 = after 7 days        (0.0055% -> 0% -> 2% recovery)
+#   phase1 = first 7 days at 2%  (img_2 - img_2017 inclusive = 2016 frames = 168 h;
+#            img_0/1 are dropped by the tracker (spurious masks) so img_2 is time 0;
+#            img_2018 already carries the optical signature of the medium change and is
+#            excluded from the phase-1 dataset -- see fig_switch_frame_check_260517, 2026-09-10)
+#   phase2 = after that          (0.0055% -> 0% -> 2% recovery)
 #
-# MEDIA_SWITCHES (frames) -- VERIFY against acquisition metadata once HDD is connected.
-# 5 min interval => 12 frames/h => 288 frames/day.
+# MEDIA_SWITCHES (absolute img_NNN, as used by the tracking media schedule
+# "0:wo_2,2019:wo_0p0055,2307:wo_0,2885:wo_2"). 5 min interval => 12 frames/h => 288 frames/day.
 media_switches:
   - {frame: 0,     medium: "wo_2",      note: "growth, 7 days"}
-  - {frame: 2016,  medium: "wo_0.0055", note: "intermediate starvation -- verify frame"}
-  - {frame: null,  medium: "wo_0",      note: "full starvation -- fill frame once known"}
-  - {frame: 2893,  medium: "wo_2",      note: "recovery -- Pos16 ch05 lysis 観察より frame 2893 付近で確認"}
+  - {frame: 2019,  medium: "wo_0.0055", note: "intermediate starvation -- verified 2026-09-10 from mother RI/phase step (perturbation visible from img_2018, RI dip at img_2019, settled from img_2020)"}
+  - {frame: 2307,  medium: "wo_0",      note: "full starvation -- per tracking media schedule (not independently verified)"}
+  - {frame: 2893,  medium: "wo_2",      note: "recovery -- Pos16 ch05 lysis 観察より frame 2893 付近で確認 (tracking media schedule uses 2885)"}
 
 dataset: "260517"
 classified_at: null      # ISO date, fill when classification is finalized
