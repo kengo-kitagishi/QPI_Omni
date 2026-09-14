@@ -16,10 +16,17 @@ conda.anaconda.org, pypi.org). Windows PowerShell 5.1 is enough.
 param(
     [string]$EnvName = "omnipose",
     [string]$CondaRoot = "$env:USERPROFILE\miniconda3",
-    [switch]$SkipCheck
+    [switch]$SkipCheck,
+    [switch]$ForceInstall    # install Miniconda into -CondaRoot even if another conda exists (tests the installer branch)
 )
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent $PSScriptRoot
+# A shell where another conda is active exports CONDA_ROOT / CONDA_PREFIX / CONDA_EXE; a different conda.bat
+# then reports that installation as its base and creates the env there (seen 2026-09-14). Drop them.
+foreach ($v in @("CONDA_ROOT", "CONDA_PREFIX", "CONDA_EXE", "CONDA_DEFAULT_ENV", "CONDA_PYTHON_EXE",
+                 "CONDA_SHLVL", "CONDA_PROMPT_MODIFIER", "_CONDA_ROOT", "_CONDA_EXE", "CONDA_ENVS_PATH", "CONDA_ENVS_DIRS")) {
+    if (Test-Path "Env:$v") { Remove-Item "Env:$v" }
+}
 $Explicit = Join-Path $PSScriptRoot "omnipose_win64_explicit.txt"
 $PipReq = Join-Path $PSScriptRoot "omnipose_pip_requirements.txt"
 if (-not (Test-Path $Explicit)) { throw "missing $Explicit" }
@@ -43,8 +50,14 @@ function Find-Conda {
 }
 
 # ---- 1. conda -------------------------------------------------------------
-$conda = Find-Conda
+$conda = if ($ForceInstall) { $null } else { Find-Conda }
 if (-not $conda) {
+    # The Miniconda installer exits with code 2 (nothing installed, no message) when the target path is
+    # long, contains spaces or non-ASCII characters (tested 2026-09-14: a 125-character path failed,
+    # C:\TEMP\mc_fresh_test worked). Keep the default %USERPROFILE%\miniconda3 or pass a short -CondaRoot.
+    if ($CondaRoot.Length -gt 64 -or $CondaRoot -match '[\s]' -or $CondaRoot -match '[^\x20-\x7E]') {
+        throw "CondaRoot must be a short ASCII path without spaces (got $($CondaRoot.Length) chars: $CondaRoot)"
+    }
     Write-Host "[1/4] conda not found: installing Miniconda (per-user) into $CondaRoot"
     $inst = Join-Path $env:TEMP "Miniconda3-latest-Windows-x86_64.exe"
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -58,16 +71,25 @@ if (-not $conda) {
 }
 & $conda --version
 if ($LASTEXITCODE -ne 0) { throw "conda does not run ($LASTEXITCODE)" }
+# Part of the explicit spec comes from Anaconda's defaults channel (repo.anaconda.com/pkgs/main), whose
+# Terms of Service a non-interactive conda >= 24.x must have accepted, or `conda create` stops.
+# Same terms the lab's existing Anaconda installations run under. Older conda has no `tos` command (ignored).
+foreach ($ch in @("https://repo.anaconda.com/pkgs/main", "https://repo.anaconda.com/pkgs/r", "https://repo.anaconda.com/pkgs/msys2")) {
+    & $conda tos accept --override-channels --channel $ch 2>$null | Out-Null
+}
+$global:LASTEXITCODE = 0
 
 # ---- 2. env from the explicit spec ----------------------------------------
-$base = (& $conda info --base | Select-Object -Last 1).Trim()
+# The env lives under the conda installation that conda.bat belongs to (<root>\condabin\conda.bat),
+# addressed by --prefix so no other installation's settings can redirect it.
+$base = Split-Path -Parent (Split-Path -Parent (Resolve-Path $conda).Path)
 $envPrefix = Join-Path $base "envs\$EnvName"
 $py = Join-Path $envPrefix "python.exe"
 if (Test-Path $py) {
     Write-Host "[2/4] env '$EnvName' already exists at $envPrefix (reusing)"
 } else {
-    Write-Host "[2/4] creating env '$EnvName' from $Explicit (about 3 GB of downloads)"
-    & $conda create -y -n $EnvName --file $Explicit
+    Write-Host "[2/4] creating env at $envPrefix from $Explicit (about 3 GB of downloads)"
+    & $conda create -y --prefix $envPrefix --file $Explicit
     if ($LASTEXITCODE -ne 0) { throw "conda create failed ($LASTEXITCODE)" }
 }
 if (-not (Test-Path $py)) { throw "python.exe not found: $py" }
