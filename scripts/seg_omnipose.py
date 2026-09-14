@@ -23,6 +23,7 @@ Behaviour
 """
 from __future__ import annotations
 
+import base64
 import argparse
 import json
 import os
@@ -42,11 +43,33 @@ _model = None
 _cfg: dict = {}
 
 
+# cellpose_omni imports its GUI module when the package is imported, and that module downloads GUI
+# assets into ~/.omnipose/ whenever they are missing. Two of those URLs answer 404 (seen 2026-09-15 on
+# a fresh PC: gui/logo.png and gui/gamma.svg upstream), so `import cellpose_omni` itself raises. Both
+# files only decorate the GUI window: 1x1 stand-ins let the import through. The test images it also
+# fetches (docs/test_files/) still download. Same guard in environment/bootstrap_windows.ps1,
+# environment/check_env.py and scripts/seg_omnipose.py.
+_GUI_ASSETS_B64 = {
+    "logo.png": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+    "gamma.svg": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz4=",
+}
+
+
+def _ensure_gui_icon() -> None:
+    d = Path.home() / ".omnipose"
+    for name, b64 in _GUI_ASSETS_B64.items():
+        f = d / name
+        if not f.is_file():
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_bytes(base64.b64decode(b64))
+
+
 def _init(model_path: str, eval_params: dict, gate_hi: float, gate_min_px: int,
           raw_root: str, mask_root: str, phase_glob: str, max_files):
     global _model, _cfg
     import logging
     logging.getLogger("cellpose_omni").setLevel(logging.WARNING)
+    _ensure_gui_icon()
     from cellpose_omni.models import CellposeModel
     _model = CellposeModel(gpu=True, pretrained_model=model_path, omni=True, nchan=1, nclasses=3, dim=2)
     _cfg = dict(eval=eval_params, gate_hi=gate_hi, gate_min_px=gate_min_px, raw_root=Path(raw_root),
