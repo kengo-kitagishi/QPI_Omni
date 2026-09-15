@@ -107,7 +107,7 @@ def process_channel(args):
     done_marker = outdir / "_DONE"
     max_files = _cfg["max_files"]
     if done_marker.exists() and not max_files:
-        return (pos, chdir.name, "skip-done", 0, 0)
+        return (pos, chdir.name, "skip-done", 0, 0, 0, "", 0)
     outdir.mkdir(parents=True, exist_ok=True)
     files = sorted(chdir.glob(_cfg["phase_glob"]), key=_frame_no)
     if max_files:
@@ -115,7 +115,7 @@ def process_channel(args):
     # A frame that cannot be read or makes the model raise is an error, not an empty trap: it is
     # counted apart, reported, and keeps _DONE from being written so a re-run retries the channel.
     # (Counting those as "gated" hid a missing-DLL failure on every frame after the first.)
-    nc = ng = ne = 0
+    nc = ng = ne = nt = 0
     first_err = ""
     for f in files:
         try:
@@ -129,6 +129,18 @@ def process_channel(args):
             continue
         try:
             m = _model.eval([img], **_cfg["eval"])[0][0]
+        except ValueError as e:
+            if "n_neighbors <= n_samples_fit" not in str(e):
+                ne += 1
+                first_err = first_err or f"{f.name}: eval {str(e).splitlines()[0][:160]}"
+                continue
+            # Omnipose post-processing takes 50 nearest neighbours over the foreground pixels and
+            # raises when a frame holds fewer (an object of < 50 px: a cell tip at the trap edge,
+            # debris). Deterministic per frame, so it would fail every re-run; the pre-2026-09-15
+            # code counted it as an empty frame and 260517 was published that way. 260908: 96 of
+            # ~500k frames over 12 channels. Counted apart as "tiny", no mask, _DONE allowed.
+            nt += 1
+            continue
         except Exception as e:  # noqa: BLE001
             ne += 1
             first_err = first_err or f"{f.name}: eval {str(e).splitlines()[0][:160]}"
@@ -140,7 +152,7 @@ def process_channel(args):
         nc += 1
     if not max_files and ne == 0:
         done_marker.write_text("done")
-    return (pos, chdir.name, "ok" if ne == 0 else "ERROR", nc, ng, ne, first_err)
+    return (pos, chdir.name, "ok" if ne == 0 else "ERROR", nc, ng + nt, ne, first_err, nt)
 
 
 def channel_dirs(raw_root: Path, rel: Path, pos_start: int, pos_end: int) -> list[tuple[int, str]]:
@@ -194,13 +206,13 @@ def main() -> int:
     with ProcessPoolExecutor(max_workers=a.workers, initializer=_init, initargs=initargs) as ex:
         futs = [ex.submit(process_channel, t) for t in tasks]
         for fut in as_completed(futs):
-            pos, ch, st, c, g, e, err = fut.result()
+            pos, ch, st, c, g, e, err, tiny = fut.result()
             done += 1
             tot_c += c
             tot_g += g
             tot_e += e
             el = time.time() - t0
-            print(f"[{done}/{len(tasks)}] Pos{pos} {ch}: {st} cell={c} gated={g} errors={e} "
+            print(f"[{done}/{len(tasks)}] Pos{pos} {ch}: {st} cell={c} gated={g} (tiny={tiny}) errors={e} "
                   f"| {el:.0f}s {(tot_c + tot_g + tot_e) / max(el, 1e-9):.1f} frames/s"
                   + (f" | first error: {err}" if e else ""), flush=True)
     el = time.time() - t0
