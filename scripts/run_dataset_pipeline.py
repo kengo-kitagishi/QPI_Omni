@@ -101,6 +101,10 @@ class Dataset:
         self.cal = _path(t["ri_calibration"]) if t.get("ri_calibration") else None
         self.bad = _path(t["bad_frames"]) if t.get("bad_frames") else None
         self.marker = str(t.get("production_marker") or "volume_um3_efd")
+        # How far the EFD contour is shrunk before measuring. 0.5 px was adopted 2026-09-07;
+        # 0 measures the un-shrunk Omnipose boundary. Part of is_production, so changing it
+        # re-tracks instead of mixing two geometries in one table.
+        self.contour_offset_px = float(t.get("contour_offset_px", 0.5))
         self.track_workers = int(t.get("workers", 1))
         self.edge_channels = list(cfg.get("edge_channels") or [])
         self.inputs_extra = [_path(x) for x in (cfg.get("inputs_extra") or [])]
@@ -207,6 +211,8 @@ def is_production(ds: Dataset, lo: Path) -> bool:
         j = json.loads(params.read_text(encoding="utf-8"))
         if j.get("media_schedule") != ds.media_schedule or j.get("frame_min") != ds.frame_min:
             return False
+        if float(j.get("geometry", {}).get("contour_offset_px", 0.5)) != ds.contour_offset_px:
+            return False
         return ds.marker in pd.read_csv(csv, nrows=0).columns
     except Exception:  # noqa: BLE001
         return False
@@ -294,7 +300,8 @@ def tracker_cmd(ds: Dataset, mask_ch: Path, raw_ch: Path) -> list[str]:
            "--wavelength-nm", str(t.get("wavelength_nm", 658.0)),
            "--alpha-ri", str(t.get("alpha_ri", 0.00018)),
            "--media-schedule", ds.media_schedule,
-           "--frame-min", str(ds.frame_min)]
+           "--frame-min", str(ds.frame_min),
+           "--contour-offset-px", str(ds.contour_offset_px)]
     if ds.cal:
         cmd += ["--ri-calibration", str(ds.cal)]
     if t.get("calibration_id"):
@@ -690,7 +697,8 @@ def plan(ds: Dataset, poss: list[int], stages: set[str], tag: str | None) -> Non
     print(f"  model       {ds.model}  ({'ok' if ds.model.exists() else 'MISSING'})")
     print(f"  calibration {ds.cal}  ({'ok' if ds.cal and ds.cal.exists() else 'MISSING' if ds.cal else 'none'})")
     print(f"  bad_frames  {ds.bad}  ({'ok' if ds.bad and ds.bad.exists() else 'MISSING' if ds.bad else 'none'})")
-    print(f"  media       {ds.media_schedule}; frame_min {ds.frame_min}; marker {ds.marker}")
+    print(f"  media       {ds.media_schedule}; frame_min {ds.frame_min}; marker {ds.marker}; "
+          f"contour_offset_px {ds.contour_offset_px}")
     print(f"  stages      {', '.join(s for s in STAGES if s in stages)}; Pos {poss[0]}..{poss[-1]}")
     tot = dict(raw_ch=0, seg_needed=0, track=0, done=0, empty=0)
     for n in poss:

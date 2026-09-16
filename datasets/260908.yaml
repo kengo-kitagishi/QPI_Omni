@@ -35,6 +35,10 @@ tracking:
   ri_calibration: null
   calibration_id: null
   bad_frames: null                                             # drift_session/bad_frames.json is 260517's (n_total 3745), not this run
+  # 2026-09-16: measure the un-shrunk Omnipose boundary (the 0.5 px inward shrink adopted
+  # 2026-09-07 is not applied to this dataset). Recorded in lineage_run_params.json and
+  # part of the production check, so the tables never mix the two geometries.
+  contour_offset_px: 0.0
   production_marker: "volume_um3_efd"
   workers: 1                                                   # raw_root is a single-spindle HDD
 
