@@ -10,6 +10,14 @@ so the choice leaves the browser as a list.
         --channel-rel output_phase/channels/crop_sub_rawraw/z000 --phase-glob "img_*_ph_000.tif" \
         --frame 100 --mask-root E:/260908_seg --out E:/260908_seg/_qc/contact_sheet_f100.html
 
+With --serve the page is handed out by a local server instead of being written to a file, and a
+"analyse these channels" button posts the selection straight to disk (<out>.selected.txt and
+.csv), so the chosen channels reach the pipeline without anyone retyping them:
+
+    python scripts/channel_contact_sheet.py ... --out E:/260908_seg/_qc/sheet_f100.html --serve
+    python scripts/run_dataset_pipeline.py datasets/260908.yaml \
+        --channels-file E:/260908_seg/_qc/sheet_f100.selected.txt
+
 The tiles are 8-bit PNGs that carry the inferno colour table itself (one byte per pixel), which
 keeps a 1153-channel sheet at a few MB instead of tens.
 """
@@ -19,9 +27,11 @@ import argparse
 import base64
 import html
 import io
+import json
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import numpy as np
@@ -92,8 +102,81 @@ function showSel(){
   ta.select();
 }
 function clearSel(){ sel = new Set(); localStorage.setItem(KEY, "[]"); paint(); }
+function sorted(){
+  return [...sel].sort(function(a, b){
+    const pa = num(a, "Pos"), pb = num(b, "Pos");
+    return pa - pb || num(a, "ch") - num(b, "ch");
+  });
+}
+async function saveSel(){
+  const el = document.getElementById("saved");
+  el.textContent = "saving...";
+  try {
+    const r = await fetch("/save", {method: "POST", body: JSON.stringify(sorted())});
+    const j = await r.json();
+    el.textContent = j.n + " channels -> " + j.path;
+  } catch (e) {
+    el.textContent = "save failed: " + e + " (started without --serve?)";
+  }
+}
 paint();
 """
+
+
+def serve_page(page: str, out: Path, port: int) -> int:
+    """Serve the sheet and write what its button posts next to `out`.
+
+    Keeping the selection on this side means the channels chosen by eye reach the pipeline as a
+    file (--channels-file) instead of being retyped. Bound to 127.0.0.1: the page embeds the data.
+    """
+    body = page.encode("utf-8")
+    txt = out.with_suffix(".selected.txt")
+    csv = out.with_suffix(".selected.csv")
+
+    class Handler(BaseHTTPRequestHandler):
+        def _send(self, code, payload, ctype):
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def do_GET(self):  # noqa: N802
+            if self.path in ("/", "/index.html"):
+                self._send(200, body, "text/html; charset=utf-8")
+            else:
+                self._send(404, b"not found", "text/plain")
+
+        def do_POST(self):  # noqa: N802
+            if self.path != "/save":
+                self._send(404, b"not found", "text/plain")
+                return
+            n = int(self.headers.get("Content-Length", 0))
+            keys = json.loads(self.rfile.read(n) or b"[]")
+            rows = []
+            for k in keys:
+                m = re.match(r"Pos(\d+)\s+(ch\d+)$", k)
+                if m:
+                    rows.append((int(m.group(1)), m.group(2)))
+            rows.sort()
+            nl = chr(10)
+            txt.write_text("".join(f"Pos{p} {c}{nl}" for p, c in rows), encoding="utf-8")
+            csv.write_text(f"pos,ch{nl}" + "".join(f"{p},{c}{nl}" for p, c in rows), encoding="utf-8")
+            print(f"[{time.strftime('%H:%M:%S')}] saved {len(rows)} channels -> {txt}", flush=True)
+            self._send(200, json.dumps({"n": len(rows), "path": str(txt)}).encode(),
+                       "application/json")
+
+        def log_message(self, *args):  # keep the console to the saves
+            pass
+
+    srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    print(f"open http://localhost:{port}/   (selection -> {txt})")
+    print("Ctrl+C to stop", flush=True)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        print("stopped")
+    return 0
 
 
 def main() -> int:
@@ -111,7 +194,12 @@ def main() -> int:
     ap.add_argument("--no-rotate", action="store_true", help="keep the crop wide instead of standing it up")
     ap.add_argument("--workers", type=int, default=16, help="cold reads parallelise well on this disk")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--serve", action="store_true",
+                    help="hand the page out at http://localhost:<port>/ and let its button write "
+                         "the selection to <out>.selected.txt / .csv instead of saving the HTML")
+    ap.add_argument("--port", type=int, default=8765)
     a = ap.parse_args()
+    serve = a.serve
 
     raw_root, rel = Path(a.raw_root), Path(a.channel_rel)
     mask_root = Path(a.mask_root) if a.mask_root else None
@@ -157,8 +245,10 @@ def main() -> int:
              "<header>",
              f"<b>frame {a.frame}</b> &middot; {len(jobs)} channels &middot; "
              f"inferno {a.vmin}-{a.vmax} rad &middot; <span id=\"count\">0</span> selected ",
+             ('<button onclick="saveSel()"><b>analyse these channels</b></button>' if serve else ''),
              '<button onclick="showSel()">copy list</button>',
              '<button onclick="clearSel()">clear</button>',
+             '<span id="saved" class="nm"></span> ',
              '<span class="nm">click a tile to select; the number under it is how many frames of '
              'that channel have masks</span></header>',
              '<dialog id="dlg"><textarea id="ta"></textarea><br>'
@@ -178,11 +268,14 @@ def main() -> int:
         parts.append("</div></div>")
     parts.append(f"<script>{JS}</script>")
 
+    page = "".join(parts)
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text("".join(parts), encoding="utf-8")
-    print(f"{out}  ({out.stat().st_size / 1e6:.1f} MB)")
-    return 0
+    if not serve:
+        out.write_text(page, encoding="utf-8")
+        print(f"{out}  ({out.stat().st_size / 1e6:.1f} MB)")
+        return 0
+    return serve_page(page, out, a.port)
 
 
 if __name__ == "__main__":

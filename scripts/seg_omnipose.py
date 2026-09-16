@@ -155,14 +155,37 @@ def process_channel(args):
     return (pos, chdir.name, "ok" if ne == 0 else "ERROR", nc, ng + nt, ne, first_err, nt)
 
 
-def channel_dirs(raw_root: Path, rel: Path, pos_start: int, pos_end: int) -> list[tuple[int, str]]:
+def load_channel_filter(path):
+    """{(pos, "chNN")} from a selection file, or None when no path is given.
+
+    Accepts what channel_contact_sheet.py writes: "PosN chNN" lines (.selected.txt) or
+    "pos,ch" rows with a header (.selected.csv). Blank lines and # comments are ignored.
+    """
+    if not path:
+        return None
+    keep = set()
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or line.lower().startswith("pos,ch"):
+            continue
+        m = re.match(r"Pos(\d+)[\s,]+(ch\d+)$", line) or re.match(r"(\d+)[\s,]+(ch\d+)$", line)
+        if not m:
+            raise ValueError(f"{path}: cannot read channel line {line!r}")
+        keep.add((int(m.group(1)), m.group(2)))
+    if not keep:
+        raise ValueError(f"{path}: no channels listed")
+    return keep
+
+
+def channel_dirs(raw_root: Path, rel: Path, pos_start: int, pos_end: int,
+                 keep=None) -> list[tuple[int, str]]:
     tasks = []
     for pos in range(pos_start, pos_end + 1):
         base = raw_root / f"Pos{pos}" / rel
         if not base.is_dir():
             continue
         chs = sorted((d for d in base.glob("ch*") if d.is_dir()), key=lambda p: int(p.name[2:]))
-        tasks += [(pos, str(c)) for c in chs]
+        tasks += [(pos, str(c)) for c in chs if keep is None or (pos, c.name) in keep]
     return tasks
 
 
@@ -180,6 +203,9 @@ def main() -> int:
     ap.add_argument("--gate-hi", type=float, default=0.7)
     ap.add_argument("--gate-min-px", type=int, default=40)
     ap.add_argument("--phase-glob", default="img_*_ph_000_phase.tif")
+    ap.add_argument("--channels-file", default=None,
+                    help="only these channels: PosN chNN lines or pos,ch rows "
+                         "(channel_contact_sheet.py --serve writes both)")
     a = ap.parse_args()
     try:
         sys.stdout.reconfigure(errors="replace")
@@ -193,7 +219,10 @@ def main() -> int:
     eval_params = dict(EVAL_DEFAULT)
     if a.eval_json:
         eval_params.update(json.loads(a.eval_json))
-    tasks = channel_dirs(raw_root, Path(a.channel_rel), a.pos_start, a.pos_end)
+    keep = load_channel_filter(a.channels_file)
+    tasks = channel_dirs(raw_root, Path(a.channel_rel), a.pos_start, a.pos_end, keep)
+    if keep is not None:
+        print(f"channel filter: {a.channels_file} ({len(keep)} channels listed)", flush=True)
     print(f"channels={len(tasks)} workers={a.workers} pos={a.pos_start}-{a.pos_end} max_files={a.max_files} "
           f"raw={raw_root} out={mask_root} model={model.name}", flush=True)
     if not tasks:

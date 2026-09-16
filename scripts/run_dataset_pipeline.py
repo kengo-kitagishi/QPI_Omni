@@ -106,6 +106,8 @@ class Dataset:
         self.inputs_extra = [_path(x) for x in (cfg.get("inputs_extra") or [])]
         self.qc_extra = [_path(x) for x in (cfg.get("qc_extra") or [])]
         self.derived = cfg.get("derived") or None
+        self.channel_filter = None   # {(pos, 'chNN')} from --channels-file
+        self.channels_file = None
         self.log_path = self.mask_root / "_pipeline" / f"{self.id}_pipeline.log"
 
     def raw_root_for(self, n: int) -> Path:
@@ -217,6 +219,8 @@ def production_channels(ds: Dataset, start: int | None = None, end: int | None =
         if (start is not None and n < start) or (end is not None and n > end):
             continue
         for ch in _channels(pos_dir / ds.rel):
+            if ds.channel_filter is not None and (n, ch.name) not in ds.channel_filter:
+                continue
             lo = ch / "inference_out" / "lineage_out"
             if is_production(ds, lo):
                 out.append((pos_dir.name, ch.name, lo))
@@ -242,6 +246,8 @@ def stage_seg(ds: Dataset, n: int, workers: int, max_files: int | None = None) -
            "--channel-rel", ds.rel.as_posix(), "--model", str(ds.model),
            "--pos-start", str(n), "--pos-end", str(n), "--workers", str(workers),
            "--phase-glob", ds.phase_glob]
+    if ds.channels_file:
+        cmd += ["--channels-file", str(ds.channels_file)]
     if ds.seg_eval:
         cmd += ["--eval-json", json.dumps(ds.seg_eval)]
     if "phase_hi" in ds.gate:
@@ -262,6 +268,8 @@ def worklist(ds: Dataset, n: int, force: bool) -> tuple[list[tuple[Path, Path]],
     targets: list[tuple[Path, Path]] = []
     n_done = n_empty = 0
     for ch in _channels(ds.mask_pos(n)):
+        if ds.channel_filter is not None and (n, ch.name) not in ds.channel_filter:
+            continue
         inf = ch / "inference_out"
         if count_masks(inf) == 0:
             n_empty += 1
@@ -725,6 +733,10 @@ def main() -> int:
     ap.add_argument("--force-track", action="store_true", help="re-track channels that already have a production lineage")
     ap.add_argument("--force-qc", action="store_true", help="recompute divisions_qc.csv even when up to date")
     ap.add_argument("--max-files", type=int, default=None, help="seg smoke test: first N frames per channel, no _DONE")
+    ap.add_argument("--channels-file", default=None,
+                    help="restrict every stage to the channels listed in this file "
+                         "(channel_contact_sheet.py --serve writes it when you press "
+                         "'analyse these channels')")
     ap.add_argument("--seg-workers", type=int, default=None)
     ap.add_argument("--track-workers", type=int, default=None)
     ap.add_argument("--consolidated-dir", default=None, help="override paths.consolidated_dir")
@@ -739,6 +751,12 @@ def main() -> int:
         pass
 
     ds = Dataset(Path(a.yaml))
+    if a.channels_file:
+        from seg_omnipose import load_channel_filter
+        ds.channels_file = Path(a.channels_file)
+        ds.channel_filter = load_channel_filter(a.channels_file)
+        print(f"channel filter: {a.channels_file} "
+              f"({len(ds.channel_filter)} channels)")
     if a.consolidated_dir:
         ds.consolidated = _path(a.consolidated_dir)
     if a.master_root:
