@@ -78,13 +78,13 @@ def load_lineage(master: Path, pos: str, ch: str):
     return load_lineage_dir(master / "per_channel" / pos / ch)
 
 
-def working_tree_lineages(pos_max: int, flags: pd.DataFrame | None):
+def working_tree_lineages(pos_max: int, flags: pd.DataFrame | None, pos_min: int = 1):
     """(pos, ch, lineage_out) for every yellow-tracker production channel in D:\\260517_seg."""
     import _retrack_260517_newmodel as chain
     out = []
     for pos_dir in sorted(chain.MASK_ROOT.glob("Pos*"), key=lambda p: int(p.name[3:])):
         n = int(pos_dir.name[3:])
-        if n > pos_max:
+        if n < pos_min or n > pos_max:
             continue
         z = pos_dir / chain.REL
         if not z.is_dir():
@@ -118,6 +118,10 @@ def prepare(df: pd.DataFrame, bad: pd.DataFrame) -> dict:
     vol = m[vol_col].to_numpy(dtype=float)
     # hidden rows carry NaN physics in the table; for the markers we still need x positions
     d = dict(t=t, ri=ri, mass=mass, vol=vol, valid=valid, outl=outl, bord=bord, frame=m["frame"].to_numpy())
+    # dry-mass concentration [mg/mL] = density_pg_um3_efd * 1000 (pg/um^3 = g/mL); = (n_cell - n_medium)/alpha,
+    # i.e. medium-RI removed, so it is comparable across the media switches.
+    d["conc"] = (m["density_pg_um3_efd"].to_numpy(dtype=float) * 1000.0
+                 if "density_pg_um3_efd" in m.columns else np.full(len(m), np.nan))
     # drift-excluded rank-1 measurements
     if len(bad) and "rank_in_frame" in bad.columns:
         b = bad[(bad["rank_in_frame"] == 1) & (bad["frame"] >= T0_FRAME) & (bad["frame"] <= END_FRAME)]
@@ -125,13 +129,20 @@ def prepare(df: pd.DataFrame, bad: pd.DataFrame) -> dict:
         d["bad_mass"] = phase_mass_pg(b["total_phase"])
         d["bad_vol"] = b["volume_um3_rod"].to_numpy(dtype=float)   # bad table has the rod volume only
         d["bad_ri"] = b["mean_ri"].to_numpy(dtype=float)           # NaN by design (drift-uncorrected)
+        d["bad_conc"] = np.full(len(b), np.nan)                     # drift rows carry no valid concentration
     else:
-        d["bad_t"] = np.array([]); d["bad_mass"] = np.array([]); d["bad_vol"] = np.array([]); d["bad_ri"] = np.array([])
+        d["bad_t"] = np.array([]); d["bad_mass"] = np.array([]); d["bad_vol"] = np.array([])
+        d["bad_ri"] = np.array([]); d["bad_conc"] = np.array([])
     # QC-validated mother divisions (computed on the full channel so +-8 frame windows are complete)
     qc = dqc.qc_channel(df, dt_min=DT_MIN, frame_min=T0_FRAME, mass_col=mass_col, vol_col=vol_col)
-    md = qc[qc["is_mother_division"]]
-    d["div_all"] = np.sort(md["frame"].to_numpy(dtype=int))
-    d["div_ok"] = np.sort(md[md["validated"]]["frame"].to_numpy(dtype=int))
+    md = qc[qc["is_mother_division"]] if len(qc) and "is_mother_division" in qc.columns else qc.iloc[0:0]
+    if len(md) and "frame" in md.columns:  # a mother with zero detected divisions yields an empty qc table
+        d["div_all"] = np.sort(md["frame"].to_numpy(dtype=int))
+        dvok = md[md["validated"]]["frame"].to_numpy(dtype=int)
+    else:
+        d["div_all"] = np.array([], dtype=int)
+        dvok = np.array([], dtype=int)
+    d["div_ok"] = np.sort(dvok)
     d["div_ok"] = d["div_ok"][(d["div_ok"] >= T0_FRAME) & (d["div_ok"] <= END_FRAME)]
     # cycle fits: ln(mass) ~ t on valid frames of each complete cycle
     fits = []
@@ -154,9 +165,11 @@ def prepare(df: pd.DataFrame, bad: pd.DataFrame) -> dict:
     return d
 
 
-def render(pos: str, ch: str, d: dict, ylims: dict, dpi: int = 110) -> bytes:
+def render(pos: str, ch: str, d: dict, ylims: dict, dpi: int = 110, panel1: str = "ri") -> bytes:
     fig, axes = plt.subplots(3, 1, figsize=(15, 6.2), sharex=True, dpi=dpi)
-    series = [("ri", "mean RI", d["ri"], d["bad_ri"]), ("mass", "phase-integral mass [pg]", d["mass"], d["bad_mass"]),
+    s0 = (("conc", "dry-mass conc. [mg/mL]", d["conc"], d.get("bad_conc", np.array([])))
+          if panel1 == "conc" else ("ri", "mean RI", d["ri"], d["bad_ri"]))
+    series = [s0, ("mass", "phase-integral mass [pg]", d["mass"], d["bad_mass"]),
               ("vol", f"volume [um$^3$] ({d['vol_col']})", d["vol"], d["bad_vol"])]
     t, valid, outl, bord = d["t"], d["valid"], d["outl"], d["bord"]
     for ax, (key, label, y, ybad) in zip(axes, series):
@@ -201,30 +214,83 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--master-tag", default=None)
     ap.add_argument("--pos-max", type=int, default=52, help="skip positions above this (tilt-biased in v20260911)")
+    ap.add_argument("--pos-min", type=int, default=1, help="skip positions below this")
     ap.add_argument("--max-lineages", type=int, default=30)
     ap.add_argument("--min-coverage", type=float, default=0.98)
     ap.add_argument("--out", default=None)
-    ap.add_argument("--source", choices=["master", "working-tree"], default="master",
-                    help="working-tree = yellow-tracker lineages in D:\\260517_seg before the master is published")
+    ap.add_argument("--source", choices=["master", "working-tree", "csv"], default="master",
+                    help="master / working-tree (D:\\260517_seg) / csv (a consolidated all-cells CSV you already have)")
+    ap.add_argument("--csv", default=None,
+                    help="--source csv: path to a consolidated all_cells_lineage_data3D.csv(.gz) with pos,ch,cell_id,frame,... columns")
+    ap.add_argument("--bad-csv", default=None,
+                    help="--source csv: optional all_cells_lineage_bad_frames.csv(.gz) for the drift-excluded markers")
+    ap.add_argument("--channels-csv", default=None,
+                    help="--source csv: optional channels.csv (classification_status/qc_oob_excluded flags); omit to include every non-edge channel")
+    ap.add_argument("--panel1", choices=["ri", "conc"], default="ri",
+                    help="top panel: ri = mean RI, conc = dry-mass concentration [mg/mL] (density_pg_um3_efd*1000)")
     ap.add_argument("--ylim-ri", default="1.37,1.40", help="mean RI axis, lo,hi (or auto)")
+    ap.add_argument("--ylim-conc", default="150,400", help="concentration axis [mg/mL], lo,hi (or auto)")
     ap.add_argument("--ylim-mass", default="0,50", help="mass axis [pg], lo,hi (or auto)")
     ap.add_argument("--ylim-vol", default="0,120", help="volume axis [um3], lo,hi (or auto)")
     ap.add_argument("--min-mother-frames", type=int, default=1000,
                     help="working-tree mode: skip channels whose mother has fewer rows in the window")
     args = ap.parse_args()
-    if args.master_tag:
-        os.environ["QPI_LINEAGE_MASTER"] = args.master_tag
-    master = qp.master_dir()
-    if master is None:
-        raise SystemExit("no master published")
-    chans = pd.read_csv(master / "derived" / "phase1_img0002-2017" / "channels.csv")
-    chans["pos_num"] = chans["pos"].str[3:].astype(int)
 
     data = {}
-    if args.source == "master":
+    if args.source == "csv":
+        # Portable mode: render straight from a consolidated all-cells CSV, no published master needed.
+        if not args.csv:
+            raise SystemExit("--source csv requires --csv <consolidated all_cells_lineage_data3D.csv(.gz)>")
+        big = pd.read_csv(args.csv)
+        for col in ("pos", "ch", "cell_id", "frame"):
+            if col not in big.columns:
+                raise SystemExit(f"--csv file lacks the required column '{col}'")
+        badbig = pd.read_csv(args.bad_csv) if args.bad_csv else None
+        flags = pd.read_csv(args.channels_csv) if args.channels_csv else None
+
+        def _posnum(p):
+            return int(str(p)[3:]) if str(p).startswith("Pos") else 0
+        keys = sorted(set(map(tuple, big[["pos", "ch"]].drop_duplicates().to_numpy())),
+                      key=lambda k: (_posnum(k[0]), str(k[1])))
+        for pos, ch in keys:
+            if len(data) >= args.max_lineages:
+                break
+            pn = _posnum(pos)
+            if pn < args.pos_min or pn > args.pos_max or ch in EDGE_CHANNELS:
+                continue
+            if flags is not None:
+                f = flags[(flags["pos"] == pos) & (flags["ch"] == ch)]
+                if len(f) and (f.iloc[0].get("classification_status") not in ("cells", None, np.nan)
+                               or bool(f.iloc[0].get("qc_oob_excluded"))):
+                    continue
+            try:
+                df = big[(big["pos"] == pos) & (big["ch"] == ch)].copy()
+                bad = (badbig[(badbig["pos"] == pos) & (badbig["ch"] == ch)].copy()
+                       if badbig is not None else pd.DataFrame())
+                m = df[(df["cell_id"] == 0) & (df["frame"] >= T0_FRAME) & (df["frame"] <= END_FRAME)]
+                if len(m) < args.min_mother_frames:
+                    continue
+                data[(pos, ch)] = prepare(df, bad)
+            except Exception as e:  # a malformed channel must not abort the gallery
+                print(f"  skip {pos}/{ch}: {type(e).__name__}: {e}")
+        source_name = "csv"
+        if not data:
+            raise SystemExit("no lineages selected from --csv (check columns and --min-mother-frames)")
+        print(f"csv {Path(args.csv).name}: {len(data)} lineages selected")
+        master = None
+        parts_hdr = f"csv {Path(args.csv).name}"
+    elif args.source == "master":
+        if args.master_tag:
+            os.environ["QPI_LINEAGE_MASTER"] = args.master_tag
+        master = qp.master_dir()
+        if master is None:
+            raise SystemExit("no master published")
+        chans = pd.read_csv(master / "derived" / "phase1_img0002-2017" / "channels.csv")
+        chans["pos_num"] = chans["pos"].str[3:].astype(int)
         sel = chans[(chans["classification_status"] == "cells") & chans["mother_present"]
                     & (~chans["qc_oob_excluded"].astype(bool)) & (~chans["ch"].isin(EDGE_CHANNELS))
                     & (chans["mother_coverage"] >= args.min_coverage)
+                    & (chans["pos_num"] >= args.pos_min)
                     & (chans["pos_num"] <= args.pos_max)].sort_values(["pos_num", "ch"])
         sel = sel.head(args.max_lineages)
         print(f"master {master.name}: {len(sel)} lineages selected")
@@ -232,17 +298,27 @@ def main() -> None:
             df, bad = load_lineage(master, r.pos, r.ch)
             data[(r.pos, r.ch)] = prepare(df, bad)
         source_name = master.name
-    else:
-        cands = working_tree_lineages(args.pos_max, chans)
+    else:  # working-tree: still needs the published master's channels.csv for the classification/OOB flags
+        if args.master_tag:
+            os.environ["QPI_LINEAGE_MASTER"] = args.master_tag
+        master = qp.master_dir()
+        if master is None:
+            raise SystemExit("no master published")
+        chans = pd.read_csv(master / "derived" / "phase1_img0002-2017" / "channels.csv")
+        chans["pos_num"] = chans["pos"].str[3:].astype(int)
+        cands = working_tree_lineages(args.pos_max, chans, pos_min=args.pos_min)
         print(f"working tree: {len(cands)} yellow-tracker channels found (classification/OOB flags from {master.name})")
         for pos, ch, lo in cands:
             if len(data) >= args.max_lineages:
                 break
-            df, bad = load_lineage_dir(lo)
-            m = df[(df["cell_id"] == 0) & (df["frame"] >= T0_FRAME) & (df["frame"] <= END_FRAME)]
-            if len(m) < args.min_mother_frames:
-                continue
-            data[(pos, ch)] = prepare(df, bad)
+            try:
+                df, bad = load_lineage_dir(lo)
+                m = df[(df["cell_id"] == 0) & (df["frame"] >= T0_FRAME) & (df["frame"] <= END_FRAME)]
+                if len(m) < args.min_mother_frames:
+                    continue
+                data[(pos, ch)] = prepare(df, bad)
+            except Exception as e:  # a malformed / half-written channel must not abort the gallery
+                print(f"  skip {pos}/{ch}: {type(e).__name__}: {e}")
         source_name = "working-tree_yellow"
         if not data:
             raise SystemExit("no yellow-tracker lineages with a mother yet")
@@ -260,6 +336,7 @@ def main() -> None:
         lo, hi = (float(x) for x in str(spec).split(","))
         return (lo, hi)
     ylims = {"ri": _parse(args.ylim_ri, lambda: _lim("ri")),
+             "conc": _parse(args.ylim_conc, lambda: _lim("conc")),
              "mass": _parse(args.ylim_mass, lambda: (0, _lim("mass")[1])),
              "vol": _parse(args.ylim_vol, lambda: (0, _lim("vol")[1]))}
 
@@ -269,7 +346,7 @@ def main() -> None:
     html_path = out_dir / f"lineage_gallery_{source_name}_{stamp}.html"
     fit_rows, parts = [], []
     for (pos, ch), d in data.items():
-        png = render(pos, ch, d, ylims)
+        png = render(pos, ch, d, ylims, panel1=args.panel1)
         (out_dir / f"{pos}_{ch}_{stamp}.png").write_bytes(png)
         b64 = base64.b64encode(png).decode("ascii")
         for fz in d["fits"]:
@@ -300,7 +377,7 @@ def main() -> None:
             f"<b>Fits:</b> complete cycles between two retained divisions, valid frames only (no outlier / border), &ge; {MIN_FIT_POINTS} points. "
             f"Shared y ranges (fixed): RI {ylims['ri'][0]:.3f}-{ylims['ri'][1]:.3f}, mass {ylims['mass'][0]:.0f}-{ylims['mass'][1]:.0f} pg, volume {ylims['vol'][0]:.0f}-{ylims['vol'][1]:.0f} &micro;m&sup3;; values outside are clipped.<br>"
             f"Selection: classification cells, mother present, not OOB, not an edge trap (ch00/ch11), coverage &ge; {args.min_coverage}, Pos &le; {args.pos_max}, first {args.max_lineages}.</p>")
-    html = (f"<!doctype html><html><head><meta charset='utf-8'><title>260517 lineage gallery {master.name}</title>"
+    html = (f"<!doctype html><html><head><meta charset='utf-8'><title>260517 lineage gallery {source_name}</title>"
             f"<style>{style}</style></head><body><h1 style='font-size:18px'>260517 mother lineages: RI / phase-integral mass / volume</h1>"
             f"{note}<p class='note'>{legend}</p><p class='toc'>{toc}</p>{''.join(parts)}</body></html>")
     html_path.write_text(html, encoding="utf-8")
