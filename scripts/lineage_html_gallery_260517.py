@@ -49,6 +49,10 @@ DT_MIN = 5.0
 T0_FRAME = 2
 END_FRAME = 2017
 MIN_FIT_POINTS = 5
+# fixed axes horizontal extent in figure fraction, so a click x on the PNG maps to a time
+# (data x-range 0..t_h(END_FRAME) spans figure fraction PLOT_LEFT..PLOT_RIGHT).
+PLOT_LEFT = 0.060
+PLOT_RIGHT = 0.996
 EDGE_CHANNELS = ("ch00", "ch11")   # edge traps excluded from the analysis (2026-09-14)
 
 C_VALID = "#1B3A6B"
@@ -203,7 +207,8 @@ def render(pos: str, ch: str, d: dict, ylims: dict, dpi: int = 110, panel1: str 
                       f"fitted cycles: {nfit}  |  median doubling time "
                       f"{np.nanmedian([f['doubling_time_h'] for f in d['fits']]) if nfit else float('nan'):.2f} h",
                       fontsize=10, loc="left")
-    fig.tight_layout(h_pad=0.4)
+    # fixed geometry (not tight_layout) so the plot area maps deterministically to click coordinates
+    fig.subplots_adjust(left=PLOT_LEFT, right=PLOT_RIGHT, top=0.93, bottom=0.085, hspace=0.13)
     buf = io.BytesIO()
     fig.savefig(buf, format="png")
     plt.close(fig)
@@ -231,7 +236,7 @@ def main() -> None:
     ap.add_argument("--ylim-ri", default="1.37,1.40", help="mean RI axis, lo,hi (or auto)")
     ap.add_argument("--ylim-conc", default="150,400", help="concentration axis [mg/mL], lo,hi (or auto)")
     ap.add_argument("--ylim-mass", default="0,50", help="mass axis [pg], lo,hi (or auto)")
-    ap.add_argument("--ylim-vol", default="0,120", help="volume axis [um3], lo,hi (or auto)")
+    ap.add_argument("--ylim-vol", default="0,170", help="volume axis [um3], lo,hi (or auto)")
     ap.add_argument("--min-mother-frames", type=int, default=1000,
                     help="working-tree mode: skip channels whose mother has fewer rows in the window")
     args = ap.parse_args()
@@ -351,8 +356,14 @@ def main() -> None:
         b64 = base64.b64encode(png).decode("ascii")
         for fz in d["fits"]:
             fit_rows.append(dict(pos=pos, ch=ch, **fz))
-        parts.append(f"<section id='{pos}_{ch}'><h2>{pos} {ch}</h2>"
-                     f"<img src='data:image/png;base64,{b64}' alt='{pos} {ch}'></section>")
+        key = f"{pos} {ch}"
+        divs = ",".join(f"{t_h(int(f)):.2f}" for f in d["div_ok"])  # cycle boundaries [h] for click->cycle mapping
+        parts.append(f"<section id='{pos}_{ch}'><h2>{pos} {ch} <span class='done' data-for='{key}'></span></h2>"
+                     f"<div class='imgwrap' data-key='{key}' data-divs='{divs}'>"
+                     f"<img src='data:image/png;base64,{b64}' alt='{pos} {ch}'></div>"
+                     f"<div class='cmtwrap'><div class='marks' data-key='{key}'></div>"
+                     f"<textarea class='cmt' data-key='{key}' placeholder='{key} 全体メモ (任意)'></textarea>"
+                     f"</div></section>")
     pd.DataFrame(fit_rows).to_csv(out_dir / f"cycle_fits_{source_name}_{stamp}.csv", index=False)
 
     toc = " | ".join(f"<a href='#{p}_{c}'>{p} {c}</a>" for (p, c) in data)
@@ -360,7 +371,24 @@ def main() -> None:
              "img{width:100%;max-width:1500px;display:block;border:1px solid #ddd}"
              "h2{font-size:15px;margin:22px 0 4px}section{margin-bottom:6px}"
              ".note{font-size:13px;line-height:1.5;max-width:1100px}.toc{font-size:12px;line-height:1.8}"
-             ".sw{display:inline-block;width:10px;height:10px;margin-right:4px;vertical-align:middle}")
+             ".sw{display:inline-block;width:10px;height:10px;margin-right:4px;vertical-align:middle}"
+             "textarea.cmt{width:100%;max-width:1100px;min-height:42px;font-family:inherit;font-size:13px;"
+             "padding:6px;border:1px solid #bbb;border-radius:4px;box-sizing:border-box;resize:vertical}"
+             "textarea.cmt.has{border-color:#0a8a0a;background:#f2fbf2}.cmtwrap{margin:4px 0 14px}"
+             ".imgwrap{position:relative;display:inline-block;width:100%;max-width:1500px;cursor:crosshair}"
+             ".imgwrap img{display:block;width:100%;border:1px solid #ddd}"
+             ".dot{position:absolute;width:12px;height:12px;border-radius:50%;transform:translate(-50%,-50%);"
+             "border:2px solid #fff;box-shadow:0 0 2px #000;pointer-events:none}"
+             ".dot.miss{background:#c0392b}.dot.weird{background:#8e44ad}.dot.note{background:#2980b9}"
+             ".marks{font-size:12px;margin:3px 0;line-height:1.9}.marks .chip{display:inline-block;margin:2px 5px 2px 0;"
+             "padding:2px 7px;border-radius:11px;background:#eee}.chip.miss{background:#fdecea}.chip.weird{background:#f4ecf7}"
+             ".chip.note{background:#eaf2f8}.chip .x{color:#900;cursor:pointer;margin-left:6px;font-weight:bold}"
+             "#bar .mode button{opacity:.5;border:none;background:#555;color:#fff;border-radius:4px}"
+             "#bar .mode button.active{opacity:1;background:#0a7a0a}"
+             "#bar{position:fixed;top:0;right:0;background:#222;color:#fff;padding:8px 12px;font-size:13px;"
+             "z-index:99;border-bottom-left-radius:6px;box-shadow:0 1px 6px rgba(0,0,0,.3)}"
+             "#bar button{font-size:13px;margin-left:6px;cursor:pointer;padding:3px 8px}"
+             "#bar b{color:#7fd97f}.done:after{content:attr(data-c);color:#0a8a0a;font-size:12px;font-weight:normal}")
     legend = (f"<span class='sw' style='background:{C_VALID}'></span>valid frame &nbsp; "
               f"<span style='color:{C_OUT};font-weight:bold'>&times;</span> tracker outlier &nbsp; "
               f"<span style='color:{C_BORDER}'>&#9650;</span> border &nbsp; "
@@ -377,9 +405,59 @@ def main() -> None:
             f"<b>Fits:</b> complete cycles between two retained divisions, valid frames only (no outlier / border), &ge; {MIN_FIT_POINTS} points. "
             f"Shared y ranges (fixed): RI {ylims['ri'][0]:.3f}-{ylims['ri'][1]:.3f}, mass {ylims['mass'][0]:.0f}-{ylims['mass'][1]:.0f} pg, volume {ylims['vol'][0]:.0f}-{ylims['vol'][1]:.0f} &micro;m&sup3;; values outside are clipped.<br>"
             f"Selection: classification cells, mother present, not OOB, not an edge trap (ch00/ch11), coverage &ge; {args.min_coverage}, Pos &le; {args.pos_max}, first {args.max_lineages}.</p>")
+    toolbar = ("<div id='bar'>マーク種類: <span class='mode'>"
+               "<button data-m='miss' class='active' onclick='setMode(this)'>&#128308; 分裂見逃し</button>"
+               "<button data-m='weird' onclick='setMode(this)'>&#128995; 変なcycle</button>"
+               "<button data-m='note' onclick='setMode(this)'>&#128309; メモ点</button></span>"
+               " &nbsp;&nbsp;<b><span id='cnt'>0</span></b> 系列 "
+               "<button onclick='copyComments()'>コピー</button>"
+               "<button onclick='downloadComments()'>.md</button>"
+               "<button onclick='clearComments()'>消去</button></div>")
+    # plain string (literal braces): click a lineage plot to drop a time-stamped mark of the active
+    # category (miss / weird cycle / note); stored per lineage in localStorage; one-click clipboard copy.
+    script = ("<script>\n"
+              "const KEY='lineage_cmt_260517';let MODE='miss';\n"
+              f"const ENDH={t_h(END_FRAME):.4f},L={PLOT_LEFT},R={PLOT_RIGHT};\n"
+              "const CAT={miss:'\\u5206\\u88c2\\u898b\\u9003\\u3057',weird:'\\u5909\\u306acycle',note:'\\u30e1\\u30e2\\u70b9'};\n"
+              "function setMode(b){MODE=b.dataset.m;document.querySelectorAll('#bar .mode button').forEach(x=>x.classList.remove('active'));b.classList.add('active');}\n"
+              "function store(){let o={};try{o=JSON.parse(localStorage.getItem(KEY)||'{}');}catch(e){}return o;}\n"
+              "function save(o){try{localStorage.setItem(KEY,JSON.stringify(o));}catch(e){}}\n"
+              "function kd(o,k){if(!o[k])o[k]={marks:[],t:''};if(!o[k].marks)o[k].marks=[];return o[k];}\n"
+              "function divsOf(w){const s=w.dataset.divs;return s?s.split(',').map(Number):[];}\n"
+              "function cycleOf(dv,t){let a=0,b=ENDH;for(const d of dv){if(d<=t&&d>a)a=d;if(d>t&&d<b){b=d;break;}}return [a,b];}\n"
+              "function count(){const o=store();let n=0;Object.keys(o).forEach(k=>{if((o[k].marks&&o[k].marks.length)||(o[k].t&&o[k].t.trim()))n++;});document.getElementById('cnt').textContent=n;}\n"
+              "function chipTxt(m){return CAT[m.c]+' @'+m.t.toFixed(1)+'h'+(m.c==='weird'&&m.cyc?' (cycle '+m.cyc[0].toFixed(0)+'-'+m.cyc[1].toFixed(0)+'h)':'');}\n"
+              "function draw(){const o=store();document.querySelectorAll('.imgwrap').forEach(w=>{w.querySelectorAll('.dot').forEach(d=>d.remove());"
+              "const d=o[w.dataset.key];if(d&&d.marks)d.marks.forEach(m=>{const el=document.createElement('div');el.className='dot '+m.c;"
+              "el.style.left=(m.x*100)+'%';el.style.top=(m.y*100)+'%';w.appendChild(el);});});"
+              "document.querySelectorAll('.marks').forEach(box=>{const d=o[box.dataset.key];box.innerHTML='';"
+              "if(d&&d.marks)d.marks.forEach((m,i)=>{const c=document.createElement('span');c.className='chip '+m.c;"
+              "c.innerHTML=chipTxt(m)+\" <span class='x' data-k='\"+box.dataset.key+\"' data-i='\"+i+\"'>\\u00d7</span>\";box.appendChild(c);});});count();}\n"
+              "function asText(){const o=store();const out=[];document.querySelectorAll('.imgwrap').forEach(w=>{const k=w.dataset.key;const d=o[k];if(!d)return;"
+              "const p=[];if(d.marks)d.marks.forEach(m=>{p.push(CAT[m.c]+'@'+m.t.toFixed(1)+'h'+(m.c==='weird'&&m.cyc?'('+m.cyc[0].toFixed(0)+'-'+m.cyc[1].toFixed(0)+'h)':''));});"
+              "let s=p.join(', ');if(d.t&&d.t.trim())s+=(s?'; ':'')+d.t.trim().replace(/\\s*\\n\\s*/g,' ');if(s)out.push(k+': '+s);});return out.join('\\n');}\n"
+              "document.addEventListener('click',e=>{const img=e.target.closest('.imgwrap img');if(!img)return;"
+              "const w=img.closest('.imgwrap');const r=img.getBoundingClientRect();const x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;"
+              "let t=(x-L)/(R-L)*ENDH;t=Math.max(0,Math.min(ENDH,t));const o=store();const d=kd(o,w.dataset.key);"
+              "const m={c:MODE,x:x,y:y,t:t};if(MODE==='weird')m.cyc=cycleOf(divsOf(w),t);d.marks.push(m);save(o);draw();});\n"
+              "document.addEventListener('click',e=>{if(e.target.classList&&e.target.classList.contains('x')){const o=store();const k=e.target.dataset.k,i=+e.target.dataset.i;"
+              "if(o[k]&&o[k].marks){o[k].marks.splice(i,1);save(o);draw();}}});\n"
+              "document.addEventListener('input',e=>{if(e.target.classList&&e.target.classList.contains('cmt')){const o=store();kd(o,e.target.dataset.key).t=e.target.value;save(o);"
+              "e.target.classList.toggle('has',!!e.target.value.trim());count();}});\n"
+              "function copyComments(){const s=asText();if(!s){alert('\\u30de\\u30fc\\u30af\\u3082\\u30e1\\u30e2\\u3082\\u3042\\u308a\\u307e\\u305b\\u3093');return;}const n=s.split('\\n').length;"
+              "if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(s).then(()=>alert('\\u30b3\\u30d4\\u30fc\\u3057\\u307e\\u3057\\u305f ('+n+')'),()=>window.prompt('copy:',s));}else{window.prompt('copy:',s);}}\n"
+              "function downloadComments(){const s=asText();if(!s){alert('empty');return;}const b=new Blob([s],{type:'text/markdown'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='lineage_marks_'+Date.now()+'.md';a.click();}\n"
+              "function clearComments(){if(confirm('clear all?')){try{localStorage.removeItem(KEY);}catch(e){}document.querySelectorAll('textarea.cmt').forEach(t=>{t.value='';t.classList.remove('has');});draw();}}\n"
+              "window.addEventListener('DOMContentLoaded',()=>{const o=store();document.querySelectorAll('textarea.cmt').forEach(t=>{const d=o[t.dataset.key];if(d&&d.t){t.value=d.t;t.classList.add('has');}});draw();});\n"
+              "</script>")
     html = (f"<!doctype html><html><head><meta charset='utf-8'><title>260517 lineage gallery {source_name}</title>"
-            f"<style>{style}</style></head><body><h1 style='font-size:18px'>260517 mother lineages: RI / phase-integral mass / volume</h1>"
-            f"{note}<p class='note'>{legend}</p><p class='toc'>{toc}</p>{''.join(parts)}</body></html>")
+            f"<style>{style}</style></head><body>{toolbar}<h1 style='font-size:18px'>260517 mother lineages: RI / phase-integral mass / volume</h1>"
+            f"{note}<p class='note'>{legend}</p>"
+            f"<p class='note'><b>cycle を指定する:</b> 右上でマーク種類を選び（<b style='color:#c0392b'>分裂見逃し</b>=分裂すべきなのに縦線が無い所 / "
+            f"<b style='color:#8e44ad'>変なcycle</b>=挙動がおかしい cycle / <b style='color:#2980b9'>メモ点</b>）、その系列の図の該当箇所をクリックすると、その時刻に印が付く。"
+            f"変なcycle は分裂線から cycle の範囲も自動で付く。右上「コピー」で <code>Pos5 ch04: 分裂見逃し@42.5h, 変なcycle@88.0h(84-92h)</code> "
+            f"の形でまとめてコピー -> チャットに1回貼り付け。印は&times;で消せる。全体メモ欄と内容はこのブラウザに自動保存される（再読込で残る）。</p>"
+            f"<p class='toc'>{toc}</p>{''.join(parts)}{script}</body></html>")
     html_path.write_text(html, encoding="utf-8")
     print("html:", html_path)
     print("fits csv:", out_dir / f"cycle_fits_{source_name}_{stamp}.csv", "| cycles fitted:", len(fit_rows))
