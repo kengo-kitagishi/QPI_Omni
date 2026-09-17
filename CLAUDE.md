@@ -71,6 +71,8 @@ MCP が繋がっていない場合は `NOTION_TOKEN` を `~/.secrets/.env` に�
 | grid 撮影 | **7.2–7.4 min/Pos** | 2026-09-09。09:44 に 1447 点 → 09:47 に 1496 点（3.67 s/点 × 121） |
 | grid の容量 | **20.4 GB/Pos（169 MB/点）** | 2026-09-09。空き容量の減り ÷ 増えた点数。tif 13.34 MB × 11 z ＋ metadata.txt 19.7 MB |
 | 位相再構成 | **5.0–5.3 min/Pos（4.4 fps）** | 2026-09-09。Pos1 が 1331 frames を 299.2 s。律速は `unwrap_phase` の CPU と C: からの 17.7 GB/Pos 読み出し。GPU は余る |
+| grid recon＋calib（raw を NVMe から読む） | **1.7 min/Pos**（全 11 z ＋ channel 検出 ＋ calibration） | 2026-09-17。E: raw → D: 出力、41 Pos を 1.15 h。C: HDD 読みより 3 倍速い |
+| grid の recon 出力 | 2.6 GB/Pos | 2026-09-17。41 Pos で 106 GB |
 | 小ファイルの削除 | **66 files/s** | 2026-09-09。260810（183 KB × 241万個）。`/MT:16` で頭打ち |
 | 大ファイルの削除 | 約 20,000 files / 1.5 分 | 2026-09-09。grid raw 14 Pos ＝ 282 GB |
 | 位置安定化 | 5 h | 実験手順の既定 |
