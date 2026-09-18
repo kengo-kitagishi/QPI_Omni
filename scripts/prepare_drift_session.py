@@ -37,8 +37,8 @@ from ecc_utils import get_aligner  # single source for the estimator score thres
 POSITIONS_FILE   = r"E:\260917\timelapse.pos"
 
 # Grid acquisition directory (small grid is fine)
-GRID_DIR         = r"D:\AquisitionData\Kitagishi\260917\grid_hologram_0p05"
-GRID_Z_INDEX     = 5   # grid z-slice used as ECC reference (index 5 = 0.0 um of the -2.0..+2.0 um / 0.4 um stack)
+GRID_DIR         = r"D:\AquisitionData\Kitagishi\260917\grid_hologram_0p05_3"
+GRID_Z_INDEX     = 0   # single-z grid: the point folder holds one plane, at the working focus
 
 # channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
 # No single path needed — compute_drift_online.py reads per-pos from grid_dir.
@@ -47,7 +47,7 @@ GRID_Z_INDEX     = 5   # grid z-slice used as ECC reference (index 5 = 0.0 um of
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"E:\260917\ph_zstack_test_1"
+SAVE_DIR         = r"E:\260917\ph_zstack_test_2"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
@@ -146,7 +146,7 @@ RAW_TL_Z_INDEX        = 0   # only one plane is captured, so it is index 0 (= gr
 CROP_SUB_X_STEP_UM    = 0.05
 CROP_SUB_Y_STEP_UM    = 0.05
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"E:\260917\online_crop_sub_zstack_test_1"
+CROP_SUB_ROOT         = r"E:\260917\online_crop_sub_zstack_test_2"
 CROP_SUB_MAX_SECONDS  = 150.0
 CROP_SUB_MAX_WORKERS  = 4
 CROP_SUB_MIN_FREE_GB  = 2.0
