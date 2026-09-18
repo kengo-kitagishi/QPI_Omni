@@ -47,14 +47,14 @@ GRID_Z_INDEX     = 0   # single-z grid: the point folder holds one plane, at the
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"E:\260917\ph_zstack_test_2"
+SAVE_DIR         = r"E:\260917\ph_zstack_test_3"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
 
 # Micro-Manager acquisition parameters
-N_TIMEPOINTS     = 480        # 1 day @ 180s (3 min) interval
-INTERVAL_SEC     = 180        # Time-lapse interval [s] (3 min)
+N_TIMEPOINTS     = 480        # at ~2.7 min per real cycle this is about a day
+INTERVAL_SEC     = 60         # deliberately shorter than a cycle: the run overruns and cycles back to back
 EXPOSURE_MS      = 60.0
 SETTLE_MS        = 150        # Stage settle time after move [ms]
 PFS_SETTLE_MS    = 0          # PFS continuously tracks; no extra settle needed
@@ -137,7 +137,7 @@ CROP_SUB_OUTPUT_CROP_H = 240
 N_Z_SLICES            = 1
 Z_STEP_UM             = 0.4
 Z_START_UM            = 0.0   # single plane at the measured focus (grid z-index 5)
-CLEANUP_RAW_HOLOGRAMS = True
+CLEANUP_RAW_HOLOGRAMS = False  # keep the raw holograms (10.0 MB each, 1.0 GB per 100-Pos cycle)
 
 # Crop-subtract / raw-phase Phase B (online crop_sub_rawraw save)
 # Step values are nominal fallback only; grid_calibration_*.json (measured)
@@ -146,7 +146,7 @@ RAW_TL_Z_INDEX        = 0   # only one plane is captured, so it is index 0 (= gr
 CROP_SUB_X_STEP_UM    = 0.05
 CROP_SUB_Y_STEP_UM    = 0.05
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"E:\260917\online_crop_sub_zstack_test_2"
+CROP_SUB_ROOT         = r"E:\260917\online_crop_sub_zstack_test_3"
 CROP_SUB_MAX_SECONDS  = 150.0
 CROP_SUB_MAX_WORKERS  = 4
 CROP_SUB_MIN_FREE_GB  = 2.0
