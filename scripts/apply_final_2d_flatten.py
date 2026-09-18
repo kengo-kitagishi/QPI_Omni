@@ -56,9 +56,9 @@ from grid_subtract import (
 # Parameters
 # ============================================================
 # Batch: session root that contains PosN/output_phase/channels/...
-PH_SESSION_ROOT = r"E:\260917\online_crop_sub_zstack_test_1"
-POS_NUMBERS_TO_RUN = [1, 5, 18, 39, 41, 42]   # [] -> single-Pos mode below
-GRID_2PER_DIR = r"D:\AquisitionData\Kitagishi\260917\grid_hologram_0p05"   # for grid_calibration_PosN.json
+PH_SESSION_ROOT = r"D:\AquisitionData\Kitagishi\260908\online_crop_sub_zstack_2"
+POS_NUMBERS_TO_RUN = [p for p in range(1, 99) if p not in (1, 5, 30)]   # [] -> single-Pos mode below
+GRID_2PER_DIR = r"E:\260908\ye_grid_0p05_2"   # for grid_calibration_PosN.json
 
 # Per-Pos sub-paths (under PosN/output_phase/channels/)
 DATA_SUBDIR   = "crop_sub_rawraw/z000"     # contains chNN/ (correct_0pergluc output)

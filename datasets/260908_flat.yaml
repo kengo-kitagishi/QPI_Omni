@@ -1,0 +1,58 @@
+# 260908_flat - the same acquisition as 260908.yaml, re-analysed from the 2D-flattened crops.
+# Why: the one-sided linear tilt of grid_subtract fits only the aperture-end third of the 270 px
+# window and extrapolates ~200 px, so the far end of a crop keeps a curved ramp (measured
+# 2026-09-18 on the 260917 test run: 67 of 1169 channels above 0.1 rad at one frame, worst 2.96 rad).
+# apply_final_2d_flatten.py refits a cell-masked 2D quadratic using BOTH ends, which takes the
+# far end to ~0 (median 0.0013 rad). On cell-bearing channels it also moves the integrated cell
+# phase by -10 % .. +7 % (260908 Pos1/5/30, T=700), which is exactly what this re-analysis is for:
+# compare dry mass / volume against the 260908 master built from the tilt-only crops.
+#
+# Separate mask_root and master_root: the 260908 analysis stays untouched and comparable.
+dataset: "260908_flat"
+description: "YE, 98 Pos x 8-12 traps, 5 min/frame, single z (0.0 um), contaminated - 2D-flattened crops"
+
+paths:
+  raw_root: "D:/AquisitionData/Kitagishi/260908/online_crop_sub_zstack_2"   # online crop_sub from compute_drift_online (HDD)
+  raw_root_overrides: []
+  mask_root: "E:/260908_seg_flat"                              # NVMe, separate disk from raw
+  channel_rel: "output_phase/channels/crop_sub_rawraw/z000_flat"   # apply_final_2d_flatten.py output
+  phase_glob: "img_*_ph_000.tif"                               # online crop_sub has no _phase suffix (260517 offline crops do)
+  consolidated_dir: null
+  master_root: "E:/QPI_master/260908_flat"
+  mirror_root: null                                            # contaminated run: not mirrored to the shared drive
+
+positions: {start: 1, end: 98}
+
+segmentation:
+  model: "models/omni_model_d20_2026_09_07_12_41_31.782047"
+  eval: {diameter: 20, normalize: true, tile: false, omni: true, flow_threshold: 0.11, mask_threshold: 0, min_size: 10, net_avg: false}
+  gate: {phase_hi: 0.7, min_px: 40}
+  workers: 6
+
+tracking:
+  pixel_size_um: 0.34567514677103717
+  time_interval_min: 5.0
+  wavelength_nm: 658.0
+  alpha_ri: 0.00018
+  frame_min: 2
+  # Same as 260908: no RI calibration was acquired, so the schedule is empty and the scalar
+  # n_medium default (1.333) is used for every frame.
+  media_schedule: ""
+  ri_calibration: null
+  calibration_id: null
+  bad_frames: null                                             # drift_session/bad_frames.json is 260517's (n_total 3745), not this run
+  contour_offset_px: 0.0                                       # same geometry as 260908, so the two masters are comparable
+  production_marker: "volume_um3_efd"
+  workers: 1                                                   # raw_root is a single-spindle HDD
+
+edge_channels: ["ch00", "ch11"]                                # NOTE: traps per Pos vary 8-12 here, so ch11 is not always the edge
+
+inputs_extra: []
+qc_extra: []
+derived: null
+notes:
+  - "re-analysis of 260908 from crop_sub_rawraw/z000_flat (apply_final_2d_flatten.py, cell-masked both-ends 2D quadratic)"
+  - "flatten parameters: CELL_THRESH 0.5 rad, DILATION 2 px, MIN_BG 100 px, VALID_ERODE_PX 1, POS_SPLIT 52"
+  - "identity fallbacks (frames left unflattened for lack of background pixels) are counted in each Pos's final_2d_flatten_log.json"
+  - "channel subset: E:/260908_seg/_qc/sheet_f100.selected.txt (130 channels picked by eye on the contact sheet)"
+  - "compare against master E:/QPI_master/260908 (same acquisition, tilt-only crops)"
