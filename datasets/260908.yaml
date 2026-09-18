@@ -44,10 +44,11 @@ tracking:
 
 edge_channels: ["ch00", "ch11"]                                # NOTE: traps per Pos vary 8-12 here, so ch11 is not always the edge
 
-inputs_extra: []
+inputs_extra: ["E:/260908_seg/_qc/sheet_f100.selected.txt"]   # the 130 channels picked by eye; archived into the master at publish
 qc_extra: []
 derived: null
 notes:
   - "contaminated: acquisition stopped at T=1259 (2026-09-15 02:00, MM live mode at 02:06); later frames may already show contamination"
   - "drift correction healthy to the end: 98/98 Pos valid, score median 0.998 at T=3 and T=74"
   - "grid: E:/260908/ye_grid_0p05_2 (99 Pos, z=5 only, merged from three acquisitions)"
+  - "two consolidations exist under mask_root: _lineage_consolidated = all 1112 production channels; _lineage_selected = the 130 channels of inputs_extra (channel_index.csv lists them, manifest n_channels=130)"

@@ -47,7 +47,7 @@ tracking:
 
 edge_channels: ["ch00", "ch11"]                                # NOTE: traps per Pos vary 8-12 here, so ch11 is not always the edge
 
-inputs_extra: []
+inputs_extra: ["E:/260908_seg/_qc/sheet_f100.selected.txt"]   # the 130 channels picked by eye; archived into the master at publish
 qc_extra: []
 derived: null
 notes:
@@ -56,3 +56,4 @@ notes:
   - "identity fallbacks (frames left unflattened for lack of background pixels) are counted in each Pos's final_2d_flatten_log.json"
   - "channel subset: E:/260908_seg/_qc/sheet_f100.selected.txt (130 channels picked by eye on the contact sheet)"
   - "compare against master E:/QPI_master/260908 (same acquisition, tilt-only crops)"
+  - "seg/track were run only on the 130 channels of inputs_extra (--channels-file), so this dataset is that subset by construction"
