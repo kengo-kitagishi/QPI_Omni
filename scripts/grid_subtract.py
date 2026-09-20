@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from scipy.ndimage import binary_erosion
+from scipy.ndimage import binary_dilation, binary_erosion
 
 # Number of threads for the per-frame main loop (cv2/tifffile release the GIL).
 N_PARALLEL_FRAMES = 8
@@ -109,6 +109,17 @@ RAW_GRID_Z_INDEX = 18
 
 # Large crop height for 2pi correction + tilt correction (px count along axis=1)
 TILT_CROP_H_RAW  = 270
+
+# Background removal inside each channel window.
+#   "tilt"         linear fit on the aperture-end third, extrapolated (the original)
+#   "outside_quad" 2D quadratic fitted on the area OUTSIDE the channel, no extrapolation
+# The channel itself is read from the GRID's output_phase (cell-free): everything below
+# CH_MASK_THRESH is channel, grown by CH_MASK_DILATE px. A channel with fewer than
+# CH_MASK_MIN_BG background pixels left is reported as failed, not silently fitted.
+BG_METHOD        = "tilt"
+CH_MASK_THRESH   = -1.0
+CH_MASK_DILATE   = 2
+CH_MASK_MIN_BG   = 500
 
 # Pos split threshold for which side to take background 1/3 (same as compute_pos_shifts.py).
 # Pos number < POS_SPLIT -> fit with left 1/3. Pos number >= POS_SPLIT -> fit with right 1/3.
@@ -254,6 +265,51 @@ def _raw_subtract_correct(sub_large, out_crop_h, fit_right=False, tilt_crop_h_ra
     return apply_2pi_tilt_crop(sub_large, out_crop_h, th, fit_right=fit_right)
 
 
+def _outside_channel_quad_correct(sub_large, out_crop_h, mask_large, valid_large,
+                                  fit_right=False, tilt_crop_h_raw=None,
+                                  ch_thresh=CH_MASK_THRESH, dilate=CH_MASK_DILATE,
+                                  min_bg_px=CH_MASK_MIN_BG):
+    """2pi offset, then a 2D quadratic fitted OUTSIDE the channel. Returns (crop, ok).
+
+    The alternative to the one-sided linear tilt: instead of fitting a line on the
+    aperture-end third and extrapolating it across the window, the background region is
+    the area outside the channel itself.
+
+    ``mask_large`` must be a cell-free image of the same window -- the GRID's output_phase.
+    Pixels below ``ch_thresh`` are inside the channel; the mask is grown by ``dilate`` px and
+    the quadratic is fitted on what is left. Using the timelapse image instead would put the
+    cells in the fit region: a cell has positive phase, so its pixels read as "outside the
+    channel" (measured on 260908 Pos30 ch01: 1118 of 1319 cell pixels).
+
+    Out-of-image and warped-in pixels (``valid_large`` <= 0.999) never enter the fit.
+    ``ok`` is False when fewer than ``min_bg_px`` background pixels remain; the caller decides
+    what to do with that channel.
+    """
+    th = tilt_crop_h_raw if tilt_crop_h_raw is not None else TILT_CROP_H_RAW
+    fn = max(1, th // 3)
+    bg_side = sub_large[:, -fn:] if fit_right else sub_large[:, :fn]
+    k = int(round(float(np.mean(bg_side)) / (2.0 * np.pi)))
+    if k:
+        sub_large = sub_large - k * 2.0 * np.pi
+
+    inside = mask_large < ch_thresh
+    if dilate:
+        inside = binary_dilation(inside, iterations=dilate)
+    outside = (~inside) & (valid_large > 0.999)
+
+    start = (th - out_crop_h) // 2
+    if int(outside.sum()) < min_bg_px:
+        return sub_large[:, start:start + out_crop_h], False
+
+    h, w = sub_large.shape
+    c, r = np.meshgrid(np.arange(w) / w, np.arange(h) / h)
+    terms = (np.ones_like(c), c, r, c * c, r * r, c * r)
+    A = np.stack([t[outside] for t in terms], axis=1)
+    co, *_ = np.linalg.lstsq(A, sub_large[outside], rcond=None)
+    flat = sub_large - sum(k_ * t for k_, t in zip(co, terms))
+    return flat[:, start:start + out_crop_h], True
+
+
 def select_grid(sx, sy, pos_map, grid_cal,
                 pixel_scale_um, x_step=X_STEP, y_step=Y_STEP,
                 shift_sign_x=SHIFT_SIGN_X, shift_sign_y=SHIFT_SIGN_Y):
@@ -299,7 +355,9 @@ def process_single_frame(tl_img, sx, sy, rois,
                          use_raw_phase=True,
                          apply_subpixel_correction=True,
                          fit_right=False,
-                         apply_inverse_shift=False):
+                         apply_inverse_shift=False,
+                         bg_method=None,
+                         ch_mask_img=None):
     """Process one frame end-to-end: residual subpixel warp -> per-channel crop + grid-subtract.
 
     This is the shared kernel used by both grid_subtract.main() (offline) and
@@ -331,17 +389,29 @@ def process_single_frame(tl_img, sx, sy, rois,
         tilt-correction side (per Pos number vs POS_SPLIT).
     apply_inverse_shift : bool
         Legacy: apply -(sx, sy) to final subtracted crop (normally False).
+    bg_method : str or None
+        "tilt" (linear fit on the aperture-end third) or "outside_quad" (2D quadratic on the
+        area outside the channel). None -> module BG_METHOD.
+    ch_mask_img : np.ndarray or None
+        Full frame used to find the channel for "outside_quad": the GRID's output_phase, which
+        is cell-free. Required for that method, ignored by "tilt".
 
     Returns
     -------
-    per_channel_out : list[np.ndarray (float32)]
-        Per-channel cropped, grid-subtracted, corrected images.
+    per_channel_out : list[np.ndarray (float32) or None]
+        Per-channel cropped, grid-subtracted, corrected images. With "outside_quad" an entry is
+        None when that channel had too little background outside the channel to fit; callers
+        skip those channels instead of writing an uncorrected crop.
     full_frame : np.ndarray (float32) or None
         Full-frame (tl_warped - grid_img) if grid_img present else tl_warped,
         caller may discard.
     """
     n_channels = len(rois)
     _tilt_h = tilt_crop_h_raw if tilt_crop_h_raw is not None else TILT_CROP_H_RAW
+    _bg_method = bg_method if bg_method is not None else BG_METHOD
+    if _bg_method == "outside_quad" and ch_mask_img is None:
+        raise ValueError("bg_method='outside_quad' needs ch_mask_img "
+                         "(the grid's output_phase, which holds no cells)")
 
     if apply_subpixel_correction and (residual_x != 0.0 or residual_y != 0.0):
         tl_warped = apply_inverse_shift_warp(tl_img, residual_x, residual_y)
@@ -382,9 +452,30 @@ def process_single_frame(tl_img, sx, sy, rois,
                         interpolation=cv2.INTER_LINEAR
                     ).astype(np.float64)
                 sub_large = tl_large - grid_large
-                subtracted = _raw_subtract_correct(sub_large, out_crop_h,
-                                                    fit_right=fit_right,
-                                                    tilt_crop_h_raw=_tilt_h)
+                if _bg_method == "outside_quad" and ch_mask_img is not None:
+                    mask_large = extract_rect_roi(ch_mask_img, crop_cy, crop_cx,
+                                                  crop_w, _tilt_h)
+                    # The same erosion the output zeroing uses: the first in-frame column
+                    # carries FFT reconstruction edge artifacts that the warp-validity test
+                    # does not see, and those must not feed the background fit either.
+                    if VALID_ERODE_PX > 0:
+                        valid_large = binary_erosion(
+                            valid_large > 0.999, iterations=VALID_ERODE_PX,
+                            border_value=1).astype(np.float64)
+                    subtracted, ok = _outside_channel_quad_correct(
+                        sub_large, out_crop_h, mask_large, valid_large,
+                        fit_right=fit_right, tilt_crop_h_raw=_tilt_h,
+                        ch_thresh=CH_MASK_THRESH, dilate=CH_MASK_DILATE,
+                        min_bg_px=CH_MASK_MIN_BG)
+                    if not ok:
+                        # Too little background outside the channel to fit: this channel has
+                        # no trustworthy background, so it is not produced at all.
+                        per_channel_out.append(None)
+                        continue
+                else:
+                    subtracted = _raw_subtract_correct(sub_large, out_crop_h,
+                                                        fit_right=fit_right,
+                                                        tilt_crop_h_raw=_tilt_h)
             else:
                 subtracted = np.zeros((crop_w, out_crop_h), dtype=np.float64)
         else:
@@ -404,6 +495,10 @@ def process_single_frame(tl_img, sx, sy, rois,
                 subtracted = tl_bc - grid_bc
             else:
                 subtracted = tl_crop.copy()
+
+        if subtracted is None:
+            per_channel_out.append(None)
+            continue
 
         if VALID_ERODE_PX > 0:
             # Drop the reconstruction-edge column kept by the warp-validity test:

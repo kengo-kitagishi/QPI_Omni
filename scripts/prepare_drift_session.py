@@ -37,7 +37,7 @@ from ecc_utils import get_aligner  # single source for the estimator score thres
 POSITIONS_FILE   = r"E:\260917\timelapse.pos"
 
 # Grid acquisition directory (small grid is fine)
-GRID_DIR         = r"D:\AquisitionData\Kitagishi\260917\grid_hologram_0p05_3"
+GRID_DIR         = r"D:\AquisitionData\Kitagishi\260917\grid_hologram_0p05_4"
 GRID_Z_INDEX     = 0   # single-z grid: the point folder holds one plane, at the working focus
 
 # channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
@@ -47,13 +47,13 @@ GRID_Z_INDEX     = 0   # single-z grid: the point folder holds one plane, at the
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"E:\260917\ph_zstack_test_3"
+SAVE_DIR         = r"E:\260917\ph_zstack_test_6"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
 
 # Micro-Manager acquisition parameters
-N_TIMEPOINTS     = 480        # at ~2.7 min per real cycle this is about a day
+N_TIMEPOINTS     = 300        # raw kept at 1.0 GB/cycle: 300 GB of the 497 GB free on E:
 INTERVAL_SEC     = 60         # deliberately shorter than a cycle: the run overruns and cycles back to back
 EXPOSURE_MS      = 60.0
 SETTLE_MS        = 150        # Stage settle time after move [ms]
@@ -146,8 +146,18 @@ RAW_TL_Z_INDEX        = 0   # only one plane is captured, so it is index 0 (= gr
 CROP_SUB_X_STEP_UM    = 0.05
 CROP_SUB_Y_STEP_UM    = 0.05
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"E:\260917\online_crop_sub_zstack_test_3"
+CROP_SUB_ROOT         = r"E:\260917\online_crop_sub_zstack_test_6"
 CROP_SUB_MAX_SECONDS  = 150.0
+# Per-channel background removal (grid_subtract.process_single_frame).
+#   "tilt"         linear fit on the aperture-end third, extrapolated across the window
+#   "outside_quad" 2D quadratic fitted on the area OUTSIDE the channel -- no extrapolation,
+#                  and the cell can never enter the fit region because the channel comes from
+#                  the GRID's output_phase, which holds no cells
+# A channel with fewer than CH_MASK_MIN_BG background px left is not written at all.
+BG_METHOD             = "outside_quad"
+CH_MASK_THRESH        = -1.0
+CH_MASK_DILATE        = 2
+CH_MASK_MIN_BG        = 500
 CROP_SUB_MAX_WORKERS  = 4
 CROP_SUB_MIN_FREE_GB  = 2.0
 ECC_THREADS_PER_POS   = 4
@@ -340,6 +350,10 @@ def main():
         "crop_sub_output_crop_h": CROP_SUB_OUTPUT_CROP_H,
         "enable_crop_sub_save": ENABLE_CROP_SUB_SAVE,
         "crop_sub_root":      CROP_SUB_ROOT,
+        "bg_method":          BG_METHOD,
+        "ch_mask_thresh":     CH_MASK_THRESH,
+        "ch_mask_dilate":     CH_MASK_DILATE,
+        "ch_mask_min_bg":     CH_MASK_MIN_BG,
         "crop_sub_max_seconds": CROP_SUB_MAX_SECONDS,
         "crop_sub_max_workers": CROP_SUB_MAX_WORKERS,
         "crop_sub_min_free_gb": CROP_SUB_MIN_FREE_GB,

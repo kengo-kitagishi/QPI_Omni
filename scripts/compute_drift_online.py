@@ -1126,6 +1126,23 @@ def _save_crop_sub_one_pos(args):
                         g_qpi = gs._make_qpi_params_raw(grid_holo, raw_crop)
                         grid_img = gs._reconstruct_raw(grid_holo, g_qpi, raw_crop)
 
+            # Background method. "outside_quad" fits a 2D quadratic on the area outside the
+            # channel instead of the one-sided linear tilt; the channel is read from the GRID's
+            # output_phase, which holds no cells (using the timelapse image would put cells in
+            # the fit region, since a cell's phase is positive).
+            bg_method = cfg.get("bg_method", "tilt")
+            gs.CH_MASK_THRESH = float(cfg.get("ch_mask_thresh", gs.CH_MASK_THRESH))
+            gs.CH_MASK_DILATE = int(cfg.get("ch_mask_dilate", gs.CH_MASK_DILATE))
+            gs.CH_MASK_MIN_BG = int(cfg.get("ch_mask_min_bg", gs.CH_MASK_MIN_BG))
+            ch_mask_img = None
+            if bg_method == "outside_quad" and grid_pos_dir is not None:
+                mask_path = grid_pos_dir / "output_phase" / f"img_000000000_ph_{grid_z:03d}_phase.tif"
+                if mask_path.exists():
+                    ch_mask_img = tifffile.imread(str(mask_path)).astype(np.float64)
+                else:
+                    raise FileNotFoundError(
+                        f"bg_method=outside_quad needs the grid's output_phase: {mask_path}")
+
             per_channel_out, _ = gs.process_single_frame(
                 tl_img, sx, sy, rois,
                 cal_dx, cal_dy, residual_x, residual_y,
@@ -1136,10 +1153,16 @@ def _save_crop_sub_one_pos(args):
                 apply_subpixel_correction=True,
                 fit_right=fit_right,
                 apply_inverse_shift=False,
+                bg_method=bg_method,
+                ch_mask_img=ch_mask_img,
             )
 
             tif_name = raw_holo.name
             for ch in range(len(rois)):
+                if per_channel_out[ch] is None:
+                    # outside_quad found too little background outside this channel to fit:
+                    # nothing is written, so no half-corrected crop enters the analysis.
+                    continue
                 ch_dir = out_base / f"z{z_idx:03d}" / f"ch{ch:02d}"
                 ch_dir.mkdir(parents=True, exist_ok=True)
                 final = ch_dir / tif_name
