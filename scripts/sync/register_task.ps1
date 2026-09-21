@@ -24,7 +24,7 @@ Register-ScheduledTask `
     -Action $action `
     -Trigger $trigger `
     -Settings $settings `
-    -Description "Claude JSONL logs -> Google Drive daily sync (Python)" `
+    -Description "Claude + Codex JSONL logs -> Google Drive daily sync (Python)" `
     -Force
 
 Write-Host "Task registered: SyncClaudeLogs (daily 22:00)"
