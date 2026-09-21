@@ -14,10 +14,10 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 PYTHON = sys.executable
 SCRIPT_DIR = Path(__file__).resolve().parent
-GRID_DIR = Path(r"C:\260908\ye_grid_0p05_3")
-OUTPUT_DIR = Path(r"E:\260908\ye_grid_0p05_3")
+GRID_DIR = Path(r"E:\260917\grid_hologram_0p05_1")
+OUTPUT_DIR = Path(r"D:\AquisitionData\Kitagishi\260917\grid_hologram_0p05_1")
 Z_INDEX = 5
-POS_SPLIT = 51
+POS_SPLIT = 52
 N_WORKERS_DETECT = 20
 N_WORKERS_CALIBRATE = 4
 N_GRID_THREADS = 7

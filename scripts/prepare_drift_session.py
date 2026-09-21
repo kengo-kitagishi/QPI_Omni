@@ -34,11 +34,11 @@ from ecc_utils import get_aligner  # single source for the estimator score thres
 # ============================================================
 
 # .pos file consumed by Micro-Manager (the actual time-lapse position list)
-POSITIONS_FILE   = r"C:\260908\timelapse_5pos.pos"
+POSITIONS_FILE   = r"E:\260917\timelapse.pos"
 
 # Grid acquisition directory (small grid is fine)
-GRID_DIR         = r"E:\260908\ye_grid_0p05_2"
-GRID_Z_INDEX     = 5  # grid z-slice used as ECC reference (index3 = -0.8um, measured focus)
+GRID_DIR         = r"D:\AquisitionData\Kitagishi\260917\grid_hologram_0p05_4"
+GRID_Z_INDEX     = 0   # single-z grid: the point folder holds one plane, at the working focus
 
 # channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
 # No single path needed — compute_drift_online.py reads per-pos from grid_dir.
@@ -47,14 +47,14 @@ GRID_Z_INDEX     = 5  # grid z-slice used as ECC reference (index3 = -0.8um, mea
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"D:\AquisitionData\Kitagishi\260908\ph_zstack_1"
+SAVE_DIR         = r"E:\260917\ph_zstack_test_6"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
 
 # Micro-Manager acquisition parameters
-N_TIMEPOINTS     = 3168       # 11 days @ 300s (5 min) interval
-INTERVAL_SEC     = 300        # Time-lapse interval [s] (5 min)
+N_TIMEPOINTS     = 300        # raw kept at 1.0 GB/cycle: 300 GB of the 497 GB free on E:
+INTERVAL_SEC     = 60         # deliberately shorter than a cycle: the run overruns and cycles back to back
 EXPOSURE_MS      = 60.0
 SETTLE_MS        = 150        # Stage settle time after move [ms]
 PFS_SETTLE_MS    = 0          # PFS continuously tracks; no extra settle needed
@@ -104,7 +104,7 @@ ORIGINAL_DIM         = 2048
 RECONSTRUCTED_DIM    = 511
 
 # Position-dependent crop (matches pipeline_full.py)
-POS_SPLIT    = 51
+POS_SPLIT    = 52
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 
@@ -134,20 +134,30 @@ CROP_SUB_OUTPUT_CROP_H = 240
 
 # Z parameters. Single-z mode: N_Z_SLICES=1 captures one plane at baseZ+Z_START_UM.
 # Focus measured on the 260819 focus-check run: -0.8 um = grid z-index 3.
-N_Z_SLICES            = 11
+N_Z_SLICES            = 1
 Z_STEP_UM             = 0.4
-Z_START_UM            = -2.0   # single plane at the measured focus (grid z-index 3)
-CLEANUP_RAW_HOLOGRAMS = True
+Z_START_UM            = 0.0   # single plane at the measured focus (grid z-index 5)
+CLEANUP_RAW_HOLOGRAMS = False  # keep the raw holograms (10.0 MB each, 1.0 GB per 100-Pos cycle)
 
 # Crop-subtract / raw-phase Phase B (online crop_sub_rawraw save)
 # Step values are nominal fallback only; grid_calibration_*.json (measured)
 # wins when present.
-RAW_TL_Z_INDEX        = 5    # only one plane is captured, so it is index 0 (= grid z-index 3)
+RAW_TL_Z_INDEX        = 0   # only one plane is captured, so it is index 0 (= grid z-index 5)
 CROP_SUB_X_STEP_UM    = 0.05
 CROP_SUB_Y_STEP_UM    = 0.05
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"D:\AquisitionData\Kitagishi\260908\online_crop_sub_zstack"
+CROP_SUB_ROOT         = r"E:\260917\online_crop_sub_zstack_test_6"
 CROP_SUB_MAX_SECONDS  = 150.0
+# Per-channel background removal (grid_subtract.process_single_frame).
+#   "tilt"         linear fit on the aperture-end third, extrapolated across the window
+#   "outside_quad" 2D quadratic fitted on the area OUTSIDE the channel -- no extrapolation,
+#                  and the cell can never enter the fit region because the channel comes from
+#                  the GRID's output_phase, which holds no cells
+# A channel with fewer than CH_MASK_MIN_BG background px left is not written at all.
+BG_METHOD             = "outside_quad"
+CH_MASK_THRESH        = -1.0
+CH_MASK_DILATE        = 2
+CH_MASK_MIN_BG        = 500
 CROP_SUB_MAX_WORKERS  = 4
 CROP_SUB_MIN_FREE_GB  = 2.0
 ECC_THREADS_PER_POS   = 4
@@ -340,6 +350,10 @@ def main():
         "crop_sub_output_crop_h": CROP_SUB_OUTPUT_CROP_H,
         "enable_crop_sub_save": ENABLE_CROP_SUB_SAVE,
         "crop_sub_root":      CROP_SUB_ROOT,
+        "bg_method":          BG_METHOD,
+        "ch_mask_thresh":     CH_MASK_THRESH,
+        "ch_mask_dilate":     CH_MASK_DILATE,
+        "ch_mask_min_bg":     CH_MASK_MIN_BG,
         "crop_sub_max_seconds": CROP_SUB_MAX_SECONDS,
         "crop_sub_max_workers": CROP_SUB_MAX_WORKERS,
         "crop_sub_min_free_gb": CROP_SUB_MIN_FREE_GB,

@@ -105,6 +105,22 @@ Write-Host "      pip check (informational; the reference env reports the same l
 & $py -m pip check
 $global:LASTEXITCODE = 0
 
+# cellpose_omni downloads GUI assets into ~\.omnipose at package import when they are missing, and two
+# of those URLs answer 404 (seen 2026-09-15: gui/logo.png, gui/gamma.svg), which makes `import cellpose_omni`
+# fail on a fresh PC. Both only decorate the GUI window, so 1x1 stand-ins take their place.
+$guiAssets = @{
+    "logo.png"  = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+    "gamma.svg" = "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxIiBoZWlnaHQ9IjEiLz4="
+}
+foreach ($name in $guiAssets.Keys) {
+    $assetPath = Join-Path $env:USERPROFILE (".omnipose\" + $name)
+    if (-not (Test-Path $assetPath)) {
+        New-Item -ItemType Directory -Force (Split-Path -Parent $assetPath) | Out-Null
+        [IO.File]::WriteAllBytes($assetPath, [Convert]::FromBase64String($guiAssets[$name]))
+        Write-Host "      placed a 1x1 stand-in for the cellpose_omni GUI asset $assetPath"
+    }
+}
+
 # ---- 4. check ---------------------------------------------------------------
 if (-not $SkipCheck) {
     Write-Host "[4/4] environment check"

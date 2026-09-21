@@ -56,9 +56,9 @@ from grid_subtract import (
 # Parameters
 # ============================================================
 # Batch: session root that contains PosN/output_phase/channels/...
-PH_SESSION_ROOT = r"E:\260517\2per_0055per_0per_2per_crop_sub"
-POS_NUMBERS_TO_RUN = list(range(1, 105))   # [] -> single-Pos mode below
-GRID_2PER_DIR = r"E:\260517\grid_2pergluc_2"   # for grid_calibration_PosN.json
+PH_SESSION_ROOT = r"D:\AquisitionData\Kitagishi\260908\online_crop_sub_zstack_2"
+POS_NUMBERS_TO_RUN = [p for p in range(1, 99) if p not in (1, 5, 30)]   # [] -> single-Pos mode below
+GRID_2PER_DIR = r"E:\260908\ye_grid_0p05_2"   # for grid_calibration_PosN.json
 
 # Per-Pos sub-paths (under PosN/output_phase/channels/)
 DATA_SUBDIR   = "crop_sub_rawraw/z000"     # contains chNN/ (correct_0pergluc output)
@@ -78,7 +78,7 @@ CELL_THRESH = 0.5     # rad, relative to fit-side background median
 DILATION    = 2       # cell-mask dilation (px)
 MIN_BG      = 100     # min background pixels; else leave frame unchanged
 VALID_ERODE_PX = 1    # erode valid mask at OOB boundary (drop reconstruction edge)
-POS_SPLIT   = 51
+POS_SPLIT   = 52
 FIT_RIGHT_OVERRIDE = None   # None -> auto from Pos number vs POS_SPLIT
 
 RECON_DIM = gs.RECONSTRUCTED_DIM   # 511

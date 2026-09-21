@@ -265,6 +265,9 @@ def calc_rod_volume_um3(major_px: float, minor_px: float, pixel_size_um: float) 
     return float((4.0 / 3.0) * np.pi * r**3 + np.pi * r**2 * h)
 
 
+# Set from --contour-offset-px in main(); the per-frame measuring call reads it.
+_CONTOUR_OFFSET_PX = EFD_CONTOUR_OFFSET_PX
+
 def _yellow_axes(geo) -> tuple[float, float, float, int]:
     """(long_px, short_px, volume_px3, n_chords) from a yellow-contour geometry.
 
@@ -341,7 +344,8 @@ def extract_cells_from_frame(
         # geometry degenerates (tiny / fragmented mask) the axes and volumes are NaN;
         # there is deliberately no fallback to another measurement method.
         try:
-            geo = efd_section_geometry(np.pad(p.image, 6), pixel_size_um=1.0)
+            geo = efd_section_geometry(np.pad(p.image, 6), pixel_size_um=1.0,
+                                       contour_offset_px=_CONTOUR_OFFSET_PX)
         except Exception:
             geo = None
         major_px, minor_px, efd_px3, n_chords = _yellow_axes(geo)
@@ -1115,7 +1119,7 @@ def run(
         "geometry": {
             "method": "yellow_contour_efd",
             "contour": "EFD K=6 smoothing of the mask boundary, shrunk contour_offset_px inward",
-            "contour_offset_px": EFD_CONTOUR_OFFSET_PX,
+            "contour_offset_px": _CONTOUR_OFFSET_PX,
             "centerline_smoothing_frac": EFD_SMOOTH_WINDOW_FRAC,
             "midpoint_updates": 1,
             "long_axis": "arc length of the updated centerline",
@@ -1168,6 +1172,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--wavelength-nm", type=float, default=658.0)
     p.add_argument("--n-medium", type=float, default=1.333)
     p.add_argument("--alpha-ri", type=float, default=0.00018)
+    p.add_argument("--contour-offset-px", type=float, default=EFD_CONTOUR_OFFSET_PX,
+                   help="shrink the EFD contour this far inward before measuring "
+                        "(0 = the un-shrunk Omnipose boundary; adopted default 0.5)")
     p.add_argument("--min-area", type=int, default=20)
     p.add_argument("--max-frames", type=int, default=None,
                    help="Limit to first N frames (for quick testing)")
@@ -1199,6 +1206,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
+    global _CONTOUR_OFFSET_PX
+    _CONTOUR_OFFSET_PX = float(args.contour_offset_px)
     tim = args.time_interval_min if args.time_interval_min and args.time_interval_min > 0 else None
     run(
         channel_dir=args.indir,
