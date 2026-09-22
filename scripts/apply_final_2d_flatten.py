@@ -57,7 +57,7 @@ from grid_subtract import (
 # ============================================================
 # Batch: session root that contains PosN/output_phase/channels/...
 PH_SESSION_ROOT = r"D:\AquisitionData\Kitagishi\260908\online_crop_sub_zstack_2"
-POS_NUMBERS_TO_RUN = [p for p in range(1, 99) if p not in (1, 5, 30)]   # [] -> single-Pos mode below
+POS_NUMBERS_TO_RUN = [7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 21, 22, 37, 51, 52, 53, 54, 56, 58, 59, 61, 66, 67, 69, 70, 71, 72, 74, 75, 76, 77, 78, 80, 81, 82, 83, 84, 85, 86, 87, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98]   # the Pos of the 130 selected channels that are not flattened yet
 GRID_2PER_DIR = r"E:\260908\ye_grid_0p05_2"   # for grid_calibration_PosN.json
 
 # Per-Pos sub-paths (under PosN/output_phase/channels/)
@@ -78,7 +78,7 @@ CELL_THRESH = 0.5     # rad, relative to fit-side background median
 DILATION    = 2       # cell-mask dilation (px)
 MIN_BG      = 100     # min background pixels; else leave frame unchanged
 VALID_ERODE_PX = 1    # erode valid mask at OOB boundary (drop reconstruction edge)
-POS_SPLIT   = 52
+POS_SPLIT   = 53
 FIT_RIGHT_OVERRIDE = None   # None -> auto from Pos number vs POS_SPLIT
 
 RECON_DIM = gs.RECONSTRUCTED_DIM   # 511

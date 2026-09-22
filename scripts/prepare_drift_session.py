@@ -34,10 +34,10 @@ from ecc_utils import get_aligner  # single source for the estimator score thres
 # ============================================================
 
 # .pos file consumed by Micro-Manager (the actual time-lapse position list)
-POSITIONS_FILE   = r"E:\260917\timelapse.pos"
+POSITIONS_FILE   = r"E:\260922\timelapse.pos"
 
 # Grid acquisition directory (small grid is fine)
-GRID_DIR         = r"D:\AquisitionData\Kitagishi\260917\grid_hologram_0p05_4"
+GRID_DIR         = r"D:\AquisitionData\Kitagishi\260922\grid_hologram_0p05um_2per_1"
 GRID_Z_INDEX     = 0   # single-z grid: the point folder holds one plane, at the working focus
 
 # channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
@@ -47,7 +47,7 @@ GRID_Z_INDEX     = 0   # single-z grid: the point folder holds one plane, at the
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"E:\260917\ph_zstack_test_6"
+SAVE_DIR         = r"E:\260922\ph_zstack_1"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
@@ -104,7 +104,7 @@ ORIGINAL_DIM         = 2048
 RECONSTRUCTED_DIM    = 511
 
 # Position-dependent crop (matches pipeline_full.py)
-POS_SPLIT    = 52
+POS_SPLIT    = 53
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 
@@ -146,7 +146,7 @@ RAW_TL_Z_INDEX        = 0   # only one plane is captured, so it is index 0 (= gr
 CROP_SUB_X_STEP_UM    = 0.05
 CROP_SUB_Y_STEP_UM    = 0.05
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"E:\260917\online_crop_sub_zstack_test_6"
+CROP_SUB_ROOT         = r"E:\260922\online_crop_sub_zstack_1"
 CROP_SUB_MAX_SECONDS  = 150.0
 # Per-channel background removal (grid_subtract.process_single_frame).
 #   "tilt"         linear fit on the aperture-end third, extrapolated across the window

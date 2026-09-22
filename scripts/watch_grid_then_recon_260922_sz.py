@@ -1,10 +1,10 @@
 """
-watch_grid_then_recon_260917_sz.py
+watch_grid_then_recon_260922_sz.py
 
-The 260917 SINGLE-Z grid (grid_hologram_0p05_3, one z per point at the working plane).
+The 260922 SINGLE-Z grid (grid_hologram_0p05um_2per_1, one z per point at the working plane).
 
-  raw     E:\260917\grid_hologram_0p05_3          Pos0..Pos99, 121 points each, 1 z
-  output  D:\AquisitionData\Kitagishi\260917\grid_hologram_0p05_3
+  raw     E:\260922\grid_hologram_0p05um_2per_1          Pos0..Pos99, 121 points each, 1 z
+  output  D:\AquisitionData\Kitagishi\260922\grid_hologram_0p05um_2per_1
 
 One z per point, so Z_INDEX and RECON_Z_INDICES are 0 -- the point folder holds a single
 img_000000000_ph_000.tif and that plane IS the ECC reference the timelapse will use.
@@ -30,11 +30,11 @@ from pathlib import Path
 # ============================================================
 # Configuration
 # ============================================================
-SESSION_DIR = Path(r"E:\260917")
+SESSION_DIR = Path(r"E:\260922")
 
 # The acquisition this script waits for before doing anything.
-WATCH_DIR = Path(r"E:\260917\grid_hologram_0p05_4")
-OUTPUT_DIR = Path(r"D:\AquisitionData\Kitagishi\260917\grid_hologram_0p05_4")
+WATCH_DIR = Path(r"E:\260922\grid_hologram_0p05um_2per_1")
+OUTPUT_DIR = Path(r"D:\AquisitionData\Kitagishi\260922\grid_hologram_0p05um_2per_1")
 
 # Pos list is discovered from disk at run time (see discover_complete_pos).
 BATCHES = [
@@ -56,8 +56,8 @@ N_Z           = 1       # single-z grid: one plane per point
 # the grid_calibration_*.json and channel_rois.json, set Z_INDEX, re-run
 # scheduled_recon_and_calibrate.py with SKIP_RECON=True.
 Z_INDEX       = 0       # the only plane there is
-POS_SPLIT     = 52      # Pos < 52 -> crop_before, Pos >= 52 -> crop_after
-LAST_POS      = 99      # this acquisition covers Pos0..Pos99
+POS_SPLIT     = 53      # Pos < 53 -> crop_before, Pos >= 53 -> crop_after
+LAST_POS      = 103     # this acquisition covers Pos0..Pos103
 # z planes to reconstruct. None = all N_Z.
 # The timelapse runs single-z at the measured focus (grid index 5 = 0.0 um) and
 # reads its ECC reference from that plane only, so reconstructing just that
@@ -416,7 +416,7 @@ def main():
     args = ap.parse_args()
 
     log("=" * 70)
-    log(f"watch_grid_then_recon_260917_sz  (POS_SPLIT={POS_SPLIT}, Z_INDEX={Z_INDEX})")
+    log(f"watch_grid_then_recon_260922_sz  (POS_SPLIT={POS_SPLIT}, Z_INDEX={Z_INDEX})")
     log("=" * 70)
 
     if not (args.skip_wait or args.pos) and not wait_for_acquisition():

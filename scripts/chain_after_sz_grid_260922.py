@@ -22,12 +22,12 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PYTHON = sys.executable
-SESSION = Path(r"E:\260917")
+SESSION = Path(r"E:\260922")
 WATCH_LOG = SESSION / "watch_grid_then_recon_sz.log"
 # the --dry-run of the watcher also prints "batch b1: OK", so key on the line that
 # only a real, verified run can write
 GRID_OK = "batch b1: verification passed"
-CROP_SUB = SESSION / "online_crop_sub_zstack_test_4"
+CROP_SUB = SESSION / "online_crop_sub_zstack_1"
 PROBE_CH = CROP_SUB / "Pos1" / "output_phase" / "channels" / "crop_sub_rawraw" / "z000" / "ch00"
 QC_DIR = SESSION / "_qc"
 FRAMES_WANTED = 15
@@ -89,7 +89,7 @@ def sheets():
     QC_DIR.mkdir(parents=True, exist_ok=True)
     outs = []
     for vmin, vmax, tag in ((0, 1.8, "p18"), (-0.2, 0.2, "pm02")):
-        out = QC_DIR / f"test4_f{FRAME_FOR_SHEET}_{tag}.html"
+        out = QC_DIR / f"260922_f{FRAME_FOR_SHEET}_{tag}.html"
         ok = run("channel_contact_sheet.py",
                  "--raw-root", str(CROP_SUB),
                  "--channel-rel", "output_phase/channels/crop_sub_rawraw/z000",

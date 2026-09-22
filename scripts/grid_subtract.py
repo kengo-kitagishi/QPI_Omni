@@ -123,7 +123,7 @@ CH_MASK_MIN_BG   = 500
 
 # Pos split threshold for which side to take background 1/3 (same as compute_pos_shifts.py).
 # Pos number < POS_SPLIT -> fit with left 1/3. Pos number >= POS_SPLIT -> fit with right 1/3.
-POS_SPLIT        = 52
+POS_SPLIT        = 53
 # Tilt-side split may differ from the crop split (260517: crops switch at 51, but the traps are
 # mirrored from Pos53). None -> use POS_SPLIT. Batch scripts set this explicitly.
 TILT_POS_SPLIT   = None

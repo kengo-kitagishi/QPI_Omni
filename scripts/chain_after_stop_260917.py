@@ -22,8 +22,8 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 PYTHON = sys.executable
 SESSION = Path(r"E:\260917")
-OLD_CROP_SUB = SESSION / "online_crop_sub_zstack_test_2"
-NEW_CROP_SUB = SESSION / "online_crop_sub_zstack_test_3"
+OLD_CROP_SUB = SESSION / "online_crop_sub_zstack_test_4"
+NEW_CROP_SUB = SESSION / "online_crop_sub_zstack_test_5"
 PROBE_CH = NEW_CROP_SUB / "Pos1" / "output_phase" / "channels" / "crop_sub_rawraw" / "z000" / "ch00"
 QC_DIR = SESSION / "_qc"
 QUIET_MIN = 6.0          # longer than one cycle (~2.5-3 min), so a mid-cycle gap is not "stopped"
@@ -99,7 +99,7 @@ def main():
         log("prepare_drift_session failed")
         beep()
         sys.exit(3)
-    msg = ("ph_zstack_test_3 is ready: interval 60 s (it will overrun and cycle back to back), "
+    msg = ("ph_zstack_test_5 is ready: interval 60 s (it will overrun and cycle back to back), "
            "raw holograms are KEPT at 1.0 GB per cycle. Press Run on "
            "realtime_drift_mda_zstack.bsh (CONFIG_FILE = "
            r"C:\Users\QPI\Documents\QPI_Omni\drift_session\drift_config_zstack.json).")
@@ -115,7 +115,7 @@ def main():
             break
         time.sleep(POLL_SEC)
     for vmin, vmax, tag in ((0, 1.8, "p18"), (-0.2, 0.2, "pm02")):
-        out = QC_DIR / f"test3_f{FRAME_FOR_SHEET}_{tag}.html"
+        out = QC_DIR / f"test5_f{FRAME_FOR_SHEET}_{tag}.html"
         if run("channel_contact_sheet.py", "--raw-root", str(NEW_CROP_SUB),
                "--channel-rel", "output_phase/channels/crop_sub_rawraw/z000",
                "--phase-glob", "img_*_ph_000.tif", "--frame", str(FRAME_FOR_SHEET),

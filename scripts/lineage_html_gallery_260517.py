@@ -27,6 +27,7 @@ import base64
 import io
 import json
 import os
+from html import escape
 import sys
 import time
 from pathlib import Path
@@ -41,6 +42,7 @@ import division_qc_260517 as dqc  # noqa: E402
 import matplotlib  # noqa: E402
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+from figure_logger import save_figure  # noqa: E402
 
 WAVELENGTH_UM = 0.658
 PIXEL_UM = 0.34567514677103717
@@ -169,7 +171,8 @@ def prepare(df: pd.DataFrame, bad: pd.DataFrame) -> dict:
     return d
 
 
-def render(pos: str, ch: str, d: dict, ylims: dict, dpi: int = 110, panel1: str = "ri") -> bytes:
+def render(pos: str, ch: str, d: dict, ylims: dict, dpi: int = 110, panel1: str = "ri",
+           provenance: dict | None = None) -> bytes:
     fig, axes = plt.subplots(3, 1, figsize=(15, 6.2), sharex=True, dpi=dpi)
     s0 = (("conc", "dry-mass conc. [mg/mL]", d["conc"], d.get("bad_conc", np.array([])))
           if panel1 == "conc" else ("ri", "mean RI", d["ri"], d["bad_ri"]))
@@ -200,6 +203,8 @@ def render(pos: str, ch: str, d: dict, ylims: dict, dpi: int = 110, panel1: str 
         ax.set_ylabel(label, fontsize=9)
         ax.tick_params(labelsize=8)
         ax.grid(False)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
     axes[-1].set_xlim(0, t_h(END_FRAME))
     axes[-1].set_xlabel("time [h]  (img_0002 = 0 h, 5 min/frame)", fontsize=9)
     nfit = len(d["fits"])
@@ -209,13 +214,38 @@ def render(pos: str, ch: str, d: dict, ylims: dict, dpi: int = 110, panel1: str 
                       fontsize=10, loc="left")
     # fixed geometry (not tight_layout) so the plot area maps deterministically to click coordinates
     fig.subplots_adjust(left=PLOT_LEFT, right=PLOT_RIGHT, top=0.93, bottom=0.085, hspace=0.13)
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png")
+    if provenance is not None:
+        caption = (
+            f"Mother-cell time series for {pos} {ch}, dataset {provenance['dataset']}. "
+            "Mean RI is the tracker's mean refractive index estimated from optical phase and cell geometry, "
+            "with the medium RI specified in the analysis configuration. "
+            "Dry mass = total_phase * wavelength_um * pixel_um^2 / (2*pi*alpha) * 1e-3 pg. "
+            f"Volume is the EFD-contour rotational estimate ({d['vol_col']}). "
+            "Dark blue: valid measurements; red crosses: tracker outliers; orange triangles: border contact; "
+            "purple diamonds: drift-excluded measurements; grey lines: QC-retained mother divisions; "
+            "red curves: exponentiated least-squares fits to log(mass) within complete cycles. "
+            f"One mother lineage, {len(d['frame'])} measured frames, 5 min/frame; "
+            "individual measurements, no error bars or hypothesis tests. "
+            "Species: S. pombe; growth conditions are recorded with the source dataset; "
+            "strain and temperature are not inferred. Source arrays and analysis parameters accompany this image."
+        )
+        archived = save_figure(
+            fig, params={**provenance, "pos": pos, "ch": ch, "ylims": ylims, "panel1": panel1,
+                         "t0_frame": T0_FRAME, "end_frame": END_FRAME},
+            description=f"{provenance['dataset']} {pos} {ch}: RI, dry mass and volume",
+            data={k: v for k, v in d.items() if isinstance(v, np.ndarray)},
+            caption=caption, dpi=300, fmt="png", publish=False, save_to_notion=False)
+        png = archived.read_bytes()
+    else:
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png")
+        png = buf.getvalue()
     plt.close(fig)
-    return buf.getvalue()
+    return png
 
 
 def main() -> None:
+    global END_FRAME, EDGE_CHANNELS
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--master-tag", default=None)
     ap.add_argument("--pos-max", type=int, default=52, help="skip positions above this (tilt-biased in v20260911)")
@@ -239,7 +269,18 @@ def main() -> None:
     ap.add_argument("--ylim-vol", default="0,170", help="volume axis [um3], lo,hi (or auto)")
     ap.add_argument("--min-mother-frames", type=int, default=1000,
                     help="working-tree mode: skip channels whose mother has fewer rows in the window")
+    ap.add_argument("--end-frame", type=int, default=2017, help="last frame of the displayed dataset")
+    ap.add_argument("--include-edge-channels", action="store_true",
+                    help="include explicitly selected edge channels in the gallery")
+    ap.add_argument("--dataset-label", default="260517", help="dataset name in the HTML title")
+    ap.add_argument("--missing-channels", default="", help="comma-separated channels to show as BG unavailable")
     args = ap.parse_args()
+    if args.end_frame < T0_FRAME:
+        ap.error("--end-frame precedes the first displayed frame")
+    END_FRAME = args.end_frame
+    if args.include_edge_channels:
+        EDGE_CHANNELS = ()
+    missing_channels = [x.strip() for x in __import__("re").split(r"[,;]", args.missing_channels) if x.strip()]
 
     data = {}
     if args.source == "csv":
@@ -347,11 +388,14 @@ def main() -> None:
 
     out_dir = Path(args.out) if args.out else (SCRIPTS.parent / "results" / "figures" / "lineage_html")
     out_dir.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("QPI_FIGURE_INBOX_ROOT", str((out_dir / "source_figures").resolve()))
     stamp = time.strftime("%Y%m%dT%H%M%S")
     html_path = out_dir / f"lineage_gallery_{source_name}_{stamp}.html"
     fit_rows, parts = [], []
     for (pos, ch), d in data.items():
-        png = render(pos, ch, d, ylims, panel1=args.panel1)
+        png = render(pos, ch, d, ylims, panel1=args.panel1,
+                     provenance={"dataset": args.dataset_label, "source": source_name,
+                                 "csv": str(Path(args.csv).resolve()) if args.csv else None})
         (out_dir / f"{pos}_{ch}_{stamp}.png").write_bytes(png)
         b64 = base64.b64encode(png).decode("ascii")
         for fz in d["fits"]:
@@ -395,6 +439,12 @@ def main() -> None:
               f"<span style='color:{C_DRIFT}'>&#9670;</span> drift-excluded rank-1 &nbsp; "
               f"<span style='color:{C_DIV}'>|</span> retained mother division &nbsp; "
               f"<span style='color:{C_FIT}'>&mdash;</span> ln(mass) linear fit per complete cycle (back-transformed)")
+    selection_note = (f"CSV channels with at least {args.min_mother_frames} mother frames; "
+                      f"Pos {args.pos_min}-{args.pos_max}; first {args.max_lineages}; "
+                      + ("edge channels included" if args.include_edge_channels else "edge channels excluded")
+                      if args.source == "csv" else
+                      f"classification cells, mother present, not OOB, coverage >= {args.min_coverage}, "
+                      f"Pos {args.pos_min}-{args.pos_max}, first {args.max_lineages}")
     note = (f"<p class='note'><b>Data:</b> <code>{source_name}</code> (yellow-contour tracker where the volume column is volume_um3_efd), mother cell "
             f"(cell_id 0), window img_{T0_FRAME:04d}-img_{END_FRAME:04d} (0-{t_h(END_FRAME):.1f} h), 5 min/frame.<br>"
             f"<b>Mass:</b> phase-integral, mass_pg = total_phase &times; {WAVELENGTH_UM} &micro;m &times; ({PIXEL_UM:.5f} &micro;m)&sup2; "
@@ -404,7 +454,10 @@ def main() -> None:
             f"QC columns {next(iter(data.values()))['mass_col_qc']} / {next(iter(data.values()))['vol_col']}.<br>"
             f"<b>Fits:</b> complete cycles between two retained divisions, valid frames only (no outlier / border), &ge; {MIN_FIT_POINTS} points. "
             f"Shared y ranges (fixed): RI {ylims['ri'][0]:.3f}-{ylims['ri'][1]:.3f}, mass {ylims['mass'][0]:.0f}-{ylims['mass'][1]:.0f} pg, volume {ylims['vol'][0]:.0f}-{ylims['vol'][1]:.0f} &micro;m&sup3;; values outside are clipped.<br>"
-            f"Selection: classification cells, mother present, not OOB, not an edge trap (ch00/ch11), coverage &ge; {args.min_coverage}, Pos &le; {args.pos_max}, first {args.max_lineages}.</p>")
+            f"Selection: {selection_note}.</p>"
+            + ("<p class='note' style='color:#b03a2e'><b>BG不足・計測なし:</b> "
+               + escape(", ".join(missing_channels)) + "。outside-channel quadratic fit の有効BG領域が不足したため、segmentation・tracking・CSVから除外。</p>"
+               if missing_channels else ""))
     toolbar = ("<div id='bar'>マーク種類: <span class='mode'>"
                "<button data-m='miss' class='active' onclick='setMode(this)'>&#128308; 分裂見逃し</button>"
                "<button data-m='weird' onclick='setMode(this)'>&#128995; 変なcycle</button>"
@@ -416,7 +469,7 @@ def main() -> None:
     # plain string (literal braces): click a lineage plot to drop a time-stamped mark of the active
     # category (miss / weird cycle / note); stored per lineage in localStorage; one-click clipboard copy.
     script = ("<script>\n"
-              "const KEY='lineage_cmt_260517';let MODE='miss';\n"
+              f"const KEY={json.dumps('lineage_cmt_' + args.dataset_label).replace('<', chr(92) + 'u003c')};let MODE='miss';\n"
               f"const ENDH={t_h(END_FRAME):.4f},L={PLOT_LEFT},R={PLOT_RIGHT};\n"
               "const CAT={miss:'\\u5206\\u88c2\\u898b\\u9003\\u3057',weird:'\\u5909\\u306acycle',note:'\\u30e1\\u30e2\\u70b9'};\n"
               "function setMode(b){MODE=b.dataset.m;document.querySelectorAll('#bar .mode button').forEach(x=>x.classList.remove('active'));b.classList.add('active');}\n"
@@ -450,8 +503,8 @@ def main() -> None:
               "function clearComments(){if(confirm('clear all?')){try{localStorage.removeItem(KEY);}catch(e){}document.querySelectorAll('textarea.cmt').forEach(t=>{t.value='';t.classList.remove('has');});draw();}}\n"
               "window.addEventListener('DOMContentLoaded',()=>{const o=store();document.querySelectorAll('textarea.cmt').forEach(t=>{const d=o[t.dataset.key];if(d&&d.t){t.value=d.t;t.classList.add('has');}});draw();});\n"
               "</script>")
-    html = (f"<!doctype html><html><head><meta charset='utf-8'><title>260517 lineage gallery {source_name}</title>"
-            f"<style>{style}</style></head><body>{toolbar}<h1 style='font-size:18px'>260517 mother lineages: RI / phase-integral mass / volume</h1>"
+    html = (f"<!doctype html><html><head><meta charset='utf-8'><title>{escape(args.dataset_label)} lineage gallery {source_name}</title>"
+            f"<style>{style}</style></head><body>{toolbar}<h1 style='font-size:18px'>{escape(args.dataset_label)} mother lineages: RI / phase-integral mass / volume</h1>"
             f"{note}<p class='note'>{legend}</p>"
             f"<p class='note'><b>cycle を指定する:</b> 右上でマーク種類を選び（<b style='color:#c0392b'>分裂見逃し</b>=分裂すべきなのに縦線が無い所 / "
             f"<b style='color:#8e44ad'>変なcycle</b>=挙動がおかしい cycle / <b style='color:#2980b9'>メモ点</b>）、その系列の図の該当箇所をクリックすると、その時刻に印が付く。"
