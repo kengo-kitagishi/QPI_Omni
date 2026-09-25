@@ -892,6 +892,7 @@ def save_figure(
     source_tifs: Optional[list] = None,
     related: Optional[list] = None,
     caption: Optional[str] = None,
+    bbox_inches: Optional[str] = "tight",
 ) -> Path:
     """
     Save a matplotlib Figure with inbox-first workflow.
@@ -904,6 +905,9 @@ def save_figure(
         Key parameters for reproducibility.
     description : str
         Human-readable description.
+    bbox_inches : str or None, optional
+        Defaults to "tight". Use None to preserve the full figure canvas, e.g.
+        when an HTML viewer maps image click coordinates to plot coordinates.
     caption : str, optional
         Publication-grade figure legend (see docs/FIGURE_SPEC.md). Stored in the
         JSON sidecar 'caption' field. If omitted, a warning is emitted and the
@@ -1031,7 +1035,7 @@ def save_figure(
     else:
         base = f"{script}__{run_id}__f{fig_index:03d}"
     inbox_file = inbox_dir / f"{base}.{fmt}"
-    fig.savefig(inbox_file, dpi=dpi, bbox_inches="tight")
+    fig.savefig(inbox_file, dpi=dpi, bbox_inches=bbox_inches)
 
     data_file = ""
     csv_file = ""

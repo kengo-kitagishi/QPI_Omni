@@ -1,0 +1,58 @@
+# Reanalysis of 260908 with the production outside-channel quadratic BG method.
+# Separate outputs force fresh masks and tracking; prior crops/masks/CSVs are retained.
+dataset: "260908_outside_quad"
+description: "260908 YE, selected 130 channels, outside-channel quadratic BG, frames 0-1259"
+paths:
+  raw_root: "E:/260908_outside_quad/phase"
+  raw_root_overrides: []
+  mask_root: "E:/260908_outside_quad/seg"
+  channel_rel: "output_phase/channels/crop_sub_rawraw/z000"
+  phase_glob: "img_*_ph_000.tif"
+  consolidated_dir: "E:/260908_outside_quad/seg/_lineage_consolidated"
+  master_root: "E:/QPI_master/260908_outside_quad"
+  mirror_root: null
+positions: {start: 1, end: 98}
+background_replay:
+  source_crop_root: "D:/AquisitionData/Kitagishi/260908/online_crop_sub_zstack_2"
+  tl_root: "D:/AquisitionData/Kitagishi/260908/ph_zstack_2"
+  grid_dir: "E:/260908/ye_grid_0p05_2"
+  grid_z: 5
+  frame_min: 0
+  frame_max: 1259
+  tilt_h: 270
+  out_h: 240
+  pos_split: 52
+  workers: 2
+  channels_file: "E:/260908_seg/_qc/sheet_f100.selected.txt"
+  exclude_channels:
+    - [6, ch00]
+    - [6, ch01]
+segmentation:
+  model: "models/omni_model_d20_2026_09_07_12_41_31.782047"
+  eval: {diameter: 20, normalize: true, tile: false, omni: true, flow_threshold: 0.11, mask_threshold: 0, min_size: 10, net_avg: false}
+  gate: {phase_hi: 0.7, min_px: 40}
+  workers: 6
+tracking:
+  pixel_size_um: 0.34567514677103717
+  time_interval_min: 5.0
+  wavelength_nm: 658.0
+  alpha_ri: 0.00018
+  frame_min: 2
+  frame_max: 1259
+  media_schedule: ""
+  ri_calibration: null
+  calibration_id: null
+  bad_frames: null
+  contour_offset_px: 0.0
+  production_marker: "volume_um3_efd"
+  workers: 2
+edge_channels: ["ch00", "ch11"]
+inputs_extra: ["E:/260908_seg/_qc/sheet_f100.selected.txt"]
+qc_extra: []
+derived: null
+notes:
+  - "Reuses saved per-frame grid nodes, calibration, residual warp and ROIs. No new drift estimation."
+  - "BG mask is the cell-free grid output_phase: threshold -1.0 rad, dilation 2 px, minimum BG 500 px; validity erosion 1 px."
+  - "Insufficient BG or missing input stops the replay before segmentation of that Pos."
+  - "Same Omnipose model and unshrunk contour as datasets/260908.yaml."
+  - "No YE RI calibration exists; n_medium remains the original scalar 1.333."

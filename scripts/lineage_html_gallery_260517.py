@@ -181,7 +181,11 @@ def render(pos: str, ch: str, d: dict, ylims: dict, dpi: int = 110, panel1: str 
     t, valid, outl, bord = d["t"], d["valid"], d["outl"], d["bord"]
     for ax, (key, label, y, ybad) in zip(axes, series):
         for f in d["div_ok"]:
-            ax.axvline(t_h(f), color=C_DIV, lw=0.45, alpha=0.55, zorder=1)
+            added = f in d.get("div_added", [])
+            ax.axvline(t_h(f), color="#009E73" if added else C_DIV,
+                       lw=0.8 if added else 0.45, alpha=0.7 if added else 0.55, zorder=1)
+        for f in (d.get("div_removed", []) if d.get("show_removed", True) else []):
+            ax.axvline(t_h(f), color="#CC79A7", ls=":", lw=0.65, alpha=0.65, zorder=1)
         yv = np.where(valid, y, np.nan)
         ax.plot(t, yv, "-", color=C_VALID, lw=0.7, alpha=0.9, zorder=3)
         ax.plot(t[valid], y[valid], ".", color=C_VALID, ms=2.2, zorder=4)
@@ -190,6 +194,10 @@ def render(pos: str, ch: str, d: dict, ylims: dict, dpi: int = 110, panel1: str 
         yo = np.where(np.isfinite(y), y, lo + 0.03 * (hi - lo))
         if outl.any():
             ax.plot(t[outl], yo[outl], "x", color=C_OUT, ms=4, mew=0.8, zorder=5, label="tracker outlier")
+        added_outl = d.get("outl_added", np.zeros(len(t), dtype=bool))
+        if added_outl.any():
+            ax.plot(t[added_outl], yo[added_outl], "x", color="#CC79A7", ms=4,
+                    mew=0.8, zorder=6, label="review outlier")
         if bord.any():
             ax.plot(t[bord], yo[bord], "^", color=C_BORDER, ms=4, mew=0, zorder=5, label="border")
         if len(d["bad_t"]):
@@ -229,12 +237,21 @@ def render(pos: str, ch: str, d: dict, ylims: dict, dpi: int = 110, panel1: str 
             "Species: S. pombe; growth conditions are recorded with the source dataset; "
             "strain and temperature are not inferred. Source arrays and analysis parameters accompany this image."
         )
+        if "div_added" in d:
+            caption += (" Review overlay: green lines are newly proposed divisions; magenta crosses are additional "
+                        "outliers (plotted at their original value). Original tracker outliers remain red. "
+                        "No automatic death classification. Gaps may make division timing uncertain.")
+            caption += (" Rejected divisions are not drawn; consult the HTML event table."
+                        if not d.get("show_removed", True) else
+                        " Magenta dotted lines are previously accepted divisions rejected by review QC.")
         archived = save_figure(
             fig, params={**provenance, "pos": pos, "ch": ch, "ylims": ylims, "panel1": panel1,
-                         "t0_frame": T0_FRAME, "end_frame": END_FRAME},
+                         "t0_frame": T0_FRAME, "end_frame": END_FRAME,
+                         "plot_left": PLOT_LEFT, "plot_right": PLOT_RIGHT, "bbox_inches": None},
             description=f"{provenance['dataset']} {pos} {ch}: RI, dry mass and volume",
             data={k: v for k, v in d.items() if isinstance(v, np.ndarray)},
-            caption=caption, dpi=300, fmt="png", publish=False, save_to_notion=False)
+            caption=caption, dpi=300, fmt="png", publish=False, save_to_notion=False,
+            bbox_inches=None)
         png = archived.read_bytes()
     else:
         buf = io.BytesIO()
