@@ -38,6 +38,7 @@ import numpy as np
 import pandas as pd
 
 from figure_logger import save_figure
+from qpi_paths import use_efd_metrics
 
 # Okabe-Ito-friendly defaults; one color per physical quantity.
 COLORS = {
@@ -82,7 +83,7 @@ def load_channel_data(channel_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, di
     plotting; it is a slice of the full data3D, not a separate read.
     """
     out = channel_dir / "inference_out" / "lineage_out"
-    data3D = pd.read_csv(out / "lineage_data3D.csv")
+    data3D = use_efd_metrics(pd.read_csv(out / "lineage_data3D.csv"))
     run_meta_path = out / "lineage_run_params.json"
     run_meta = {}
     if run_meta_path.exists():
@@ -97,7 +98,7 @@ def load_channel_data(channel_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, di
     m = data3D[data3D["cell_id"] == 0].sort_values("frame").copy()
     if not m.empty:
         bad = m["is_outlier"].to_numpy(dtype=bool) | m["touches_border"].to_numpy(dtype=bool)
-        for col in ("volume_um3_rod", "mean_ri", "mass_pg"):
+        for col in ("volume_um3_efd", "mean_ri", "mass_pg"):
             if col in m.columns:
                 m.loc[bad, col] = np.nan
     return data3D, m, run_meta
@@ -281,7 +282,7 @@ def run(channel_dirs: list[Path]) -> None:
     data_source = {"raw_files": raw_files}
 
     panels = [
-        ("volume_um3_rod", r"volume [µm$^3$]",  COLORS["volume"],
+        ("volume_um3_efd", r"volume [µm$^3$]",  COLORS["volume"],
          "pooled mother volume", "pooled mother volume overlay"),
         ("mean_ri",        "mean RI",            COLORS["mean_ri"],
          "pooled mother mean RI", "pooled mother mean RI overlay"),

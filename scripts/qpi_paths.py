@@ -211,15 +211,35 @@ def find_lineage_csv(pos: str, ch: str) -> Path | None:
 # Corrected (mask-direct) lineage resolution
 # ---------------------------------------------------------------------------
 # Downstream scripts pick up corrected mother axes/volume/RI/mass transparently
-# when QPI_USE_CORRECTED=1. The volume variant (rod | profile) is chosen with
-# QPI_VOLUME_VARIANT so the same script renders either set without code changes.
+# when QPI_USE_CORRECTED=1. Only the efd volume is used (rod was removed 2026-09-29).
 def use_corrected() -> bool:
     return os.environ.get("QPI_USE_CORRECTED", "").strip() in {"1", "true", "yes", "on"}
 
 
 def volume_variant() -> str:
-    v = os.environ.get("QPI_VOLUME_VARIANT", "rod").strip().lower()
-    return v if v in {"rod", "profile", "efd"} else "rod"
+    return "efd"
+
+
+# Masters published before 2026-09-29 carry rod-based mean_ri / mass_pg / density_pg_um3
+# next to *_efd copies; newer ones carry the efd-based values under the plain names.
+EFD_METRICS = ("mean_ri", "mass_pg", "density_pg_um3")
+
+
+def efd_col(columns, name: str) -> str:
+    """Column holding the efd-volume version of `name` (mean_ri / mass_pg / density_pg_um3)."""
+    return f"{name}_efd" if f"{name}_efd" in columns else name
+
+
+def use_efd_metrics(df):
+    """Return df with mean_ri / mass_pg / density_pg_um3 taken from the efd volume.
+
+    Old masters: the *_efd columns replace the rod-based plain ones (and are dropped).
+    New outputs are already efd-based and pass through unchanged.
+    """
+    ren = {f"{n}_efd": n for n in EFD_METRICS if f"{n}_efd" in df.columns}
+    if not ren:
+        return df
+    return df.drop(columns=[n for n in ren.values() if n in df.columns]).rename(columns=ren)
 
 
 def corrected_run_dir(pos: str, ch: str, variant: str | None = None) -> Path | None:

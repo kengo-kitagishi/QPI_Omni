@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 
 from figure_logger import save_figure
+from qpi_paths import use_efd_metrics
 
 # =============================================================================
 # Constants
@@ -102,7 +103,7 @@ def frame_to_h(frame: float) -> float:
 def load_inputs(channel_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     lineage_out = channel_dir / "inference_out" / "lineage_out"
     clist = pd.read_csv(lineage_out / "clist.csv")
-    data3D = pd.read_csv(lineage_out / "lineage_data3D.csv")
+    data3D = use_efd_metrics(pd.read_csv(lineage_out / "lineage_data3D.csv"))
     return clist, data3D
 
 
@@ -239,7 +240,7 @@ def build_fate_table(clist: pd.DataFrame, data3D: pd.DataFrame) -> pd.DataFrame:
             & (~cell_data["is_outlier"])
             & (~cell_data["touches_border"])
         ]
-        pre_v = float(sub["volume_um3_rod"].mean()) if len(sub) else np.nan
+        pre_v = float(sub["volume_um3_efd"].mean()) if len(sub) else np.nan
         pre_m = float(sub["mass_pg"].mean()) if len(sub) else np.nan
         pre_ri = float(sub["mean_ri"].mean()) if len(sub) else np.nan
 
@@ -339,7 +340,7 @@ def plot_mother_trajectory(data3D: pd.DataFrame, survival: pd.DataFrame) -> plt.
     t = m["time_h"].to_numpy()
     # mask invalid frames with NaN for gap in the line
     bad = m["is_outlier"].to_numpy() | m["touches_border"].to_numpy()
-    vol = np.where(bad, np.nan, m["volume_um3_rod"].to_numpy())
+    vol = np.where(bad, np.nan, m["volume_um3_efd"].to_numpy())
     mass = np.where(bad, np.nan, m["mass_pg"].to_numpy())
 
     fig, axes = plt.subplots(2, 1, figsize=(7.2, 4.0), sharex=True, constrained_layout=True)

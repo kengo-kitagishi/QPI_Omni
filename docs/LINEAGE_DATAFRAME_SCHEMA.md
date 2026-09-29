@@ -59,7 +59,7 @@
 | long_axis_birth_um / long_axis_death_um | 楕円近似 major 軸（µm） |
 | short_axis_birth_um / short_axis_death_um | 楕円近似 minor 軸（µm） |
 | area_birth_um2 / area_death_um2 | 2D 面積（µm²） |
-| volume_birth_um3 / volume_death_um3 | rod 体積近似（µm³） |
+| volume_birth_um3 / volume_death_um3 | volume_um3_efd（µm³） |
 | mean_ri_birth / mean_ri_death | 細胞内 mean refractive index |
 | mass_birth_pg / mass_death_pg | dry mass（pg）＝ ∫Δn dA を mass に換算 |
 
@@ -85,7 +85,7 @@
 |----|------|
 | rank_birth | birth_frame での rank |
 | rank_death | death_frame での rank |
-| mean_volume_um3 | 生涯の volume_um3_rod 平均（outlier/border 除外） |
+| mean_volume_um3 | 生涯の volume_um3_efd 平均（outlier/border 除外） |
 | mean_ri_over_life | 生涯の mean_ri 平均（同） |
 | mean_mass_pg | 生涯の mass_pg 平均（同） |
 
@@ -108,16 +108,16 @@
 | mask_label | そのフレームの `inference_out/*_masks.tif` 内でこの cell が持つラベル値（mask 画素への逆参照用。2026-09 追加） |
 | area_px | セグメンテーションマスクの面積（ピクセル） |
 | area_um2 | 面積（µm²） |
-| long_axis_um | 黄色の輪郭（mask 境界を EFD K=6 で平滑化し法線方向に 0.5 px 内側へ縮めたもの）に基づく長軸（µm）: 中心線を弦の中点で 1 回更新した後の弧長。2026-09-14 以降。それ以前は medial-axis、2026-06 以前は skimage 楕円 |
+| long_axis_um | 黄色の輪郭（mask 境界を EFD K=6 で平滑化したもの。縮め量は `lineage_run_params.json: geometry.contour_offset_px`（2026-09-16 から 0、v20260915_yellow は 0.5 px））に基づく長軸（µm）: 中心線を弦の中点で 1 回更新した後の弧長。2026-09-14 以降。それ以前は medial-axis、2026-06 以前は skimage 楕円 |
 | short_axis_um | 黄色の輪郭の短軸（µm）: 中心線に垂直な弦の長さを、両端のキャップ（体半径ぶん）を除いた胴体で最大値の 50% 以上のものだけ平均 |
 | centroid_x_px / centroid_y_px | 重心（画素） |
 | total_phase | ROI 内の位相積分値（rad·px） |
-| volume_um3_rod | 黄色の長軸・短軸からのカプセル体積（µm³）: (4/3)πr³ + πr²(L − 2r)、r = short/2 |
-| volume_um3_efd | 採用体積（µm³）: 黄色の弦を回転体として積分 Σ π(w/2)² Δs |
-| mean_ri | mean refractive index（= n_medium_used + Σφ·λ·A_px / (2π·V_rod)） |
-| mass_pg | dry mass（pg）= (mean_ri − n_milliq_used) / alpha_ri × V_rod × 1e-3 |
-| density_pg_um3 | dry-mass density（pg/µm³）= mass_pg / volume_um3_rod |
-| mean_ri_efd / mass_pg_efd / density_pg_um3_efd | 同じ 3 量を volume_um3_efd で計算したもの |
+| volume_um3_efd | 体積（µm³）: 黄色の弦を回転体として積分 Σ π(w/2)² Δs |
+| mean_ri | mean refractive index（= n_medium_used + Σφ·λ·A_px / (2π·V_efd)） |
+| mass_pg | dry mass（pg）= (mean_ri − n_milliq_used) / alpha_ri × V_efd × 1e-3 |
+| density_pg_um3 | dry-mass density（pg/µm³）= mass_pg / volume_um3_efd |
+
+2026-09-29 より前の出力・master には `volume_um3_rod`（黄色の長軸・短軸からのカプセル）があり、`mean_ri` / `mass_pg` / `density_pg_um3` は rod 体積、`mean_ri_efd` / `mass_pg_efd` / `density_pg_um3_efd` が efd 体積だった。読むときは `qpi_paths.use_efd_metrics(df)` で `*_efd` を素の列名に置き換える（新しい出力はそのまま通る）。
 | n_medium_used | このフレームで使った培地 RI（`--media-schedule` + RI calibration から frame ごとに決定） |
 | medium_name | 培地ラベル（wo_2 / wo_0p0055 / wo_0 など） |
 | n_milliq_used | mass 計算の基準 RI（n_milliq） |
@@ -130,7 +130,7 @@
 - drift 由来の bad frame（`--bad-frames`）はトラッキング前に除外され、生の計測値のみ `lineage_bad_frames.csv` に保存される。
 - 娘細胞（rank ≥ 2、`in_tree = True`）も同じ列を持つ。frame 0 に rank ≥ 2 で存在する系譜不明の cell は `in_tree = False`。
 - 体積は黄色の輪郭由来の 2 種（rod / efd）だけを載せる。medial-axis・profile・skimage の値は master にも CSV にも載せない（手法の対比は figure-hub の比較図で行う）。
-- 分裂判定は 1 フレームの面積だけで決まるため、一時的な mask の分裂が偽の娘を生む。`divisions_qc.csv`（`division_qc_260517.py`）が各候補を親の mass_pg_efd / volume_um3_efd の前後比で検証し、`validated` / `method`（direct / rescued / rejected / insufficient / duplicate）を付ける。分裂を数えるときは `validated = True` だけを使う。
+- 分裂判定は 1 フレームの面積だけで決まるため、一時的な mask の分裂が偽の娘を生む。`divisions_qc.csv`（`division_qc_260517.py`）が各候補を親の efd の mass_pg / volume_um3_efd の前後比で検証し、`validated` / `method`（direct / rescued / rejected / insufficient / duplicate）を付ける。分裂を数えるときは `validated = True` だけを使う。
 - 分裂の発生は「同じ `cell_id` の death_frame 直後に `parent_id == その cell_id` の new row が現れる」ことで確認できる。
 
 ---

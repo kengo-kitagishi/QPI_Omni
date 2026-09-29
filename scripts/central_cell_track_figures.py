@@ -22,6 +22,7 @@ from skimage import measure
 from skimage.transform import rotate
 
 from figure_logger import save_figure
+from mask_volume_schematic import efd_section_geometry
 from ri_calibration import (
     load_calibration,
     n_medium_at_frame,
@@ -655,14 +656,22 @@ def candidate_rows_for_frame(
     return pd.DataFrame(rows)
 
 
-def calc_rod_volume_um3(major_px: float, minor_px: float, pixel_size_um: float) -> float:
-    length_um = float(major_px) * pixel_size_um
-    width_um = float(minor_px) * pixel_size_um
-    r_um = width_um / 2.0
-    h_um = length_um - 2.0 * r_um
-    if h_um < 0:
-        return float((4.0 / 3.0) * np.pi * (r_um ** 3))
-    return float((4.0 / 3.0) * np.pi * (r_um ** 3) + np.pi * (r_um ** 2) * h_um)
+def calc_efd_volume_um3(mask_path: str, label: float, pixel_size_um: float) -> float:
+    """Yellow-contour (EFD) solid-of-revolution volume of one labelled cell, as in the tracker."""
+    if not mask_path or not np.isfinite(label):
+        return np.nan
+    cell = load_label_image(Path(mask_path)) == int(label)
+    if not cell.any():
+        return np.nan
+    ys, xs = np.nonzero(cell)
+    crop = cell[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+    try:
+        geo = efd_section_geometry(np.pad(crop, 6), pixel_size_um=1.0)
+    except Exception:
+        return np.nan
+    if geo is None or not np.isfinite(geo.volume_px3):
+        return np.nan
+    return float(geo.volume_px3) * pixel_size_um ** 3
 
 
 def calc_optical_metrics(
@@ -808,21 +817,15 @@ def build_summary_table(
         np.nan,
     )
     if pixel_size_um is not None and pixel_size_um > 0:
-        df["volume_um3_rod"] = np.where(
-            df["tracked"].to_numpy(dtype=bool),
-            [
-                calc_rod_volume_um3(major, minor, pixel_size_um)
-                if np.isfinite(major) and np.isfinite(minor) and minor > 0
-                else np.nan
-                for major, minor in zip(
-                    df["major_axis_px"].to_numpy(dtype=float),
-                    df["minor_axis_px"].to_numpy(dtype=float),
-                )
-            ],
-            np.nan,
-        )
+        df["volume_um3_efd"] = [
+            calc_efd_volume_um3(mp, lab, pixel_size_um) if tracked else np.nan
+            for mp, lab, tracked in zip(
+                df["mask_path"], df["label"].to_numpy(dtype=float),
+                df["tracked"].to_numpy(dtype=bool),
+            )
+        ]
     else:
-        df["volume_um3_rod"] = np.nan
+        df["volume_um3_efd"] = np.nan
 
     use_schedule = bool(media_schedule) and bool(media_ri)
     if use_schedule:
@@ -843,7 +846,7 @@ def build_summary_table(
             )
             for total_phase, volume_um3, nm_row in zip(
                 df["total_phase"].to_numpy(dtype=float),
-                df["volume_um3_rod"].to_numpy(dtype=float),
+                df["volume_um3_efd"].to_numpy(dtype=float),
                 n_medium_per_row,
             )
         ]
@@ -1282,7 +1285,7 @@ def make_shape_trace(summary_df: pd.DataFrame, args: argparse.Namespace) -> plt.
 
 
 def make_volume_trace(summary_df: pd.DataFrame, args: argparse.Namespace) -> plt.Figure | None:
-    if summary_df["volume_um3_rod"].isna().all():
+    if summary_df["volume_um3_efd"].isna().all():
         return None
 
     df = summary_df.copy()
@@ -1293,7 +1296,7 @@ def make_volume_trace(summary_df: pd.DataFrame, args: argparse.Namespace) -> plt
     else:
         x_label = "Frame"
 
-    volume = df["volume_um3_rod"].to_numpy(dtype=float)
+    volume = df["volume_um3_efd"].to_numpy(dtype=float)
     mean_ri = df["mean_ri"].to_numpy(dtype=float)
     mass_pg = df["mass_pg"].to_numpy(dtype=float)
 
@@ -1303,7 +1306,7 @@ def make_volume_trace(summary_df: pd.DataFrame, args: argparse.Namespace) -> plt
     media_switches = [float(frame) for frame in args.media_switch_frames]
 
     axes[0].plot(x, volume, color="#1f77b4", lw=1.5)
-    axes[0].set_title("A  Rod volume estimate", loc="left")
+    axes[0].set_title("A  Volume (yellow-contour EFD)", loc="left")
     axes[0].set_ylabel("Volume [um^3]")
     axes[0].set_ylim(*args.volume_ylim)
     axes[0].grid(True, alpha=0.3, linestyle="--")

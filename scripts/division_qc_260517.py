@@ -6,7 +6,8 @@ prev < 0.30, otherwise the frame is an outlier and the ID continues. It never ch
 whether the split persists, so a transient segmentation split produces a spurious
 daughter. This QC re-examines every candidate division (= birth of a daughter) with
 the parent's dry mass and volume before and after the event (yellow-contour
-``mass_pg_efd`` / ``volume_um3_efd``), using the rules agreed on 2026-09-14:
+efd ``mass_pg`` / ``volume_um3_efd``; older masters' ``mass_pg_efd`` is used in place of
+their rod-based ``mass_pg``), using the rules agreed on 2026-09-14:
 
   1. every daughter birth in lineage_data3D.csv is a candidate;
   2. if the parent has no tracker outlier within +-1 frame of the event, accept it as is
@@ -42,6 +43,7 @@ import pandas as pd
 
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
+from qpi_paths import use_efd_metrics  # noqa: E402
 
 # --- rule constants (2026-09-14) ---
 OUTLIER_NEAR_FRAMES = 1        # +-1 frame: direct acceptance if no tracker outlier there
@@ -52,7 +54,7 @@ MASS_RATIO = (0.25, 0.78)
 VOL_RATIO = (0.25, 0.85)
 MAX_RATIO_DIFF = 0.25
 DUPLICATE_FRAMES = 12          # 1 h at 5 min/frame
-MASS_COL = "mass_pg_efd"
+MASS_COL = "mass_pg"             # efd-based (qpi_paths.use_efd_metrics for older masters)
 VOL_COL = "volume_um3_efd"
 
 OUT_COLS = ["parent_id", "daughter_id", "frame", "time_h", "is_mother_division", "in_tree",
@@ -165,9 +167,9 @@ def run_lineage_dir(lo: Path, force: bool = False) -> Path | None:
         return None
     if out.exists() and not force and out.stat().st_mtime >= csv.stat().st_mtime:
         return out
-    df = pd.read_csv(csv)
-    if MASS_COL not in df.columns:
-        raise RuntimeError(f"{csv} lacks {MASS_COL}: not a yellow-geometry lineage")
+    df = use_efd_metrics(pd.read_csv(csv))
+    if VOL_COL not in df.columns:
+        raise RuntimeError(f"{csv} lacks {VOL_COL}: not a yellow-geometry lineage")
     frame_min = None
     params = lo / "lineage_run_params.json"
     dt_min = 5.0

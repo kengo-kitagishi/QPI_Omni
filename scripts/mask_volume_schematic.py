@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -67,11 +68,14 @@ SMOOTH_WINDOW_FRAC = 0.15
 # cos-theta reproduction above, which must stay at 0.15 to match the pipeline.
 EFD_SMOOTH_WINDOW_FRAC = 0.30
 PIXEL_SIZE_UM_DEFAULT = 0.34567514677103717
-# Adopted 2026-09-07 (visual EFD-vs-inferno 0-1.8 check): shrink the EFD contour
-# 0.5 px inward along its normal before width/volume measurement. The raw Omnipose
-# mask includes boundary pixels that only graze the cell edge (~+0.5 px per side);
-# this trims that. Set to 0.0 to recover the un-shrunk boundary.
-EFD_CONTOUR_OFFSET_PX = 0.5
+# EFD contour inward shrink [px] before width/volume measurement.
+# 2026-09-16 decision: use 0.0 (NO shrink). The earlier 0.5 px trim (for boundary pixels
+# that only graze the cell edge) pushed the diameter and volume below literature S. pombe
+# (diameter 3.1 vs 3.5-4 um; volume median 77 vs 70-140 um3); dropping it lands both in
+# range (diameter ~3.5, volume ~90 um3) while dry mass is unchanged (mass = Sum phi cancels V).
+# The 0.5 px "yellow" master v20260915_yellow is frozen for comparison.
+# Overridable per run with the env var QPI_EFD_OFFSET_PX (for offset sweeps / test tracks).
+EFD_CONTOUR_OFFSET_PX = float(os.environ.get("QPI_EFD_OFFSET_PX", "0.0"))
 
 
 # =========================================================================
