@@ -48,9 +48,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 # Cell geometry (2026-09-14): the adopted "yellow contour" method only. Elliptic-Fourier
 # (K=6) smoothing of the mask boundary, shrunk EFD_CONTOUR_OFFSET_PX inward, chords
 # perpendicular to the centerline with ONE midpoint update; long axis = arc length of
-# the updated centerline, short axis = mean body chord width, and two volumes:
-# rod (capsule from those axes) and efd (solid of revolution of the chords).
-# No medial-axis / profile / skimage columns are produced any more.
+# the updated centerline, short axis = mean body chord width, and one volume:
+# efd (solid of revolution of the chords). RI / mass / density all use it.
+# No rod / medial-axis / profile / skimage columns are produced any more.
 from mask_volume_schematic import (  # noqa: E402
     efd_section_geometry, EFD_CONTOUR_OFFSET_PX, EFD_SMOOTH_WINDOW_FRAC,
 )
@@ -92,12 +92,9 @@ class FrameData:
     touches_border: bool = False
     volume_efd_px3: float = np.nan          # yellow-contour section volume (px^3)
     n_chords: int = 0                       # chords found on the yellow contour (0 -> geometry failed)
-    volume_um3_rod: float = np.nan          # capsule from the yellow axes
-    volume_um3_efd: float = np.nan          # solid of revolution of the yellow chords (adopted)
-    mean_ri: float = np.nan
-    mass_pg: float = np.nan
-    mean_ri_efd: float = np.nan
-    mass_pg_efd: float = np.nan
+    volume_um3_efd: float = np.nan          # solid of revolution of the yellow chords
+    mean_ri: float = np.nan                 # from volume_um3_efd
+    mass_pg: float = np.nan                 # from volume_um3_efd
     n_medium_used: float = np.nan
     medium_name: str = ""
     is_outlier: bool = False
@@ -253,18 +250,8 @@ def collect_frame_pairs(
 
 
 # =============================================================================
-# Physics: rod volume, RI, mass  (eqs. taken from central_cell_track_figures.py)
+# Physics: RI, mass from the yellow-contour (efd) volume
 # =============================================================================
-def calc_rod_volume_um3(major_px: float, minor_px: float, pixel_size_um: float) -> float:
-    L = float(major_px) * pixel_size_um
-    w = float(minor_px) * pixel_size_um
-    r = w / 2.0
-    h = L - 2.0 * r
-    if h < 0:
-        return float((4.0 / 3.0) * np.pi * r**3)
-    return float((4.0 / 3.0) * np.pi * r**3 + np.pi * r**2 * h)
-
-
 def _yellow_axes(geo) -> tuple[float, float, float, int]:
     """(long_px, short_px, volume_px3, n_chords) from a yellow-contour geometry.
 
@@ -502,7 +489,7 @@ def apply_outlier_detection(state: LineageState) -> None:
         if len(cell.frames) < 3:
             continue
         cell.frames.sort(key=lambda f: f.frame)
-        volumes = np.array([f.volume_um3_rod for f in cell.frames], dtype=float)
+        volumes = np.array([f.volume_um3_efd for f in cell.frames], dtype=float)
         areas = np.array([float(f.area_px) for f in cell.frames], dtype=float)
         n = len(cell.frames)
         birth = cell.birth_frame
@@ -539,11 +526,7 @@ def compute_metrics_for_all(
     use_schedule = bool(media_schedule) and bool(media_ri)
     for cell in state.cells.values():
         for f in cell.frames:
-            # Two volumes from the yellow contour: rod (capsule from the yellow axes)
-            # and efd (solid of revolution of the yellow chords, adopted). RI/mass are
-            # computed for each so every volume column has a self-consistent
-            # (volume, RI, mass, density) set.
-            f.volume_um3_rod = calc_rod_volume_um3(f.major_axis_px, f.minor_axis_px, pixel_size_um)
+            # Volume = solid of revolution of the yellow chords (efd); RI/mass use it.
             if np.isfinite(f.volume_efd_px3):
                 f.volume_um3_efd = f.volume_efd_px3 * pixel_size_um ** 3
             if use_schedule:
@@ -554,17 +537,11 @@ def compute_metrics_for_all(
                 f.medium_name = ""
             f.n_medium_used = nm_f
             ri, _conc, mass = calc_optical_metrics(
-                f.total_phase, f.volume_um3_rod, pixel_size_um, wavelength_nm,
+                f.total_phase, f.volume_um3_efd, pixel_size_um, wavelength_nm,
                 nm_f, alpha_ri, n_protein_basis=n_milliq,
             )
             f.mean_ri = ri
             f.mass_pg = mass
-            ri_e, _ce, mass_e = calc_optical_metrics(
-                f.total_phase, f.volume_um3_efd, pixel_size_um, wavelength_nm,
-                nm_f, alpha_ri, n_protein_basis=n_milliq,
-            )
-            f.mean_ri_efd = ri_e
-            f.mass_pg_efd = mass_e
 
 
 # =============================================================================
@@ -584,7 +561,7 @@ def build_bad_frames_table(
     Each row = one detected mask region in one bad frame. NOT tracked, so no
     cell_id. mean_ri/mass_pg are deliberately NaN because total_phase is read
     on a drift-uncorrected phase image and is not trustworthy. Morphology
-    (area, major/minor, volume_um3_rod) is stored at face value since shape
+    (area, major/minor, volume_um3_efd) is stored at face value since shape
     is locally observed and largely independent of the centroid drift error.
     """
     use_schedule = bool(media_schedule) and bool(media_ri)
@@ -593,9 +570,6 @@ def build_bad_frames_table(
     for r in bad_records:
         L_um = r["major_axis_px"] * pixel_size_um
         w_um = r["minor_axis_px"] * pixel_size_um
-        volume_um3 = calc_rod_volume_um3(
-            r["major_axis_px"], r["minor_axis_px"], pixel_size_um
-        )
         t_h = (
             (r["frame"] - time_zero_frame) * (time_interval_min / 60.0)
             if time_interval_min else np.nan
@@ -621,7 +595,6 @@ def build_bad_frames_table(
             "centroid_x_px": float(r["centroid_x_px"]),
             "centroid_y_px": float(r["centroid_y_px"]),
             "total_phase": float(r["total_phase"]),
-            "volume_um3_rod": volume_um3,
             "volume_um3_efd": (float(r["volume_efd_px3"]) * pixel_size_um ** 3
                                if np.isfinite(r.get("volume_efd_px3", np.nan)) else np.nan),
             "mean_ri": np.nan,   # intentionally NaN: drift-uncorrected phase
@@ -636,7 +609,7 @@ def build_bad_frames_table(
             "frame", "time_h", "rank_in_frame", "label",
             "area_px", "area_um2", "long_axis_um", "short_axis_um",
             "centroid_x_px", "centroid_y_px", "total_phase",
-            "volume_um3_rod", "volume_um3_efd", "mean_ri", "mass_pg",
+            "volume_um3_efd", "mean_ri", "mass_pg",
             "n_medium_used", "medium_name", "touches_border", "bad_reason",
         ])
     return (
@@ -660,15 +633,11 @@ def build_long_table(
         for f in cell.frames:
             t_h = (f.frame - time_zero_frame) * (time_interval_min / 60.0) if time_interval_min else np.nan
             hide = f.is_outlier or f.touches_border
-            v = np.nan if hide else f.volume_um3_rod
-            ve = np.nan if hide else f.volume_um3_efd
+            v = np.nan if hide else f.volume_um3_efd
             ri = np.nan if hide else f.mean_ri
             mass = np.nan if hide else f.mass_pg
-            ri_e = np.nan if hide else f.mean_ri_efd
-            mass_e = np.nan if hide else f.mass_pg_efd
             # Dry-mass density (pg/um^3) = mass / volume; NaN whenever either is hidden.
             dens = mass / v if (np.isfinite(mass) and np.isfinite(v) and v > 0) else np.nan
-            dens_e = mass_e / ve if (np.isfinite(mass_e) and np.isfinite(ve) and ve > 0) else np.nan
             rows.append({
                 "cell_id": cid,
                 "parent_id": cell.parent_id if cell.parent_id is not None else -1,
@@ -686,14 +655,10 @@ def build_long_table(
                 "centroid_x_px": f.centroid_x,
                 "centroid_y_px": f.centroid_y,
                 "total_phase": f.total_phase,
-                "volume_um3_rod": v,
-                "volume_um3_efd": ve,
+                "volume_um3_efd": v,
                 "mean_ri": ri,
                 "mass_pg": mass,
                 "density_pg_um3": dens,
-                "mean_ri_efd": ri_e,
-                "mass_pg_efd": mass_e,
-                "density_pg_um3_efd": dens_e,
                 "n_medium_used": f.n_medium_used,
                 "medium_name": f.medium_name,
                 "n_milliq_used": n_milliq_val,
@@ -708,8 +673,7 @@ def build_long_table(
             "frame", "time_h", "rank", "mask_label",
             "area_px", "area_um2", "long_axis_um", "short_axis_um",
             "centroid_x_px", "centroid_y_px", "total_phase",
-            "volume_um3_rod", "volume_um3_efd", "mean_ri", "mass_pg", "density_pg_um3",
-            "mean_ri_efd", "mass_pg_efd", "density_pg_um3_efd",
+            "volume_um3_efd", "mean_ri", "mass_pg", "density_pg_um3",
             "n_medium_used", "medium_name", "n_milliq_used",
             "is_outlier", "touches_border",
         ])
@@ -780,7 +744,7 @@ def build_clist_table(
         def _ri_of(fr: FrameData) -> float:
             return np.nan if fr.is_outlier else fr.mean_ri
         def _vol_of(fr: FrameData) -> float:
-            return np.nan if fr.is_outlier else fr.volume_um3_rod
+            return np.nan if fr.is_outlier else fr.volume_um3_efd
 
         rows.append({
             "cell_id": cid,
@@ -1120,8 +1084,7 @@ def run(
             "midpoint_updates": 1,
             "long_axis": "arc length of the updated centerline",
             "short_axis": "mean chord width over the central body (caps excluded, chords >= 50% of max)",
-            "volumes": {"rod": "capsule from the yellow long/short axes",
-                        "efd": "solid of revolution of the yellow chords (adopted)"},
+            "volume": "efd: solid of revolution of the yellow chords (RI / mass / density use it)",
         },
         "div_area_ratio_min": DIV_AREA_RATIO_MIN,
         "div_sum_tol": DIV_SUM_TOL,

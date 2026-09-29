@@ -1,7 +1,7 @@
 """_fig_mother_lineage_qc_260517.py - QC figure: is the mother-cell lineage intact?
 
 One row per cell-bearing channel of the selected positions. Each row shows the
-mother cell (in-tree root, cell_id 0) rod volume against time with
+mother cell (in-tree root, cell_id 0) efd volume against time with
 
     black ticks (top)     divisions of the mother (birth of a direct daughter)
     red dots (top)        mother rows hidden by the tracker (is_outlier | touches_border)
@@ -81,7 +81,7 @@ def channel_rows(pos_list: list[int], min_mother_frames: int):
             csv, src = _lineage_csv(pos, ch)
             if csv is None:
                 continue
-            df = pd.read_csv(csv)
+            df = qp.use_efd_metrics(pd.read_csv(csv))
             if df.empty:
                 continue
             roots = df[(df["parent_id"] == -1) & (df["in_tree"] == True)]["cell_id"].unique()
@@ -134,7 +134,7 @@ def main() -> None:
         m, df = r["m"], r["df"]
         key = f"{r['pos']}_{r['ch']}"
         t = m["time_h"].to_numpy(dtype=float)
-        v = m["volume_um3_rod"].to_numpy(dtype=float)
+        v = m["volume_um3_efd"].to_numpy(dtype=float)
         hidden = (m["is_outlier"].to_numpy(dtype=bool) | m["touches_border"].to_numpy(dtype=bool))
         frames = m["frame"].to_numpy(dtype=int)
         first, last = int(df["frame"].min()), int(df["frame"].max())
@@ -173,7 +173,7 @@ def main() -> None:
                f"bad {len(r['bad_frames'])} | cover {coverage*100:.1f}% | max gap {max_gap_h:.2f} h")
         ax.text(0.995, 0.92, txt, transform=ax.transAxes, ha="right", va="top", fontsize=7,
                 bbox=dict(facecolor="white", alpha=0.75, edgecolor="none", pad=1.5), zorder=6)
-        for k, arr in (("time_h", t), ("volume_um3_rod", v), ("hidden", hidden.astype(np.uint8)),
+        for k, arr in (("time_h", t), ("volume_um3_efd", v), ("hidden", hidden.astype(np.uint8)),
                        ("div_time_h", t_div), ("missing_time_h", t_missing), ("bad_time_h", t_bad)):
             data[f"{key}_{k}"] = np.asarray(arr)
         summary.append(dict(pos=r["pos"], ch=r["ch"], mother_id=r["mother_id"], n_div=len(div_frames),
@@ -198,7 +198,7 @@ def main() -> None:
                 "source": src_label, "n_channels": n},
         description="Mother-cell lineage QC per channel (volume trace, divisions, hidden/missing/bad frames) "
                     "for the 260517 new-model tracking",
-        caption=("Mother cell (in-tree root) rod volume versus time for every cell-bearing channel of the "
+        caption=("Mother cell (in-tree root) efd volume versus time for every cell-bearing channel of the "
                  f"selected positions ({src_label} data). Black ticks mark mother divisions, red dots rows hidden "
                  "by the tracker (area-rule outlier or border contact), orange ticks frames without a mother row, "
                  "grey bands drift bad frames excluded before linking; background shading gives the glucose epochs."),

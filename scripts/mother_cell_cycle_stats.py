@@ -40,6 +40,7 @@ from scipy.optimize import curve_fit
 from scipy.stats import pearsonr
 
 from figure_logger import save_figure
+from qpi_paths import use_efd_metrics
 
 # =============================================================================
 # Constants (match lineage_survival_analysis.py defaults for Pos9/260405)
@@ -138,7 +139,7 @@ def load_mother_cycles(channel_dir: Path,
     """
     out_dir = channel_dir / "inference_out" / "lineage_out"
     clist = pd.read_csv(out_dir / "clist.csv")
-    data3D = pd.read_csv(out_dir / "lineage_data3D.csv")
+    data3D = use_efd_metrics(pd.read_csv(out_dir / "lineage_data3D.csv"))
     src = source_tag(channel_dir)
 
     false_ids = _find_false_births(clist, data3D)
@@ -189,9 +190,9 @@ def load_mother_cycles(channel_dir: Path,
             "birth_time_h": frame_to_h(f_birth),
             "interval_h": frame_to_h(f_next - f_birth),
             "birth_epoch": epoch_of(f_birth),
-            "birth_volume_um3":  float(r_birth["volume_um3_rod"]),
-            "div_volume_um3":    float(r_div["volume_um3_rod"]),
-            "added_volume_um3":  float(r_div["volume_um3_rod"] - r_birth["volume_um3_rod"]),
+            "birth_volume_um3":  float(r_birth["volume_um3_efd"]),
+            "div_volume_um3":    float(r_div["volume_um3_efd"]),
+            "added_volume_um3":  float(r_div["volume_um3_efd"] - r_birth["volume_um3_efd"]),
             "birth_mass_pg":     float(r_birth["mass_pg"]),
             "div_mass_pg":       float(r_div["mass_pg"]),
             "added_mass_pg":     float(r_div["mass_pg"] - r_birth["mass_pg"]),
@@ -224,7 +225,7 @@ def extract_cycle_traces(m_df: pd.DataFrame, cycles: list[dict],
             "source":       src,
             "rel_progress": rel,
             "birth_epoch":  c["birth_epoch"],
-            "volume":       np.interp(rel, t_rel, sub["volume_um3_rod"].to_numpy()),
+            "volume":       np.interp(rel, t_rel, sub["volume_um3_efd"].to_numpy()),
             "mass":         np.interp(rel, t_rel, sub["mass_pg"].to_numpy()),
             "ri":           np.interp(rel, t_rel, sub["mean_ri"].to_numpy()),
         })
@@ -253,7 +254,7 @@ def fig_mother_timeseries(m_df: pd.DataFrame, cycles: list[dict]) -> plt.Figure:
     fig, axes = plt.subplots(3, 1, figsize=(183/25.4, 120/25.4), sharex=True,
                              constrained_layout=True)
     panels = [
-        (axes[0], "volume_um3_rod", r"volume [µm$^3$]", OI["blue"]),
+        (axes[0], "volume_um3_efd", r"volume [µm$^3$]", OI["blue"]),
         (axes[1], "mass_pg",        "dry mass [pg]",     OI["orange"]),
         (axes[2], "mean_ri",        "mean RI",            OI["green"]),
     ]
@@ -447,8 +448,8 @@ def fig_conc_distribution(m_df: pd.DataFrame, max_frame: int | None = None) -> p
     sub = m_df[~(m_df["is_outlier"] | m_df["touches_border"])]
     if max_frame is not None:
         sub = sub[sub["frame"] <= max_frame]
-    sub = sub[(sub["mass_pg"] >= 10.0) & (sub["volume_um3_rod"] > 0)]
-    conc = (1000.0 * sub["mass_pg"] / sub["volume_um3_rod"]).dropna().to_numpy()
+    sub = sub[(sub["mass_pg"] >= 10.0) & (sub["volume_um3_efd"] > 0)]
+    conc = (1000.0 * sub["mass_pg"] / sub["volume_um3_efd"]).dropna().to_numpy()
     if len(conc) < 20:
         return None
     mu, sd = float(np.mean(conc)), float(np.std(conc))

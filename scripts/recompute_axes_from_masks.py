@@ -10,17 +10,17 @@ directly from the segmentation masks using bias-free width methods:
   - ``supersegger_adaptive``: rotate-and-project, adaptive endcap trim
   - ``medial_axis``         : Morphometrics-equivalent perpendicular width
 
-For every mode it recomputes rod volume from the measured axes and — because a
-changed volume changes the optics — re-derives ``mean_ri`` and ``mass_pg`` from
+Volume is the yellow-contour (EFD) solid of revolution, identical for every
+mode; ``mean_ri_efd`` and ``mass_pg_efd`` are re-derived from it and
 the per-frame integrated phase (``total_phase``, taken from the lineage CSV) and
 the per-frame medium index (``n_medium_used``). Optical formulae are imported
 from ``central_cell_lineage_tracker`` so they stay bit-identical to the pipeline.
 
 Output (long format, one row per frame x mode):
     frame, cell_id, mode,
-    short_axis_um, long_axis_um, volume_um3_rod,
-    short_axis_px, long_axis_px, area_px,
-    total_phase, mean_ri, mass_pg, time_h
+    short_axis_um, long_axis_um, volume_profile_um3,
+    short_axis_px, long_axis_px, area_px, total_phase,
+    volume_efd_um3, mean_ri_efd, mass_pg_efd, time_h
 
 Usage:
     python scripts/recompute_axes_from_masks.py --pos Pos27 --ch ch06 \
@@ -50,9 +50,7 @@ from mask_morphology import (  # noqa: E402
     measure_all_modes,
 )
 from mask_volume_schematic import efd_section_geometry  # noqa: E402
-from central_cell_lineage_tracker import (  # noqa: E402
-    calc_rod_volume_um3, calc_optical_metrics,
-)
+from central_cell_lineage_tracker import calc_optical_metrics  # noqa: E402
 from skimage import measure  # noqa: E402
 
 DEFAULT_MODES = ["skimage_legacy", "supersegger_adaptive", "medial_axis"]
@@ -216,10 +214,6 @@ def recompute_channel(pos: str, ch: str, modes: list[str],
             if mode not in per_mode:
                 continue
             short_px, long_px, area_px, vol_prof_px3 = per_mode[mode]
-            vol = calc_rod_volume_um3(long_px, short_px, px)
-            mean_ri, _conc, mass = calc_optical_metrics(
-                total_phase, vol, px, wl, n_medium, alpha, basis,
-            )
             vol_profile = vol_prof_px3 * px ** 3 if vol_prof_px3 > 0 else np.nan
             if np.isfinite(vol_profile) and vol_profile > 0:
                 ri_p, _c, mass_p = calc_optical_metrics(
@@ -230,10 +224,9 @@ def recompute_channel(pos: str, ch: str, modes: list[str],
             rows.append({
                 "frame": frame, "cell_id": int(r["cell_id"]), "mode": mode,
                 "short_axis_um": short_px * px, "long_axis_um": long_px * px,
-                "volume_um3_rod": vol, "volume_profile_um3": vol_profile,
+                "volume_profile_um3": vol_profile,
                 "short_axis_px": short_px, "long_axis_px": long_px,
                 "area_px": area_px, "total_phase": total_phase,
-                "mean_ri": mean_ri, "mass_pg": mass,
                 "mean_ri_profile": ri_p, "mass_pg_profile": mass_p,
                 "volume_efd_um3": vol_efd, "mean_ri_efd": ri_efd,
                 "mass_pg_efd": mass_efd, "short_axis_efd_um": short_efd,

@@ -780,7 +780,7 @@ Python は `environment/` の pinned env（`environment/bootstrap_windows.ps1` �
     ↓ run_dataset_pipeline.py --stages seg          → seg_omnipose.py（GPU、models/ の checkpoint）
 mask        <mask_root>/PosN/.../chNN/inference_out/img_*_masks.tif（細胞ありフレームのみ。ch ごとに _DONE）
     ↓ run_dataset_pipeline.py --stages track        → central_cell_lineage_tracker.py --indir <mask ch> --raw-dir <phase ch>
-lineage_out/lineage_data3D.csv ほか（全細胞・全 frame: 面積、黄色輪郭の長軸・短軸、volume_um3_rod / volume_um3_efd、mean_ri、mass_pg、density）
+lineage_out/lineage_data3D.csv ほか（全細胞・全 frame: 面積、黄色輪郭の長軸・短軸、volume_um3_efd、それを使った mean_ri、mass_pg、density）
     ↓ run_dataset_pipeline.py --stages qc           → division_qc_260517.py（分裂候補を mass / volume 比で検証 → divisions_qc.csv）
     ↓ run_dataset_pipeline.py --stages consolidate  → <mask_root>/_lineage_consolidated/all_cells_*.csv.gz + channel_index.csv
     ↓ run_dataset_pipeline.py --stages publish      → <master_root>/<tag>/（読み取り専用・SHA256・MANIFEST・LATEST.txt）
@@ -790,7 +790,8 @@ MASTER      解析はここから読む（qpi_paths.resolve_lineage_csv が mast
 
 - ImageJ の ROI tracking、楕円近似（`32_simple_ellipse_ri`）、`19_gaussian_backsub`、`36_align_and_subtract_timelapse`、
   `10_batch_reconstruction_new` は使わない（`scripts/archive/2026-09-14_reorg/` に退避済み。索引は `scripts/README.md`）。
-- 体積は黄色輪郭（mask 境界を EFD K=6 で平滑化し 0.5 px 内側に縮めた輪郭）由来の `volume_um3_rod` と `volume_um3_efd`（採用）だけ。
+- 体積は黄色輪郭（mask 境界を EFD K=6 で平滑化し 0.5 px 内側に縮めた輪郭）由来の `volume_um3_efd` だけ。RI・mass・density・外れ値判定もこれを使う。
+  rod（カプセル）体積は 2026-09-29 にコードから削除。旧 master の読み込みは `qpi_paths.use_efd_metrics` で efd に揃える。
   medial-axis・profile・skimage の値は出さない。
 - 端 trap ch00 / ch11 は master に残すが解析対象から外す（`channels.csv: analysis_recommended`）。
 - 260517 だけは固有 chain（`_retrack_260517_newmodel.py` → `_chain_tiltfix_260517.py` → `_finalize_yellow_260517.py` →

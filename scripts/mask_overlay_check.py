@@ -29,6 +29,7 @@ from skimage import measure
 # ── Add scripts/ to path for local imports ─────────────────────────
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mask_morphology import extract_cell_morphology, smooth_mask
+from mask_volume_schematic import efd_section_geometry
 from scipy import ndimage as ndi
 
 # ── Configuration ──────────────────────────────────────────────────
@@ -268,15 +269,15 @@ def process_channel(
 
 # ── Time-series extraction ─────────────────────────────────────────
 
-def calc_rod_volume_um3(major_px: float, minor_px: float, pixel_size_um: float) -> float:
-    """Rod volume: cylinder + two hemispherical caps."""
-    length_um = float(major_px) * pixel_size_um
-    width_um = float(minor_px) * pixel_size_um
-    r_um = width_um / 2.0
-    h_um = length_um - 2.0 * r_um
-    if h_um < 0:
-        return float((4.0 / 3.0) * np.pi * (r_um ** 3))
-    return float((4.0 / 3.0) * np.pi * (r_um ** 3) + np.pi * (r_um ** 2) * h_um)
+def calc_efd_volume_um3(cell_crop: np.ndarray, pixel_size_um: float) -> float:
+    """Yellow-contour (EFD) solid-of-revolution volume, as in the tracker."""
+    try:
+        geo = efd_section_geometry(np.pad(cell_crop, 6), pixel_size_um=1.0)
+    except Exception:
+        return np.nan
+    if geo is None or not np.isfinite(geo.volume_px3):
+        return np.nan
+    return float(geo.volume_px3) * pixel_size_um ** 3
 
 
 def calc_mean_ri(
@@ -286,7 +287,7 @@ def calc_mean_ri(
     wavelength_nm: float = WAVELENGTH_NM,
     n_medium: float = N_MEDIUM,
 ) -> float:
-    """Mean RI from integrated phase and rod volume."""
+    """Mean RI from integrated phase and efd volume."""
     if not np.isfinite(total_phase) or not np.isfinite(volume_um3) or volume_um3 <= 0:
         return np.nan
     wavelength_um = wavelength_nm * 1e-3
@@ -339,6 +340,7 @@ def extract_full_timeseries(
         best_morph = None
         best_area = 0
         best_total_phase = np.nan
+        best_crop = None
         for lbl in labels:
             cell_binary = (mask == lbl)
             area = cell_binary.sum()
@@ -361,6 +363,7 @@ def extract_full_timeseries(
             if morph.area_px > best_area:
                 best_area = morph.area_px
                 best_morph = morph
+                best_crop = crop
                 # Integrated phase from smoothed mask in global coords
                 if phase_img is not None:
                     smoothed_global = np.zeros_like(mask, dtype=bool)
@@ -373,9 +376,7 @@ def extract_full_timeseries(
             row["n_cells"] = len(labels)
             rows.append(row)
         else:
-            vol = calc_rod_volume_um3(
-                best_morph.long_axis_px, best_morph.short_axis_px, pixel_size_um,
-            )
+            vol = calc_efd_volume_um3(best_crop, pixel_size_um)
             ri = calc_mean_ri(best_total_phase, vol, pixel_size_um)
             conc = (ri - N_MEDIUM) / ALPHA_RI if np.isfinite(ri) else np.nan
             mass = conc * vol if np.isfinite(conc) else np.nan
@@ -417,7 +418,7 @@ def plot_full_timeseries(
                      linewidth=0.6, alpha=0.8, label=label)
 
     axes[0].set_ylabel("Volume [um^3]")
-    axes[0].set_title("A  Rod volume estimate")
+    axes[0].set_title("A  Volume (yellow-contour EFD)")
     axes[0].set_ylim(0.0, 400.0)
     axes[0].legend(fontsize=7, loc="upper right", ncol=2)
 

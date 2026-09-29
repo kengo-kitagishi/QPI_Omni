@@ -1,13 +1,13 @@
 """_fig_volume_method_comparison_260517.py - one-off comparison of the volume methods.
 
-The master carries only the yellow-contour volumes (rod and efd). This figure keeps the
+The master carries only the yellow-contour efd volume. This figure keeps the
 side-by-side record of the methods that were used before, computed on the same masks:
 
-    medial rod       capsule from the medial-axis long/short axes           (master until 2026-09-14)
     medial profile   solid of revolution of the cos-theta corrected columns  (master until 2026-09-14)
     EFD 0 px         solid of revolution of chords on the EFD-smoothed contour without the inward shrink
-    yellow rod       capsule from the yellow-contour axes                    (master since 2026-09-14)
     yellow efd       solid of revolution of the yellow-contour chords        (adopted, master since 2026-09-14)
+
+The capsule ("rod") volumes were removed from the code on 2026-09-29.
 
 Cells: every mask not touching the crop border in the sampled frames of a few clean
 Pos <= 52 channels (mothers and daughters pooled). Saved via figure_logger with the
@@ -32,13 +32,12 @@ from figure_logger import save_figure  # noqa: E402  (applies the paper style on
 import matplotlib.pyplot as plt  # noqa: E402
 from mask_morphology import measure_all_modes  # noqa: E402
 from mask_volume_schematic import efd_section_geometry  # noqa: E402
-from central_cell_lineage_tracker import _yellow_axes, calc_rod_volume_um3  # noqa: E402
+from central_cell_lineage_tracker import _yellow_axes  # noqa: E402
 import _retrack_260517_newmodel as chain  # noqa: E402
 
 PX = float(chain.PIXEL_UM)
 CHANNELS = [("Pos1", "ch05"), ("Pos4", "ch02"), ("Pos6", "ch04")]
-COLORS = {"medial rod": "#999999", "medial profile": "#bbbbbb", "EFD 0 px": "#56B4E9",
-          "yellow rod": "#E69F00", "yellow efd": "#D55E00"}
+COLORS = {"medial profile": "#bbbbbb", "EFD 0 px": "#56B4E9", "yellow efd": "#D55E00"}
 
 
 def measure(mask: np.ndarray, label: int) -> dict | None:
@@ -52,10 +51,8 @@ def measure(mask: np.ndarray, label: int) -> dict | None:
     if not np.isfinite(v_efd):
         return None
     return {
-        "medial rod": calc_rod_volume_um3(a["medial_long_px"], a["medial_short_px"], PX),
         "medial profile": a["medial_profile_px3"] * PX ** 3,
         "EFD 0 px": g0.volume_px3 * PX ** 3,
-        "yellow rod": calc_rod_volume_um3(L, w, PX),
         "yellow efd": v_efd * PX ** 3,
         "short_medial_um": a["medial_short_px"] * PX,
         "short_yellow_um": w * PX,
@@ -118,7 +115,7 @@ def main() -> None:
 
     ax = axes[1]
     x = df["medial profile"].to_numpy()
-    for k in ("yellow efd", "yellow rod"):
+    for k in ("yellow efd",):
         ax.scatter(x, df[k], s=4, color=COLORS[k], alpha=0.35, linewidths=0, rasterized=True,
                    label=f"{k}: median ratio {ratio[k]:.2f}")
     lim = float(np.nanpercentile(x, 99.5)) * 1.05
@@ -126,7 +123,7 @@ def main() -> None:
     ax.set_xlim(0, lim)
     ax.set_ylim(0, lim)
     ax.set_xlabel("medial profile volume [um$^3$]")
-    ax.set_ylabel("yellow volume [um$^3$]")
+    ax.set_ylabel("yellow efd volume [um$^3$]")
     ax.legend(frameon=False, fontsize=6, loc="upper left")
 
     ax = axes[2]
@@ -146,12 +143,11 @@ def main() -> None:
         f"Volume methods compared on the same Omnipose masks: {n} cell-frames (mothers and daughters not touching "
         f"the crop border) from channels {', '.join(f'{p} {c}' for p, c in CHANNELS)}, absolute frames {f0}-{f1} every "
         f"{st} frames (2% glucose, 2026-05-17 experiment, 0.346 um/px). Left: per-cell-frame volumes; boxes = median and "
-        f"quartiles, whiskers = 1.5 IQR, dots = individual cell-frames. medial rod = capsule (4/3 pi r^3 + pi r^2 (L-2r)) "
-        f"from the medial-axis long/short axes; medial profile = sum pi (w/2)^2 ds of the cos(theta)-corrected column chords; "
+        f"quartiles, whiskers = 1.5 IQR, dots = individual cell-frames. medial profile = sum pi (w/2)^2 ds of the cos(theta)-corrected column chords; "
         f"EFD 0 px = sum pi (w/2)^2 ds of chords perpendicular to the centerline bounded by the elliptic-Fourier (K=6) "
-        f"smoothed contour without shrink; yellow rod / yellow efd = the same two quantities from the contour shrunk 0.5 px "
-        f"inward (adopted 2026-09-07). Middle: per-cell-frame yellow volumes against the medial profile volume, dashed = "
-        f"identity; median ratios yellow efd {ratio['yellow efd']:.2f}, yellow rod {ratio['yellow rod']:.2f}. Right: short "
+        f"smoothed contour without shrink; yellow efd = the same quantity from the contour shrunk 0.5 px "
+        f"inward (adopted 2026-09-07). Middle: per-cell-frame yellow efd volume against the medial profile volume, dashed = "
+        f"identity; median ratio {ratio['yellow efd']:.2f}. Right: short "
         f"axis, medial (mean cos(theta)-corrected column width over the body plateau) versus yellow (mean chord width over the "
         f"body plateau); medians {df.short_medial_um.median():.2f} and {df.short_yellow_um.median():.2f} um. No statistical test."
     )
@@ -159,7 +155,7 @@ def main() -> None:
         fig,
         params={"channels": CHANNELS, "frames": [f0, f1, st], "n_cell_frames": n, "medians_um3": med,
                 "ratio_to_medial_profile": ratio, "efd_k": 6, "contour_offset_px": 0.5},
-        description="Side-by-side record of cell-volume methods (medial rod/profile, EFD 0 px, yellow rod/efd) on identical masks",
+        description="Side-by-side record of cell-volume methods (medial profile, EFD 0 px, yellow efd) on identical masks",
         caption=caption,
         data={k.replace(" ", "_"): df[k].to_numpy() for k in methods}
         | {"short_medial_um": df.short_medial_um.to_numpy(), "short_yellow_um": df.short_yellow_um.to_numpy(),
