@@ -559,9 +559,8 @@ ch ごとに 1 回。`run_dataset_pipeline.py --stages track` が masks のあ�
 3. 各 frame の mask を trap 奥からの距離で rank 付け（rank 1 = mother）。frame 間の対応は面積で決める: 面積比 > 0.68 なら同一細胞、`|(a+b) − prev| / prev < 0.30` なら分裂（内側が親・外側が娘）、どちらでもなければ `is_outlier=True` の行として残す（ID は切れない。3 frame 規則: 比 < 0.30・> 1.50・< 1/1.8 も outlier）
 4. mother の子孫を系譜木（`in_tree`）に入れる。木の外の細胞も全 frame 測る
 5. 各細胞・各 frame で **黄色輪郭**（`mask_volume_schematic.efd_section_geometry`: mask 境界を EFD K=6 で平滑化し 0.5 px 内側へ縮め、中心線の中点更新を 1 回）から長軸・短軸・体積を取る
-   - `volume_um3_rod`: 黄色の長軸・短軸からのカプセル
-   - `volume_um3_efd`: 黄色の弦の回転体積分 Σπ(w/2)²Δs（**採用**）
-6. RI と dry mass: `--ri-calibration` の JSON と `--media-schedule`（絶対 img 番号 → wo_* の対応）から frame ごとの n_medium を決め、`Δn = Σφ · λ / (2π · V)`、`n_cell = n_medium + Δn`、`m = Δn · V / α`（α = 0.00018 mL/mg）。`mean_ri` / `mass_pg` / `density_pg_um3` は rod 体積、`mean_ri_efd` / `mass_pg_efd` / `density_pg_um3_efd` は efd 体積から
+   - `volume_um3_efd`: 黄色の弦の回転体積分 Σπ(w/2)²Δs（体積はこれだけ。長軸・短軸からのカプセル `volume_um3_rod` は 2026-09-29 にコードから削除）
+6. RI と dry mass: `--ri-calibration` の JSON と `--media-schedule`（絶対 img 番号 → wo_* の対応）から frame ごとの n_medium を決め、`Δn = Σφ · λ / (2π · V)`、`n_cell = n_medium + Δn`、`m = Δn · V / α`（α = 0.00018 mL/mg）。`mean_ri` / `mass_pg` / `density_pg_um3` は efd 体積から。外れ値判定（3 frame 規則）と clist の体積も efd。2026-09-29 より前の master は rod 由来の `mean_ri` 等と `*_efd` を両方持つので、読み側は `qpi_paths.use_efd_metrics` で efd に揃える
 7. `--frame-min 2` で img_0 / img_1 を落とし、img_2 を time 0 h にする
 
 **出力** (`<mask ch>/inference_out/lineage_out/`): `lineage_data3D.csv`（細胞 × frame）、`clist.csv`（細胞ごと）、`lineage_cells.json`、`lineage_bad_frames.csv`、`bad_frames_used.json`、`lineage_run_params.json`。列は `docs/LINEAGE_DATAFRAME_SCHEMA.md`
@@ -572,7 +571,7 @@ medial-axis・profile・skimage の楕円近似は出さない（2026-09-14 決�
 
 ### 10.2 `division_qc_260517.py` — 分裂判定の検証
 
-tracker の分裂判定は 1 frame の面積だけなので、一時的な mask 分裂が偽の娘を作る。各候補を親の `mass_pg_efd` / `volume_um3_efd` の前後比で検証する:
+tracker の分裂判定は 1 frame の面積だけなので、一時的な mask 分裂が偽の娘を作る。各候補を親の efd の `mass_pg` / `volume_um3_efd` の前後比で検証する:
 
 - ±1 frame に outlier がなければ direct 採用
 - あれば ±8 frame の有効 2〜3 点の中央値で post/pre mass 0.25〜0.78、volume 0.25〜0.85、両比の差 ≤ 0.25 なら rescued
@@ -657,7 +656,7 @@ m_dry = (1/α) · ∫∫ Δn(x, y) · A_pixel  dxdy
 **細胞内平均 RI**
 ```
 n_cell = n_medium + ΣΔn[mask] · A_pixel / V_total
-V_total: 黄色輪郭の回転体積分 volume_um3_efd（10.1）。volume_um3_rod は同じ輪郭の長軸・短軸からのカプセル
+V_total: 黄色輪郭の回転体積分 volume_um3_efd（10.1）
 ```
 
 ---

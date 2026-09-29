@@ -25,7 +25,7 @@
 
 ```
 all_cells_lineage_data3D.csv.gz      ← 必須。pos, ch, cell_id, frame, volume_um3_efd, mean_ri, total_phase,
-                                        density_pg_um3_efd, is_outlier, touches_border ... を含む
+                                        density_pg_um3（旧 master は density_pg_um3_efd）, is_outlier, touches_border ... を含む
 all_cells_lineage_bad_frames.csv.gz  ← 任意。drift 除外点（紫の菱形）を出したいとき
 channels.csv                          ← 任意。分類フラグで解析対象を絞りたいとき（無ければ端 ch 以外を全部使う）
 ```
@@ -88,7 +88,7 @@ drift 除外 rank-1 = 紫の菱形 / 検証済み母細胞分裂 = 灰色の縦�
 mass 段には解析対象 cycle の ln(mass) 直線 fit を赤線で描く。y 軸は全系列で共通。
 
 - mass_pg = total_phase × 0.658 × pixel² / (2π × 0.00018) × 1e-3（pixel = 0.34567514677103717 µm）
-- 濃度 [mg/mL] = density_pg_um3_efd × 1000 = (n_cell − n_medium) / α。培地切替をまたいで比較できる。
+- 濃度 [mg/mL] = efd の density_pg_um3（旧 master は density_pg_um3_efd）× 1000 = (n_cell − n_medium) / α。培地切替をまたいで比較できる。
 
 ## 6. 困ったとき
 

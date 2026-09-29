@@ -10,7 +10,7 @@ separate single-quantity PDFs per channel (no multi-panel composites):
     lineage_tree.pdf        full lineage tree rooted at mother
 
 Inputs (under <channel_dir>/inference_out/lineage_out/):
-    lineage_data3D.csv      per-frame per-cell metrics (volume_um3_rod,
+    lineage_data3D.csv      per-frame per-cell metrics (volume_um3_efd,
                             mean_ri, mass_pg, n_medium_used, ...)
     clist.csv               per-cell summary (birth_frame, death_frame,
                             mother_id, in_tree, ...)
@@ -36,6 +36,7 @@ import numpy as np
 import pandas as pd
 
 from figure_logger import save_figure
+from qpi_paths import use_efd_metrics
 
 # Okabe-Ito palette
 OI = {
@@ -62,7 +63,7 @@ def load_tables(
     channel_dir: Path,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     out = channel_dir / "inference_out" / "lineage_out"
-    data3D = pd.read_csv(out / "lineage_data3D.csv")
+    data3D = use_efd_metrics(pd.read_csv(out / "lineage_data3D.csv"))
     clist = pd.read_csv(out / "clist.csv")
     run_meta_path = out / "lineage_run_params.json"
     run_meta = {}
@@ -183,7 +184,7 @@ def fig_mother_volume(
     m = data3D[data3D["cell_id"] == 0].sort_values("frame")
     bad = m["is_outlier"].to_numpy(dtype=bool) | m["touches_border"].to_numpy(dtype=bool)
     t = m["time_h"].to_numpy() if "time_h" in m.columns else m["frame"].to_numpy()
-    y = np.where(bad, np.nan, m["volume_um3_rod"].to_numpy(dtype=float))
+    y = np.where(bad, np.nan, m["volume_um3_efd"].to_numpy(dtype=float))
 
     fig, ax = plt.subplots(figsize=(140/25.4, 70/25.4), constrained_layout=True)
     _add_division_ticks(ax, division_frames, time_interval_min, time_zero_frame)

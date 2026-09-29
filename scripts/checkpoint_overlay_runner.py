@@ -6,7 +6,7 @@ For each saved checkpoint (`*_eNNNN`) in --model-dir:
   2. Run central_cell_lineage_tracker.py on the same dir
   3. Pack per-cell lineage CSVs into a *_data.npz with the schema that
      batch_volume_trace_overlay.py understands (label_i / frame_index_i /
-     volume_um3_rod_i / mean_ri_i / mass_pg_i / n_series).
+     volume_um3_efd_i / mean_ri_i / mass_pg_i / n_series).
   4. Call `batch_volume_trace_overlay.py --from-npz <npz>` to get a figure
      where each line is one cell of the lineage at that checkpoint.
 
@@ -26,6 +26,9 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from qpi_paths import use_efd_metrics  # noqa: E402
 
 PYTHON = r"C:\Users\QPI\anaconda3\envs\omnipose\python.exe"
 SCRIPTS = Path(__file__).resolve().parent
@@ -48,7 +51,7 @@ def find_checkpoints(model_dir: Path) -> list[tuple[int, Path]]:
 
 
 def split_lineage_to_cells(lineage_csv: Path) -> list[tuple[str, pd.DataFrame]]:
-    df = pd.read_csv(lineage_csv)
+    df = use_efd_metrics(pd.read_csv(lineage_csv))
     if "frame_index" not in df.columns and "frame" in df.columns:
         df = df.rename(columns={"frame": "frame_index"})
     df = df[df["in_tree"]].copy()
@@ -65,7 +68,7 @@ def series_to_npz(series: list[tuple[str, pd.DataFrame]], out_path: Path,
     for i, (label, df) in enumerate(series):
         out[f"label_{i}"] = np.array([label], dtype=object)
         out[f"frame_index_{i}"] = df["frame_index"].to_numpy(dtype=np.float64)
-        out[f"volume_um3_rod_{i}"] = df["volume_um3_rod"].to_numpy(dtype=np.float64)
+        out[f"volume_um3_efd_{i}"] = df["volume_um3_efd"].to_numpy(dtype=np.float64)
         out[f"mean_ri_{i}"] = df["mean_ri"].to_numpy(dtype=np.float64)
         out[f"mass_pg_{i}"] = df["mass_pg"].to_numpy(dtype=np.float64)
     if time_interval_min is not None:

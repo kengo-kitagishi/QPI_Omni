@@ -112,28 +112,31 @@ def working_tree_lineages(pos_max: int, flags: pd.DataFrame | None, pos_min: int
 
 def prepare(df: pd.DataFrame, bad: pd.DataFrame) -> dict:
     vol_col = "volume_um3_efd" if "volume_um3_efd" in df.columns else "volume_um3_profile"
-    mass_col = "mass_pg_efd" if "mass_pg_efd" in df.columns else "mass_pg"
+    mass_col = qp.efd_col(df.columns, "mass_pg")
+    ri_col = qp.efd_col(df.columns, "mean_ri")
+    dens_col = qp.efd_col(df.columns, "density_pg_um3")
     m = df[df["cell_id"] == 0].sort_values("frame")
     m = m[(m["frame"] >= T0_FRAME) & (m["frame"] <= END_FRAME)]
     t = t_h(m["frame"])
     outl = m["is_outlier"].astype(bool).to_numpy()
     bord = m["touches_border"].astype(bool).to_numpy()
     valid = ~outl & ~bord
-    ri = m["mean_ri"].to_numpy(dtype=float)
+    ri = m[ri_col].to_numpy(dtype=float)
     mass = phase_mass_pg(m["total_phase"])
     vol = m[vol_col].to_numpy(dtype=float)
     # hidden rows carry NaN physics in the table; for the markers we still need x positions
     d = dict(t=t, ri=ri, mass=mass, vol=vol, valid=valid, outl=outl, bord=bord, frame=m["frame"].to_numpy())
-    # dry-mass concentration [mg/mL] = density_pg_um3_efd * 1000 (pg/um^3 = g/mL); = (n_cell - n_medium)/alpha,
+    # dry-mass concentration [mg/mL] = density_pg_um3 (efd) * 1000 (pg/um^3 = g/mL); = (n_cell - n_medium)/alpha,
     # i.e. medium-RI removed, so it is comparable across the media switches.
-    d["conc"] = (m["density_pg_um3_efd"].to_numpy(dtype=float) * 1000.0
-                 if "density_pg_um3_efd" in m.columns else np.full(len(m), np.nan))
+    d["conc"] = (m[dens_col].to_numpy(dtype=float) * 1000.0
+                 if dens_col in m.columns else np.full(len(m), np.nan))
     # drift-excluded rank-1 measurements
     if len(bad) and "rank_in_frame" in bad.columns:
         b = bad[(bad["rank_in_frame"] == 1) & (bad["frame"] >= T0_FRAME) & (bad["frame"] <= END_FRAME)]
         d["bad_t"] = t_h(b["frame"])
         d["bad_mass"] = phase_mass_pg(b["total_phase"])
-        d["bad_vol"] = b["volume_um3_rod"].to_numpy(dtype=float)   # bad table has the rod volume only
+        d["bad_vol"] = (b["volume_um3_efd"].to_numpy(dtype=float) if "volume_um3_efd" in b.columns
+                        else np.full(len(b), np.nan))
         d["bad_ri"] = b["mean_ri"].to_numpy(dtype=float)           # NaN by design (drift-uncorrected)
         d["bad_conc"] = np.full(len(b), np.nan)                     # drift rows carry no valid concentration
     else:
@@ -279,7 +282,7 @@ def main() -> None:
     ap.add_argument("--channels-csv", default=None,
                     help="--source csv: optional channels.csv (classification_status/qc_oob_excluded flags); omit to include every non-edge channel")
     ap.add_argument("--panel1", choices=["ri", "conc"], default="ri",
-                    help="top panel: ri = mean RI, conc = dry-mass concentration [mg/mL] (density_pg_um3_efd*1000)")
+                    help="top panel: ri = mean RI, conc = dry-mass concentration [mg/mL] (efd density_pg_um3*1000)")
     ap.add_argument("--ylim-ri", default="1.37,1.40", help="mean RI axis, lo,hi (or auto)")
     ap.add_argument("--ylim-conc", default="150,400", help="concentration axis [mg/mL], lo,hi (or auto)")
     ap.add_argument("--ylim-mass", default="0,50", help="mass axis [pg], lo,hi (or auto)")

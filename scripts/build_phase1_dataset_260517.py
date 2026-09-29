@@ -45,15 +45,14 @@ SCRIPTS = Path(__file__).resolve().parent
 REPO = SCRIPTS.parent
 sys.path.insert(0, str(SCRIPTS))
 import _retrack_260517_newmodel as chain  # noqa: E402
+from qpi_paths import use_efd_metrics  # noqa: E402
 
 FIRST_FRAME = int(chain.FRAME_MIN)        # 2 : time 0 of the master
 END_FRAME_DEFAULT = 2017                  # last unperturbed 2% frame
 DT_MIN = float(chain.DT_MIN)
 EXPECTED_MEDIUM = "wo_2"
-VALUE_COLS = ["volume_um3_rod", "volume_um3_efd", "long_axis_um", "short_axis_um",
-              "mean_ri", "mass_pg", "density_pg_um3", "mean_ri_efd", "mass_pg_efd", "density_pg_um3_efd"]
-MEAN_COLS = ["volume_um3_rod", "volume_um3_efd", "mean_ri", "mass_pg", "density_pg_um3",
-             "mean_ri_efd", "mass_pg_efd", "density_pg_um3_efd"]
+VALUE_COLS = ["volume_um3_efd", "long_axis_um", "short_axis_um", "mean_ri", "mass_pg", "density_pg_um3"]
+MEAN_COLS = ["volume_um3_efd", "mean_ri", "mass_pg", "density_pg_um3"]
 OTHER_SESSION_SCRATCH = Path(r"C:\TEMP\claude\C--Users-QPI\945bff36-8800-4b3a-911b-252a0b4214fa\scratchpad")
 EDGE_CHANNELS = ("ch00", "ch11")   # decided 2026-09-14: edge traps excluded from the analysis cohort
 
@@ -80,6 +79,8 @@ def _read_window(long_csv: Path, end_frame: int, log):
     n_total = 0
     t0 = time.time()
     for chunk in pd.read_csv(long_csv, chunksize=500_000):
+        # older masters: rod volume + rod-based RI/mass next to *_efd copies -> keep efd only
+        chunk = use_efd_metrics(chunk.drop(columns=["volume_um3_rod"], errors="ignore"))
         n_total += len(chunk)
         f = chunk["frame"].to_numpy()
         win_parts.append(chunk[(f >= FIRST_FRAME) & (f <= end_frame)])
@@ -147,8 +148,8 @@ def _divisions_table(win: pd.DataFrame, cells: pd.DataFrame, qc: pd.DataFrame | 
         columns={"cell_id": "daughter_id", "birth_frame": "frame"})
     d["time_h"] = _t_h(d["frame"])
     hidden = win["is_outlier"].astype(bool) | win["touches_border"].astype(bool)
-    vol = win.loc[~hidden, ["pos", "ch", "cell_id", "frame", "volume_um3_rod"]]
-    vol = vol.set_index(["pos", "ch", "cell_id", "frame"])["volume_um3_rod"]
+    vol = win.loc[~hidden, ["pos", "ch", "cell_id", "frame", "volume_um3_efd"]]
+    vol = vol.set_index(["pos", "ch", "cell_id", "frame"])["volume_um3_efd"]
 
     def _lookup(pos, ch, cid, frame):
         try:
@@ -285,12 +286,10 @@ Frame numbers are absolute acquisition indices (img_NNN). `time_h = (frame - {FI
 | long_axis_um, short_axis_um | from the smoothed cell contour ("yellow" contour: elliptic-Fourier K=6 smoothing of the mask boundary, shrunk 0.5 px inward). long = arc length of the centerline after one midpoint update; short = mean chord width over the central body (chords perpendicular to the centerline, caps excluded, widths >= 50% of max) |
 | centroid_x_px, centroid_y_px | centroid in the channel crop |
 | total_phase | integrated phase over the mask (rad * px) |
-| volume_um3_rod | capsule (rod) volume from the yellow-contour axes: (4/3) pi r^3 + pi r^2 (L - 2r), r = short/2 |
-| volume_um3_efd | adopted volume: solid of revolution of the yellow-contour chords, sum pi (w/2)^2 ds along the updated centerline |
-| mean_ri | mean refractive index = n_medium_used + total_phase * lambda * A_px / (2 pi V_rod) |
-| mass_pg | dry mass = (mean_ri - n_milliq_used) / alpha_ri * V_rod * 1e-3 |
-| density_pg_um3 | dry-mass density = mass_pg / volume_um3_rod |
-| mean_ri_efd, mass_pg_efd, density_pg_um3_efd | the same three quantities computed with volume_um3_efd |
+| volume_um3_efd | cell volume: solid of revolution of the yellow-contour chords, sum pi (w/2)^2 ds along the updated centerline |
+| mean_ri | mean refractive index = n_medium_used + total_phase * lambda * A_px / (2 pi V_efd) |
+| mass_pg | dry mass = (mean_ri - n_milliq_used) / alpha_ri * V_efd * 1e-3 |
+| density_pg_um3 | dry-mass density = mass_pg / volume_um3_efd |
 | n_medium_used, medium_name, n_milliq_used | medium RI, medium label (all `wo_2` here), protein baseline RI |
 | is_outlier | frame failed the tracker's continuation/division area rules (3-frame rule); physics columns are NaN |
 | touches_border | mask touches the crop border; physics columns are NaN |
@@ -311,11 +310,11 @@ Frame numbers are absolute acquisition indices (img_NNN). `time_h = (frame - {FI
 
 ## divisions.csv.gz (one row = one candidate division event inside the window)
 parent_id, daughter_id, frame, time_h, parent_volume_before_um3 (frame - 1), parent_volume_after_um3,
-daughter_birth_volume_um3 (rod volumes), is_mother_division (parent is cell 0), in_tree.
+daughter_birth_volume_um3 (efd volumes), is_mother_division (parent is cell 0), in_tree.
 
 The tracker calls a division from a single frame's areas, so transient segmentation splits
 produce spurious daughters. Every candidate is therefore re-examined (division_qc_260517.py)
-with the parent's mass_pg_efd / volume_um3_efd before and after the event:
+with the parent's efd mass_pg / volume_um3_efd before and after the event:
 `validated` (bool) is the flag to use; `method` = direct (no tracker outlier within +-1 frame),
 rescued (outlier nearby but post/pre mass in 0.25-0.78, post/pre volume in 0.25-0.85 and the
 two ratios within 0.25 of each other, medians of up to 3 valid points within +-8 frames),
@@ -421,7 +420,8 @@ def build(consolidated_dir: Path, inputs_dir: Path | None, out_dir: Path, derive
     channels = _channels_table(win, cells, divisions, excluded, consolidated_dir / "channel_index.csv",
                                yaml_path, qc_dir, end_frame)
     bad_meas_src = consolidated_dir / "all_cells_lineage_bad_frames.csv.gz"
-    bad_meas = pd.read_csv(bad_meas_src) if bad_meas_src.exists() else pd.DataFrame()
+    bad_meas = (pd.read_csv(bad_meas_src).drop(columns=["volume_um3_rod"], errors="ignore")
+                if bad_meas_src.exists() else pd.DataFrame())
     if len(bad_meas):
         bad_meas = bad_meas[(bad_meas["frame"] >= FIRST_FRAME) & (bad_meas["frame"] <= end_frame)]
         bad_meas.insert(2, "channel_id", bad_meas["pos"].astype(str) + "_" + bad_meas["ch"].astype(str))

@@ -614,7 +614,7 @@ Frozen output of the all-cell lineage tracking (mother and daughters) of every t
 Segmentation: Omnipose `{ds.model.name}` (see inputs/model/MODEL.json).
 Tracking: `code/central_cell_lineage_tracker.py` driven by `code/run_dataset_pipeline.py` with
 `inputs/{ds.yaml_path.name}` (media schedule `{ds.media_schedule}`, frame_min {ds.frame_min},
-drift bad frames excluded, yellow-contour geometry: volume_um3_rod / volume_um3_efd).
+drift bad frames excluded, yellow-contour geometry: volume_um3_efd; mean_ri / mass_pg / density_pg_um3 use it).
 Published {manifest['published']}.
 
 This directory is READ-ONLY. Do not edit in place; publish a new tag instead.

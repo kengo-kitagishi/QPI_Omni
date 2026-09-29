@@ -64,8 +64,9 @@ def main() -> None:
     bad_hits = {}  # frame -> number of positions where it is a drift bad frame
     seen_pos = set()
     for n, ch, csv in channel_csvs():
-        df = pd.read_csv(csv, usecols=["cell_id", "frame", "total_phase", "mean_ri", "volume_um3_rod",
-                                       "is_outlier", "touches_border"])
+        ri_col = qp.efd_col(pd.read_csv(csv, nrows=0).columns, "mean_ri")
+        df = pd.read_csv(csv, usecols=["cell_id", "frame", "total_phase", ri_col,
+                                       "is_outlier", "touches_border"]).rename(columns={ri_col: "mean_ri"})
         m = df[(df.cell_id == 0) & df.frame.isin(frames) & ~(df.is_outlier | df.touches_border)]
         if len(m) < 0.5 * len(frames):
             continue
