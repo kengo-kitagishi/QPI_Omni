@@ -18,6 +18,7 @@ mass_pg / volume_um3_profile).
 
 Usage:
     python scripts/lineage_html_gallery_260517.py                 # LATEST master, Pos<=52, 30 lineages
+    python scripts/lineage_html_gallery_260517.py --end-frame 3747 --panel1 conc
     python scripts/lineage_html_gallery_260517.py --max-lineages 60 --pos-max 104
 """
 from __future__ import annotations
@@ -219,12 +220,15 @@ def render(pos: str, ch: str, d: dict, ylims: dict, dpi: int = 110, panel1: str 
 
 
 def main() -> None:
+    global END_FRAME
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--master-tag", default=None)
     ap.add_argument("--pos-max", type=int, default=52, help="skip positions above this (tilt-biased in v20260911)")
     ap.add_argument("--pos-min", type=int, default=1, help="skip positions below this")
     ap.add_argument("--max-lineages", type=int, default=30)
     ap.add_argument("--min-coverage", type=float, default=0.98)
+    ap.add_argument("--end-frame", type=int, default=END_FRAME,
+                    help=f"last frame to include, inclusive (default: {END_FRAME})")
     ap.add_argument("--out", default=None)
     ap.add_argument("--source", choices=["master", "working-tree", "csv"], default="master",
                     help="master / working-tree (D:\\260517_seg) / csv (a consolidated all-cells CSV you already have)")
@@ -243,6 +247,9 @@ def main() -> None:
     ap.add_argument("--min-mother-frames", type=int, default=1000,
                     help="working-tree mode: skip channels whose mother has fewer rows in the window")
     args = ap.parse_args()
+    if args.end_frame < T0_FRAME:
+        raise SystemExit(f"--end-frame must be >= {T0_FRAME}")
+    END_FRAME = args.end_frame
 
     data = {}
     if args.source == "csv":
