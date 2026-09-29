@@ -55,5 +55,6 @@ derived:                                                       # built inside th
 
 notes:
   - "2026-09-14 tilt fix: grid_subtract fitted the tilt on the cell side for Pos >= 53; those crops were re-flattened into D:/260517_tiltfix and re-segmented"
+  - "2026-09-29: rod volume removed; RI / mass / density now use volume_um3_efd. Lineages that still carry volume_um3_rod are not production (re-tracked by the track stage; consolidate refuses while any remain)"
   - "img_2018 is already perturbed by the medium switch (planned img_2019): last clean 2% frame is img_2017"
   - "the 260517 masters so far were published by the dataset-specific chain (_retrack_260517_newmodel -> _chain_tiltfix_260517 -> _finalize_yellow_260517 -> publish_master_260517); this yaml describes the same run"

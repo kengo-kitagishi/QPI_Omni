@@ -8,7 +8,9 @@ sequences the generic tools and records provenance:
     seg          scripts/seg_omnipose.py per Pos (GPU only). Channels with inference_out/_DONE are skipped.
     track        scripts/central_cell_lineage_tracker.py per channel that has masks and no production lineage.
                  production := lineage_run_params.json matches the yaml (media_schedule, frame_min) and
-                 lineage_data3D.csv carries tracking.production_marker (volume_um3_efd).
+                 lineage_data3D.csv carries tracking.production_marker (volume_um3_efd) and no
+                 volume_um3_rod (lineages from before 2026-09-29 used the rod volume for RI / mass
+                 and are re-tracked).
     qc           division_qc_260517.run_lineage_dir on every production lineage -> divisions_qc.csv.
     consolidate  every production lineage -> <consolidated_dir>/all_cells_*.csv.gz, channel_index.csv, manifest.json.
     publish      freeze consolidated + per_channel + inputs + code -> <master_root>/<tag>/ (read-only,
@@ -57,6 +59,9 @@ PER_CHANNEL_FILES = ["lineage_data3D.csv", "clist.csv", "lineage_cells.json", "l
 CODE_FILES = ["run_dataset_pipeline.py", "seg_omnipose.py", "central_cell_lineage_tracker.py",
               "mask_volume_schematic.py", "mask_morphology.py", "ri_calibration.py",
               "division_qc_260517.py", "qpi_paths.py"]
+# RI / mass / density were computed from this capsule volume until 2026-09-29; a lineage that
+# still has it is stale and gets re-tracked.
+LEGACY_COLUMN = "volume_um3_rod"
 _lock = threading.Lock()
 _LOG: Path | None = None
 
@@ -205,7 +210,8 @@ def is_production(ds: Dataset, lo: Path) -> bool:
         j = json.loads(params.read_text(encoding="utf-8"))
         if j.get("media_schedule") != ds.media_schedule or j.get("frame_min") != ds.frame_min:
             return False
-        return ds.marker in pd.read_csv(csv, nrows=0).columns
+        cols = pd.read_csv(csv, nrows=0).columns
+        return ds.marker in cols and LEGACY_COLUMN not in cols
     except Exception:  # noqa: BLE001
         return False
 
@@ -220,6 +226,20 @@ def production_channels(ds: Dataset, start: int | None = None, end: int | None =
             lo = ch / "inference_out" / "lineage_out"
             if is_production(ds, lo):
                 out.append((pos_dir.name, ch.name, lo))
+    return out
+
+
+def legacy_channels(ds: Dataset) -> list[tuple[str, str]]:
+    """Channels whose lineage still has the pre-2026-09-29 rod-volume columns."""
+    out = []
+    for pos_dir in sorted(ds.mask_root.glob("Pos*"), key=lambda p: int(p.name[3:])):
+        for ch in _channels(pos_dir / ds.rel):
+            csv = ch / "inference_out" / "lineage_out" / "lineage_data3D.csv"
+            try:
+                if csv.exists() and LEGACY_COLUMN in pd.read_csv(csv, nrows=0).columns:
+                    out.append((pos_dir.name, ch.name))
+            except Exception:  # noqa: BLE001
+                pass
     return out
 
 
@@ -387,6 +407,10 @@ def stage_qc(ds: Dataset, start: int | None, end: int | None, force: bool = Fals
 def consolidate(ds: Dataset) -> Path:
     """Concatenate every production lineage (all cells, all channels) into ds.consolidated."""
     import division_qc_260517 as dqc
+    stale = legacy_channels(ds)
+    if stale:
+        raise RuntimeError(f"{len(stale)} channels still carry {LEGACY_COLUMN} (e.g. {stale[0][0]} {stale[0][1]}); "
+                           f"run --stages track,qc first so the master is not a mix of old and new lineages")
     out = ds.consolidated
     out.mkdir(parents=True, exist_ok=True)
     long_path = out / "all_cells_lineage_data3D.csv.gz"
