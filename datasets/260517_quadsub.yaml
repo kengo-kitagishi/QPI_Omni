@@ -1,0 +1,54 @@
+# 260517 quadsub dataset: outside-quad tilt refit from 2026-09-21.
+dataset: "260517"
+description: "260517 quadsub (outside-quad refit), 104 Pos x 12 traps, 5 min/frame, single z"
+
+paths:
+  raw_root: "D:/260517_outside_quad_20260921/phase"
+  raw_root_overrides: []
+  mask_root: "D:/260517_outside_quad_20260921/seg"
+  channel_rel: "output_phase/channels/crop_sub_rawraw/z000"
+  phase_glob: "img_*_ph_000_phase.tif"
+  consolidated_dir: null
+  master_root: "D:/QPI_master/260517"
+  mirror_root: null
+
+positions: {start: 1, end: 104}
+
+segmentation:
+  model: "D:/260517_outside_quad_20260921/code/models/omni_model_d20_2026_09_07_12_41_31.782047"
+  eval: {diameter: 20, normalize: true, tile: false, omni: true, flow_threshold: 0.11, mask_threshold: 0, min_size: 10, net_avg: false}
+  gate: {phase_hi: 0.7, min_px: 40}
+  workers: 6
+
+tracking:
+  pixel_size_um: 0.34567514677103717
+  time_interval_min: 5.0
+  wavelength_nm: 658.0
+  alpha_ri: 0.00018
+  frame_min: 2
+  media_schedule: "0:wo_2,2019:wo_0p0055,2307:wo_0,2885:wo_2"
+  ri_calibration: "H:/260517/grid_2pergluc_2/ri_calibration_results.json"
+  bad_frames: "H:/260517/drift_session_20260521T2142/bad_frames.json"
+  production_marker: "volume_um3_efd"
+  contour_offset_px: 0.0
+  workers: 1
+
+edge_channels: ["ch00", "ch11"]
+
+inputs_extra:
+  - "docs/channel_classification_260517.yaml"
+qc_extra:
+  - "D:/QPI_master/260517/v20260911_newmodel/qc/short_oob_exclude.json"
+  - "D:/QPI_master/260517/v20260911_newmodel/qc/tree_qc.json"
+  - "D:/QPI_master/260517/v20260911_newmodel/qc/trackability.json"
+
+derived:
+  module: "build_phase1_dataset_260517"
+  function: "build"
+  name: "phase1_img0002-2017"
+  kwargs: {end_frame: 2017}
+
+notes:
+  - "Source phase and masks are from D:/260517_outside_quad_20260921, not the original crop_sub master."
+  - "outside_quad tilt refit and segmentation completed 2026-09-23; lineage tracking is recomputed with EFD slice volume."
+  - "Input processing provenance is in D:/260517_outside_quad_20260921/run_identity.json and source_dataset.yaml."
