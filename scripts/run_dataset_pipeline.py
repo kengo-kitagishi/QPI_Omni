@@ -8,7 +8,9 @@ sequences the generic tools and records provenance:
     seg          scripts/seg_omnipose.py per Pos (GPU only). Channels with inference_out/_DONE are skipped.
     track        scripts/central_cell_lineage_tracker.py per channel that has masks and no production lineage.
                  production := lineage_run_params.json matches the yaml (media_schedule, frame_min) and
-                 lineage_data3D.csv carries tracking.production_marker (volume_um3_efd).
+                 lineage_data3D.csv carries tracking.production_marker (volume_um3_efd) and no
+                 volume_um3_rod (lineages from before 2026-09-29 used the rod volume for RI / mass
+                 and are re-tracked).
     qc           division_qc_260517.run_lineage_dir on every production lineage -> divisions_qc.csv.
     consolidate  every production lineage -> <consolidated_dir>/all_cells_*.csv.gz, channel_index.csv, manifest.json.
     publish      freeze consolidated + per_channel + inputs + code -> <master_root>/<tag>/ (read-only,
@@ -57,6 +59,9 @@ PER_CHANNEL_FILES = ["lineage_data3D.csv", "clist.csv", "lineage_cells.json", "l
 CODE_FILES = ["run_dataset_pipeline.py", "seg_omnipose.py", "central_cell_lineage_tracker.py",
               "mask_volume_schematic.py", "mask_morphology.py", "ri_calibration.py",
               "division_qc_260517.py", "qpi_paths.py"]
+# RI / mass / density were computed from this capsule volume until 2026-09-29; a lineage that
+# still has it is stale and gets re-tracked.
+LEGACY_COLUMN = "volume_um3_rod"
 _lock = threading.Lock()
 _LOG: Path | None = None
 
@@ -101,17 +106,11 @@ class Dataset:
         self.cal = _path(t["ri_calibration"]) if t.get("ri_calibration") else None
         self.bad = _path(t["bad_frames"]) if t.get("bad_frames") else None
         self.marker = str(t.get("production_marker") or "volume_um3_efd")
-        # How far the EFD contour is shrunk before measuring. 0.5 px was adopted 2026-09-07;
-        # 0 measures the un-shrunk Omnipose boundary. Part of is_production, so changing it
-        # re-tracks instead of mixing two geometries in one table.
-        self.contour_offset_px = float(t.get("contour_offset_px", 0.5))
         self.track_workers = int(t.get("workers", 1))
         self.edge_channels = list(cfg.get("edge_channels") or [])
         self.inputs_extra = [_path(x) for x in (cfg.get("inputs_extra") or [])]
         self.qc_extra = [_path(x) for x in (cfg.get("qc_extra") or [])]
         self.derived = cfg.get("derived") or None
-        self.channel_filter = None   # {(pos, 'chNN')} from --channels-file
-        self.channels_file = None
         self.log_path = self.mask_root / "_pipeline" / f"{self.id}_pipeline.log"
 
     def raw_root_for(self, n: int) -> Path:
@@ -211,9 +210,8 @@ def is_production(ds: Dataset, lo: Path) -> bool:
         j = json.loads(params.read_text(encoding="utf-8"))
         if j.get("media_schedule") != ds.media_schedule or j.get("frame_min") != ds.frame_min:
             return False
-        if float(j.get("geometry", {}).get("contour_offset_px", 0.5)) != ds.contour_offset_px:
-            return False
-        return ds.marker in pd.read_csv(csv, nrows=0).columns
+        cols = pd.read_csv(csv, nrows=0).columns
+        return ds.marker in cols and LEGACY_COLUMN not in cols
     except Exception:  # noqa: BLE001
         return False
 
@@ -225,11 +223,23 @@ def production_channels(ds: Dataset, start: int | None = None, end: int | None =
         if (start is not None and n < start) or (end is not None and n > end):
             continue
         for ch in _channels(pos_dir / ds.rel):
-            if ds.channel_filter is not None and (n, ch.name) not in ds.channel_filter:
-                continue
             lo = ch / "inference_out" / "lineage_out"
             if is_production(ds, lo):
                 out.append((pos_dir.name, ch.name, lo))
+    return out
+
+
+def legacy_channels(ds: Dataset) -> list[tuple[str, str]]:
+    """Channels whose lineage still has the pre-2026-09-29 rod-volume columns."""
+    out = []
+    for pos_dir in sorted(ds.mask_root.glob("Pos*"), key=lambda p: int(p.name[3:])):
+        for ch in _channels(pos_dir / ds.rel):
+            csv = ch / "inference_out" / "lineage_out" / "lineage_data3D.csv"
+            try:
+                if csv.exists() and LEGACY_COLUMN in pd.read_csv(csv, nrows=0).columns:
+                    out.append((pos_dir.name, ch.name))
+            except Exception:  # noqa: BLE001
+                pass
     return out
 
 
@@ -252,8 +262,6 @@ def stage_seg(ds: Dataset, n: int, workers: int, max_files: int | None = None) -
            "--channel-rel", ds.rel.as_posix(), "--model", str(ds.model),
            "--pos-start", str(n), "--pos-end", str(n), "--workers", str(workers),
            "--phase-glob", ds.phase_glob]
-    if ds.channels_file:
-        cmd += ["--channels-file", str(ds.channels_file)]
     if ds.seg_eval:
         cmd += ["--eval-json", json.dumps(ds.seg_eval)]
     if "phase_hi" in ds.gate:
@@ -274,8 +282,6 @@ def worklist(ds: Dataset, n: int, force: bool) -> tuple[list[tuple[Path, Path]],
     targets: list[tuple[Path, Path]] = []
     n_done = n_empty = 0
     for ch in _channels(ds.mask_pos(n)):
-        if ds.channel_filter is not None and (n, ch.name) not in ds.channel_filter:
-            continue
         inf = ch / "inference_out"
         if count_masks(inf) == 0:
             n_empty += 1
@@ -300,8 +306,7 @@ def tracker_cmd(ds: Dataset, mask_ch: Path, raw_ch: Path) -> list[str]:
            "--wavelength-nm", str(t.get("wavelength_nm", 658.0)),
            "--alpha-ri", str(t.get("alpha_ri", 0.00018)),
            "--media-schedule", ds.media_schedule,
-           "--frame-min", str(ds.frame_min),
-           "--contour-offset-px", str(ds.contour_offset_px)]
+           "--frame-min", str(ds.frame_min)]
     if ds.cal:
         cmd += ["--ri-calibration", str(ds.cal)]
     if t.get("calibration_id"):
@@ -402,6 +407,10 @@ def stage_qc(ds: Dataset, start: int | None, end: int | None, force: bool = Fals
 def consolidate(ds: Dataset) -> Path:
     """Concatenate every production lineage (all cells, all channels) into ds.consolidated."""
     import division_qc_260517 as dqc
+    stale = legacy_channels(ds)
+    if stale:
+        raise RuntimeError(f"{len(stale)} channels still carry {LEGACY_COLUMN} (e.g. {stale[0][0]} {stale[0][1]}); "
+                           f"run --stages track,qc first so the master is not a mix of old and new lineages")
     out = ds.consolidated
     out.mkdir(parents=True, exist_ok=True)
     long_path = out / "all_cells_lineage_data3D.csv.gz"
@@ -697,8 +706,7 @@ def plan(ds: Dataset, poss: list[int], stages: set[str], tag: str | None) -> Non
     print(f"  model       {ds.model}  ({'ok' if ds.model.exists() else 'MISSING'})")
     print(f"  calibration {ds.cal}  ({'ok' if ds.cal and ds.cal.exists() else 'MISSING' if ds.cal else 'none'})")
     print(f"  bad_frames  {ds.bad}  ({'ok' if ds.bad and ds.bad.exists() else 'MISSING' if ds.bad else 'none'})")
-    print(f"  media       {ds.media_schedule}; frame_min {ds.frame_min}; marker {ds.marker}; "
-          f"contour_offset_px {ds.contour_offset_px}")
+    print(f"  media       {ds.media_schedule}; frame_min {ds.frame_min}; marker {ds.marker}")
     print(f"  stages      {', '.join(s for s in STAGES if s in stages)}; Pos {poss[0]}..{poss[-1]}")
     tot = dict(raw_ch=0, seg_needed=0, track=0, done=0, empty=0)
     for n in poss:
@@ -741,10 +749,6 @@ def main() -> int:
     ap.add_argument("--force-track", action="store_true", help="re-track channels that already have a production lineage")
     ap.add_argument("--force-qc", action="store_true", help="recompute divisions_qc.csv even when up to date")
     ap.add_argument("--max-files", type=int, default=None, help="seg smoke test: first N frames per channel, no _DONE")
-    ap.add_argument("--channels-file", default=None,
-                    help="restrict every stage to the channels listed in this file "
-                         "(channel_contact_sheet.py --serve writes it when you press "
-                         "'analyse these channels')")
     ap.add_argument("--seg-workers", type=int, default=None)
     ap.add_argument("--track-workers", type=int, default=None)
     ap.add_argument("--consolidated-dir", default=None, help="override paths.consolidated_dir")
@@ -759,12 +763,6 @@ def main() -> int:
         pass
 
     ds = Dataset(Path(a.yaml))
-    if a.channels_file:
-        from seg_omnipose import load_channel_filter
-        ds.channels_file = Path(a.channels_file)
-        ds.channel_filter = load_channel_filter(a.channels_file)
-        print(f"channel filter: {a.channels_file} "
-              f"({len(ds.channel_filter)} channels)")
     if a.consolidated_dir:
         ds.consolidated = _path(a.consolidated_dir)
     if a.master_root:
