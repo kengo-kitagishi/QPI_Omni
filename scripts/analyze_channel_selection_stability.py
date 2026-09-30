@@ -139,6 +139,7 @@ def reproduce_selection(tab, ntp, thr):
         C, X, Y = d["C"], d["X"], d["Y"]
         U = np.zeros(C.shape, bool)
         fallback = np.zeros(ntp, bool)
+        biased = np.zeros(ntp, bool)
         for t in range(ntp):
             fin = np.isfinite(C[t])
             if not fin.any():
@@ -157,12 +158,15 @@ def reproduce_selection(tab, ntp, thr):
                 # passed is a MAD outlier.
                 keep = np.ones(len(idx), bool)
                 fallback[t] = True
+                # The constant bias is applied only on the subset where every
+                # score was below threshold; a MAD-only fallback does not get it.
+                biased[t] = bool(np.all(low))
             U[t, idx[keep]] = True
             logged = d["nu"].get(t)
             if logged is not None and np.isfinite(logged):
                 tot_n += 1
                 ok_n += int(int(logged) == int(keep.sum()))
-        used[p] = dict(U=U, fallback=fallback)
+        used[p] = dict(U=U, fallback=fallback, biased=biased)
     return used, (ok_n, tot_n)
 
 
@@ -214,7 +218,7 @@ def analyse(tab, used, lab, ntp, thr, px_nm, cell_bias_nm, pos_split):
     off_pass, off_fail, n_fixed = [], [], []
     for p, d in tab.items():
         C, X = d["C"], d["X"]
-        U, fb = used[p]["U"], used[p]["fallback"]
+        U, fb, bi = used[p]["U"], used[p]["fallback"], used[p]["biased"]
         L = lab[p]
         S = L["inner"] if L["inner"].sum() >= 2 else L["free"]
         n_fixed.append(int(S.sum()))
@@ -230,7 +234,7 @@ def analyse(tab, used, lab, ntp, thr, px_nm, cell_bias_nm, pos_split):
                 continue
             if U[t].any():
                 prod[t] = X[t][U[t]].mean()
-                if fb[t]:
+                if bi[t]:
                     prod[t] += (-1.0 if int(p[3:]) >= pos_split else 1.0) * cell_bias_nm / px_nm
             s = S & fin[t]
             if s.sum() < 2:
