@@ -151,9 +151,13 @@ def reproduce_selection(tab, ntp, thr):
                 is_out = low
             keep = ~is_out
             if not keep.any():
+                # Production's fallback: every channel was flagged, so all are used
+                # again. It fires whenever nothing survives -- not only when every
+                # score is below threshold, but also when the one channel that
+                # passed is a MAD outlier.
                 keep = np.ones(len(idx), bool)
+                fallback[t] = True
             U[t, idx[keep]] = True
-            fallback[t] = bool(np.all(low)) and keep.all()
             logged = d["nu"].get(t)
             if logged is not None and np.isfinite(logged):
                 tot_n += 1
@@ -205,6 +209,7 @@ def analyse(tab, used, lab, ntp, thr, px_nm, cell_bias_nm, pos_split):
     R["jaccard"] = np.concatenate(jac)
 
     diff, diff_fb, diff_cont, n_used_all = [], [], [], []
+    n_frames_scored = 0
     scatter, resid_sigma, resid_std = [], [], []
     off_pass, off_fail, n_fixed = [], [], []
     for p, d in tab.items():
@@ -232,11 +237,14 @@ def analyse(tab, used, lab, ntp, thr, px_nm, cell_bias_nm, pos_split):
                 continue
             ref = X[t][s].mean()
             fx[t] = ref
+            n_frames_scored += 1
             if s.sum() >= 3:
                 scatter.append(np.std(X[t][s], ddof=1) * px_nm)
             for c in np.where(flick_ch & fin[t])[0]:
                 (off_pass if C[t][c] >= thr else off_fail).append((X[t][c] - ref) * px_nm)
-            if (U[t] & L["cell"]).any():
+            if not fb[t] and (U[t] & L["cell"]).any():
+                # a stably cell-bearing channel passed the gate on its own merits;
+                # fallback frames are counted separately, they are not leaks
                 diff_cont.append((X[t][U[t]].mean() - ref) * px_nm)
         m = np.isfinite(prod) & np.isfinite(fx)
         diff.append((prod - fx)[m] * px_nm)
@@ -252,6 +260,7 @@ def analyse(tab, used, lab, ntp, thr, px_nm, cell_bias_nm, pos_split):
              scatter=np.asarray(scatter),
              resid_sigma=np.asarray(resid_sigma),
              resid_std=np.asarray(resid_std),
+             n_frames=np.asarray([n_frames_scored]),
              off_pass=np.asarray(off_pass),
              off_fail=np.asarray(off_fail),
              n_fixed=np.asarray(n_fixed))
@@ -297,8 +306,10 @@ def make_figure(R):
     ax = axes[3]
     terms = [
         ("closed-loop residual", np.median(R["resid_std"]), C_GREY),
-        ("cell ch leaks in (4%)", abs(np.median(R["diff_cont"])), C_CELL),
-        ("fallback +181 nm (1%)", abs(np.median(R["diff_fb"])), C_CELL),
+        ("cell ch leaks in (%.0f%%)" % (100 * len(R["diff_cont"]) / R["n_frames"][0]),
+         abs(np.median(R["diff_cont"])), C_CELL),
+        ("fallback +181 nm (%.0f%%)" % (100 * len(R["diff_fb"]) / R["n_frames"][0]),
+         abs(np.median(R["diff_fb"])), C_CELL),
         ("cell-free ch spread", np.median(R["scatter"]), C_FREE),
         ("production $-$ fixed set", np.median(np.abs(R["diff"])), C_MIX),
     ]
@@ -349,9 +360,12 @@ def main():
     print("\n-- production vs a fixed stably-cell-free set (tx) --")
     for nm, a in [("typical frame", R["diff"]),
                   ("all-ch fallback frames", R["diff_fb"]),
-                  ("frames with a cell-bearing ch in the mean", R["diff_cont"])]:
+                  ("genuine leak frames (cell ch passed the gate)", R["diff_cont"])]:
         print("   %-42s median|d| %6.1f nm  p95 %7.1f  n=%d"
               % (nm, np.median(np.abs(a)), np.percentile(np.abs(a), 95), len(a)))
+    print("   (fallback = %.2f%% of frames, genuine leaks = %.2f%% of frames)"
+          % (100 * len(R["diff_fb"]) / R["n_frames"][0],
+             100 * len(R["diff_cont"]) / R["n_frames"][0]))
     print("\n-- error budget --")
     print("   cell-free channels disagree within a frame: median std %.1f nm"
           % np.median(R["scatter"]))
@@ -396,6 +410,7 @@ def main():
         description=("260928 online drift log: stability of the corr-threshold cell-free channel "
                      "selection vs a fixed stably-cell-free set, and the error budget it sits in"),
         data={k: R[k] for k in ("sel_frac", "jaccard", "diff", "diff_fb", "diff_cont", "n_used",
+                                "n_frames",
                                 "scatter", "resid_sigma", "resid_std", "off_pass", "off_fail",
                                 "n_fixed")},
         caption=caption,
