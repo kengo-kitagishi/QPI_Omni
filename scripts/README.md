@@ -33,6 +33,9 @@ production checkpoints in `models/`.
 - `_fig_mother_lineage_qc_260517.py`
 - `_fig_switch_frame_check_260517.py`
 - `_fig_volume_method_comparison_260517.py`
+- `fig_cycle_strip_upright.py` (one cycle, upright cells, phase only, every frame; `--figma` exports tiles / scale bar / color bar)
+- `fig_poster_mask_geometry_strip.py` (cycle strip with EFD contour, long axis and every chord from the master masks)
+- `fig_trap_geometry_skeleton.py` (whole trap crop: phase, and the measured geometry of every cell on a separate panel)
 - `figure_logger.py`
 - `lineage_html_gallery_260517.py`
 
