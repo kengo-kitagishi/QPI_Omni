@@ -65,6 +65,111 @@ def kf_step_posonly_nm(z_nm: float, pos_nm: float, P: float,
     return float(pos_new), float(P_new), float(K)
 
 
+# ================================================================
+# Cell-free channel whitelist (opt-in, per session)
+# ================================================================
+# The averaged channel set is chosen per frame by score + 5 x MAD, and when
+# nothing survives production averages EVERY channel and adds cell_bias_nm.
+# On the 261004 cell run that fallback fires on 8.1% of frames. A whitelist of
+# traps a human confirmed are cell-free (channel_contact_sheet.py) fixes both
+# ends: it can never let a cell-bearing trap into the average, and it gives the
+# fallback a real measurement to anchor on -- those channels still agree to
+# 39 nm on exactly the frames where the constant would otherwise be applied.
+#
+# This is opt-in and per session on purpose: a whitelist can only be picked
+# after cells are loaded, and not every run wants it. With no file the rule
+# below is production's, bit for bit (replay_drift_selection.py check 1).
+#
+#   cfg["channel_whitelist_file"] absent / null -> <session dir>/channel_whitelist.json
+#                                                  if it exists, else off
+#   cfg["channel_whitelist_file"] = false       -> off, even if the file exists
+#   cfg["channel_whitelist_file"] = "<path>"    -> that file, which must exist
+#
+# The BeanShell re-execs this script every time point, so dropping the file in
+# or taking it away switches the mode from the next frame with no restart.
+
+_WHITELIST_CACHE = {}
+
+
+def _whitelist_path(cfg):
+    """Resolve the whitelist file, or None when the mode is off."""
+    spec = cfg.get("channel_whitelist_file", None)
+    if spec is False:
+        return None
+    if spec:
+        p = Path(spec)
+        if not p.exists():
+            raise FileNotFoundError(
+                "channel_whitelist_file points at %s, which does not exist. "
+                "Remove the key to turn the whitelist off." % p)
+        return p
+    state = cfg.get("state_file")
+    if not state:
+        return None
+    p = Path(state).parent / "channel_whitelist.json"
+    return p if p.exists() else None
+
+
+def load_channel_whitelist(cfg):
+    """{pos_label: set(channel numbers)} or None. Cached per (path, mtime)."""
+    p = _whitelist_path(cfg)
+    if p is None:
+        return None
+    key = (str(p), p.stat().st_mtime_ns)
+    hit = _WHITELIST_CACHE.get(key)
+    if hit is None:
+        payload = json.loads(p.read_text(encoding="utf-8"))
+        hit = {pos: set(int(c) for c in idx)
+               for pos, idx in payload.get("whitelist", {}).items()}
+        _WHITELIST_CACHE.clear()
+        _WHITELIST_CACHE[key] = hit
+        print("  [whitelist] %s: %d Pos, %d channels"
+              % (p.name, len(hit), sum(len(v) for v in hit.values())))
+    return hit
+
+
+def whitelist_mask(cfg, pos_label, valid_ch_indices, n_ch_raw):
+    """Whitelist as a bool mask over the channels that survived ECC, or None.
+
+    tx_list holds only the channels ECC produced a shift for, and
+    valid_ch_indices is their channel numbers in the same order, so the mask is
+    built through that. Do not reconstruct the mapping from the status string:
+    "pass1_failed" is not the only status that keeps a channel out of tx_list
+    ("tilt_bounds_ng" does too, on 89 channels of the 261004 run), so guessing
+    puts the whitelist on the wrong channels.
+    """
+    wl = load_channel_whitelist(cfg)
+    if not wl:
+        return None
+    chs = wl.get(pos_label)
+    if not chs:
+        return None
+    if len(valid_ch_indices) != n_ch_raw:
+        print("  [%s] [WARN] whitelist skipped this frame: %d measured channels "
+              "but %d channel indices" % (pos_label, n_ch_raw, len(valid_ch_indices)))
+        return None
+    mask = np.array([c in chs for c in valid_ch_indices], dtype=bool)
+    return mask if mask.any() else None
+
+
+def whitelist_used_idx(is_out, wl_mask, n_ch_raw):
+    """(used_idx, anchored). anchored=True means cell_bias_nm must NOT be added.
+
+    With wl_mask None this is production: the survivors, or every channel when
+    there are none.
+    """
+    survived = [i for i, o in enumerate(is_out) if not o]
+    if survived:
+        if wl_mask is not None:
+            kept = [i for i in survived if wl_mask[i]]
+            if kept:
+                return kept, False
+        return survived, False
+    if wl_mask is not None and wl_mask.any():
+        return [i for i, m in enumerate(wl_mask) if m], True
+    return list(range(n_ch_raw)), False
+
+
 from ecc_utils import (
     tilt_fit_crop, extract_rect_roi, ecc_align, get_aligner,
     mad, remove_outliers_mad,
@@ -901,22 +1006,21 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
 
     if n_ch_raw >= 3:
         is_out = remove_outliers_mad(tx_list, 5.0) | remove_outliers_mad(ty_list, 5.0) | low_corr_mask
-        used_idx = [i for i, o in enumerate(is_out) if not o]
-        if not used_idx:
-            used_idx = list(range(n_ch_raw))
     else:
         is_out = low_corr_mask
-        used_idx = [i for i, o in enumerate(is_out) if not o]
-        if not used_idx:
-            used_idx = list(range(n_ch_raw))
+    wl_mask = whitelist_mask(cfg, pos_label, valid_ch_indices, n_ch_raw)
+    used_idx, wl_anchored = whitelist_used_idx(is_out, wl_mask, n_ch_raw)
 
-    # Mark outliers in channel_details
-    detail_idx = 0
-    for cd in channel_details:
-        if cd.get("status") != "pass1_failed":
-            if detail_idx < len(is_out):
-                cd["outlier"] = bool(is_out[detail_idx])
-            detail_idx += 1
+    # Mark outliers in channel_details. is_out indexes the channels ECC
+    # produced a shift for; valid_ch_indices maps those back to channel
+    # numbers. This used to walk channel_details skipping "pass1_failed",
+    # which is not the only status that keeps a channel out of tx_list, so a
+    # "tilt_bounds_ng" channel shifted every later flag onto its neighbour.
+    _detail_by_ch = {cd["ch"]: cd for cd in channel_details}
+    for _k, _ch in enumerate(valid_ch_indices):
+        _cd = _detail_by_ch.get(_ch)
+        if _cd is not None and _k < len(is_out):
+            _cd["outlier"] = bool(is_out[_k])
 
     tx_arr = np.array(tx_list)
     ty_arr = np.array(ty_list)
@@ -933,7 +1037,8 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
     # It is a per-Pos mean correction only -- per channel the bias scatters by
     # ~73 nm and is not predictable from any available score.
     cell_bias_applied_nm = 0.0
-    if cell_bias_nm and len(used_idx) == n_ch_raw and bool(np.all(low_corr_mask)):
+    if (cell_bias_nm and not wl_anchored and len(used_idx) == n_ch_raw
+            and bool(np.all(low_corr_mask))):
         sign = -1.0 if _pos_index_from_label(pos_label) >= pos_split else 1.0
         cell_bias_applied_nm = sign * cell_bias_nm
         tx_avg += cell_bias_applied_nm / (pixel_scale_um * 1000.0)
@@ -1020,6 +1125,8 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
         "kf_update": kf_update,
         "channel_details": sorted(channel_details, key=lambda x: x["ch"]),
         "n_channels_used": len(used_idx),
+        "whitelist_n_ch": (-1 if wl_mask is None else int(wl_mask.sum())),
+        "whitelist_anchored": bool(wl_anchored),
         "cell_bias_applied_nm": cell_bias_applied_nm,
         "estimator": estimator,
         "n_channels_raw": n_ch_raw,
@@ -1606,6 +1713,12 @@ def main():
             "raw_path": r.get("raw_path"),
             "n_channels_used": r.get("n_channels_used", 0),
             "n_channels_raw": r.get("n_channels_raw", 0),
+            # -1 = the whitelist was not in use for this Pos-frame, so the
+            # number above came from production's rule. The data says which
+            # rule produced it instead of only the console saying so.
+            "whitelist_n_ch": r.get("whitelist_n_ch", -1),
+            "whitelist_anchored": r.get("whitelist_anchored", False),
+            "cell_bias_applied_nm": r.get("cell_bias_applied_nm", 0.0),
             "tx_avg_px": r.get("tx_avg_px", 0.0),
             "ty_avg_px": r.get("ty_avg_px", 0.0),
             "ecc_correlation": r["corr"],
