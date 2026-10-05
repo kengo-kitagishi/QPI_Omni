@@ -342,9 +342,40 @@ for (int i = 0; i < nPositions; i++) {
 // rounds after it pull back onto the 5-min grid as soon as one of them fits
 // inside its slot again. The old relative wait pushed the whole schedule later
 // by every overrun and never caught up.
-// On resume, the startT rounds already on disk are treated as if they had been
-// on grid, so the phase restarts here; only the spacing matters downstream.
-long gridT0 = System.currentTimeMillis() - (long)startT * INTERVAL_MS;
+// The anchor is the FIRST timepoint of the timelapse, not the moment this Run
+// started: it is written to grid_t0.txt beside the state file on a fresh start
+// and read back on resume, so stopping and resuming keeps timepoint t on the
+// same absolute 5-min grid it had from T=0 (frame number -> wall time stays
+// exact). Only a resume with no recorded anchor has to re-anchor, and it says so.
+String GRID_T0_FILE = new File(STATE_FILE).getParent() + "/grid_t0.txt";
+SimpleDateFormat gridFmt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+long gridT0 = 0;
+if (startT > 0 && new File(GRID_T0_FILE).exists()) {
+    BufferedReader gridReader = new BufferedReader(new FileReader(GRID_T0_FILE));
+    String gridLine = gridReader.readLine();
+    gridReader.close();
+    try {
+        gridT0 = Long.parseLong(gridLine.trim());
+    } catch (Exception e) {
+        print("[GRID] [WARN] " + GRID_T0_FILE + " is unreadable (" + gridLine + ")");
+        gridT0 = 0;
+    }
+}
+if (gridT0 > 0) {
+    print("[GRID] Anchor from " + GRID_T0_FILE + ": T=0 at " + gridFmt.format(new Date(gridT0))
+          + "  ->  T=" + startT + " due at "
+          + gridFmt.format(new Date(gridT0 + (long)startT * INTERVAL_MS)));
+} else {
+    if (startT > 0) {
+        print("[GRID] [WARN] No anchor recorded in " + GRID_T0_FILE + ". Re-anchoring the grid"
+              + " at this resume: the 5-min spacing continues, but its phase shifts once here.");
+    }
+    gridT0 = System.currentTimeMillis() - (long)startT * INTERVAL_MS;
+    PrintWriter gridWriter = new PrintWriter(new FileWriter(GRID_T0_FILE));
+    gridWriter.println(gridT0);
+    gridWriter.close();
+    print("[GRID] Anchor written to " + GRID_T0_FILE + ": T=0 at " + gridFmt.format(new Date(gridT0)));
+}
 
 for (int t = startT; t < N_TIMEPOINTS; t++) {
     long tpStart = System.currentTimeMillis();
