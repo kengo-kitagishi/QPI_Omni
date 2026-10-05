@@ -335,11 +335,25 @@ for (int i = 0; i < nPositions; i++) {
     }
 }
 
+// ---- Absolute timepoint grid ----
+// Timepoint t is due at gridT0 + t*INTERVAL_MS. The wait at the end of a round
+// targets the next slot on this grid, not "INTERVAL_MS from wherever this round
+// happened to start". A round that overruns therefore delays only itself: the
+// rounds after it pull back onto the 5-min grid as soon as one of them fits
+// inside its slot again. The old relative wait pushed the whole schedule later
+// by every overrun and never caught up.
+// On resume, the startT rounds already on disk are treated as if they had been
+// on grid, so the phase restarts here; only the spacing matters downstream.
+long gridT0 = System.currentTimeMillis() - (long)startT * INTERVAL_MS;
+
 for (int t = startT; t < N_TIMEPOINTS; t++) {
     long tpStart = System.currentTimeMillis();
+    long tpDue   = gridT0 + (long)t * INTERVAL_MS;
+    long lateMs  = tpStart - tpDue;
 
     print("\n-- Timepoint " + t + " / " + (N_TIMEPOINTS-1) + " ----------------");
-    print("  Start: " + new SimpleDateFormat("HH:mm:ss").format(new Date()));
+    print("  Start: " + new SimpleDateFormat("HH:mm:ss").format(new Date())
+          + (lateMs > 1000 ? "  (" + fmtD(lateMs/1000.0,1) + "s late vs grid)" : "  (on grid)"));
 
     // ---- Acquire all positions ----
     setChannelPh();
@@ -480,9 +494,10 @@ for (int t = startT; t < N_TIMEPOINTS; t++) {
         }
     }
 
-    // ---- Wait for next timepoint ----
+    // ---- Wait for the next slot on the absolute grid ----
     long elapsed    = System.currentTimeMillis() - tpStart;
-    long waitTimeMs = INTERVAL_MS - elapsed;
+    long nextDue    = gridT0 + (long)(t + 1) * INTERVAL_MS;
+    long waitTimeMs = nextDue - System.currentTimeMillis();
     if (waitTimeMs > 0) {
         print("  Waiting " + fmtD(waitTimeMs / 1000.0, 1) + "s until T=" + (t+1));
 
@@ -499,7 +514,10 @@ for (int t = startT; t < N_TIMEPOINTS; t++) {
             Thread.sleep(200);
         }
     } else {
-        print("  [WARN] Processing overran interval by " + (-waitTimeMs/1000) + "s");
+        print("  [WARN] Round took " + fmtD(elapsed/1000.0,1) + "s and ran "
+              + fmtD(-waitTimeMs/1000.0,1) + "s past the T=" + (t+1)
+              + " slot; starting it now. The grid itself is unchanged, so"
+              + " later rounds return to it once one fits inside its slot.");
     }
 
     print("  Timepoint " + t + " done (" + fmtD(elapsed/1000.0,1) + "s)");
