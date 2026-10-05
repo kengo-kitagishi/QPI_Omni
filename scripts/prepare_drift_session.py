@@ -34,27 +34,27 @@ from ecc_utils import get_aligner  # single source for the estimator score thres
 # ============================================================
 
 # .pos file consumed by Micro-Manager (the actual time-lapse position list)
-POSITIONS_FILE   = r"E:\260922\timelapse.pos"
+POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\261004\timelapse.pos"
 
 # Grid acquisition directory (small grid is fine)
-GRID_DIR         = r"D:\AquisitionData\Kitagishi\260922\grid_hologram_0p05um_2per_1"
+GRID_DIR         = r"D:\AquisitionData\Kitagishi\261004\2%_grid_hologram_1"
 GRID_Z_INDEX     = 0   # single-z grid: the point folder holds one plane, at the working focus
 
 # channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
 # No single path needed — compute_drift_online.py reads per-pos from grid_dir.
 
 # Session working directory (config + state files land here)
-SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session"
+SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session_261004"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"E:\260922\ph_zstack_1"
+SAVE_DIR         = r"E:\261004\ph_0per_1"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
 
 # Micro-Manager acquisition parameters
-N_TIMEPOINTS     = 300        # raw kept at 1.0 GB/cycle: 300 GB of the 497 GB free on E:
-INTERVAL_SEC     = 60         # deliberately shorter than a cycle: the run overruns and cycles back to back
+N_TIMEPOINTS     = 8928       # 31 days @ 300 s
+INTERVAL_SEC     = 300        # 5 min
 EXPOSURE_MS      = 60.0
 SETTLE_MS        = 150        # Stage settle time after move [ms]
 PFS_SETTLE_MS    = 0          # PFS continuously tracks; no extra settle needed
@@ -104,7 +104,7 @@ ORIGINAL_DIM         = 2048
 RECONSTRUCTED_DIM    = 511
 
 # Position-dependent crop (matches pipeline_full.py)
-POS_SPLIT    = 53
+POS_SPLIT    = 56
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 
@@ -137,7 +137,7 @@ CROP_SUB_OUTPUT_CROP_H = 240
 N_Z_SLICES            = 1
 Z_STEP_UM             = 0.4
 Z_START_UM            = 0.0   # single plane at the measured focus (grid z-index 5)
-CLEANUP_RAW_HOLOGRAMS = False  # keep the raw holograms (10.0 MB each, 1.0 GB per 100-Pos cycle)
+CLEANUP_RAW_HOLOGRAMS = True   # raw holograms deleted after processing; output_phase_raw is kept
 
 # Crop-subtract / raw-phase Phase B (online crop_sub_rawraw save)
 # Step values are nominal fallback only; grid_calibration_*.json (measured)
@@ -146,7 +146,7 @@ RAW_TL_Z_INDEX        = 0   # only one plane is captured, so it is index 0 (= gr
 CROP_SUB_X_STEP_UM    = 0.05
 CROP_SUB_Y_STEP_UM    = 0.05
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"E:\260922\online_crop_sub_zstack_1"
+CROP_SUB_ROOT         = r"D:\AquisitionData\Kitagishi\261004\online_crop_sub_0per_1"
 CROP_SUB_MAX_SECONDS  = 150.0
 # Per-channel background removal (grid_subtract.process_single_frame).
 #   "tilt"         linear fit on the aperture-end third, extrapolated across the window
