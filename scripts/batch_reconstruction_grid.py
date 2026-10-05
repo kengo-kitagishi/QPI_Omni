@@ -55,7 +55,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 # Configuration parameters
 # ============================================================
 # Must match GRID_DIR in pipeline_full.py
-GRID_DIR = r"E:\261004\2%_grid_hologram_1"
+GRID_DIR = r"E:\261004\0%_grid_hologram_1"
 
 # Base label used as BG (pipeline_full: GRID_BG_BASE_LABEL)
 BG_BASE_LABEL = "Pos0"
