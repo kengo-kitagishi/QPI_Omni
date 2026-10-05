@@ -526,29 +526,43 @@ for (int t = startT; t < N_TIMEPOINTS; t++) {
     }
 
     // ---- Wait for the next slot on the absolute grid ----
-    long elapsed    = System.currentTimeMillis() - tpStart;
-    long nextDue    = gridT0 + (long)(t + 1) * INTERVAL_MS;
-    long waitTimeMs = nextDue - System.currentTimeMillis();
-    if (waitTimeMs > 0) {
-        print("  Waiting " + fmtD(waitTimeMs / 1000.0, 1) + "s until T=" + (t+1));
+    long elapsed = System.currentTimeMillis() - tpStart;
+    if (elapsed > INTERVAL_MS) {
+        print("  [WARN] Round took " + fmtD(elapsed/1000.0,1) + "s, longer than the "
+              + (INTERVAL_MS/1000) + "s interval.");
+    }
+    // Only slots that are still ahead count. If this round ran past the nominal
+    // slot for t+1 -- an overrun, or a long stop before a resume -- advance by
+    // whole intervals to the next slot that has not passed. Chasing the missed
+    // slots back to back would fire several timepoints with no wait at all
+    // (a two-hour stop would burn 24 of them), which is worse than the gap it
+    // tries to close. Advancing by whole intervals keeps the phase, so every
+    // acquisition still lands on the T=0 grid.
+    long nowMs   = System.currentTimeMillis();
+    long nextDue = gridT0 + (long)(t + 1) * INTERVAL_MS;
+    if (nextDue <= nowMs) {
+        long skipped = (nowMs - nextDue) / INTERVAL_MS + 1;
+        nextDue += skipped * INTERVAL_MS;
+        print("  [WARN] The T=" + (t+1) + " slot had already passed; waiting for the slot "
+              + skipped + " interval(s) later instead of firing the missed ones back to"
+              + " back. Timepoint numbering stays unbroken, so from here on frame number"
+              + " and wall clock differ by that gap.");
+    }
+    long waitTimeMs = nextDue - nowMs;
+    print("  Waiting " + fmtD(waitTimeMs / 1000.0, 1) + "s until T=" + (t+1)
+          + " at " + new SimpleDateFormat("HH:mm:ss").format(new Date(nextDue)));
 
-        long waitUntil = System.currentTimeMillis() + waitTimeMs;
-        boolean shownCountdown = false;
-        while (System.currentTimeMillis() < waitUntil) {
-            long remaining = waitUntil - System.currentTimeMillis();
-            if (remaining < 10000 && !shownCountdown) {
-                shownCountdown = true;
-            }
-            if (shownCountdown && remaining % 1000 < 100) {
-                print("    " + (remaining / 1000 + 1) + "s remaining...");
-            }
-            Thread.sleep(200);
+    long waitUntil = nextDue;
+    boolean shownCountdown = false;
+    while (System.currentTimeMillis() < waitUntil) {
+        long remaining = waitUntil - System.currentTimeMillis();
+        if (remaining < 10000 && !shownCountdown) {
+            shownCountdown = true;
         }
-    } else {
-        print("  [WARN] Round took " + fmtD(elapsed/1000.0,1) + "s and ran "
-              + fmtD(-waitTimeMs/1000.0,1) + "s past the T=" + (t+1)
-              + " slot; starting it now. The grid itself is unchanged, so"
-              + " later rounds return to it once one fits inside its slot.");
+        if (shownCountdown && remaining % 1000 < 100) {
+            print("    " + (remaining / 1000 + 1) + "s remaining...");
+        }
+        Thread.sleep(200);
     }
 
     print("  Timepoint " + t + " done (" + fmtD(elapsed/1000.0,1) + "s)");
