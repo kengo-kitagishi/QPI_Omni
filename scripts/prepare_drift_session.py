@@ -44,10 +44,10 @@ GRID_Z_INDEX     = 0   # single-z grid: the point folder holds one plane, at the
 # No single path needed — compute_drift_online.py reads per-pos from grid_dir.
 
 # Session working directory (config + state files land here)
-SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session_261004"
+SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session_261004_cells"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"E:\261004\ph_0per_1"
+SAVE_DIR         = r"E:\261004\ph_1"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
@@ -146,7 +146,7 @@ RAW_TL_Z_INDEX        = 0   # only one plane is captured, so it is index 0 (= gr
 CROP_SUB_X_STEP_UM    = 0.05
 CROP_SUB_Y_STEP_UM    = 0.05
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"D:\AquisitionData\Kitagishi\261004\online_crop_sub_0per_1"
+CROP_SUB_ROOT         = r"E:\261004\online_crop_sub_1"
 CROP_SUB_MAX_SECONDS  = 150.0
 # Per-channel background removal (grid_subtract.process_single_frame).
 #   "tilt"         linear fit on the aperture-end third, extrapolated across the window
