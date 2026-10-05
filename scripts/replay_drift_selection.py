@@ -31,14 +31,22 @@ import drift_channel_whitelist as wl  # noqa: E402
 
 
 def replay(tab, ntp, thr, px_nm, cell_bias_nm, pos_split, use_whitelist,
-           window, warmup):
-    """Re-decide every frame. Returns per-(pos, tp) records."""
+           window, warmup, static=None):
+    """Re-decide every frame. Returns per-(pos, tp) records.
+
+    ``static`` is {pos_label: bool mask} picked by hand (channel_contact_sheet).
+    When given it replaces the rolling tracker: the mask is fixed, so there is
+    no warmup and frame 0 is already whitelisted. A Pos missing from it gets
+    whitelist=None, i.e. production's rule unchanged.
+    """
     out = []
     for p, d in tab.items():
         C, X, Y = d["C"], d["X"], d["Y"]
         nch = C.shape[1]
         tracker = wl.WhitelistTracker(nch, thr, window=window, warmup=warmup)
         mask = None
+        if static is not None:
+            mask = static.get(p)
         sign = -1.0 if int(p[3:]) >= pos_split else 1.0
         for t in range(ntp):
             fin = np.isfinite(C[t])
@@ -62,7 +70,7 @@ def replay(tab, ntp, thr, px_nm, cell_bias_nm, pos_split, use_whitelist,
             spread = (np.std(X[t][idx][keep], ddof=1) * px_nm
                       if keep.sum() >= 3 else np.nan)
             out.append((p, t, tx, int(keep.sum()), fallback, anchored, spread))
-            if use_whitelist:
+            if use_whitelist and static is None:
                 row = np.full(nch, np.nan)
                 row[idx] = C[t][idx]
                 mask = tracker.update(row)
@@ -75,6 +83,9 @@ def main():
     ap.add_argument("--config", default=None)
     ap.add_argument("--window", type=int, default=wl.WINDOW)
     ap.add_argument("--warmup", type=int, default=wl.WARMUP)
+    ap.add_argument("--whitelist", default=None,
+                    help="channel_whitelist.json picked by hand; replaces the rolling "
+                         "tracker with that fixed mask (no warmup)")
     args = ap.parse_args()
 
     log_path = Path(args.log)
@@ -91,6 +102,24 @@ def main():
           % (len(tab), ntp, thr, cell_bias_nm))
 
     # ---- check 1: whitelist off must reproduce the log exactly ----
+    static = None
+    if args.whitelist:
+        payload = json.loads(Path(args.whitelist).read_text(encoding="utf-8"))
+        static = {}
+        for pos, idx in payload.get("whitelist", {}).items():
+            if pos not in tab:
+                continue
+            m = np.zeros(tab[pos]["C"].shape[1], dtype=bool)
+            for i in idx:
+                if 0 <= i < len(m):
+                    m[i] = True
+            static[pos] = m
+        absent = sorted(set(tab) - set(static), key=lambda s: int(s[3:]))
+        print("  hand-picked whitelist: %d Pos, %d channels; %d Pos without one "
+              "(production rule unchanged): %s"
+              % (len(static), sum(int(m.sum()) for m in static.values()),
+                 len(absent), absent))
+
     base = replay(tab, ntp, thr, px_nm, cell_bias_nm, pos_split, False,
                   args.window, args.warmup)
     err = []
@@ -107,7 +136,7 @@ def main():
 
     # ---- check 2: whitelist on ----
     new = replay(tab, ntp, thr, px_nm, cell_bias_nm, pos_split, True,
-                 args.window, args.warmup)
+                 args.window, args.warmup, static=static)
     assert len(new) == len(base)
     d = np.array([(b[2] - a[2]) * px_nm for a, b in zip(base, new)])
     fb_old = np.array([a[4] for a in base])
@@ -116,8 +145,11 @@ def main():
     sp_anch = np.array([b[6] for b in new])[anc]
 
     n = len(d)
-    print("\n[2] whitelist ON (window %d frames, warmup %d, enter %.2f / leave %.2f)"
-          % (args.window, args.warmup, wl.ENTER, wl.LEAVE))
+    if static is not None:
+        print("\n[2] whitelist ON (hand-picked, fixed mask, no warmup)")
+    else:
+        print("\n[2] whitelist ON (window %d frames, warmup %d, enter %.2f / leave %.2f)"
+              % (args.window, args.warmup, wl.ENTER, wl.LEAVE))
     print("    frames replayed                     : %d" % n)
     print("    frames whose estimate changes       : %d (%.2f%%)"
           % ((np.abs(d) > 1e-9).sum(), 100 * (np.abs(d) > 1e-9).mean()))
