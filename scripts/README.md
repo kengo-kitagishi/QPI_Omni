@@ -33,6 +33,7 @@ production checkpoints in `models/`.
 - `_fig_mother_lineage_qc_260517.py`
 - `_fig_switch_frame_check_260517.py`
 - `_fig_volume_method_comparison_260517.py`
+- `figreq_260908_numbers.py`
 - `figure_logger.py`
 - `lineage_html_gallery_260517.py`
 

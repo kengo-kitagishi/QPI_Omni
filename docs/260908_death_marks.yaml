@@ -1,0 +1,56 @@
+# 260908_outside_quad の母細胞の死亡マーク（gallery_100h_v3 の round 2 注記から転記）。
+# 出典: qc_review/260908_outside_quad/gallery_100h_v3/annotations_round2.txt（feat/ecc-float-input, b4096f5）。
+# mark_h は新 HTML（クリックと軸の座標が一致する版）の時刻。kind は注記の言葉で分けた
+# （膨潤 → swelling、elongation → elongation、「死んでいて」だけ → unspecified）。自動判定はしていない。
+#
+# 図での扱い（docs/FIGURE_REQUIREMENTS_260908.md §1）:
+#   death cycle = mark_h を含むサイクル（mark_h 以前で最後に accepted になった分裂から後）。
+#   death cycle とその前の 4 サイクル（計 5 サイクル）以降を解析から外し、それより前は使う。
+#   death cycle より後の「分裂」は死んだ細胞の偽イベントなので必ず捨てる。
+#
+# 解析対象外の系列にもともと付いていた死亡（channel_review.csv で included=False）は下に記録だけ残す:
+#   Pos30 ch01（最初から死亡）, Pos53 ch03（最初から死亡）, Pos86 ch04（最初から死亡）,
+#   Pos81 ch03（膨潤しながら分裂してしばらく生きている。判断保留で対象外）。
+dataset: "260908_outside_quad"
+source_package: "qc_review/260908_outside_quad/gallery_100h_v3"
+source_commit: "b4096f5"
+deaths:
+  - {pos: Pos2,  ch: ch04, mark_h: 18.0, kind: swelling,    note: "ここで膨潤死しています最後のサイクルです。"}
+  - {pos: Pos2,  ch: ch09, mark_h: 17.2, kind: swelling,    note: "ここで膨潤死しています。さいごのサイクルです。"}
+  - {pos: Pos3,  ch: ch05, mark_h: 99.0, kind: swelling,    note: "ここで膨潤死していて最後のサイクルです。"}
+  - {pos: Pos4,  ch: ch09, mark_h: 99.3, kind: swelling,    note: "ここで膨潤死しています。最後のサイクルです。"}
+  - {pos: Pos8,  ch: ch09, mark_h: 35.6, kind: swelling,    note: "ここで膨潤死しています。最後のサイクルです。"}
+  - {pos: Pos10, ch: ch02, mark_h: 62.2, kind: swelling,    note: "ここで膨潤死しています。outleirです。（round 1 では 71.2 h に「このさいくるがさいごのさいくる」。要確認）"}
+  - {pos: Pos10, ch: ch03, mark_h: 79.7, kind: swelling,    note: "ここで膨潤死しています。最後のサイクルです。"}
+  - {pos: Pos12, ch: ch03, mark_h: 49.1, kind: swelling,    note: "ここで膨潤死しています。最後のサイクルです。"}
+  - {pos: Pos12, ch: ch10, mark_h: 31.3, kind: swelling,    note: "ここで膨潤死しています最後のサイクルです。"}
+  - {pos: Pos56, ch: ch10, mark_h: 58.7, kind: swelling,    note: "ここでぼうじゅんしていてしんでいます最後のサイクルです。"}
+  - {pos: Pos59, ch: ch09, mark_h: 70.8, kind: swelling,    note: "ここで膨潤死していて最後のサイクルです。"}
+  - {pos: Pos66, ch: ch09, mark_h: 17.6, kind: swelling,    note: "ここでしんでいる膨潤死最後のサイクル"}
+  - {pos: Pos70, ch: ch07, mark_h: 58.7, kind: unspecified, note: "ここで死んでいて最後のサイクルです。"}
+  - {pos: Pos71, ch: ch05, mark_h: 58.6, kind: unspecified, note: "ここで死んでいて最後のサイクルです"}
+  - {pos: Pos74, ch: ch08, mark_h: 14.6, kind: unspecified, note: "ここで死んでいて最後のサイクルです"}
+  - {pos: Pos75, ch: ch01, mark_h: 16.3, kind: unspecified, note: "ここで死んでいて最後のサイクルです。"}
+  - {pos: Pos75, ch: ch08, mark_h: 76.1, kind: swelling,    note: "ここで膨潤死していて最後のサイクルです。"}
+  - {pos: Pos76, ch: ch08, mark_h: 91.4, kind: swelling,    note: "ここで膨潤死しています。最後のサイクルです。"}
+  - {pos: Pos77, ch: ch08, mark_h: 4.6,  kind: swelling,    note: "ここで膨潤していて最後のサイクル。なんかさいしょから死んでいるな。"}
+  - {pos: Pos80, ch: ch00, mark_h: 81.5, kind: swelling,    note: "ここで膨潤していて最後のサイクル"}
+  - {pos: Pos81, ch: ch09, mark_h: 25.2, kind: swelling,    note: "ここで膨潤していて最後のサイクルです。"}
+  - {pos: Pos82, ch: ch00, mark_h: 20.6, kind: swelling,    note: "ここでぼうじゅんしていて最後のサイクルです。"}
+  - {pos: Pos82, ch: ch01, mark_h: 70.0, kind: swelling,    note: "ここで膨潤していて最後のサイクルです。"}
+  - {pos: Pos82, ch: ch03, mark_h: 87.2, kind: swelling,    note: "ここで膨潤していて最後のサイクルです。"}
+  - {pos: Pos84, ch: ch01, mark_h: 95.7, kind: elongation,  note: "elongationして最後のサイクルです（round 1: elongation死）。mark の後に 97.25 h の分裂が1つある。要確認"}
+  - {pos: Pos84, ch: ch03, mark_h: 14.9, kind: swelling,    note: "ここで膨潤し死していて最後のサイクルです。"}
+  - {pos: Pos85, ch: ch00, mark_h: 41.4, kind: swelling,    note: "ここで膨潤死していて最後のサイクルです"}
+  - {pos: Pos89, ch: ch01, mark_h: 68.6, kind: swelling,    note: "ここで膨潤死していて最後のサイクルです"}
+  - {pos: Pos89, ch: ch02, mark_h: 98.5, kind: swelling,    note: "ここでぼうじゅんししていて最後のサイクルです。"}
+  - {pos: Pos89, ch: ch04, mark_h: 92.6, kind: swelling,    note: "ここで膨潤死していて最後のサイクルです"}
+  - {pos: Pos90, ch: ch09, mark_h: 56.6, kind: swelling,    note: "ここで膨潤死していて最後のサイクルです"}
+  - {pos: Pos93, ch: ch03, mark_h: 11.9, kind: swelling,    note: "ここでぼうじゅんししていてさいごのさいくるです"}
+  - {pos: Pos93, ch: ch06, mark_h: 25.9, kind: swelling,    note: "ここで膨潤死していて最後のサイクルです"}
+  - {pos: Pos95, ch: ch00, mark_h: 61.2, kind: swelling,    note: "ここで膨潤死していてさいごのcycleです。（17.2 h と 17.5 h の2点は outlier）"}
+  - {pos: Pos95, ch: ch04, mark_h: 93.1, kind: swelling,    note: "ここで膨潤死しています。最後のサイクルです"}
+  - {pos: Pos96, ch: ch01, mark_h: 40.0, kind: elongation,  note: "elongationしていてさいごのcycleです"}
+  - {pos: Pos96, ch: ch02, mark_h: 22.2, kind: swelling,    note: "ここで膨潤死 しています"}
+  - {pos: Pos97, ch: ch03, mark_h: 6.6,  kind: swelling,    note: "ここで膨潤死しています"}
+  - {pos: Pos98, ch: ch04, mark_h: 38.0, kind: swelling,    note: "ここが膨潤死しています"}
