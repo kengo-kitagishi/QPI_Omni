@@ -1,0 +1,109 @@
+{
+  "dataset": "260908_outside_quad",
+  "status": "review_only",
+  "fate": "manual; not inferred",
+  "source_csv": "E:\\260908_outside_quad\\seg\\_lineage_consolidated\\all_cells_lineage_data3D.csv.gz",
+  "source_sha256": "3b83dc5c2823efd02f3b7ca92ae20c9ba53bc08df1ea45b77e3c4ecec0a15d4e",
+  "source_qc_sha256": "b78de8fe7c61ade0a79462e61dd084582f402a72b19f278f83b45c735f37b8c0",
+  "choices_sha256": "c9edc3365604c7199814d879df0efc98c8e6052f5e36ba4d9c5f8611aca90828",
+  "qc_code_sha256": "8213cdf171e7d529aafe3576210f9ed693aaa95f198dcf8fddf0eb3c5e2e35a4",
+  "end_hour": 100.0,
+  "end_frame": 1202,
+  "n_channels": 113,
+  "excluded_channels": [
+    {
+      "pos": "Pos1",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos4",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos7",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos30",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos53",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos54",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos58",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos61",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos81",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos86",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos87",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos91",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos94",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos94",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos94",
+      "ch": "ch10"
+    }
+  ],
+  "missing_channels": [
+    "Pos6 ch00",
+    "Pos6 ch01"
+  ],
+  "cutoff": {
+    "Pos85 ch07": "time_h < 90"
+  },
+  "outlier_rule": "positive transient 1-9 frames; >=20% and 4 robust SD; >=2/3 mass-area-EFD; extrapolated flanks agree within 25%; >=60% of block",
+  "division_rule": "all candidates tested; nearest <=3 good points per side within 8 frames; >=2 each; mass ratio .25-.78, volume .25-.85, abs difference <=.25; persistent missing steps added; require local mass/volume edge for tracker events, gap <=8 frames; deduplicate identical good-point brackets; scan pre plateau within8 frames of last good pre point",
+  "source_data_note": "original physical columns preserved; review_valid is the mask used for fits",
+  "added_outlier_points": 256,
+  "added_divisions": 129,
+  "removed_divisions": 82,
+  "extra_exclusions": [
+    "Pos7/ch10",
+    "Pos4/ch10",
+    "Pos61/ch03",
+    "Pos81/ch03"
+  ],
+  "annotations_sha256": "1f97cef73ea9c367844b84607ab6206f0e62c90e244753ce097b9385f4921e9f",
+  "cycle_fits": 3903,
+  "mother_rows": 122215,
+  "verification": "PASS",
+  "tests": "9 synthetic behavior regressions passed",
+  "changes_since_v2": {},
+  "outlier_flags_vs_v2": "unchanged on all retained channels",
+  "newly_excluded_this_round": [
+    "Pos4/ch10",
+    "Pos61/ch03",
+    "Pos81/ch03"
+  ],
+  "builder_sha256": "45972928d3604095d431ac0f76aae47fff712d5f83efc3562561574384c77e6a",
+  "renderer_sha256": "d056366f5ce750151fba93fabc8f555f3b0806c41b72c1d64a74138419346a61",
+  "html_sha256": "586860be520cb56a361eb3ef7e77cb4b7c324e4b8511a43c8d62c902138d58e9"
+}
