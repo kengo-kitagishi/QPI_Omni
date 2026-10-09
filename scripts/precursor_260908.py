@@ -7,6 +7,11 @@ docs/260908_death_marks.yaml。結果の読み方は docs/PRECURSOR_260908.md。
 基準時刻（anchor）= 死亡系列の最後の分裂（mark_h 以前で最後の accepted 分裂。figreq_260908_numbers.load の
 death_cycle_start_frame と同じ）。mark の位置は death cycle の中でばらつく（anchor から 0.4–8.5 h 後）ので、
 客観的に決まる最後の分裂にそろえる。lag −1 = 最後の完結サイクル（anchor で終わるサイクル）。
+--anchor arrest にすると、マークを使わずに「その後 --arrest-h（既定 6 h。生存系列の分裂間隔の最大は 4.92 h）分裂しない最初の分裂」を
+anchor にし、それがある系列だけを死亡系列とする（マークはあるが記録の終わりまでに 6 h 無い系列は、どちらの群にも入れない）。
+--anchor first_long は arrest の anchor から、直前のサイクルが生存系列の分裂間隔の --long-q 分位（既定 0.99 = 3.04 h）より
+長いあいだ遡り、最初に長くなったサイクルの始まりを anchor にする（分裂が遅れ始める点）。死亡系列 39 のうち 25 は最後の完結サイクルが
+これより長いので、その 25 は 1 サイクル前にずれる。この anchor より前のサイクルは長さが正常なので、そこでの差は「分裂が遅れる前の変化」。
 
 比較の相手（matched control）: 死亡系列ごとに、同じ Pos 群（Pos1–17 / Pos21 以降。密度・体積に Pos の偏りがある）で、
 死亡マークが無く anchor の 2 h 後まで追えた系列を集め、anchor に一番近い分裂（±1.5 h）を仮の anchor にする。
@@ -180,6 +185,15 @@ def channel_adjust(c: pd.DataFrame, fr: pd.DataFrame, surv_mids: set):
     for col, _ in HOURLY:
         fr[col + "_n"] = fr[col + "_n"] / fr.chn.map(fs.groupby("chn")[col + "_n"].median())
     return c, fr
+
+
+def arrest_anchor(divs: np.ndarray, last_valid: int, arrest_h: float):
+    """その後 arrest_h 以上分裂しない最初の分裂の frame。記録の終わりまでに arrest_h 無ければ None。"""
+    for i, x in enumerate(divs):
+        nxt = divs[i + 1] if i + 1 < len(divs) else last_valid
+        if (nxt - x) * FRAME_H > arrest_h:
+            return int(x)
+    return None
 
 
 # ---------------------------------------------------------------- matched comparison
@@ -402,6 +416,11 @@ def main():
     ap.add_argument("--no-fig", action="store_true")
     ap.add_argument("--no-channel-adjust", action="store_true", help="channel 番号の偏りを除かない（比較用）")
     ap.add_argument("--replot", action="store_true", help="計算せず <outdir>/state.pkl から図だけ描き直す")
+    ap.add_argument("--anchor", choices=["mark", "arrest", "first_long"], default="mark",
+                    help="mark: マーク以前で最後の分裂（既定）。arrest: マークを使わず、その後 --arrest-h 分裂しない最初の分裂。"
+                         "first_long: arrest から遡って、分裂間隔が長くなり始めたサイクルの始まり")
+    ap.add_argument("--arrest-h", type=float, default=6.0)
+    ap.add_argument("--long-q", type=float, default=0.99, help="first_long の閾値にする生存系列の分裂間隔の分位")
     args = ap.parse_args()
     warnings.simplefilter("ignore", RuntimeWarning)  # 全部 NaN の列の nanmean / nanmedian
     rng = np.random.default_rng(args.seed)
@@ -427,10 +446,65 @@ def main():
     moth["dead"] = moth.mid.isin(deaths.mid)
     moth["posgrp"] = np.where(moth.pos.str[3:].astype(int) <= POS_SPLIT, "P1-17", "P21+")
     moth["last_valid_frame"] = moth.mid.map(m[m.review_valid].assign(mid=lambda x: x.pos + "_" + x.ch).groupby("mid").frame.max())
+    moth["marked"] = moth.dead
+    marks = deaths.copy()
+
+    # マークを使わない最後の分裂（分裂が arrest_h 以上止まる直前の分裂）とマークの比較
+    divs = acc.assign(mid=acc.pos + "_" + acc.ch).groupby("mid").frame.apply(lambda f: np.sort(f.to_numpy()))
+    arr = {mid: arrest_anchor(divs.get(mid, np.array([], int)), lv, args.arrest_h)
+           for mid, lv in zip(moth.mid, moth.last_valid_frame)}
+    cmp_ = []
+    for r in marks.itertuples():
+        a = arr[r.mid]
+        f = divs[r.mid]
+        dc = None if a is None else int(np.sign(a - r.anchor) * ((f > min(a, r.anchor)) & (f <= max(a, r.anchor))).sum())
+        cmp_.append(dict(mid=r.mid, mark_h=r.mark_h, last_div_mark_h=round(r.anchor_h, 2),
+                         last_div_arrest_h=None if a is None else round((a - 2) * FRAME_H, 2), diff_cycles=dc))
+    cmp_ = pd.DataFrame(cmp_)
+    cmp_.to_csv(args.outdir / "last_division_mark_vs_arrest.csv", index=False)
+    un = [mid for mid in moth.mid[~moth.marked] if arr[mid] is not None]
+    print(f"## 最後の分裂: マークから決めたもの と 分裂が {args.arrest_h:g} h 止まる直前の分裂（マークを使わない）")
+    print(f"一致 {int((cmp_.diff_cycles == 0).sum())}、ずれ {int((cmp_.diff_cycles.fillna(0) != 0).sum())}、"
+          f"記録の終わりまでに {args.arrest_h:g} h 無く判定できない {int(cmp_.diff_cycles.isna().sum())}。"
+          f"マークの無い系列で分裂が止まったもの {len(un)} {un}")
+    print(cmp_[cmp_.diff_cycles != 0].to_string(index=False))
+    # 分裂が遅れ始めた点: arrest の anchor から、直前のサイクルが生存系列の分裂間隔の long_q 分位より長いあいだ遡る
+    sv_iv = np.concatenate([np.diff(divs[mid]) * FRAME_H for mid in moth.mid[~moth.marked] if mid in divs.index])
+    long_h = float(np.quantile(sv_iv, args.long_q))
+    first_long = {}
+    for mid, a in arr.items():
+        if a is None:
+            continue
+        f = divs[mid]
+        i = int(np.searchsorted(f, a))
+        while i >= 1 and (f[i] - f[i - 1]) * FRAME_H > long_h:
+            i -= 1
+        first_long[mid] = int(f[i])
+    moved = [mid for mid in first_long if first_long[mid] != arr[mid] and mid in set(marks.mid)]
+    print(f"分裂が遅れ始めた点: 生存系列の分裂間隔の {args.long_q:g} 分位 = {long_h:.2f} h。"
+          f"最後の完結サイクルがこれより長く、1 サイクル前にずれる系列 {len(moved)}")
+    if not args.no_fig:
+        fig_last_division_check(args, m, marks, arr, first_long, divs, long_h)
+    if args.anchor == "first_long":
+        arr = dict(arr, **first_long)
+    if args.anchor in ("arrest", "first_long"):
+        rows = []
+        for mid in moth.mid:
+            if arr[mid] is None:
+                continue
+            base = marks[marks.mid == mid]
+            r = base.iloc[0].to_dict() if len(base) else dict(pos=mid.split("_")[0], ch=mid.split("_")[1], mid=mid,
+                                                              mark_h=np.nan, kind="unmarked", note="")
+            r["anchor"] = arr[mid]
+            rows.append(r)
+        deaths = pd.DataFrame(rows)
+        deaths["posgrp"] = np.where(deaths.pos.str[3:].astype(int) <= POS_SPLIT, "P1-17", "P21+")
+        deaths["anchor_h"] = (deaths.anchor - 2) * FRAME_H
+        moth["dead"] = moth.marked | moth.mid.isin(deaths.mid)   # マークだけで判定できない系列は control にも入れない
 
     c = cycle_features(cyc, m, ev)
     c["rel"] = rel_index(c, deaths.rename(columns={"anchor": "death_cycle_start_frame"}))
-    c["dead"] = c.mid.isin(deaths.mid)
+    c["dead"] = c.mid.isin(moth.mid[moth.dead])
     c.to_csv(args.outdir / "cycle_features.csv", index=False)
     fr = frame_features(m, acc, set(moth.mid[~moth.dead]))
     sv = c[~c.dead].assign(chn=lambda x: x.ch.str[2:].astype(int)).groupby(["chn", "mid"])[["w_mean", "rho_mean", "interval_h"]]
@@ -443,7 +517,8 @@ def main():
     match = Matcher(c, fr, moth, acc)
 
     print("## 0. 対象")
-    print(f"母細胞 {len(moth)}（死亡 {int(moth.dead.sum())}、生存 {int((~moth.dead).sum())}）。"
+    print(f"anchor = {args.anchor}。母細胞 {len(moth)}（解析する死亡系列 {len(deaths)}、マーク {int(moth.marked.sum())}、"
+          f"control にする生存系列 {int((~moth.dead).sum())}）。"
           f"anchor から mark までの時間: 中央値 {np.median(deaths.mark_h - deaths.anchor_h):.1f} h "
           f"（{(deaths.mark_h - deaths.anchor_h).min():.1f}–{(deaths.mark_h - deaths.anchor_h).max():.1f} h）")
 
@@ -494,8 +569,8 @@ def main():
     ndiv = acc.assign(mid=acc.pos + "_" + acc.ch).groupby("mid").frame.apply(np.array)
     T, E, G = [], [], []
     for mo in moth.itertuples():
-        if mo.dead:
-            r = deaths[deaths.mid == mo.mid].iloc[0]
+        if mo.marked:
+            r = marks[marks.mid == mo.mid].iloc[0]
             T.append(r.mark_h), E.append(1), G.append(int((ndiv[mo.mid] <= r.anchor).sum()))
         else:
             T.append((mo.last_valid_frame - 2) * FRAME_H), E.append(0), G.append(int((ndiv[mo.mid] <= mo.last_valid_frame).sum()))
@@ -540,6 +615,54 @@ def main():
     make_figures(args, **state)
 
 
+def fig_last_division_check(args, m, marks, arr, first_long, divs, long_h):
+    """死亡系列ごとに、マーク・マークから決めた最後の分裂・マークを使わない最後の分裂・分裂が遅れ始めた点を時系列に重ねる。"""
+    import matplotlib.pyplot as plt
+    c_s, c_d = _style()
+    MM = 1 / 25.4
+    v = m[m.review_valid].assign(mid=lambda x: x.pos + "_" + x.ch)
+    mk = marks.sort_values("mark_h").reset_index(drop=True)
+    nr = int(np.ceil(len(mk) / 5))
+    fig, axs = plt.subplots(nr, 5, figsize=(183 * MM, 30 * MM * nr))
+    axs = axs.ravel()
+    for i, r in enumerate(mk.itertuples()):
+        ax = axs[i]
+        g = v[v.mid == r.mid]
+        t0 = r.anchor_h
+        sel = (g.t > t0 - 14) & (g.t < t0 + 10)
+        ax.plot(g.t[sel] - t0, g.phase_mass[sel], ".", color="k", ms=0.6, rasterized=True)
+        ax2 = ax.twinx()
+        ax2.plot(g.t[sel] - t0, g.short_axis_um[sel], ".", color="#009E73", ms=0.6, rasterized=True)
+        ax2.set_ylim(3.3, 5.0)
+        ax2.spines["right"].set_visible(True)
+        ax2.tick_params(labelsize=4)
+        f = (divs[r.mid] - 2) * FRAME_H - t0
+        for x in f[(f > -14) & (f < 10)]:
+            ax.axvline(x, color="0.8", lw=0.4)
+        ax.axvline(0, color=c_d, lw=1.0)
+        if arr.get(r.mid) is not None:
+            ax.axvline((arr[r.mid] - 2) * FRAME_H - t0, color="k", lw=0.8, ls=":")
+        if r.mid in first_long and first_long[r.mid] != arr.get(r.mid):
+            ax.axvline((first_long[r.mid] - 2) * FRAME_H - t0, color="#E69F00", lw=0.8, ls="--")
+        ax.axvline(r.mark_h - t0, color="#CC79A7", lw=0.8)
+        ax.set_title(f"{r.mid.replace('_', ' ')} ({r.kind})", fontsize=5, pad=1)
+        ax.tick_params(labelsize=4)
+    for ax in axs[len(mk):]:
+        ax.axis("off")
+    fig.supxlabel("time from the last division (from the mark) [h]", fontsize=6)
+    fig.supylabel("dry mass [pg] (black); width [µm] (green, right axis)", fontsize=6)
+    fig.tight_layout()
+    cap = ("Where the last division sits in each dying lineage. Black dots, dry mass; green dots, width (short axis of the yellow "
+           "contour, right axis); grey lines, accepted divisions. Vermilion, last division taken from the death mark (last accepted "
+           "division before it; time 0); reddish purple, the death mark; black dotted, last division found without the mark (the first "
+           f"division followed by no division for {args.arrest_h:g} h; missing when the record ends sooner); orange dashed, start of the "
+           f"first cycle longer than the surviving lineages' {args.long_q:g} quantile of division intervals ({long_h:.2f} h) in the "
+           "terminal stretch (shown only where it differs). Lineages ordered by the time of the mark. "
+           f"n = {len(mk)} marked lineages. S. pombe mother cells in YE, mother machine, 5 min/frame (260908_outside_quad, gallery_100h_v3).")
+    _save(fig, "fig260908_last_division_check", cap, {}, dict(arrest_h=args.arrest_h, long_q=args.long_q), args.outdir)
+    plt.close(fig)
+
+
 def make_figures(args, c, fr, deaths, moth, acc, res, rh, fwd, back, lam, lamg):
     import matplotlib.pyplot as plt
     c_s, c_d = _style()
@@ -549,7 +672,7 @@ def make_figures(args, c, fr, deaths, moth, acc, res, rh, fwd, back, lam, lamg):
             "docs/FIGURE_REQUIREMENTS_260908.md §6.")
     params = dict(pkg=str(args.pkg), deaths=str(args.deaths), boot=args.boot, null=args.null, seed=args.seed,
                   pos_split=POS_SPLIT, K=K)
-    nd, ns = int(moth.dead.sum()), int((~moth.dead).sum())
+    nd, ns = len(deaths), int((~moth.dead).sum())
     adj = ("" if args.no_channel_adjust else
            " Cycle values are adjusted for channel index (ch00–ch11; surviving lineages are 0.2 µm wider in ch00–02 than in ch10–11): "
            "the surviving lineages' median for that channel index is subtracted and their overall median added back; frame values are "

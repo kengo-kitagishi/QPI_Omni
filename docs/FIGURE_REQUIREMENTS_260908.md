@@ -143,6 +143,7 @@ robust z（(x − 中央値)/(IQR/1.349)）にした。表は死亡系列の中�
 | fig260908:generation_traces | 生存系列と絶滅系列は、世代ごとの値で違うのか（開始でそろえる／死でそろえる） | 新 | 高 | パッケージ |
 | fig260908:precursor_screen | どの量が、死ぬ何サイクル・何時間前から生存系列と区別できるのか | 新 | 高 | パッケージ |
 | fig260908:around_last_division | 最後の分裂の前後で、1 本ずつの系列はどう変わるのか | 新 | 中 | パッケージ |
+| fig260908:last_division_check | 「最後の分裂」は目視のマークに頼らずに決まるのか | 新 | 中 | パッケージ |
 
 死んだ細胞そのものの図（修論 `plot/figures.md` の fig:spontaneous_death）は、第2版で survival 以下の 4 枚として足した（§4 の最後）。
 
@@ -350,13 +351,20 @@ Fig 2（YE 34 °C。B: 生存・絶滅系列の generation time の推移、C: �
 - 今の値: 最後の分裂の 0.5 h 後で幅 4.05 µm・密度 0.246・d ln M/dt 0.21、8 h 後で 4.48 µm・0.285・0.07（生存系列は 3.78 µm・0.217・0.36）。
 - 決めること: 本文に出すなら 3 行（幅・密度・d ln M/dt）に絞る。
 
+### fig260908:last_division_check — 最後の分裂の決め方の確認［新・中］
+- 問い: 「最後の分裂」は目視のマークに頼らずに決まるのか。死に始めはいつか。
+- 置く場所（候補）: 付録。precursor_screen を本文に出すなら必須。
+- パネル: マークのある 39 系列ごとに、乾燥質量と幅（右軸）の時系列（最後の分裂の −14〜+10 h）。accepted の分裂（灰）、マークから決めた最後の分裂（朱）、マークを使わない最後の分裂（その後 6 h 分裂しない最初の分裂、黒点線）、分裂が遅れ始めたサイクルの始まり（橙破線）、マーク。
+- 今の値: マークを使わない規則と一致 33、1 サイクルずれ 1（Pos84 ch03、溶解を分裂と数えた）、記録の終わりで判定できない 5。マークの無い 74 系列で分裂が 6 h 止まったものは 0。最後の完結サイクルが生存系列の 99% 分位（3.04 h）より長い系列 25（`docs/PRECURSOR_260908.md` §2b）。
+- 決めること: 前兆の図の基準をマークにするか、マークを使わない規則（`--anchor arrest`、34 系列）にするか。
+
 ---
 
 ## 5. 並行して作れる組
 
 | 組 | 条件 | 図 |
 |---|---|---|
-| 1 | パッケージだけで今すぐ作れる | dataset、record、division_qc、predeath_window、steady_state、population、growth_law、cycle_profile (b)–(f)、size_control、return_maps、position_bias (a)–(d)、mother_individuality、replicative_age、survival、generation_traces、precursor_screen、around_last_division（この 4 枚は作成済み） |
+| 1 | パッケージだけで今すぐ作れる | dataset、record、division_qc、predeath_window、steady_state、population、growth_law、cycle_profile (b)–(f)、size_control、return_maps、position_bias (a)–(d)、mother_individuality、replicative_age、survival、generation_traces、precursor_screen、around_last_division、last_division_check（この 5 枚は作成済み） |
 | 2 | 顕微鏡 PC の位相像と mask が要る | representative、cycle_profile (a)、density_floor の空チャネル側 |
 | 3 | 他の解析結果が要る | bg_method（260908 tilt の master）、medium_comparison（260517 の master）、position_bias の grid バッチ境界（recon のログ） |
 
@@ -366,7 +374,7 @@ steady_state で解析窓（0–100 h か 0–90 h）を決めてから、他の
 ## 6. 決めること（まとめ）
 
 1. 死亡系列の除外は「death cycle とその前 4 サイクル（計 5）」でよいか（§1。この版はそれで数えた。「death cycle の前 5 サイクル＋death cycle（計 6）」なら 3,713 サイクル・105 母細胞）。
-2. Pos10 ch02 と Pos84 ch01 の death cycle（fig260908:predeath_window）。
+2. Pos10 ch02 と Pos84 ch01 の death cycle（fig260908:predeath_window）。第2版: Pos10 ch02 は 58.7 h の後に分裂が無いので round 2 が正しい。Pos84 ch01 は記録の終わりまでに足りず、データからは決められない（`docs/PRECURSOR_260908.md` §2b）。
 3. 解析窓を 0–100 h にするか 0–90 h にするか（fig260908:steady_state。汚染の影響）。
 4. Pos による密度の差（Pos1–17 と Pos21 以降、または pos_split の 52/53）を補正するか、群を分けて描くか（fig260908:position_bias）。
 5. キャプションの条件: 株、温度。
