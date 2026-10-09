@@ -7,6 +7,7 @@
 図の体裁は `docs/FIGURE_SPEC.md` と CLAUDE.md の3層インフラ（`paper.mplstyle`・`qpi_colors`・`qpi_plots`）に従う。
 
 2026-10-09 第1版。本文中の数値は `scripts/figreq_260908_numbers.py` で出し直せる（§7）。
+同日 第2版: 死亡の前兆の図 4 枚（fig260908:survival・generation_traces・precursor_screen・around_last_division）を足した。解析の中身は `docs/PRECURSOR_260908.md`、数値と図は `scripts/precursor_260908.py`。
 
 ---
 
@@ -67,8 +68,10 @@ robust z（(x − 中央値)/(IQR/1.349)）にした。表は死亡系列の中�
   5 つの量（間隔・倍加時間・出生時の質量・出生時の体積・密度）のどれかが |z| > 2 になる母細胞の割合は、2 サイクル前 70%、直前 82%。
 - 3 サイクル前は倍加時間の z が 0.40 とわずかに高いが、|z| > 2 の割合（31%）は 4〜10 サイクル前（13〜43%）の範囲に入る。
   **5 サイクル外せば、ずれの出る 2 サイクルに 2 サイクルの余裕がある。**
+- 第2版の追記: 時刻と Pos と channel をそろえた生存系列と比べ、偶然の範囲（ラベルを入れ替えた null）で較正し直すと、伸長速度 dL/dt と d ln M/dt は **3 サイクル前（最後の分裂の約 8 h 前）から出始める**（`docs/PRECURSOR_260908.md` §3）。B4 はサイクル −4 まで外すのでそれでも足りるが、余裕は 2 サイクルでなく 1 サイクル。
 - 幅だけは 10 サイクル前から z が +0.2〜0.6 で、5 サイクル外しても消えない。死ぬ前の変化ではなく、死ぬ系列がもともと少し太い可能性がある
   （robust SD は約 0.12 µm なので 0.03〜0.08 µm）。Pos の偏り（fig260908:position_bias）を除いてから確かめる。
+  第2版の追記: これは channel 番号の偏りでほぼ説明できる。生存系列でも幅は ch00–02 で 3.88 µm、ch10–11 で 3.68–3.70 µm と違い、死亡は ch00–03 に多い（39 のうち 18）。channel を補正すると、4 サイクル前より古いところの幅の AUC は 0.47–0.61 でほとんど偶然の範囲に入る。
 - elongation の Pos84 ch01 は 1 つ前のサイクルで分裂時の質量 67.7 pg（B4 の分裂時の中央値は 31.0 pg）で、ずれが早く出る例。
 
 ### 生き残った細胞だけで足りるか
@@ -136,8 +139,12 @@ robust z（(x − 中央値)/(IQR/1.349)）にした。表は死亡系列の中�
 | fig260908:bg_method | 背景処理（端の直線 → チャネル外の2次曲面）で値はどれだけ変わるのか | 新 | 中 | 260908（tilt）の master |
 | fig260908:medium_comparison | YE と EMM 2% で何が違うのか | 新 | 低 | 260517 の master |
 | fig260908:representative | 実際の像はどう見えるのか | 新 | 中 | E: の位相像と mask |
+| fig260908:survival | 母細胞はどのくらいの率で死ぬのか。世代を重ねると死にやすくなるのか | 新 | 高 | パッケージ |
+| fig260908:generation_traces | 生存系列と絶滅系列は、世代ごとの値で違うのか（開始でそろえる／死でそろえる） | 新 | 高 | パッケージ |
+| fig260908:precursor_screen | どの量が、死ぬ何サイクル・何時間前から生存系列と区別できるのか | 新 | 高 | パッケージ |
+| fig260908:around_last_division | 最後の分裂の前後で、1 本ずつの系列はどう変わるのか | 新 | 中 | パッケージ |
 
-死んだ細胞そのものの図（修論 `plot/figures.md` の fig:spontaneous_death）は今回の対象外。死亡マークの一覧は §1 の YAML に残してあるので、後でそのまま使える。
+死んだ細胞そのものの図（修論 `plot/figures.md` の fig:spontaneous_death）は、第2版で survival 以下の 4 枚として足した（§4 の最後）。
 
 ---
 
@@ -304,13 +311,52 @@ robust z（(x − 中央値)/(IQR/1.349)）にした。表は死亡系列の中�
 - データ: E:\260908_outside_quad\phase と seg の mask。`mask_label` 列で mask の画素に戻れる。
 - 決めること: どの系列を代表にするか（倍加時間・出生時の質量が中央値に近く、注記の無い系列から選ぶ）。
 
+以下の 4 枚は `scripts/precursor_260908.py` が作る。解析の決め方（最後の分裂にそろえる、時刻・Pos 群をそろえた生存系列と比べる、channel 番号を補正する、
+ラベルを入れ替えた null で較正する）と全部の数値は `docs/PRECURSOR_260908.md`。先行図は Nakaoka & Wakamoto 2017（PLoS Biol, doi:10.1371/journal.pbio.2001109）
+Fig 2（YE 34 °C。B: 生存・絶滅系列の generation time の推移、C: 世代ごとの平均 ± SD、D/E: 生存率の時間・世代に対する指数減衰）。
+
+### fig260908:survival — 死亡率［新・高］
+- 問い: 母細胞はどのくらいの率で死ぬのか。時間と世代のどちらで数えても一定か（老化しないか）。
+- 置く場所（候補）: 修論 fig:spontaneous_death、または 260908 の結果の最初。
+- パネル: (a) Kaplan–Meier の生存率 vs 時間、(b) vs 世代。片対数、打ち切りに縦棒、指数分布の当てはめ（破線）と率。
+- 量の定義: 死亡時刻 = mark_h。死亡時の世代 = 最後の分裂までの母細胞の accepted 分裂の数。マークの無い系列は最後の有効 frame で打ち切り。率 = 死亡数 / 総観察量（打ち切りありの最尤推定）、CI は Poisson の正確な区間。
+- n: 113 母細胞（死亡 39）。
+- 今の値: 0.0045 /h（95% CI 0.0032–0.0062）、0.0097 /世代（0.0069–0.0133）。25 h ごとに 0.0041・0.0035・0.0045・0.0066 /h。
+- 決めること: 75–100 h の上昇を汚染として窓を 0–90 h に切るか（§6-3 と一緒）。Nakaoka & Wakamoto と温度が違うなら、それをキャプションに書く（§6-5）。
+
+### fig260908:generation_traces — 世代ごとの値（開始でそろえる／死でそろえる）［新・高］
+- 問い: 生存系列と絶滅系列は、generation time・mass production rate・密度・幅で違うのか。開始から数えると見えない差が、死から数えると見えるのか。
+- 置く場所（候補）: fig260908:survival の次（Nakaoka & Wakamoto Fig 2B/C に対応）。
+- パネル: 行 = generation time、d ln M/dt、密度、幅、dL/dt、指数成長からのずれ（ln M の残差の SD）、分裂での母の質量の取り分（陰性対照）。
+  列 = (左) 代表 2 系列（生存 1、絶滅 1）、(中) 開始から数えた世代ごとの平均 ± SD、(右) 最後の分裂から逆に数えた世代ごとの平均 ± SD（絶滅系列と matched 生存系列）。
+  サイズ（出生時・分裂時の大きさ）は入れない。
+- n: 生存 74・死亡 39 母細胞。各点はサイクル 5 以上。
+- 今の値: 右の列で d ln M/dt は −3 で 0.343（matched 生存 0.357）、−1 で 0.245（0.355）。dL/dt は −1 で 1.65（3.21）µm/h。幅は −1 で 4.00（3.78）µm。generation time は −1 で 3.33（2.14）h。
+- 決めること: 代表の絶滅系列（今は膨潤死で最後の分裂が一番遅い Pos4 ch09）と生存系列（Pos11 ch05）。値は channel 補正後なので、代表系列の絶対値を見せたいなら補正前で描く。
+
+### fig260908:precursor_screen — どの量が何サイクル前から区別できるか［新・高］
+- 問い: 密度・体積・幅・mass rate・ほかのどの量で、死ぬ何サイクル・何時間前から生存系列と区別できるのか。
+- 置く場所（候補）: fig260908:generation_traces の次、または付録。fig260908:predeath_window の (a) をこれで置き換えてもよい。
+- パネル: (a) 26 量 × 最後の分裂から −12〜−1 サイクルの AUC のヒートマップ（null の外に点）、(b) 量ごとの onset（他の細胞と比べる／自分の過去と比べる）、
+  (c) 主な量の AUC と 95% CI のサイクルに対する変化、(d) 時間（1 h）ごとの AUC（幅・密度・d ln M/dt・dL/dt）。
+- 量の定義: AUC = 死亡系列の値が matched control の中で占める順位の平均。matched control = 同じ Pos 群でマークが無く、最後の分裂の 2 h 後まで追えた系列の、最後の分裂に一番近い分裂（±1.5 h）。onset = −1 から途切れずに null の 95% 帯の外にある一番古いサイクル。
+- n: 死亡 39 系列（−12 で 25）、生存 74 系列。null 200 回、bootstrap 1,000 回。
+- 今の値: onset は dL/dt と d ln M/dt が −3（約 8 h・7 h 前）、幅が −2〜−3（6 h 前）、密度と generation time が −1（密度は 5 h 前）。分配比・密度のゆらぎ・外れ値の割合は区別できない。
+- 決めること: (a) にサイズの行を残すか（分裂時の長さは −3 から短くなる）。本文に出すなら (b)(d) だけでもよい。
+
+### fig260908:around_last_division — 最後の分裂の前後［新・中］
+- 問い: 1 本ずつの死亡系列は、最後の分裂の前後でどう変わるのか。
+- パネル: 幅、密度、d ln M/dt、dL/dt、乾燥質量、長さを最後の分裂からの時間（−16〜+10 h）に対して。死亡系列は 1 本ずつの線、生存系列は matched control の中央値と 10–90 パーセンタイルの帯（0 より前だけ）。
+- 今の値: 最後の分裂の 0.5 h 後で幅 4.05 µm・密度 0.246・d ln M/dt 0.21、8 h 後で 4.48 µm・0.285・0.07（生存系列は 3.78 µm・0.217・0.36）。
+- 決めること: 本文に出すなら 3 行（幅・密度・d ln M/dt）に絞る。
+
 ---
 
 ## 5. 並行して作れる組
 
 | 組 | 条件 | 図 |
 |---|---|---|
-| 1 | パッケージだけで今すぐ作れる | dataset、record、division_qc、predeath_window、steady_state、population、growth_law、cycle_profile (b)–(f)、size_control、return_maps、position_bias (a)–(d)、mother_individuality、replicative_age |
+| 1 | パッケージだけで今すぐ作れる | dataset、record、division_qc、predeath_window、steady_state、population、growth_law、cycle_profile (b)–(f)、size_control、return_maps、position_bias (a)–(d)、mother_individuality、replicative_age、survival、generation_traces、precursor_screen、around_last_division（この 4 枚は作成済み） |
 | 2 | 顕微鏡 PC の位相像と mask が要る | representative、cycle_profile (a)、density_floor の空チャネル側 |
 | 3 | 他の解析結果が要る | bg_method（260908 tilt の master）、medium_comparison（260517 の master）、position_bias の grid バッチ境界（recon のログ） |
 
@@ -326,6 +372,7 @@ steady_state で解析窓（0–100 h か 0–90 h）を決めてから、他の
 5. キャプションの条件: 株、温度。
 6. 260908 を修論のどこに入れるか（fig:record の2つ目の記録か、fig:growth_reference の本体か、第3章の飢餓前の基準か）。修論の `plot/figures.md` の配置表に足すのはこれが決まってから。
 7. サイズ制御で主にする大きさ（質量・体積・長さ）。
+8. channel 番号による幅の違い（生存系列で ch00–02 が 3.88 µm、ch10–11 が 3.68–3.70 µm）が測定由来か（fig260908:position_bias の (c)）。前兆の図は今は補正して比べている。
 
 ## 7. 数値の出し直し
 

@@ -36,6 +36,7 @@ production checkpoints in `models/`.
 - `figreq_260908_numbers.py`
 - `figure_logger.py`
 - `lineage_html_gallery_260517.py`
+- `precursor_260908.py` - 260908 の死亡前兆（死ぬ何サイクル・何時間前から生存系列と区別できるか。docs/PRECURSOR_260908.md）
 
 ## Cell geometry modules
 
