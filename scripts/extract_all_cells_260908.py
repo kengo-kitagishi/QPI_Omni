@@ -142,7 +142,11 @@ def main():
         if not src.exists():
             side_info[src_name] = 'absent in source'
             continue
-        t = only_included(pd.read_csv(src), included)
+        try:
+            t = only_included(pd.read_csv(src), included)
+        except pd.errors.EmptyDataError:
+            side_info[src_name] = 'empty in source (0 bytes decompressed)'
+            continue
         t.to_csv(args.out / dst_name, index=False)
         side.append(args.out / dst_name)
         side_info[src_name] = dict(rows=int(len(t)), columns=list(t.columns), sha256=digest(src))
