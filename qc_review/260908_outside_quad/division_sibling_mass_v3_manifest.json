@@ -1,0 +1,13 @@
+{
+  "source_full_csv": "E:\\260908_outside_quad\\seg\\_lineage_consolidated\\all_cells_lineage_data3D.csv.gz",
+  "source_full_sha256": "3b83dc5c2823efd02f3b7ca92ae20c9ba53bc08df1ea45b77e3c4ecec0a15d4e",
+  "review_dir": "E:\\260908_outside_quad\\seg\\_qc\\review_20260925\\gallery_100h_v3",
+  "review_manifest_sha256": "d2bb998718d950b2322827c714303a830a57e112a4a1efbbf68f0b9c91d43af4",
+  "n_divisions_considered": 4021,
+  "n_divisions_matched": 3900,
+  "n_divisions_unmatched": 121,
+  "n_frames_per_role": 3,
+  "n_included_channels": 113,
+  "output_rows": 23386,
+  "method": "mother keeps cell_id=0 for the whole run; direct daughter identified by parent_id==0, in_tree==True, birth_frame==division frame F (same frame review used as the cycle boundary). Frames F..F+n-1 kept for both, subject to availability (death_frame / dataset end). is_outlier/touches_border kept as columns, not filtered out."
+}
