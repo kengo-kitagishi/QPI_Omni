@@ -1,0 +1,60 @@
+# Re-analysis of 260908 with the drift correction redone from a cell-free
+# channel whitelist (2026-10-13), after finding the production/outside_quad
+# correction let different channels' mass co-fluctuate within a Pos
+# (r=+0.260): the shared per-Pos average sometimes included a cell-bearing
+# channel. See scripts/batch_compute_pos_shifts_260908_whitelist.py and
+# scripts/batch_quadfit_crop_sub_260908_whitelist.py -- both reuse existing
+# alignment/tilt-fit code unchanged, only the channel selection that feeds
+# the shared average is new.
+#
+# Scope: only the 58 Pos with >=1 whitelisted cell-free channel
+# (channel_whitelist_260908.json); the other 40 are not re-analysed, by
+# explicit user decision rather than falling back to the old average. Frame
+# window 2-1202 (0-100h, t=(frame-2)/12) only -- crop_sub was not generated
+# beyond frame 1202.
+dataset: "260908_whitelist_realign"
+description: "260908 YE, 58 whitelist-covered Pos, whitelist-averaged drift + outside-channel quadratic BG, frames 2-1202 (0-100h)"
+paths:
+  raw_root: "E:/260908_whitelist_realign/crop_sub"
+  raw_root_overrides: []
+  mask_root: "E:/260908_whitelist_realign/seg"
+  channel_rel: "output_phase/channels/crop_sub_rawraw/z000"
+  phase_glob: "img_*_ph_000.tif"
+  consolidated_dir: "E:/260908_whitelist_realign/seg/_lineage_consolidated"
+  master_root: "E:/QPI_master/260908_whitelist_realign"
+  mirror_root: null
+
+positions: {start: 1, end: 98}   # only the 58 Pos with a crop_sub dir actually exist; others skip cleanly
+
+segmentation:
+  model: "models/omni_model_d20_2026_09_07_12_41_31.782047"
+  eval: {diameter: 20, normalize: true, tile: false, omni: true, flow_threshold: 0.11, mask_threshold: 0, min_size: 10, net_avg: false}
+  gate: {phase_hi: 0.7, min_px: 40}
+  workers: 6
+
+tracking:
+  pixel_size_um: 0.34567514677103717
+  time_interval_min: 5.0
+  wavelength_nm: 658.0
+  alpha_ri: 0.00018
+  frame_min: 2
+  frame_max: 1202                # crop_sub only goes to frame 1202 (0-100h window)
+  media_schedule: ""              # no YE RI calibration exists for 260908 (as in datasets/260908.yaml)
+  ri_calibration: null
+  calibration_id: null
+  bad_frames: null
+  contour_offset_px: 0.0
+  production_marker: "volume_um3_efd"
+  workers: 2
+
+edge_channels: ["ch00", "ch11"]   # traps per Pos vary 8-12, so ch11 is not always the true edge (same caveat as datasets/260908.yaml)
+
+inputs_extra:
+  - "D:/AquisitionData/Kitagishi/260908/_qc/channel_whitelist_260908.json"
+qc_extra: []
+derived: null
+notes:
+  - "crop_sub built by scripts/batch_quadfit_crop_sub_260908_whitelist.py from pos_shifts_cal_whitelist.json (scripts/batch_compute_pos_shifts_260908_whitelist.py), NOT from the online production shift."
+  - "Pixel-level tilt-correction math (quad fit outside the channel, mask_from=grid) is byte-identical to scripts/_qc_outsidech_quadfit_260908.py -- verified Pos1 frame700 matches E:/260908_outside_quad exactly where the two shift sources happened to agree that frame."
+  - "Pos51 is outside this run's coverage, so the compute_pos_shifts.py tilt-fit POS_SPLIT=51-vs-52 ambiguity resolved during this work has no effect here either way (see scripts/batch_compute_pos_shifts_260908_whitelist.py header comment)."
+  - "No YE RI calibration exists; n_medium remains the original scalar 1.333 (same as datasets/260908.yaml and 260908_outside_quad)."

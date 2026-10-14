@@ -1,0 +1,540 @@
+pos,ch,note,exclude,cutoff_h,fate_manual
+Pos1,ch01,,False,,False
+Pos1,ch06,,False,,False
+Pos1,ch07,,False,,False
+Pos2,ch01,,False,,False
+Pos2,ch04,,False,,False
+Pos2,ch05,,False,,False
+Pos2,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos2,ch09,,False,,False
+Pos3,ch00,edge channel,True,,False
+Pos3,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos3,ch05,,False,,False
+Pos3,ch06,,False,,False
+Pos3,ch10,,False,,False
+Pos3,ch11,edge channel,True,,False
+Pos4,ch02,,False,,False
+Pos4,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos4,ch08,,False,,False
+Pos4,ch09,,False,,False
+Pos4,ch10,,False,,False
+Pos4,ch11,edge channel,True,,False
+Pos5,ch00,edge channel,True,,False
+Pos5,ch01,,False,,False
+Pos5,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos5,ch03,,False,,False
+Pos5,ch04,,False,,False
+Pos5,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos5,ch06,,False,,False
+Pos5,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos6,ch00,edge channel,True,,False
+Pos6,ch01,,False,,False
+Pos6,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos6,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos6,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos6,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos6,ch08,,False,,False
+Pos6,ch09,,False,,False
+Pos7,ch00,edge channel,True,,False
+Pos7,ch01,,False,,False
+Pos7,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos7,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos7,ch04,,False,,False
+Pos7,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos7,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos7,ch08,too few divisions (0) for a meaningful mother series,True,,False
+Pos7,ch10,,False,,False
+Pos8,ch00,edge channel,True,,False
+Pos8,ch02,,False,,False
+Pos8,ch03,,False,,False
+Pos8,ch05,,False,,False
+Pos8,ch06,,False,,False
+Pos8,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos8,ch08,too few divisions (0) for a meaningful mother series,True,,False
+Pos8,ch09,,False,,False
+Pos9,ch00,edge channel,True,,False
+Pos9,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos9,ch04,,False,,False
+Pos9,ch05,,False,,False
+Pos9,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos9,ch09,,False,,False
+Pos9,ch10,too few divisions (1) for a meaningful mother series,True,,False
+Pos10,ch00,edge channel,True,,False
+Pos10,ch01,too few divisions (1) for a meaningful mother series,True,,False
+Pos10,ch02,,False,,False
+Pos10,ch03,,False,,False
+Pos10,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos10,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos10,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos10,ch08,too few divisions (1) for a meaningful mother series,True,,False
+Pos11,ch00,edge channel,True,,False
+Pos11,ch01,too few divisions (0) for a meaningful mother series,True,,False
+Pos11,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos11,ch04,,False,,False
+Pos11,ch05,,False,,False
+Pos11,ch08,,False,,False
+Pos11,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos11,ch10,,False,,False
+Pos11,ch11,edge channel,True,,False
+Pos12,ch00,edge channel,True,,False
+Pos12,ch01,,False,,False
+Pos12,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos12,ch03,,False,,False
+Pos12,ch04,,False,,False
+Pos12,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos12,ch07,,False,,False
+Pos12,ch08,too few divisions (0) for a meaningful mother series,True,,False
+Pos12,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos12,ch10,,False,,False
+Pos12,ch11,edge channel,True,,False
+Pos13,ch00,edge channel,True,,False
+Pos13,ch01,,False,,False
+Pos13,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos13,ch04,,False,,False
+Pos13,ch05,,False,,False
+Pos13,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos13,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos13,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos13,ch11,edge channel,True,,False
+Pos14,ch00,edge channel,True,,False
+Pos14,ch01,too few divisions (0) for a meaningful mother series,True,,False
+Pos14,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos14,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos14,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos14,ch05,,False,,False
+Pos14,ch06,,False,,False
+Pos14,ch07,,False,,False
+Pos14,ch08,too few divisions (0) for a meaningful mother series,True,,False
+Pos14,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos14,ch10,no tracked cells,True,,False
+Pos16,ch00,edge channel,True,,False
+Pos16,ch01,too few divisions (1) for a meaningful mother series,True,,False
+Pos16,ch02,,False,,False
+Pos16,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos16,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos16,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos16,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos16,ch08,too few divisions (0) for a meaningful mother series,True,,False
+Pos16,ch09,too few divisions (2) for a meaningful mother series,True,,False
+Pos16,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos16,ch11,edge channel,True,,False
+Pos18,ch01,,False,,False
+Pos18,ch02,,False,,False
+Pos18,ch03,too few divisions (2) for a meaningful mother series,True,,False
+Pos18,ch04,,False,,False
+Pos18,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos18,ch06,,False,,False
+Pos18,ch08,,False,,False
+Pos18,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos18,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos21,ch00,edge channel,True,,False
+Pos21,ch01,too few divisions (0) for a meaningful mother series,True,,False
+Pos21,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos21,ch03,,False,,False
+Pos21,ch04,,False,,False
+Pos21,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos21,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos21,ch08,too few divisions (0) for a meaningful mother series,True,,False
+Pos21,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos21,ch10,too few divisions (1) for a meaningful mother series,True,,False
+Pos21,ch11,edge channel,True,,False
+Pos22,ch01,too few divisions (0) for a meaningful mother series,True,,False
+Pos22,ch02,,False,,False
+Pos22,ch05,,False,,False
+Pos22,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos22,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos22,ch08,,False,,False
+Pos22,ch09,,False,,False
+Pos22,ch10,,False,,False
+Pos22,ch11,edge channel,True,,False
+Pos23,ch00,edge channel,True,,False
+Pos23,ch01,,False,,False
+Pos23,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos23,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos23,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos23,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos23,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos23,ch08,,False,,False
+Pos23,ch09,,False,,False
+Pos23,ch11,edge channel,True,,False
+Pos24,ch00,edge channel,True,,False
+Pos24,ch01,,False,,False
+Pos24,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos24,ch03,too few divisions (1) for a meaningful mother series,True,,False
+Pos24,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos24,ch05,,False,,False
+Pos24,ch06,,False,,False
+Pos24,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos24,ch08,,False,,False
+Pos24,ch09,,False,,False
+Pos24,ch11,edge channel,True,,False
+Pos25,ch00,edge channel,True,,False
+Pos25,ch01,,False,,False
+Pos25,ch03,,False,,False
+Pos25,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos25,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos25,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos25,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos25,ch09,,False,,False
+Pos25,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos25,ch11,edge channel,True,,False
+Pos27,ch00,edge channel,True,,False
+Pos27,ch01,too few divisions (0) for a meaningful mother series,True,,False
+Pos27,ch02,,False,,False
+Pos27,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos27,ch05,,False,,False
+Pos27,ch06,,False,,False
+Pos27,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos27,ch08,too few divisions (1) for a meaningful mother series,True,,False
+Pos27,ch09,too few divisions (1) for a meaningful mother series,True,,False
+Pos27,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos27,ch11,edge channel,True,,False
+Pos28,ch00,edge channel,True,,False
+Pos28,ch01,,False,,False
+Pos28,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos28,ch03,too few divisions (1) for a meaningful mother series,True,,False
+Pos28,ch04,,False,,False
+Pos28,ch05,,False,,False
+Pos28,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos28,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos28,ch08,too few divisions (0) for a meaningful mother series,True,,False
+Pos28,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos28,ch10,,False,,False
+Pos29,ch00,edge channel,True,,False
+Pos29,ch01,too few divisions (0) for a meaningful mother series,True,,False
+Pos29,ch02,too few divisions (1) for a meaningful mother series,True,,False
+Pos29,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos29,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos29,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos29,ch06,,False,,False
+Pos29,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos29,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos29,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos29,ch11,edge channel,True,,False
+Pos30,ch00,edge channel,True,,False
+Pos30,ch01,too few divisions (1) for a meaningful mother series,True,,False
+Pos30,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos30,ch04,,False,,False
+Pos30,ch05,,False,,False
+Pos30,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos30,ch08,too few divisions (0) for a meaningful mother series,True,,False
+Pos30,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos30,ch10,,False,,False
+Pos30,ch11,edge channel,True,,False
+Pos31,ch00,edge channel,True,,False
+Pos31,ch01,too few divisions (0) for a meaningful mother series,True,,False
+Pos31,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos31,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos31,ch04,,False,,False
+Pos31,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos31,ch07,,False,,False
+Pos31,ch08,,False,,False
+Pos31,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos31,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos31,ch11,edge channel,True,,False
+Pos34,ch01,,False,,False
+Pos34,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos34,ch03,,False,,False
+Pos34,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos34,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos34,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos34,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos34,ch10,,False,,False
+Pos34,ch11,edge channel,True,,False
+Pos36,ch00,edge channel,True,,False
+Pos36,ch01,too few divisions (1) for a meaningful mother series,True,,False
+Pos36,ch02,,False,,False
+Pos36,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos36,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos36,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos36,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos36,ch07,,False,,False
+Pos36,ch08,,False,,False
+Pos36,ch09,too few divisions (1) for a meaningful mother series,True,,False
+Pos36,ch10,,False,,False
+Pos36,ch11,edge channel,True,,False
+Pos44,ch00,edge channel,True,,False
+Pos44,ch01,too few divisions (0) for a meaningful mother series,True,,False
+Pos44,ch02,,False,,False
+Pos44,ch03,,False,,False
+Pos44,ch05,too few divisions (2) for a meaningful mother series,True,,False
+Pos44,ch06,,False,,False
+Pos44,ch07,,False,,False
+Pos44,ch08,,False,,False
+Pos44,ch09,,False,,False
+Pos44,ch10,,False,,False
+Pos44,ch11,edge channel,True,,False
+Pos54,ch00,edge channel,True,,False
+Pos54,ch01,too few divisions (0) for a meaningful mother series,True,,False
+Pos54,ch02,,False,,False
+Pos54,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos54,ch05,,False,,False
+Pos54,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos54,ch07,too few divisions (1) for a meaningful mother series,True,,False
+Pos54,ch08,,False,,False
+Pos54,ch09,,False,,False
+Pos54,ch10,,False,,False
+Pos54,ch11,edge channel,True,,False
+Pos60,ch00,edge channel,True,,False
+Pos60,ch01,,False,,False
+Pos60,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos60,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos60,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos60,ch07,,False,,False
+Pos60,ch08,,False,,False
+Pos60,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos61,ch00,edge channel,True,,False
+Pos61,ch01,too few divisions (0) for a meaningful mother series,True,,False
+Pos61,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos61,ch03,,False,,False
+Pos61,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos61,ch06,,False,,False
+Pos61,ch07,,False,,False
+Pos61,ch08,,False,,False
+Pos61,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos61,ch10,,False,,False
+Pos61,ch11,edge channel,True,,False
+Pos63,ch00,edge channel,True,,False
+Pos63,ch01,,False,,False
+Pos63,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos63,ch03,,False,,False
+Pos63,ch04,,False,,False
+Pos63,ch05,,False,,False
+Pos63,ch06,,False,,False
+Pos63,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos63,ch08,,False,,False
+Pos63,ch10,,False,,False
+Pos63,ch11,edge channel,True,,False
+Pos65,ch00,edge channel,True,,False
+Pos65,ch01,,False,,False
+Pos65,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos65,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos65,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos65,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos65,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos65,ch08,,False,,False
+Pos65,ch09,,False,,False
+Pos65,ch11,edge channel,True,,False
+Pos66,ch00,edge channel,True,,False
+Pos66,ch01,,False,,False
+Pos66,ch03,,False,,False
+Pos66,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos66,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos66,ch06,,False,,False
+Pos66,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos66,ch08,,False,,False
+Pos66,ch09,,False,,False
+Pos66,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos66,ch11,edge channel,True,,False
+Pos67,ch00,edge channel,True,,False
+Pos67,ch01,,False,,False
+Pos67,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos67,ch04,,False,,False
+Pos67,ch05,,False,,False
+Pos67,ch06,,False,,False
+Pos67,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos67,ch08,,False,,False
+Pos67,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos67,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos71,ch00,edge channel,True,,False
+Pos71,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos71,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos71,ch04,,False,,False
+Pos71,ch05,,False,,False
+Pos71,ch07,,False,,False
+Pos71,ch08,,False,,False
+Pos71,ch09,,False,,False
+Pos71,ch10,,False,,False
+Pos71,ch11,edge channel,True,,False
+Pos72,ch00,edge channel,True,,False
+Pos72,ch01,too few divisions (0) for a meaningful mother series,True,,False
+Pos72,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos72,ch03,,False,,False
+Pos72,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos72,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos72,ch07,,False,,False
+Pos72,ch09,,False,,False
+Pos72,ch10,,False,,False
+Pos72,ch11,edge channel,True,,False
+Pos73,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos73,ch04,,False,,False
+Pos73,ch05,,False,,False
+Pos73,ch06,,False,,False
+Pos73,ch08,too few divisions (0) for a meaningful mother series,True,,False
+Pos73,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos73,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos73,ch11,edge channel,True,,False
+Pos75,ch00,edge channel,True,,False
+Pos75,ch01,,False,,False
+Pos75,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos75,ch05,,False,,False
+Pos75,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos75,ch08,,False,,False
+Pos75,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos75,ch10,,False,,False
+Pos76,ch00,edge channel,True,,False
+Pos76,ch01,too few divisions (0) for a meaningful mother series,True,,False
+Pos76,ch02,too few divisions (2) for a meaningful mother series,True,,False
+Pos76,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos76,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos76,ch07,,False,,False
+Pos76,ch08,,False,,False
+Pos76,ch09,,False,,False
+Pos76,ch10,,False,,False
+Pos76,ch11,edge channel,True,,False
+Pos77,ch00,edge channel,True,,False
+Pos77,ch01,,False,,False
+Pos77,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos77,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos77,ch06,,False,,False
+Pos77,ch07,,False,,False
+Pos77,ch08,,False,,False
+Pos77,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos77,ch10,,False,,False
+Pos77,ch11,edge channel,True,,False
+Pos78,ch00,edge channel,True,,False
+Pos78,ch01,,False,,False
+Pos78,ch02,too few divisions (1) for a meaningful mother series,True,,False
+Pos78,ch03,,False,,False
+Pos78,ch04,,False,,False
+Pos78,ch05,,False,,False
+Pos78,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos78,ch08,,False,,False
+Pos78,ch09,,False,,False
+Pos78,ch10,,False,,False
+Pos78,ch11,edge channel,True,,False
+Pos79,ch00,edge channel,True,,False
+Pos79,ch01,too few divisions (0) for a meaningful mother series,True,,False
+Pos79,ch02,,False,,False
+Pos79,ch03,,False,,False
+Pos79,ch04,,False,,False
+Pos79,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos79,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos79,ch08,,False,,False
+Pos79,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos79,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos80,ch00,edge channel,True,,False
+Pos80,ch01,too few divisions (0) for a meaningful mother series,True,,False
+Pos80,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos80,ch05,,False,,False
+Pos80,ch06,,False,,False
+Pos80,ch07,,False,,False
+Pos80,ch08,,False,,False
+Pos80,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos80,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos80,ch11,edge channel,True,,False
+Pos81,ch00,edge channel,True,,False
+Pos81,ch01,too few divisions (0) for a meaningful mother series,True,,False
+Pos81,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos81,ch03,,False,,False
+Pos81,ch04,,False,,False
+Pos81,ch05,,False,,False
+Pos81,ch06,too few divisions (1) for a meaningful mother series,True,,False
+Pos81,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos81,ch08,too few divisions (0) for a meaningful mother series,True,,False
+Pos81,ch09,,False,,False
+Pos81,ch11,edge channel,True,,False
+Pos82,ch00,edge channel,True,,False
+Pos82,ch01,,False,,False
+Pos82,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos82,ch03,,False,,False
+Pos82,ch04,too few divisions (1) for a meaningful mother series,True,,False
+Pos82,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos82,ch06,,False,,False
+Pos82,ch07,,False,,False
+Pos82,ch08,,False,,False
+Pos82,ch09,,False,,False
+Pos82,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos83,ch00,edge channel,True,,False
+Pos83,ch01,,False,,False
+Pos83,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos83,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos83,ch04,,False,,False
+Pos83,ch05,,False,,False
+Pos83,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos83,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos83,ch11,edge channel,True,,False
+Pos84,ch00,edge channel,True,,False
+Pos84,ch01,,False,,False
+Pos84,ch02,too few divisions (1) for a meaningful mother series,True,,False
+Pos84,ch03,,False,,False
+Pos84,ch04,,False,,False
+Pos84,ch05,,False,,False
+Pos84,ch06,,False,,False
+Pos84,ch07,too few divisions (1) for a meaningful mother series,True,,False
+Pos84,ch08,,False,,False
+Pos84,ch10,,False,,False
+Pos84,ch11,edge channel,True,,False
+Pos86,ch00,edge channel,True,,False
+Pos86,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos86,ch04,,False,,False
+Pos86,ch05,too few divisions (2) for a meaningful mother series,True,,False
+Pos86,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos86,ch07,,False,,False
+Pos86,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos86,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos86,ch11,edge channel,True,,False
+Pos87,ch00,edge channel,True,,False
+Pos87,ch02,,False,,False
+Pos87,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos87,ch04,,False,,False
+Pos87,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos87,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos87,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos87,ch08,too few divisions (0) for a meaningful mother series,True,,False
+Pos87,ch09,,False,,False
+Pos87,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos87,ch11,edge channel,True,,False
+Pos90,ch00,edge channel,True,,False
+Pos90,ch01,,False,,False
+Pos90,ch02,,False,,False
+Pos90,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos90,ch04,,False,,False
+Pos90,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos90,ch06,too few divisions (0) for a meaningful mother series,True,,False
+Pos90,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos90,ch08,too few divisions (0) for a meaningful mother series,True,,False
+Pos90,ch09,,False,,False
+Pos90,ch10,too few divisions (0) for a meaningful mother series,True,,False
+Pos92,ch00,edge channel,True,,False
+Pos92,ch01,,False,,False
+Pos92,ch02,too few divisions (0) for a meaningful mother series,True,,False
+Pos92,ch03,too few divisions (0) for a meaningful mother series,True,,False
+Pos92,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos92,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos92,ch06,,False,,False
+Pos92,ch10,,False,,False
+Pos92,ch11,edge channel,True,,False
+Pos93,ch00,edge channel,True,,False
+Pos93,ch01,too few divisions (0) for a meaningful mother series,True,,False
+Pos93,ch03,,False,,False
+Pos93,ch04,,False,,False
+Pos93,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos93,ch06,,False,,False
+Pos93,ch08,,False,,False
+Pos93,ch11,edge channel,True,,False
+Pos94,ch02,too few divisions (1) for a meaningful mother series,True,,False
+Pos94,ch04,too few divisions (0) for a meaningful mother series,True,,False
+Pos94,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos94,ch06,,False,,False
+Pos94,ch07,too few divisions (0) for a meaningful mother series,True,,False
+Pos94,ch08,,False,,False
+Pos94,ch09,,False,,False
+Pos94,ch10,,False,,False
+Pos94,ch11,edge channel,True,,False
+Pos96,ch01,,False,,False
+Pos96,ch02,,False,,False
+Pos96,ch03,,False,,False
+Pos96,ch05,too few divisions (0) for a meaningful mother series,True,,False
+Pos96,ch06,,False,,False
+Pos96,ch08,,False,,False
+Pos96,ch09,too few divisions (0) for a meaningful mother series,True,,False
+Pos97,ch00,edge channel,True,,False
+Pos97,ch01,too few divisions (0) for a meaningful mother series,True,,False
+Pos97,ch03,,False,,False
+Pos97,ch04,,False,,False
+Pos97,ch10,,False,,False
+Pos97,ch11,edge channel,True,,False
+Pos98,ch02,,False,,False
+Pos98,ch04,,False,,False
+Pos98,ch05,,False,,False

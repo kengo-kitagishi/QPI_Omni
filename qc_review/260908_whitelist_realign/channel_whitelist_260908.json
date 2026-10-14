@@ -1,0 +1,285 @@
+{
+  "dataset": "260908",
+  "scope": "0-100h analysis window (frame 2-1202)",
+  "source": "whitelist_sheet_f700_pm02.html + whitelist_sheet_f1202_pm02_pos28-36.html manual selection, 2026-10-13",
+  "known_residual_contamination": {
+    "Pos28": {
+      "ch": 2,
+      "n_masks_in_window": 503,
+      "note": "kept by user decision, judged a false detection"
+    },
+    "Pos36": {
+      "ch": 3,
+      "n_masks_in_window": 206,
+      "note": "kept by user decision, judged a false detection"
+    },
+    "Pos92": {
+      "ch": 2,
+      "n_masks_in_window": 481,
+      "note": "kept by user decision, judged a false detection"
+    },
+    "Pos14": {
+      "ch": 8,
+      "n_masks_in_window": 250,
+      "note": "kept by user decision, judged a false detection"
+    }
+  },
+  "n_picks": 138,
+  "n_pos_covered": 58,
+  "whitelist": {
+    "Pos1": [
+      0,
+      2,
+      3,
+      4,
+      5
+    ],
+    "Pos2": [
+      0,
+      2,
+      3,
+      6,
+      8,
+      10
+    ],
+    "Pos3": [
+      2,
+      4,
+      7,
+      8,
+      9
+    ],
+    "Pos4": [
+      0,
+      1,
+      3,
+      4,
+      5,
+      7
+    ],
+    "Pos5": [
+      7,
+      8,
+      9
+    ],
+    "Pos6": [
+      5,
+      6,
+      10,
+      11
+    ],
+    "Pos7": [
+      6,
+      9,
+      11
+    ],
+    "Pos8": [
+      1,
+      4,
+      10
+    ],
+    "Pos9": [
+      1,
+      2,
+      7,
+      8
+    ],
+    "Pos10": [
+      7,
+      9,
+      10
+    ],
+    "Pos11": [
+      2,
+      6,
+      7
+    ],
+    "Pos12": [
+      5
+    ],
+    "Pos13": [
+      3,
+      8,
+      10
+    ],
+    "Pos14": [
+      0,
+      8,
+      10
+    ],
+    "Pos16": [
+      3
+    ],
+    "Pos18": [
+      0,
+      7
+    ],
+    "Pos21": [
+      5
+    ],
+    "Pos22": [
+      0,
+      3,
+      4
+    ],
+    "Pos23": [
+      2,
+      10
+    ],
+    "Pos24": [
+      10
+    ],
+    "Pos25": [
+      2,
+      8
+    ],
+    "Pos27": [
+      3
+    ],
+    "Pos28": [
+      2
+    ],
+    "Pos29": [
+      8
+    ],
+    "Pos30": [
+      3,
+      6
+    ],
+    "Pos31": [
+      5
+    ],
+    "Pos34": [
+      0,
+      8,
+      9
+    ],
+    "Pos36": [
+      3
+    ],
+    "Pos44": [
+      4
+    ],
+    "Pos54": [
+      3
+    ],
+    "Pos60": [
+      3,
+      4,
+      9
+    ],
+    "Pos61": [
+      4
+    ],
+    "Pos63": [
+      9
+    ],
+    "Pos65": [
+      10
+    ],
+    "Pos66": [
+      2
+    ],
+    "Pos67": [
+      3
+    ],
+    "Pos71": [
+      6
+    ],
+    "Pos72": [
+      4,
+      8
+    ],
+    "Pos73": [
+      0,
+      1,
+      2,
+      7
+    ],
+    "Pos75": [
+      2,
+      3,
+      7
+    ],
+    "Pos76": [
+      3,
+      6
+    ],
+    "Pos77": [
+      2,
+      5
+    ],
+    "Pos78": [
+      7
+    ],
+    "Pos79": [
+      7
+    ],
+    "Pos80": [
+      3,
+      4
+    ],
+    "Pos81": [
+      10
+    ],
+    "Pos82": [
+      11
+    ],
+    "Pos83": [
+      8,
+      9
+    ],
+    "Pos84": [
+      9
+    ],
+    "Pos86": [
+      1,
+      3,
+      8
+    ],
+    "Pos87": [
+      1
+    ],
+    "Pos90": [
+      11
+    ],
+    "Pos92": [
+      2,
+      7,
+      8,
+      9
+    ],
+    "Pos93": [
+      2,
+      7,
+      9,
+      10
+    ],
+    "Pos94": [
+      0,
+      1,
+      3
+    ],
+    "Pos96": [
+      0,
+      4,
+      10,
+      11
+    ],
+    "Pos97": [
+      2,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "Pos98": [
+      0,
+      1,
+      3,
+      6,
+      7
+    ]
+  }
+}

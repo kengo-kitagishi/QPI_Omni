@@ -1,0 +1,1846 @@
+{
+  "dataset": "260908_outside_quad",
+  "status": "review_only",
+  "fate": "manual; not inferred",
+  "source_csv": "E:\\260908_whitelist_realign\\seg\\_lineage_consolidated\\all_cells_lineage_data3D.csv.gz",
+  "source_sha256": "be450c342b09bdba4123cedcc4fd853eaa41477b01178060838c0741cb42d53b",
+  "source_qc_sha256": "7b94589a4d509243044024872f8e6f4be6d32dd9e96cc909f41b4f946aaa7b75",
+  "choices_sha256": "75aa63b773dde62db7cf45f85e8ffd6e4ce52504a317f06a4bff00fa252e79f0",
+  "qc_code_sha256": "8213cdf171e7d529aafe3576210f9ed693aaa95f198dcf8fddf0eb3c5e2e35a4",
+  "end_hour": 100.0,
+  "end_frame": 1202,
+  "n_channels": 84,
+  "excluded_channels": [
+    {
+      "pos": "Pos1",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos2",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos3",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos3",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos4",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos4",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos4",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos5",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos5",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos5",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos5",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos5",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos6",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos6",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos6",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos6",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos6",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos6",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos6",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos6",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos7",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos7",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos7",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos7",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos7",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos7",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos7",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos7",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos8",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos8",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos8",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos8",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos8",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos8",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos9",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos9",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos9",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos9",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos9",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos9",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos10",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos10",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos10",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos10",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos10",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos10",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos11",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos11",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos11",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos11",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos11",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos11",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos11",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos12",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos12",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos12",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos12",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos12",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos12",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos12",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos13",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos13",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos13",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos13",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos13",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos13",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos13",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos14",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos14",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos14",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos14",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos14",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos14",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos14",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos14",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos14",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos16",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos16",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos16",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos16",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos16",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos16",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos16",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos16",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos16",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos16",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos16",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos18",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos18",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos18",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos18",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos18",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos18",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos18",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos18",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos18",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos21",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos21",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos21",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos21",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos21",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos21",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos21",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos21",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos21",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos21",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos22",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos22",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos22",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos22",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos22",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos22",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos22",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos22",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos23",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos23",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos23",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos23",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos23",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos23",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos23",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos23",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos23",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos23",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos24",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos24",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos24",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos24",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos24",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos24",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos24",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos24",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos24",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos24",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos24",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos25",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos25",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos25",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos25",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos25",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos25",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos25",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos25",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos25",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos25",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos27",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos27",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos27",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos27",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos27",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos27",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos27",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos27",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos27",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos27",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos27",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos28",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos28",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos28",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos28",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos28",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos28",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos28",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos28",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos28",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos28",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos28",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos29",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos29",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos29",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos29",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos29",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos29",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos29",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos29",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos29",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos29",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos29",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos30",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos30",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos30",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos30",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos30",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos30",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos30",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos30",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos30",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos30",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos31",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos31",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos31",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos31",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos31",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos31",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos31",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos31",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos31",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos31",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos31",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos34",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos34",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos34",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos34",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos34",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos34",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos34",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos34",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos34",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos36",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos36",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos36",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos36",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos36",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos36",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos36",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos36",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos36",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos36",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos36",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos36",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos44",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos44",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos44",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos44",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos44",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos44",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos44",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos44",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos44",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos44",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos44",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos54",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos54",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos54",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos54",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos54",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos54",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos54",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos54",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos54",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos54",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos54",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos60",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos60",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos60",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos60",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos60",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos60",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos60",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos60",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos61",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos61",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos61",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos61",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos61",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos61",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos61",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos61",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos61",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos63",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos63",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos63",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos63",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos63",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos63",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos63",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos63",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos63",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos63",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos63",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos65",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos65",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos65",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos65",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos65",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos65",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos65",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos65",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos65",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos65",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos66",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos66",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos66",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos66",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos66",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos66",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos66",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos66",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos67",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos67",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos67",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos67",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos67",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos67",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos67",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos67",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos71",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos71",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos71",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos71",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos71",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos71",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos71",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos72",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos72",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos72",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos72",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos72",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos72",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos72",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos72",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos73",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos73",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos73",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos73",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos73",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos73",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos73",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos73",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos75",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos75",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos75",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos75",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos75",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos76",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos76",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos76",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos76",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos76",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos76",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos76",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos76",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos77",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos77",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos77",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos77",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos77",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos77",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos77",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos77",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos78",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos78",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos78",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos78",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos78",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos78",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos79",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos79",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos79",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos79",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos79",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos79",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos79",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos79",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos79",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos79",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos80",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos80",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos80",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos80",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos80",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos80",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos80",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos80",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos81",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos81",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos81",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos81",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos81",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos81",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos81",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos81",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos81",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos81",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos82",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos82",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos82",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos82",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos82",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos82",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos82",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos83",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos83",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos83",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos83",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos83",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos83",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos83",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos83",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos84",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos84",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos84",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos84",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos84",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos84",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos84",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos86",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos86",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos86",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos86",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos86",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos86",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos86",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos86",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos87",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos87",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos87",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos87",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos87",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos87",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos87",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos87",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos87",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos87",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos90",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos90",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos90",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos90",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos90",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos90",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos90",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos90",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos90",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos92",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos92",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos92",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos92",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos92",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos92",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos92",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos92",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos93",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos93",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos93",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos93",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos93",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos94",
+      "ch": "ch02"
+    },
+    {
+      "pos": "Pos94",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos94",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos94",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos94",
+      "ch": "ch07"
+    },
+    {
+      "pos": "Pos94",
+      "ch": "ch08"
+    },
+    {
+      "pos": "Pos94",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos94",
+      "ch": "ch10"
+    },
+    {
+      "pos": "Pos94",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos96",
+      "ch": "ch03"
+    },
+    {
+      "pos": "Pos96",
+      "ch": "ch05"
+    },
+    {
+      "pos": "Pos96",
+      "ch": "ch06"
+    },
+    {
+      "pos": "Pos96",
+      "ch": "ch09"
+    },
+    {
+      "pos": "Pos97",
+      "ch": "ch00"
+    },
+    {
+      "pos": "Pos97",
+      "ch": "ch01"
+    },
+    {
+      "pos": "Pos97",
+      "ch": "ch04"
+    },
+    {
+      "pos": "Pos97",
+      "ch": "ch11"
+    },
+    {
+      "pos": "Pos98",
+      "ch": "ch02"
+    }
+  ],
+  "missing_channels": [
+    "Pos6 ch00",
+    "Pos6 ch01"
+  ],
+  "cutoff": {
+    "Pos85 ch07": "time_h < 90"
+  },
+  "outlier_rule": "positive transient 1-9 frames; >=20% and 4 robust SD; >=2/3 mass-area-EFD; extrapolated flanks agree within 25%; >=60% of block",
+  "division_rule": "all candidates tested; nearest <=3 good points per side within 8 frames; >=2 each; mass ratio .25-.78, volume .25-.85, abs difference <=.25; persistent missing steps added; require local mass/volume edge for tracker events, gap <=8 frames; deduplicate identical good-point brackets; scan pre plateau within8 frames of last good pre point",
+  "source_data_note": "original physical columns preserved; review_valid is the mask used for fits",
+  "added_outlier_points": 147,
+  "added_divisions": 95,
+  "removed_divisions": 60,
+  "extra_exclusions": [],
+  "annotations_sha256": null
+}

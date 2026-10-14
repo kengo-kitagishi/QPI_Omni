@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 import lineage_review_qc as review
+import qpi_paths as qp
 
 def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -41,7 +42,12 @@ def prepare(args,out):
     qcfile=args.root/'_lineage_consolidated/all_cells_divisions_qc.csv.gz'
     choices=pd.read_csv(args.audit/'channels.csv').set_index(['pos','ch'])
     latest=annotation_notes(args.annotations)
-    allrows=pd.read_csv(csv);m=allrows[allrows.cell_id==0].copy()
+    allrows=pd.read_csv(csv)
+    # This dataset predates the schema change and carries both rod-era plain
+    # metrics and EFD copies. Keep source columns, but plot the EFD metrics.
+    allrows['mean_ri_review_efd']=allrows[qp.efd_col(allrows.columns,'mean_ri')]
+    allrows['density_pg_um3_review_efd']=allrows[qp.efd_col(allrows.columns,'density_pg_um3')]
+    m=allrows[allrows.cell_id==0].copy()
     q=pd.read_csv(qcfile);q=q[q.parent_id==0]
     factor=.658*.34567514677103717**2/(2*np.pi*.00018)*1e-3
     m['phase_mass']=m.total_phase*factor;m['t']=(m.frame-2)/12
@@ -178,11 +184,11 @@ def render(args,out,f,e,c,manifest):
         divs=np.array(sorted(newevents),int)
         fits_one=fit_cycles(g,divs)
         fits.extend(dict(pos=r.pos,ch=r.ch,**row) for row in fits_one)
-        d=dict(t=g.t.to_numpy(),frame=g.frame.to_numpy(),ri=g.mean_ri.to_numpy(),
+        d=dict(t=g.t.to_numpy(),frame=g.frame.to_numpy(),ri=g.mean_ri_review_efd.to_numpy(),
             mass=g.phase_mass.to_numpy(),vol=g.volume_um3_efd.to_numpy(),
             valid=g.review_valid.to_numpy(),outl=(g.is_outlier|g.review_outlier_added).to_numpy(),
             outl_added=g.review_outlier_added.to_numpy(),bord=g.touches_border.to_numpy(),
-            conc=g.density_pg_um3_efd.to_numpy()*1000,
+            conc=g.density_pg_um3_review_efd.to_numpy()*1000,
             bad_t=np.array([]),bad_mass=np.array([]),bad_vol=np.array([]),bad_ri=np.array([]),
             div_all=np.sort(ev.frame.unique()),div_ok=divs,div_added=np.array(sorted(newevents-oldevents),int),
             div_removed=np.array(sorted(oldevents-newevents),int),show_removed=False,

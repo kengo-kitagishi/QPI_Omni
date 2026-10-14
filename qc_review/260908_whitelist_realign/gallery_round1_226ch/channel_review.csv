@@ -1,0 +1,539 @@
+﻿pos,ch,included,cutoff_h,note,old_divisions,review_divisions,added_divisions,removed_divisions,added_outlier_points,n_frames,valid_points
+Pos1,ch01,True,,,46.0,46.0,0.0,0.0,0.0,1196.0,1196.0
+Pos1,ch06,True,,,46.0,47.0,3.0,2.0,6.0,1196.0,1172.0
+Pos1,ch07,True,,,25.0,19.0,2.0,8.0,11.0,501.0,449.0
+Pos2,ch01,True,,,48.0,48.0,0.0,0.0,0.0,1197.0,1197.0
+Pos2,ch04,True,,,7.0,8.0,1.0,0.0,0.0,1197.0,1194.0
+Pos2,ch05,True,,,23.0,23.0,0.0,0.0,0.0,1197.0,1196.0
+Pos2,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos2,ch09,True,,,10.0,6.0,0.0,4.0,7.0,1197.0,1123.0
+Pos3,ch00,False,,edge channel,,,,,,,
+Pos3,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos3,ch05,True,,,46.0,46.0,0.0,0.0,0.0,1199.0,1193.0
+Pos3,ch06,True,,,46.0,48.0,3.0,1.0,2.0,1199.0,1187.0
+Pos3,ch10,True,,,51.0,48.0,2.0,5.0,7.0,1199.0,1165.0
+Pos3,ch11,False,,edge channel,,,,,,,
+Pos4,ch02,True,,,50.0,48.0,0.0,2.0,3.0,1199.0,1188.0
+Pos4,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos4,ch08,True,,,47.0,47.0,1.0,1.0,0.0,1199.0,1194.0
+Pos4,ch09,True,,,47.0,46.0,0.0,1.0,4.0,1199.0,1191.0
+Pos4,ch10,True,,,46.0,46.0,1.0,1.0,6.0,1199.0,1185.0
+Pos4,ch11,False,,edge channel,,,,,,,
+Pos5,ch00,False,,edge channel,,,,,,,
+Pos5,ch01,True,,,40.0,41.0,1.0,0.0,0.0,1068.0,1059.0
+Pos5,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos5,ch03,True,,,45.0,48.0,4.0,1.0,1.0,1201.0,1190.0
+Pos5,ch04,True,,,9.0,8.0,1.0,2.0,6.0,1201.0,1175.0
+Pos5,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos5,ch06,True,,,45.0,48.0,4.0,1.0,5.0,1201.0,1181.0
+Pos5,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos6,ch00,False,,edge channel,,,,,,,
+Pos6,ch01,True,,,24.0,12.0,0.0,12.0,0.0,874.0,873.0
+Pos6,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos6,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos6,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos6,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos6,ch08,True,,,12.0,12.0,2.0,2.0,8.0,1201.0,1154.0
+Pos6,ch09,True,,,0.0,0.0,0.0,0.0,0.0,1201.0,1154.0
+Pos7,ch00,False,,edge channel,,,,,,,
+Pos7,ch01,True,,,43.0,40.0,2.0,5.0,19.0,1200.0,1135.0
+Pos7,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos7,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos7,ch04,True,,,49.0,49.0,0.0,0.0,0.0,1200.0,1199.0
+Pos7,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos7,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos7,ch08,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos7,ch10,True,,,39.0,43.0,10.0,6.0,43.0,1200.0,1052.0
+Pos8,ch00,False,,edge channel,,,,,,,
+Pos8,ch02,True,,,40.0,32.0,4.0,12.0,16.0,1200.0,1082.0
+Pos8,ch03,True,,,0.0,0.0,0.0,0.0,0.0,1200.0,1197.0
+Pos8,ch05,True,,,48.0,48.0,0.0,0.0,0.0,1200.0,1200.0
+Pos8,ch06,True,,,8.0,4.0,3.0,7.0,27.0,1200.0,1031.0
+Pos8,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos8,ch08,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos8,ch09,True,,,20.0,19.0,1.0,2.0,3.0,1200.0,1177.0
+Pos9,ch00,False,,edge channel,,,,,,,
+Pos9,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos9,ch04,True,,,35.0,29.0,9.0,15.0,53.0,1199.0,959.0
+Pos9,ch05,True,,,47.0,46.0,0.0,1.0,2.0,1199.0,1185.0
+Pos9,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos9,ch09,True,,,10.0,7.0,3.0,6.0,17.0,1199.0,1083.0
+Pos9,ch10,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos10,ch00,False,,edge channel,,,,,,,
+Pos10,ch01,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos10,ch02,True,,,32.0,29.0,0.0,3.0,19.0,1200.0,1173.0
+Pos10,ch03,True,,,37.0,37.0,0.0,0.0,0.0,1200.0,1200.0
+Pos10,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos10,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos10,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos10,ch08,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos11,ch00,False,,edge channel,,,,,,,
+Pos11,ch01,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos11,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos11,ch04,True,,,46.0,47.0,1.0,0.0,0.0,1201.0,1196.0
+Pos11,ch05,True,,,43.0,46.0,3.0,0.0,0.0,1201.0,1193.0
+Pos11,ch08,True,,,12.0,8.0,3.0,7.0,36.0,1201.0,1023.0
+Pos11,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos11,ch10,True,,,8.0,6.0,2.0,4.0,25.0,1201.0,1029.0
+Pos11,ch11,False,,edge channel,,,,,,,
+Pos12,ch00,False,,edge channel,,,,,,,
+Pos12,ch01,True,,,48.0,48.0,1.0,1.0,1.0,1201.0,1194.0
+Pos12,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos12,ch03,True,,,22.0,22.0,1.0,1.0,2.0,1184.0,1170.0
+Pos12,ch04,True,,,39.0,39.0,0.0,0.0,0.0,1201.0,1201.0
+Pos12,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos12,ch07,True,,,0.0,0.0,0.0,0.0,0.0,1201.0,1193.0
+Pos12,ch08,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos12,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos12,ch10,True,,,10.0,11.0,1.0,0.0,0.0,1201.0,1200.0
+Pos12,ch11,False,,edge channel,,,,,,,
+Pos13,ch00,False,,edge channel,,,,,,,
+Pos13,ch01,True,,,48.0,47.0,0.0,1.0,4.0,1201.0,1186.0
+Pos13,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos13,ch04,True,,,43.0,46.0,4.0,1.0,2.0,1201.0,1184.0
+Pos13,ch05,True,,,4.0,0.0,0.0,4.0,6.0,1201.0,1113.0
+Pos13,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos13,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos13,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos13,ch11,False,,edge channel,,,,,,,
+Pos14,ch00,False,,edge channel,,,,,,,
+Pos14,ch01,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos14,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos14,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos14,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos14,ch05,True,,,42.0,38.0,1.0,5.0,14.0,1201.0,1101.0
+Pos14,ch06,True,,,0.0,0.0,0.0,0.0,0.0,1201.0,1193.0
+Pos14,ch07,True,,,49.0,47.0,0.0,2.0,6.0,1201.0,1178.0
+Pos14,ch08,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos14,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos16,ch00,False,,edge channel,,,,,,,
+Pos16,ch01,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos16,ch02,True,,,19.0,8.0,1.0,12.0,16.0,443.0,307.0
+Pos16,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos16,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos16,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos16,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos16,ch08,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos16,ch09,False,,too few divisions (2) for a meaningful mother series,,,,,,,
+Pos16,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos16,ch11,False,,edge channel,,,,,,,
+Pos18,ch01,True,,,0.0,0.0,0.0,0.0,1.0,1199.0,1178.0
+Pos18,ch02,True,,,1.0,1.0,0.0,0.0,0.0,1199.0,1195.0
+Pos18,ch03,False,,too few divisions (2) for a meaningful mother series,,,,,,,
+Pos18,ch04,True,,,0.0,0.0,0.0,0.0,0.0,1199.0,1185.0
+Pos18,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos18,ch06,True,,,36.0,35.0,4.0,5.0,25.0,1199.0,1082.0
+Pos18,ch08,True,,,15.0,1.0,1.0,15.0,25.0,1199.0,934.0
+Pos18,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos18,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos21,ch00,False,,edge channel,,,,,,,
+Pos21,ch01,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos21,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos21,ch03,True,,,1.0,0.0,0.0,1.0,1.0,1192.0,1175.0
+Pos21,ch04,True,,,48.0,47.0,0.0,1.0,0.0,1192.0,1192.0
+Pos21,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos21,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos21,ch08,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos21,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos21,ch10,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos21,ch11,False,,edge channel,,,,,,,
+Pos22,ch01,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos22,ch02,True,,,47.0,47.0,0.0,0.0,0.0,1200.0,1198.0
+Pos22,ch05,True,,,0.0,0.0,0.0,0.0,0.0,1200.0,1160.0
+Pos22,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos22,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos22,ch08,True,,,0.0,0.0,0.0,0.0,0.0,1200.0,1171.0
+Pos22,ch09,True,,,11.0,0.0,0.0,11.0,18.0,1200.0,1073.0
+Pos22,ch10,True,,,0.0,0.0,0.0,0.0,0.0,1200.0,1160.0
+Pos22,ch11,False,,edge channel,,,,,,,
+Pos23,ch00,False,,edge channel,,,,,,,
+Pos23,ch01,True,,,0.0,0.0,0.0,0.0,0.0,1201.0,1191.0
+Pos23,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos23,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos23,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos23,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos23,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos23,ch08,True,,,0.0,0.0,0.0,0.0,0.0,1201.0,1193.0
+Pos23,ch09,True,,,0.0,0.0,0.0,0.0,0.0,1201.0,1199.0
+Pos23,ch11,False,,edge channel,,,,,,,
+Pos24,ch00,False,,edge channel,,,,,,,
+Pos24,ch01,True,,,26.0,31.0,18.0,13.0,41.0,1199.0,973.0
+Pos24,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos24,ch03,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos24,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos24,ch05,True,,,12.0,11.0,5.0,6.0,28.0,1199.0,838.0
+Pos24,ch06,True,,,35.0,27.0,9.0,17.0,36.0,1199.0,948.0
+Pos24,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos24,ch08,True,,,1.0,0.0,0.0,1.0,1.0,1199.0,1170.0
+Pos24,ch09,True,,,0.0,0.0,0.0,0.0,1.0,1199.0,1178.0
+Pos24,ch11,False,,edge channel,,,,,,,
+Pos25,ch00,False,,edge channel,,,,,,,
+Pos25,ch01,True,,,2.0,3.0,1.0,0.0,6.0,1201.0,1008.0
+Pos25,ch03,True,,,8.0,4.0,1.0,5.0,15.0,1201.0,1120.0
+Pos25,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos25,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos25,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos25,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos25,ch09,True,,,0.0,0.0,0.0,0.0,0.0,1201.0,1189.0
+Pos25,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos25,ch11,False,,edge channel,,,,,,,
+Pos27,ch00,False,,edge channel,,,,,,,
+Pos27,ch01,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos27,ch02,True,,,0.0,0.0,0.0,0.0,0.0,1176.0,1148.0
+Pos27,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos27,ch05,True,,,0.0,0.0,0.0,0.0,0.0,1176.0,1160.0
+Pos27,ch06,True,,,5.0,0.0,0.0,5.0,6.0,1176.0,1131.0
+Pos27,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos27,ch08,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos27,ch09,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos27,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos27,ch11,False,,edge channel,,,,,,,
+Pos28,ch00,False,,edge channel,,,,,,,
+Pos28,ch01,True,,,3.0,0.0,0.0,3.0,0.0,697.0,676.0
+Pos28,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos28,ch03,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos28,ch04,True,,,8.0,2.0,0.0,6.0,0.0,695.0,467.0
+Pos28,ch05,True,,,1.0,0.0,0.0,1.0,0.0,700.0,694.0
+Pos28,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos28,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos28,ch08,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos28,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos28,ch10,True,,,27.0,1.0,0.0,26.0,9.0,700.0,571.0
+Pos29,ch00,False,,edge channel,,,,,,,
+Pos29,ch01,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos29,ch02,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos29,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos29,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos29,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos29,ch06,True,,,43.0,20.0,8.0,31.0,60.0,1201.0,584.0
+Pos29,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos29,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos29,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos29,ch11,False,,edge channel,,,,,,,
+Pos30,ch00,False,,edge channel,,,,,,,
+Pos30,ch01,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos30,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos30,ch04,True,,,2.0,0.0,0.0,2.0,2.0,1199.0,1149.0
+Pos30,ch05,True,,,7.0,0.0,0.0,7.0,9.0,1199.0,1059.0
+Pos30,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos30,ch08,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos30,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos30,ch10,True,,,26.0,2.0,1.0,25.0,55.0,1199.0,800.0
+Pos30,ch11,False,,edge channel,,,,,,,
+Pos31,ch00,False,,edge channel,,,,,,,
+Pos31,ch01,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos31,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos31,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos31,ch04,True,,,13.0,0.0,0.0,13.0,35.0,1145.0,1037.0
+Pos31,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos31,ch07,True,,,1.0,0.0,0.0,1.0,0.0,1145.0,1122.0
+Pos31,ch08,True,,,1.0,0.0,0.0,1.0,3.0,1145.0,1110.0
+Pos31,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos31,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos31,ch11,False,,edge channel,,,,,,,
+Pos34,ch01,True,,,26.0,18.0,12.0,20.0,78.0,1201.0,718.0
+Pos34,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos34,ch03,True,,,24.0,10.0,4.0,18.0,46.0,1201.0,989.0
+Pos34,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos34,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos34,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos34,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos34,ch10,True,,,1.0,0.0,0.0,1.0,2.0,1201.0,1161.0
+Pos34,ch11,False,,edge channel,,,,,,,
+Pos36,ch00,False,,edge channel,,,,,,,
+Pos36,ch01,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos36,ch02,True,,,47.0,12.0,6.0,41.0,96.0,1135.0,614.0
+Pos36,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos36,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos36,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos36,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos36,ch07,True,,,42.0,16.0,4.0,30.0,109.0,1135.0,563.0
+Pos36,ch08,True,,,2.0,1.0,0.0,1.0,3.0,1135.0,1092.0
+Pos36,ch09,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos36,ch10,True,,,0.0,0.0,0.0,0.0,0.0,1135.0,1127.0
+Pos36,ch11,False,,edge channel,,,,,,,
+Pos44,ch00,False,,edge channel,,,,,,,
+Pos44,ch01,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos44,ch02,True,,,2.0,0.0,0.0,2.0,6.0,1201.0,1073.0
+Pos44,ch03,True,,,0.0,0.0,0.0,0.0,1.0,1201.0,1191.0
+Pos44,ch05,False,,too few divisions (2) for a meaningful mother series,,,,,,,
+Pos44,ch06,True,,,11.0,3.0,1.0,9.0,21.0,1201.0,1053.0
+Pos44,ch07,True,,,1.0,0.0,0.0,1.0,1.0,1201.0,1171.0
+Pos44,ch08,True,,,48.0,27.0,10.0,31.0,39.0,1201.0,801.0
+Pos44,ch09,True,,,2.0,0.0,0.0,2.0,2.0,1201.0,1129.0
+Pos44,ch10,True,,,0.0,0.0,0.0,0.0,0.0,1201.0,1189.0
+Pos44,ch11,False,,edge channel,,,,,,,
+Pos54,ch00,False,,edge channel,,,,,,,
+Pos54,ch01,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos54,ch02,True,,,44.0,48.0,5.0,1.0,4.0,1200.0,1177.0
+Pos54,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos54,ch05,True,,,43.0,46.0,10.0,7.0,13.0,1200.0,1124.0
+Pos54,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos54,ch07,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos54,ch08,True,,,0.0,1.0,1.0,0.0,0.0,1198.0,1179.0
+Pos54,ch09,True,,,3.0,0.0,0.0,3.0,3.0,1193.0,1152.0
+Pos54,ch10,True,,,1.0,0.0,0.0,1.0,3.0,959.0,946.0
+Pos54,ch11,False,,edge channel,,,,,,,
+Pos60,ch00,False,,edge channel,,,,,,,
+Pos60,ch01,True,,,6.0,0.0,0.0,6.0,7.0,1200.0,1106.0
+Pos60,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos60,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos60,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos60,ch07,True,,,0.0,0.0,0.0,0.0,42.0,1200.0,1092.0
+Pos60,ch08,True,,,21.0,2.0,1.0,20.0,48.0,1200.0,911.0
+Pos60,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos61,ch00,False,,edge channel,,,,,,,
+Pos61,ch01,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos61,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos61,ch03,True,,,40.0,46.0,11.0,5.0,16.0,1201.0,1138.0
+Pos61,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos61,ch06,True,,,9.0,6.0,2.0,5.0,12.0,1201.0,1132.0
+Pos61,ch07,True,,,0.0,0.0,0.0,0.0,0.0,1201.0,1195.0
+Pos61,ch08,True,,,43.0,46.0,4.0,1.0,2.0,1183.0,1162.0
+Pos61,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos61,ch10,True,,,46.0,48.0,4.0,2.0,10.0,1201.0,1167.0
+Pos61,ch11,False,,edge channel,,,,,,,
+Pos63,ch00,False,,edge channel,,,,,,,
+Pos63,ch01,True,,,50.0,47.0,0.0,3.0,5.0,1196.0,1184.0
+Pos63,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos63,ch03,True,,,42.0,42.0,1.0,1.0,2.0,1196.0,1183.0
+Pos63,ch04,True,,,49.0,48.0,0.0,1.0,5.0,1196.0,1164.0
+Pos63,ch05,True,,,12.0,13.0,3.0,2.0,4.0,1196.0,1174.0
+Pos63,ch06,True,,,9.0,1.0,1.0,9.0,11.0,1196.0,1097.0
+Pos63,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos63,ch08,True,,,19.0,0.0,0.0,19.0,28.0,1196.0,910.0
+Pos63,ch10,True,,,23.0,9.0,3.0,17.0,48.0,1196.0,948.0
+Pos63,ch11,False,,edge channel,,,,,,,
+Pos65,ch00,False,,edge channel,,,,,,,
+Pos65,ch01,True,,,1.0,0.0,0.0,1.0,1.0,1124.0,1069.0
+Pos65,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos65,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos65,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos65,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos65,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos65,ch08,True,,,5.0,0.0,0.0,5.0,11.0,1124.0,905.0
+Pos65,ch09,True,,,29.0,4.0,1.0,26.0,55.0,1124.0,763.0
+Pos65,ch11,False,,edge channel,,,,,,,
+Pos66,ch00,False,,edge channel,,,,,,,
+Pos66,ch01,True,,,45.0,47.0,2.0,0.0,1.0,1200.0,1190.0
+Pos66,ch03,True,,,44.0,47.0,4.0,1.0,1.0,1200.0,1181.0
+Pos66,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos66,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos66,ch06,True,,,33.0,24.0,0.0,9.0,18.0,1200.0,1114.0
+Pos66,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos66,ch08,True,,,0.0,0.0,0.0,0.0,0.0,1200.0,1190.0
+Pos66,ch09,True,,,6.0,5.0,0.0,1.0,1.0,1200.0,1197.0
+Pos66,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos66,ch11,False,,edge channel,,,,,,,
+Pos67,ch00,False,,edge channel,,,,,,,
+Pos67,ch01,True,,,1.0,0.0,0.0,1.0,2.0,1196.0,1168.0
+Pos67,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos67,ch04,True,,,0.0,0.0,0.0,0.0,0.0,1196.0,1190.0
+Pos67,ch05,True,,,0.0,0.0,0.0,0.0,0.0,1196.0,1186.0
+Pos67,ch06,True,,,47.0,47.0,1.0,1.0,0.0,1196.0,1191.0
+Pos67,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos67,ch08,True,,,44.0,45.0,1.0,0.0,0.0,1196.0,1191.0
+Pos67,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos67,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos71,ch00,False,,edge channel,,,,,,,
+Pos71,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos71,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos71,ch04,True,,,21.0,19.0,1.0,3.0,32.0,1199.0,982.0
+Pos71,ch05,True,,,26.0,26.0,1.0,1.0,5.0,1199.0,1188.0
+Pos71,ch07,True,,,27.0,19.0,2.0,10.0,46.0,1199.0,984.0
+Pos71,ch08,True,,,44.0,46.0,2.0,0.0,0.0,1199.0,1190.0
+Pos71,ch09,True,,,47.0,47.0,0.0,0.0,0.0,1199.0,1197.0
+Pos71,ch10,True,,,29.0,23.0,7.0,13.0,15.0,1199.0,1123.0
+Pos71,ch11,False,,edge channel,,,,,,,
+Pos72,ch00,False,,edge channel,,,,,,,
+Pos72,ch01,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos72,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos72,ch03,True,,,47.0,47.0,0.0,0.0,0.0,1200.0,1200.0
+Pos72,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos72,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos72,ch07,True,,,47.0,47.0,1.0,1.0,12.0,1200.0,1180.0
+Pos72,ch09,True,,,42.0,32.0,12.0,22.0,30.0,1200.0,650.0
+Pos72,ch10,True,,,8.0,19.0,12.0,1.0,3.0,1200.0,706.0
+Pos72,ch11,False,,edge channel,,,,,,,
+Pos73,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos73,ch04,True,,,0.0,0.0,0.0,0.0,0.0,1197.0,1182.0
+Pos73,ch05,True,,,3.0,0.0,0.0,3.0,15.0,1197.0,1093.0
+Pos73,ch06,True,,,0.0,0.0,0.0,0.0,14.0,1197.0,1099.0
+Pos73,ch08,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos73,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos73,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos73,ch11,False,,edge channel,,,,,,,
+Pos75,ch00,False,,edge channel,,,,,,,
+Pos75,ch01,True,,,5.0,5.0,0.0,0.0,0.0,485.0,485.0
+Pos75,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos75,ch05,True,,,45.0,45.0,1.0,1.0,4.0,1197.0,1183.0
+Pos75,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos75,ch08,True,,,32.0,33.0,1.0,0.0,0.0,1197.0,1191.0
+Pos75,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos75,ch10,True,,,48.0,48.0,1.0,1.0,1.0,1197.0,1193.0
+Pos76,ch00,False,,edge channel,,,,,,,
+Pos76,ch01,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos76,ch02,False,,too few divisions (2) for a meaningful mother series,,,,,,,
+Pos76,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos76,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos76,ch07,True,,,6.0,0.0,0.0,6.0,12.0,1200.0,949.0
+Pos76,ch08,True,,,40.0,42.0,4.0,2.0,4.0,1200.0,1177.0
+Pos76,ch09,True,,,1.0,0.0,0.0,1.0,0.0,1199.0,1185.0
+Pos76,ch10,True,,,48.0,47.0,0.0,1.0,0.0,1200.0,1184.0
+Pos76,ch11,False,,edge channel,,,,,,,
+Pos77,ch00,False,,edge channel,,,,,,,
+Pos77,ch01,True,,,5.0,3.0,1.0,3.0,7.0,1201.0,1077.0
+Pos77,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos77,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos77,ch06,True,,,0.0,0.0,0.0,0.0,0.0,1201.0,1195.0
+Pos77,ch07,True,,,44.0,46.0,3.0,1.0,0.0,1201.0,1190.0
+Pos77,ch08,True,,,2.0,2.0,0.0,0.0,0.0,1201.0,1181.0
+Pos77,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos77,ch10,True,,,0.0,0.0,0.0,0.0,0.0,1201.0,1178.0
+Pos77,ch11,False,,edge channel,,,,,,,
+Pos78,ch00,False,,edge channel,,,,,,,
+Pos78,ch01,True,,,47.0,48.0,1.0,0.0,0.0,1201.0,1200.0
+Pos78,ch02,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos78,ch03,True,,,45.0,47.0,2.0,0.0,0.0,1201.0,1196.0
+Pos78,ch04,True,,,48.0,48.0,0.0,0.0,0.0,1201.0,1201.0
+Pos78,ch05,True,,,0.0,0.0,0.0,0.0,0.0,1201.0,1167.0
+Pos78,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos78,ch08,True,,,46.0,47.0,3.0,2.0,2.0,1201.0,1160.0
+Pos78,ch09,True,,,11.0,9.0,3.0,5.0,20.0,1201.0,1078.0
+Pos78,ch10,True,,,27.0,21.0,7.0,13.0,0.0,1201.0,1076.0
+Pos78,ch11,False,,edge channel,,,,,,,
+Pos79,ch00,False,,edge channel,,,,,,,
+Pos79,ch01,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos79,ch02,True,,,17.0,0.0,0.0,17.0,21.0,1200.0,988.0
+Pos79,ch03,True,,,0.0,0.0,0.0,0.0,0.0,1200.0,1196.0
+Pos79,ch04,True,,,39.0,38.0,8.0,9.0,10.0,1200.0,1091.0
+Pos79,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos79,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos79,ch08,True,,,0.0,0.0,0.0,0.0,0.0,1200.0,1132.0
+Pos79,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos79,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos80,ch00,False,,edge channel,,,,,,,
+Pos80,ch01,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos80,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos80,ch05,True,,,15.0,13.0,3.0,5.0,48.0,1201.0,970.0
+Pos80,ch06,True,,,49.0,2.0,0.0,47.0,98.0,1201.0,677.0
+Pos80,ch07,True,,,49.0,47.0,0.0,2.0,2.0,1201.0,1193.0
+Pos80,ch08,True,,,0.0,0.0,0.0,0.0,0.0,1201.0,1195.0
+Pos80,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos80,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos80,ch11,False,,edge channel,,,,,,,
+Pos81,ch00,False,,edge channel,,,,,,,
+Pos81,ch01,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos81,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos81,ch03,True,,,22.0,21.0,0.0,1.0,5.0,1188.0,1178.0
+Pos81,ch04,True,,,29.0,28.0,7.0,8.0,16.0,1188.0,978.0
+Pos81,ch05,True,,,23.0,10.0,8.0,21.0,56.0,1188.0,803.0
+Pos81,ch06,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos81,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos81,ch08,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos81,ch09,True,,,10.0,10.0,0.0,0.0,0.0,1188.0,1188.0
+Pos81,ch11,False,,edge channel,,,,,,,
+Pos82,ch00,False,,edge channel,,,,,,,
+Pos82,ch01,True,,,30.0,30.0,0.0,0.0,0.0,1200.0,1198.0
+Pos82,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos82,ch03,True,,,38.0,39.0,1.0,0.0,0.0,1200.0,1195.0
+Pos82,ch04,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos82,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos82,ch06,True,,,38.0,16.0,6.0,28.0,82.0,1200.0,802.0
+Pos82,ch07,True,,,47.0,47.0,0.0,0.0,1.0,1200.0,1191.0
+Pos82,ch08,True,,,2.0,2.0,1.0,1.0,14.0,1200.0,1110.0
+Pos82,ch09,True,,,0.0,0.0,0.0,0.0,1.0,1200.0,1184.0
+Pos82,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos83,ch00,False,,edge channel,,,,,,,
+Pos83,ch01,True,,,47.0,47.0,0.0,0.0,0.0,1201.0,1201.0
+Pos83,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos83,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos83,ch04,True,,,0.0,0.0,0.0,0.0,0.0,1201.0,1187.0
+Pos83,ch05,True,,,0.0,0.0,0.0,0.0,0.0,1201.0,1157.0
+Pos83,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos83,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos83,ch11,False,,edge channel,,,,,,,
+Pos84,ch00,False,,edge channel,,,,,,,
+Pos84,ch01,True,,,44.0,45.0,1.0,0.0,0.0,1198.0,1194.0
+Pos84,ch02,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos84,ch03,True,,,8.0,8.0,1.0,1.0,0.0,1198.0,1150.0
+Pos84,ch04,True,,,38.0,45.0,7.0,0.0,4.0,1198.0,1171.0
+Pos84,ch05,True,,,24.0,0.0,0.0,24.0,53.0,1198.0,846.0
+Pos84,ch06,True,,,46.0,47.0,1.0,0.0,0.0,1198.0,1195.0
+Pos84,ch07,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos84,ch08,True,,,9.0,6.0,1.0,4.0,38.0,1198.0,990.0
+Pos84,ch10,True,,,47.0,47.0,1.0,1.0,2.0,1198.0,1179.0
+Pos84,ch11,False,,edge channel,,,,,,,
+Pos86,ch00,False,,edge channel,,,,,,,
+Pos86,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos86,ch04,True,,,5.0,3.0,2.0,4.0,38.0,1200.0,544.0
+Pos86,ch05,False,,too few divisions (2) for a meaningful mother series,,,,,,,
+Pos86,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos86,ch07,True,,,4.0,1.0,0.0,3.0,12.0,1200.0,1109.0
+Pos86,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos86,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos86,ch11,False,,edge channel,,,,,,,
+Pos87,ch00,False,,edge channel,,,,,,,
+Pos87,ch02,True,,,47.0,47.0,1.0,1.0,0.0,1200.0,1199.0
+Pos87,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos87,ch04,True,,,4.0,2.0,0.0,2.0,18.0,1200.0,1023.0
+Pos87,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos87,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos87,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos87,ch08,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos87,ch09,True,,,44.0,47.0,6.0,3.0,13.0,1200.0,1139.0
+Pos87,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos87,ch11,False,,edge channel,,,,,,,
+Pos90,ch00,False,,edge channel,,,,,,,
+Pos90,ch01,True,,,48.0,47.0,0.0,1.0,3.0,1201.0,1190.0
+Pos90,ch02,True,,,12.0,12.0,0.0,0.0,0.0,1201.0,1201.0
+Pos90,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos90,ch04,True,,,47.0,47.0,0.0,0.0,0.0,1201.0,1199.0
+Pos90,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos90,ch06,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos90,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos90,ch08,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos90,ch09,True,,,24.0,24.0,0.0,0.0,0.0,1201.0,1200.0
+Pos90,ch10,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos92,ch00,False,,edge channel,,,,,,,
+Pos92,ch01,True,,,23.0,15.0,6.0,14.0,77.0,1196.0,629.0
+Pos92,ch02,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos92,ch03,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos92,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos92,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos92,ch06,True,,,46.0,47.0,1.0,0.0,0.0,1196.0,1187.0
+Pos92,ch10,True,,,35.0,35.0,2.0,2.0,2.0,909.0,898.0
+Pos92,ch11,False,,edge channel,,,,,,,
+Pos93,ch00,False,,edge channel,,,,,,,
+Pos93,ch01,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos93,ch03,True,,,3.0,3.0,0.0,0.0,0.0,1198.0,1198.0
+Pos93,ch04,True,,,22.0,15.0,2.0,9.0,26.0,1198.0,1074.0
+Pos93,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos93,ch06,True,,,11.0,11.0,0.0,0.0,0.0,1198.0,1198.0
+Pos93,ch08,True,,,0.0,0.0,0.0,0.0,0.0,1198.0,1165.0
+Pos93,ch11,False,,edge channel,,,,,,,
+Pos94,ch02,False,,too few divisions (1) for a meaningful mother series,,,,,,,
+Pos94,ch04,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos94,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos94,ch06,True,,,4.0,1.0,0.0,3.0,5.0,1197.0,1152.0
+Pos94,ch07,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos94,ch08,True,,,46.0,48.0,7.0,5.0,23.0,1197.0,1143.0
+Pos94,ch09,True,,,40.0,46.0,6.0,0.0,0.0,1197.0,1174.0
+Pos94,ch10,True,,,46.0,18.0,4.0,32.0,102.0,1138.0,830.0
+Pos94,ch11,False,,edge channel,,,,,,,
+Pos96,ch01,True,,,19.0,18.0,1.0,2.0,2.0,1199.0,1165.0
+Pos96,ch02,True,,,5.0,5.0,0.0,0.0,0.0,1199.0,1199.0
+Pos96,ch03,True,,,5.0,4.0,3.0,4.0,6.0,1198.0,1167.0
+Pos96,ch05,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos96,ch06,True,,,4.0,6.0,3.0,1.0,9.0,1199.0,1149.0
+Pos96,ch08,True,,,42.0,45.0,4.0,1.0,2.0,1199.0,1175.0
+Pos96,ch09,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos97,ch00,False,,edge channel,,,,,,,
+Pos97,ch01,False,,too few divisions (0) for a meaningful mother series,,,,,,,
+Pos97,ch03,True,,,2.0,2.0,0.0,0.0,0.0,269.0,269.0
+Pos97,ch04,True,,,39.0,38.0,2.0,3.0,15.0,1200.0,1118.0
+Pos97,ch10,True,,,48.0,47.0,0.0,1.0,1.0,1200.0,1187.0
+Pos97,ch11,False,,edge channel,,,,,,,
+Pos98,ch02,True,,,5.0,6.0,1.0,0.0,0.0,1198.0,1193.0
+Pos98,ch04,True,,,16.0,16.0,0.0,0.0,0.0,778.0,768.0
+Pos98,ch05,True,,,33.0,34.0,1.0,0.0,0.0,865.0,856.0

@@ -19,6 +19,8 @@ import concurrent.futures
 import threading
 import re as _re
 
+from drift_channel_whitelist import select_channels as _wl_select_channels
+
 from ecc_utils import (
     tilt_fit_crop, extract_rect_roi, ecc_align, mad, remove_outliers_mad,
     ECC_MIN_CORR,
@@ -59,6 +61,14 @@ OUTLIER_TIMESERIES_THRESH = 0.0       # Timeseries MAD threshold (0 to disable)
 # with ECC score below this -> cell-free average, removing the glucose-dependent
 # cell-channel ECC bias. Override via cps.ECC_MIN_CORR = ... in batch drivers.
 OUTPUT_JSON = "pos_shifts_cal.json"
+
+# Optional cell-free channel whitelist for THIS Pos (list of int channel indices,
+# or None = production's rule unchanged -- score gate + MAD, fallback to all channels).
+# When given, used by drift_channel_whitelist.select_channels exactly as the online
+# compute_drift_online.py whitelist does (commit 07e9aac): intersected with whatever
+# passes the per-frame score/MAD gate, and substituted for "fall back to all channels"
+# when nothing passes. Override via cps.CHANNEL_WHITELIST = [...] in batch drivers.
+CHANNEL_WHITELIST = None
 
 # --- Apply gaussian_backsub to grid reference image ---
 # When True, apply the same backsub as timelapse to grid reference images
@@ -532,10 +542,19 @@ def _save_exclusion_summary_csv(frame_results, channels_dir):
     print(f"  [exclusion_summary] CSV saved: {csv_path}")
 
 
-def _frame_result_from_per_channel(t, per_channel):
+def _frame_result_from_per_channel(t, per_channel, whitelist_mask=None):
     """
     Compute outlier removal and averaging from per_channel list, returning
     (frame_result, sx_avg, sy_avg). sx_avg=sy_avg=None when all channels fail.
+
+    ``whitelist_mask``: optional bool array, length n_channels for this Pos,
+    True where that channel index is in CHANNEL_WHITELIST. The MAD-outlier
+    decision (previously hand-rolled here) is delegated to
+    drift_channel_whitelist.select_channels -- the same function the online
+    compute_drift_online.py whitelist uses -- so that whitelist_mask=None
+    reproduces this function's old behaviour bit for bit (verified: both use
+    ecc_utils.remove_outliers_mad's exact rule, select_channels' docstring
+    guarantees this).
     """
     valid = [c for c in per_channel if not c["excluded"]]
     if len(valid) == 0:
@@ -551,34 +570,33 @@ def _frame_result_from_per_channel(t, per_channel):
 
     xs = np.array([c["shift_x"] for c in valid])
     ys = np.array([c["shift_y"] for c in valid])
+    scores = np.array([c["correlation"] for c in valid], dtype=float)
 
-    if len(valid) >= 3:
-        outlier_x = remove_outliers_mad(xs.tolist(), OUTLIER_MAD_THRESH)
-        outlier_y = remove_outliers_mad(ys.tolist(), OUTLIER_MAD_THRESH)
-        is_outlier = outlier_x | outlier_y
-    else:
-        is_outlier = np.zeros(len(valid), dtype=bool)
+    wl_sub = None
+    if whitelist_mask is not None:
+        wl_sub = np.array([whitelist_mask[c["channel"]] for c in valid], dtype=bool)
+
+    # thr=-inf: the score gate already ran upstream (low_ecc -> excluded=True,
+    # dropped from `valid`), so select_channels' own `scores < thr` must never
+    # fire here -- it would just be a redundant second gate on an already
+    # pre-filtered list.
+    keep, fell_back, anchored = _wl_select_channels(
+        scores, xs, ys, thr=-np.inf, whitelist=wl_sub, mad_thresh=OUTLIER_MAD_THRESH)
 
     for i, c in enumerate(valid):
-        if is_outlier[i]:
-            c["excluded"] = True
+        c["excluded"] = not bool(keep[i])
+        if keep[i]:
+            c["exclude_reason"] = None
+        elif wl_sub is not None and not wl_sub[i]:
+            c["exclude_reason"] = "channel_not_whitelisted"
+        else:
             c["exclude_reason"] = "channel_outlier_mad"
 
-    used = [c for c in valid if not c["excluded"]]
-    n_excluded = int(np.sum(is_outlier))
-
-    if len(used) == 0:
-        sx_avg = float(np.mean(xs))
-        sy_avg = float(np.mean(ys))
-        n_used = len(valid)
-        n_excluded = 0
-        for c in valid:
-            c["excluded"] = False
-            c["exclude_reason"] = None
-    else:
-        sx_avg = float(np.mean([c["shift_x"] for c in used]))
-        sy_avg = float(np.mean([c["shift_y"] for c in used]))
-        n_used = len(used)
+    used = [c for i, c in enumerate(valid) if keep[i]]
+    n_excluded = len(valid) - len(used)
+    n_used = len(used)
+    sx_avg = float(np.mean([c["shift_x"] for c in used]))
+    sy_avg = float(np.mean([c["shift_y"] for c in used]))
 
     return {
         "frame_index": t,
@@ -587,6 +605,8 @@ def _frame_result_from_per_channel(t, per_channel):
         "n_channels_used": n_used,
         "n_channels_excluded_outlier": n_excluded,
         "is_outlier_timeseries": False,
+        "whitelist_fallback": bool(fell_back),
+        "whitelist_anchored": bool(anchored),
         "per_channel": per_channel
     }, sx_avg, sy_avg
 
@@ -905,6 +925,15 @@ def main():
     corr_records  = []   # Full record of corr/shift (for NPZ/CSV saving)
     pixel_scale_um = SENSOR_PIXEL_SIZE / MAGNIFICATION * ORIGINAL_DIM / RECONSTRUCTED_DIM * 1e6
 
+    _whitelist_mask = None
+    if CHANNEL_WHITELIST is not None:
+        _whitelist_mask = np.zeros(n_channels, dtype=bool)
+        for _ch in CHANNEL_WHITELIST:
+            if 0 <= _ch < n_channels:
+                _whitelist_mask[_ch] = True
+        print(f"[whitelist] {int(_whitelist_mask.sum())}/{n_channels} channels: "
+              f"{sorted(CHANNEL_WHITELIST)}")
+
     if USE_INCREMENTAL_TRACKING:
         pos_map = scan_grid_positions(GRID_DIR, GRID_BASE_LABEL)
         if not pos_map:
@@ -966,7 +995,7 @@ def main():
 
         # Collect results (pool.map returns in order)
         for t_idx, pc_list, cr_list in all_results:
-            fr, _, _ = _frame_result_from_per_channel(t_idx, pc_list)
+            fr, _, _ = _frame_result_from_per_channel(t_idx, pc_list, _whitelist_mask)
             frame_results.append(fr)
             corr_records.extend(cr_list)
 
@@ -1035,7 +1064,7 @@ def main():
 
         for t in range(n_frames):
             pc, cr = _frame_results_map[t]
-            frame_result, _, _ = _frame_result_from_per_channel(t, pc)
+            frame_result, _, _ = _frame_result_from_per_channel(t, pc, _whitelist_mask)
             frame_results.append(frame_result)
             corr_records.extend(cr)
 

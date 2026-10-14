@@ -1,0 +1,540 @@
+pos,ch,note,exclude,cutoff_h,fate_manual
+Pos1,ch01,,False,,False
+Pos1,ch06,"分裂見逃し@0.0h, 分裂見逃し@6.6h, 分裂見逃し@36.2h, メモ点@20.9h; outlierで分裂してる",False,,False
+Pos1,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos2,ch01,,False,,False
+Pos2,ch04,"メモ点@17.6h, 分裂見逃し@4.8h; これを最後のサイクルとして死んでいますね、膨潤死",False,,False
+Pos2,ch05,,False,,False
+Pos2,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos2,ch09,メモ点@17.8h; このサイクルを最後に死んでいます膨潤,False,,False
+Pos3,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos3,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos3,ch05,,False,,False
+Pos3,ch06,"分裂見逃し@21.8h, メモ点@93.6h, 分裂見逃し@93.9h; outlierが残っています",False,,False
+Pos3,ch10,分裂見逃し@15.5h,False,,False
+Pos3,ch11,,False,,False
+Pos4,ch02,,False,,False
+Pos4,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos4,ch08,,False,,False
+Pos4,ch09,,False,,False
+Pos4,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos4,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos5,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos5,ch01,,False,,False
+Pos5,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos5,ch03,,False,,False
+Pos5,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos5,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos5,ch06,,False,,False
+Pos5,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos6,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos6,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos6,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos6,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos6,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos6,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos6,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos6,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos7,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos7,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos7,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos7,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos7,ch04,,False,,False
+Pos7,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos7,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos7,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos7,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos8,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos8,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos8,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos8,ch05,分裂見逃し@85.7h,False,,False
+Pos8,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos8,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos8,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos8,ch09,メモ点@34.0h; このcycleをさいごにしんでいます。,False,,False
+Pos9,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos9,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos9,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos9,ch05,"メモ点@88.7h, メモ点@89.4h; このcycleにoutlierが5てんのこっています。",False,,False
+Pos9,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos9,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos9,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos10,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos10,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos10,ch02,メモ点@71.2h; このさいくるがさいごのさいくるでしんでいます,False,,False
+Pos10,ch03,メモ点@78.6h; ここでしんでいます,False,,False
+Pos10,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos10,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos10,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos10,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos11,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos11,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos11,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos11,ch04,分裂見逃し@3.6h,False,,False
+Pos11,ch05,"分裂見逃し@70.9h, 分裂見逃し@74.8h",False,,False
+Pos11,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos11,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos11,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos11,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos12,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos12,ch01,"メモ点@44.8h, メモ点@45.0h, メモ点@45.3h, メモ点@46.1h, メモ点@45.6h, メモ点@46.5h, メモ点@47.6h, メモ点@49.3h; outlier未除外です",False,,False
+Pos12,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos12,ch03,"メモ点@48.8h, 分裂見逃し@7.9h, 変なcycle@19.7h(18-20h), 変なcycle@19.8h(18-20h), 変なcycle@20.0h(18-20h); ここでしんでいます。outlierが3点あって未除外です。誤分裂もしています",False,,False
+Pos12,ch04,,False,,False
+Pos12,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos12,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos12,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos12,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos12,ch10,メモ点@27.8h; ここでしんでいます,False,,False
+Pos12,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos13,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos13,ch01,"変なcycle@76.8h(76-78h), 変なcycle@77.2h(76-78h), 変なcycle@77.0h(76-78h); outlierが3てんほど未除外で誤分裂判定もしています。",False,,False
+Pos13,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos13,ch04,"分裂見逃し@86.8h, 分裂見逃し@90.8h, 分裂見逃し@95.5h, 分裂見逃し@97.7h, 分裂見逃し@99.8h, メモ点@96.8h, メモ点@97.2h; outlierが2てんあり、未除外です。",False,,False
+Pos13,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos13,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos13,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos13,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos13,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos14,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos14,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos14,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos14,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos14,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos14,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos14,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos14,ch07,"メモ点@13.0h, メモ点@13.3h, メモ点@93.2h, メモ点@93.3h; outlierが4店あります。誤分裂判定もしています。",False,,False
+Pos14,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos14,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos14,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos16,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos16,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos16,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos16,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos16,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos16,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos16,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos16,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos16,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos16,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos16,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos18,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos18,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos18,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos18,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos18,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos18,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos18,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos18,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos18,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos21,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos21,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos21,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos21,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos21,ch04,,False,,False
+Pos21,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos21,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos21,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos21,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos21,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos21,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos22,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos22,ch02,,False,,False
+Pos22,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos22,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos22,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos22,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos22,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos22,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos22,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos23,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos23,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos23,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos23,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos23,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos23,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos23,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos23,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos23,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos23,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos24,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos24,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos24,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos24,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos24,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos24,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos24,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos24,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos24,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos24,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos24,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos25,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos25,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos25,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos25,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos25,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos25,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos25,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos25,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos25,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos25,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos27,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos27,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos27,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos27,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos27,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos27,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos27,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos27,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos27,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos27,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos27,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos28,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos28,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos28,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos28,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos28,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos28,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos28,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos28,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos28,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos28,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos28,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos29,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos29,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos29,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos29,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos29,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos29,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos29,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos29,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos29,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos29,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos29,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos30,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos30,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos30,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos30,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos30,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos30,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos30,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos30,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos30,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos30,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos31,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos31,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos31,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos31,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos31,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos31,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos31,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos31,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos31,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos31,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos31,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos34,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos34,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos34,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos34,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos34,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos34,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos34,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos34,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos34,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos36,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos36,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos36,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos36,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos36,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos36,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos36,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos36,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos36,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos36,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos36,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos36,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos44,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos44,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos44,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos44,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos44,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos44,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos44,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos44,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos44,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos44,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos44,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos54,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos54,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos54,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos54,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos54,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos54,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos54,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos54,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos54,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos54,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos54,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos60,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos60,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos60,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos60,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos60,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos60,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos60,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos60,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos61,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos61,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos61,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos61,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos61,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos61,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos61,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos61,ch08,"分裂見逃し@4.8h, 分裂見逃し@62.6h, メモ点@83.0h, メモ点@83.1h, 分裂見逃し@86.9h",False,,False
+Pos61,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos61,ch10,"メモ点@7.7h, メモ点@65.0h, メモ点@88.5h, メモ点@95.1h, メモ点@95.1h, メモ点@95.1h, メモ点@95.1h, メモ点@95.1h, メモ点@95.7h, メモ点@97.5h, メモ点@97.5h, メモ点@97.5h, メモ点@97.8h, メモ点@97.8h, メモ点@97.8h, メモ点@98.0h, メモ点@98.3h, メモ点@98.7h, メモ点@98.4h",False,,False
+Pos61,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos63,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos63,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos63,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos63,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos63,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos63,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos63,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos63,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos63,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos63,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos63,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos65,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos65,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos65,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos65,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos65,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos65,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos65,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos65,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos65,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos65,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos66,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos66,ch01,メモ点@15.0h,False,,False
+Pos66,ch03,"分裂見逃し@69.1h, 分裂見逃し@98.0h, メモ点@91.3h, メモ点@91.3h",False,,False
+Pos66,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos66,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos66,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos66,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos66,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos66,ch09,メモ点@15.7h; ここでしんでいます,False,,False
+Pos66,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos66,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos67,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos67,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos67,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos67,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos67,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos67,ch06,,False,,False
+Pos67,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos67,ch08,"メモ点@21.8h, 分裂見逃し@40.2h",False,,False
+Pos67,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos67,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos71,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos71,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos71,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos71,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos71,ch05,"メモ点@7.5h, メモ点@7.7h, メモ点@58.3h; 最後死んでる",False,,False
+Pos71,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos71,ch08,分裂見逃し@92.5h,False,,False
+Pos71,ch09,,False,,False
+Pos71,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos71,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos72,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos72,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos72,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos72,ch03,,False,,False
+Pos72,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos72,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos72,ch07,,False,,False
+Pos72,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos72,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos72,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos73,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos73,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos73,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos73,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos73,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos73,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos73,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos73,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos75,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos75,ch01,メモ点@14.4h; さいごしんでる,False,,False
+Pos75,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos75,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos75,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos75,ch08,"分裂見逃し@33.6h, メモ点@76.7h; さいごしんでる",False,,False
+Pos75,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos75,ch10,,False,,False
+Pos76,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos76,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos76,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos76,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos76,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos76,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos76,ch08,"メモ点@75.3h, メモ点@75.3h, メモ点@75.8h, メモ点@76.0h, メモ点@5.8h, 分裂見逃し@21.5h, 分裂見逃し@32.0h, 分裂見逃し@34.3h, 分裂見逃し@42.6h, メモ点@91.3h; さいごしんでる",False,,False
+Pos76,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos76,ch10,メモ点@101.2h,False,,False
+Pos76,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos77,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos77,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos77,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos77,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos77,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos77,ch07,"分裂見逃し@5.5h, 分裂見逃し@8.0h, メモ点@7.7h, メモ点@7.9h, メモ点@45.1h",False,,False
+Pos77,ch08,メモ点@3.0h; ここで死んでる,False,,False
+Pos77,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos77,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos77,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos78,ch00,,False,,False
+Pos78,ch01,分裂見逃し@90.2h,False,,False
+Pos78,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos78,ch03,分裂見逃し@39.6h,False,,False
+Pos78,ch04,,False,,False
+Pos78,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos78,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos78,ch08,"メモ点@41.5h, メモ点@75.2h, メモ点@79.3h, メモ点@79.5h",False,,False
+Pos78,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos78,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos78,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos79,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos79,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos79,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos79,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos79,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos79,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos79,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos79,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos79,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos79,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos80,ch00,メモ点@80.5h; しんでる,False,,False
+Pos80,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos80,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos80,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos80,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos80,ch07,分裂見逃し@70.6h,False,,False
+Pos80,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos80,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos80,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos80,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos81,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos81,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos81,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos81,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos81,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos81,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos81,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos81,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos81,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos81,ch09,メモ点@24.6h; ここでしんでる,False,,False
+Pos81,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos82,ch00,メモ点@19.4h; ここでしんでる,False,,False
+Pos82,ch01,メモ点@66.5h; ここでしんでる,False,,False
+Pos82,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos82,ch03,メモ点@85.5h; ここでしんでる,False,,False
+Pos82,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos82,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos82,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos82,ch07,,False,,False
+Pos82,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos82,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos82,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos83,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos83,ch01,,False,,False
+Pos83,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos83,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos83,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos83,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos83,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos83,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos83,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos84,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos84,ch01,"メモ点@43.6h, 分裂見逃し@18.9h, メモ点@99.7h; ここでしんでる。elongation死だ。",False,,False
+Pos84,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos84,ch03,メモ点@13.3h; ここで死んでる,False,,False
+Pos84,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos84,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos84,ch06,"分裂見逃し@74.2h, 分裂見逃し@85.1h",False,,False
+Pos84,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos84,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos84,ch10,"メモ点@74.4h, メモ点@76.4h, メモ点@89.2h, 分裂見逃し@90.1h, メモ点@94.3h",False,,False
+Pos84,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos86,ch00,"メモ点@73.3h, メモ点@73.4h, メモ点@99.8h, 分裂見逃し@81.1h, 分裂見逃し@100.8h",False,,False
+Pos86,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos86,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos86,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos86,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos86,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos86,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos86,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos86,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos87,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos87,ch02,分裂見逃し@95.0h,False,,False
+Pos87,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos87,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos87,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos87,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos87,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos87,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos87,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos87,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos87,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos90,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos90,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos90,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos90,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos90,ch04,分裂見逃し@78.1h,False,,False
+Pos90,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos90,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos90,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos90,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos90,ch09,メモ点@57.8h; ここでしんでる,False,,False
+Pos90,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos92,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos92,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos92,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos92,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos92,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos92,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos92,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos92,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos92,ch11,,False,,False
+Pos93,ch00,"分裂見逃し@3.0h, 分裂見逃し@13.6h",False,,False
+Pos93,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos93,ch03,,False,,False
+Pos93,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos93,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos93,ch06,,False,,False
+Pos93,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos93,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos94,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos94,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos94,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos94,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos94,ch07,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos94,ch08,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos94,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos94,ch10,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos94,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos96,ch01,"メモ点@37.7h, メモ点@22.3h, 分裂見逃し@7.1h; ここでelong死 してるoutlierで誤分裂判定している",False,,False
+Pos96,ch02,メモ点@23.5h; ここで死んでる,False,,False
+Pos96,ch03,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos96,ch05,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos96,ch06,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos96,ch08,"メモ点@67.9h, 分裂見逃し@28.4h; volume200超えているものoutlierです",False,,False
+Pos96,ch09,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos97,ch00,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos97,ch01,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos97,ch03,メモ点@3.8h; ここで死んでる,False,,False
+Pos97,ch04,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos97,ch10,メモ点@87.8h; outlierじょがいできていない,False,,False
+Pos97,ch11,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos98,ch02,not in the previously-reviewed 113ch list (qc_review/.../gallery_100h_v3/channel_review.csv),True,,False
+Pos98,ch04,メモ点@38.9h,False,,False
+Pos98,ch05,分裂見逃し@65.6h,False,,False
