@@ -1,0 +1,48 @@
+# 261024 EMM 2% single-z timelapse, stopped at T=666 (2026-10-26 20:28) when E: ran out of space.
+# Read by scripts/run_dataset_pipeline.py.
+dataset: "261024"
+description: "EMM 2% glucose only, 119 Pos x up to 12 traps, 5 min/frame, single z, whitelist-averaged drift from T=5, img 0-666 (55.5 h)"
+
+paths:
+  raw_root: "E:/261024/online_crop_sub_2per_5min_31d"            # online crop_sub from compute_drift_online (NVMe)
+  raw_root_overrides: []
+  mask_root: "D:/261024_seg"                                     # E: is full (0 GB); masks + lineage_out on D:
+  channel_rel: "output_phase/channels/crop_sub_rawraw/z000"
+  phase_glob: "img_*_ph_000.tif"
+  consolidated_dir: null
+  master_root: "D:/QPI_master/261024"
+  mirror_root: null
+
+positions: {start: 1, end: 119}                                  # Pos0 is the cell-free reference
+
+segmentation:
+  model: "models/omni_model_d20_2026_09_07_12_41_31.782047"
+  eval: {diameter: 20, normalize: true, tile: false, omni: true, flow_threshold: 0.11, mask_threshold: 0, min_size: 10, net_avg: false}
+  gate: {phase_hi: 0.7, min_px: 40}
+  workers: 6
+
+tracking:
+  pixel_size_um: 0.34567514677103717
+  time_interval_min: 5.0
+  wavelength_nm: 658.0
+  alpha_ri: 0.00018
+  frame_min: 2
+  frame_max: 666                 # acquisition stopped after img 666
+  media_schedule: "0:wo_2"        # 2% for the whole run
+  ri_calibration: null           # no RI calibration measured for this chip yet
+  calibration_id: null
+  bad_frames: null               # the drift session wrote no bad_frames.json
+  production_marker: "volume_um3_efd"
+  workers: 2
+
+edge_channels: ["ch00", "ch11"]  # POS_SPLIT 60; a few Pos have != 12 traps (Pos1 11, Pos10 13, Pos119 4)
+
+inputs_extra:
+  - "C:/Users/QPI/Documents/QPI_Omni/drift_session_261024/channel_whitelist.json"
+  - "C:/Users/QPI/Documents/QPI_Omni/drift_session_261024/drift_config_zstack.json"
+qc_extra: []
+derived: null
+notes:
+  - "Whitelist (113 Pos, 509 cell-free channels picked on the T=0 sheet) drove the drift correction from T=5; T=0-4 used the production rule."
+  - "Grid: E:/261024/recon_2per_grid_1 (POS_SPLIT 60). Focus TIPFSOffset 305.7, same as the grid."
+  - "Pos4, 28, 36, 42, 44, 119 had no whitelisted channel (user: probably not analysed)."
