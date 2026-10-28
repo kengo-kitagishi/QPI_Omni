@@ -28,8 +28,8 @@ tracking:
   alpha_ri: 0.00018
   frame_min: 2
   frame_max: 666                 # acquisition stopped after img 666
-  media_schedule: ""              # 2% for the whole run; a schedule needs ri_calibration, which does not exist yet
-  ri_calibration: null           # no RI calibration measured for this chip yet -> n_medium scalar 1.333
+  media_schedule: "0:wo_2"        # 2% EMM for the whole run
+  ri_calibration: "datasets/ri_calibration_2perEMM_from_260517.json"   # wo_2 = 1.335029, carried over from 260517 (not measured on this chip)
   calibration_id: null
   bad_frames: null               # the drift session wrote no bad_frames.json
   production_marker: "volume_um3_efd"

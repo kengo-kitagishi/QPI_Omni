@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "active": "2perEMM_from_260517",
+  "calibrations": [
+    {
+      "calibration_id": "2perEMM_from_260517",
+      "calibrated_at": "",
+      "reference": {
+        "n_miliq": 1.3312,
+        "n_etoh": 1.3588,
+        "source": "MilliQ / EtOH two-point method at 658 nm, 25 C (docs/PROTOCOL_TIMELAPSE.md)"
+      },
+      "media": {
+        "wo_milliq": 1.3312,
+        "wo_2": 1.335029,
+        "wo_etoh": 1.3588
+      },
+      "raw": {},
+      "notes": "Not measured on the 261024 chip. 2% glucose EMM value carried over from the 260517 calibration (H:/260517/grid_2pergluc_2/ri_calibration_results.json, wo_2 = 1.33503; H: is not mounted on 2026-10-29). Replace with a per-chip calibration when one is measured."
+    }
+  ]
+}
