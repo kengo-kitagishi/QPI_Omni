@@ -11,6 +11,7 @@ Status of every job (pending / running / done / FAILED) is rewritten to STATUS_P
 job, so "which ones are finished" is one file to open.
 """
 import os
+import re
 import shutil
 import sys
 import time
@@ -136,16 +137,42 @@ def write_status(rows):
     STATUS_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def previous_done():
+    """{src: row} for jobs a previous run already finished cleanly (kept, not redone).
+
+    Their sources may already be deleted by verify_delete_after_backup_261028.py, so they must
+    not be re-walked or reported as missing.
+    """
+    if not STATUS_PATH.exists():
+        return {}
+    done, last = {}, None
+    row_re = re.compile(r"^done\s+(\S.*?)\s+->\s+(\S+)\s+start (\S+ \S+)\s+end (\S+ \S+)\s+exit (\d+)")
+    for line in STATUS_PATH.read_text(encoding="utf-8").splitlines():
+        m = row_re.match(line)
+        if m:
+            last = {"src": m[1], "dst": m[2], "state": "done", "start": m[3], "end": m[4],
+                    "code": int(m[5])}
+            done[m[1]] = last
+        elif last and line.strip().startswith(("Files:", "Bytes:")):
+            key, val = line.strip().split(":", 1)
+            last[key] = val.strip()
+        else:
+            last = None
+    return {s: r for s, r in done.items() if r["code"] == 0}
+
+
 def main():
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    rows = [{"src": s, "dst": str(dest_for(s)), "state": "pending"} for s in SOURCES]
+    carried = previous_done()
+    rows = [carried.get(s) or {"src": s, "dst": str(dest_for(s)), "state": "pending"}
+            for s in SOURCES]
     for r in rows:
-        if not Path(r["src"]).exists():
+        if r["state"] == "pending" and not Path(r["src"]).exists():
             r["state"] = "missing"
     write_status(rows)
 
     for r in rows:
-        if r["state"] == "missing":
+        if r["state"] in ("missing", "done"):
             continue
         log_path = LOG_DIR / (r["src"].replace(":", "").replace("\\", "_") + ".log")
         r["state"], r["start"] = "running", f"{datetime.now():%m-%d %H:%M}"
@@ -158,7 +185,8 @@ def main():
         r["state"] = "done" if n_failed == 0 else "FAILED"
         r.update(summary)
         write_status(rows)
-        print(f"[{datetime.now():%H:%M:%S}]   exit {code}  {r.get('Files', '')}", flush=True)
+        print(f"[{datetime.now():%H:%M:%S}]   failed {r['code']}  {r.get('Files', '')}",
+              flush=True)
 
     failed = [r["src"] for r in rows if r["state"] == "FAILED"]
     print("ALL DONE" if not failed else f"FINISHED WITH FAILURES: {failed}", flush=True)
