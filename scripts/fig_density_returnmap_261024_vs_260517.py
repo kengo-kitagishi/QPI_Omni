@@ -10,6 +10,7 @@ Cycle n = mother between two consecutive QC-validated mother divisions (division
   T_n    = interdivision time [h]
   rho_n  = mean concentration over the valid frames of the cycle [mg/mL]
   Mb_n   = birth mass: median mass_pg of the first 3 valid frames after the division [pg]
+  rhob_n = birth concentration: median of the same first 3 valid frames [mg/mL]
   Vb_n, Vmean_n = birth volume (same 3 frames) / cycle-mean volume [um3, efd]
   dMdt_n = mass production rate: slope of a linear fit of mass_pg vs time over the cycle [pg/h]
 Return map = (x_n, x_n+1) over consecutive cycles of the same mother.
@@ -98,6 +99,7 @@ def cycles(m, dv, ds):
             slope = np.polyfit(seg["time_h"].values, seg["mass_pg"].values, 1)[0]
             rows.append({"pos": pos, "ch": ch, "k": i, "start": a, "end": b,
                          "T_h": (b - a) * 5.0 / 60.0, "rho": seg["conc"].mean(),
+                         "rhob": seg["conc"].iloc[:3].median(),
                          "Mb": seg["mass_pg"].iloc[:3].median(),
                          "Vb": seg["vol"].iloc[:3].median(), "Vmean": seg["vol"].mean(),
                          "dMdt": slope})          # mass production rate: linear fit over the cycle [pg/h]

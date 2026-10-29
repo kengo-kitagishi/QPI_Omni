@@ -11,12 +11,13 @@ import numpy as np
 COLORS = {"261024": "#0072B2", "260517": "#D55E00"}
 FILLS = {"261024": "rgba(0,114,178,0.18)", "260517": "rgba(213,94,0,0.18)"}
 PANELS = [("rho", "a  cycle-mean concentration", "generation lag k"),
-          ("Mb", "b  birth mass", "generation lag k"),
-          ("Vb", "c  birth volume", "generation lag k"),
-          ("Vmean", "d  cycle-mean volume", "generation lag k"),
-          ("dMdt", "e  mass production rate (pg/h)", "generation lag k"),
-          ("T_h", "f  interdivision time", "generation lag k"),
-          ("conc_time", "g  mother concentration (time)", "time lag τ [h]")]
+          ("rhob", "b  birth concentration", "generation lag k"),
+          ("Mb", "c  birth mass", "generation lag k"),
+          ("Vb", "d  birth volume", "generation lag k"),
+          ("Vmean", "e  cycle-mean volume", "generation lag k"),
+          ("dMdt", "f  mass production rate (pg/h)", "generation lag k"),
+          ("T_h", "g  interdivision time", "generation lag k"),
+          ("conc_time", "h  mother concentration (time)", "time lag τ [h]")]
 
 
 def band(x, lo, hi, ds):
