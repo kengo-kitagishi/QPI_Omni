@@ -28,6 +28,9 @@ STATUS_PATH = Path(r"C:\Users\QPI\Documents\QPI_Omni\backup_d_e_to_f_261028_STAT
 SOURCES = [
     r"E:\260928",
     r"D:\260928_from_F",          # part of E:\260928 parked on D: while F: was reformatted (2026-10-29)
+    r"C:\260928_from_F",          # overflow of the same restore (E: + D: were short)
+    r"C:\F_only_misc_261029",     # the two files that existed only on the old F: (audit_f_unique_261029.txt)
+    r"C:\261024_grid_raw_parked\2per_grid_1",   # 261024 grid raw Pos100-118 moved off E: for the 261029 grid
     r"E:\261004",
     r"E:\260917",
     r"E:\260908_whitelist_realign",
@@ -60,7 +63,12 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 
-DEST_OVERRIDE = {r"D:\260928_from_F": Path("F:/") / "from_E" / "260928"}   # back to its original place
+DEST_OVERRIDE = {   # back to their original places
+    r"D:\260928_from_F": Path("F:/") / "from_E" / "260928",
+    r"C:\260928_from_F": Path("F:/") / "from_E" / "260928",
+    r"C:\F_only_misc_261029": Path("F:/"),
+    r"C:\261024_grid_raw_parked\2per_grid_1": Path("F:/") / "from_E" / "261024" / "2per_grid_1",
+}
 
 
 def dest_for(src):
