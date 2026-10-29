@@ -8,7 +8,7 @@ For dry mass, volume and concentration of each cycle:
 Rows: mass, volume, concentration. Columns:
   1  X_b vs X_d                  (same scale, dashed y = x)
   2  X_b vs dX                   (same scale; OLS slope: 0 adder, -1 sizer, +1 timer)
-  3  X_b(n) vs X_b(n+1)          (birth to birth, consecutive cycles of the same mother)
+  3  X_b(n) vs X_b(n+1) - X_b(n) (birth to birth, consecutive cycles; same scale, slope -1 = no memory)
 Also writes an interactive HTML of the same panels next to the 261024 QC pages.
 """
 import json
@@ -25,7 +25,8 @@ sys.path.insert(0, str(SCRIPTS))
 import fig_density_returnmap_261024_vs_260517 as base  # noqa: E402  (also sets rcParams)
 from figure_logger import save_figure  # noqa: E402
 
-HTML_OUT = Path(r"D:\261024_seg\_qc\birth_division_261024_vs_260517.html")
+SHOW = ("261024",)            # datasets drawn; add "260517" to overlay the 7-day run
+HTML_OUT = Path(r"D:\261024_seg\_qc\birth_division_261024.html")
 ROWS = [("M", "dry mass", "[pg]", (0, 45), (-10, 35)),
         ("V", "volume", "[µm³]", (0, 200), (-40, 160)),
         ("rho", "concentration", "[mg/mL]", (150, 400), (-125, 125))]
@@ -53,9 +54,10 @@ def main():
     f, dv, _ = base.load_261024()
     m = base.mothers(f, None, "261024")
     data["261024"] = base.cycles(m, dv, "261024")
-    f, dv, (keep, tag) = base.load_260517()
-    m = base.mothers(f, keep, "260517")
-    data["260517"] = base.cycles(m, dv, "260517")
+    if "260517" in SHOW:
+        f, dv, (keep, _tag) = base.load_260517()
+        m = base.mothers(f, keep, "260517")
+        data["260517"] = base.cycles(m, dv, "260517")
 
     fig, axes = plt.subplots(3, 3, figsize=(183 / 25.4, 170 / 25.4), constrained_layout=True)
     arrays, summ, html_panels = {}, {}, []
@@ -64,14 +66,14 @@ def main():
         col_specs = [("birth vs division−1", f"birth {unit}", f"division−1 {unit}", lim, lim, "xd"),
                      ("birth vs increment", f"birth {unit}", f"increment (division−1 − birth) {unit}",
                       lim, dlim, "dx"),
-                     ("birth n vs birth n+1", f"birth, cycle n {unit}", f"birth, cycle n+1 {unit}", lim, lim, "bb")]
+                     ("birth n vs birth change", f"birth, cycle n {unit}", f"birth n+1 − birth n {unit}", lim, dlim, "bb")]
         for col, (title, xl, yl, xlim, ylim, kind) in enumerate(col_specs):
             ax = axes[row, col]
             traces = []
-            for ds in ("260517", "261024"):
+            for ds in [d for d in ("260517", "261024") if d in SHOW]:
                 c, p = data[ds]
                 xb, xd, pb, pn = quantities(c, p, key)
-                x, y = {"xd": (xb, xd), "dx": (xb, xd - xb), "bb": (pb, pn)}[kind]
+                x, y = {"xd": (xb, xd), "dx": (xb, xd - xb), "bb": (pb, pn - pb)}[kind]
                 ok, r, s = stats(x, y)
                 summ[f"{ds}_{key}_{kind}"] = {"r": round(r, 3), "slope": round(s, 3), "n": int(ok.sum()),
                                               "median_x": round(float(np.median(x[ok])), 2),
@@ -83,7 +85,7 @@ def main():
                 traces.append({"x": np.round(x[ok], 3).tolist(), "y": np.round(y[ok], 3).tolist(),
                                "type": "scattergl", "mode": "markers", "name": lab,
                                "marker": {"size": 3, "color": base.COLORS[ds], "opacity": 0.35}})
-            ref_y = [0, 0] if kind == "dx" else list(xlim)
+            ref_y = [0, 0] if kind in ("dx", "bb") else list(xlim)
             ax.plot(xlim, ref_y, color="0.5", lw=0.5, ls="--")
             traces.append({"x": list(xlim), "y": ref_y, "type": "scatter", "mode": "lines", "showlegend": False,
                            "line": {"color": "#888", "dash": "dash", "width": 1}, "hoverinfo": "skip"})
@@ -102,23 +104,24 @@ def main():
                                            "yaxis": {"title": yl, "range": list(ylim), "scaleanchor": "x"}}})
 
     caption = (
-        "Mother cycles: birth vs just-before-division values, increments and birth-to-birth, same scale on both "
-        "axes; 261024 (2% glucose EMM, 55 h) vs 260517 (2% glucose, 7 d). Cycle = between two QC-validated mother "
-        "divisions. Birth = median of the first 3 valid frames after the division that starts the cycle; "
-        "division-1 = median of the last 3 valid frames up to the frame before the cycle's own division; increment "
-        "= division-1 minus birth. Rows: dry mass (pg), volume (yellow-contour efd, um3), dry-mass concentration "
-        "(mg/mL = efd density x 1000). Columns: birth vs division-1 (dashed y = x), birth vs increment (dashed y = 0; "
-        "OLS slope 0 = adder, -1 = sizer, +1 = timer), birth of cycle n vs n+1. r = Pearson, slope = OLS of y on x, "
-        "n = cycles (or cycle pairs). Valid frame = not tracker outlier, not touching the border, within median +- "
-        f"{base.OUTLIER_Z} x 1.4826 MAD of the dataset ({base.OUTLIER_LOG}). 261024 n_medium 1.335029 carried over "
-        f"from 260517; mothers with >= {base.MIN_MOTHER_FRAMES} valid frames, edge traps excluded. 260517 master "
-        f"{tag}, img 2-2017, analysis_recommended channels. Descriptive only."
+        "Mother cycles of 261024 (2% glucose EMM, img 2-666, 55 h): birth vs just-before-division values, increments "
+        "and birth-to-birth changes, same scale on both axes. Cycle = between two QC-validated mother divisions. "
+        "Birth = median of the first 3 valid frames after the division that starts the cycle; division-1 = median of "
+        "the last 3 valid frames up to the frame before the cycle's own division; increment = division-1 minus birth. "
+        "Rows: dry mass (pg), volume (yellow-contour efd, um3), dry-mass concentration (mg/mL = efd density x 1000). "
+        "Columns: birth vs division-1 (dashed y = x); birth vs increment (dashed y = 0; OLS slope 0 = adder, "
+        "-1 = sizer, +1 = timer); birth of cycle n vs birth n+1 - birth n (dashed y = 0; slope -1 = no memory of the "
+        "previous birth, 0 = birth passed on unchanged). r = Pearson, slope = OLS of y on x, n = cycles (or cycle "
+        "pairs). Valid frame = not tracker outlier, not touching the border, within median +- "
+        f"{base.OUTLIER_Z} x 1.4826 MAD ({base.OUTLIER_LOG.get('261024')}). Medium RI 1.335029 (2% glucose EMM value "
+        f"of the 260517 MilliQ/EtOH calibration), n_MilliQ 1.3312. Mothers with >= {base.MIN_MOTHER_FRAMES} valid "
+        "frames, edge traps excluded. Descriptive only."
     )
     path = save_figure(
         fig, fmt="png", dpi=300,
-        params={"outliers": base.OUTLIER_LOG, "master_260517": tag, "summary": summ},
-        description="Birth vs division-1, birth vs increment, birth vs next birth for mass, volume and "
-                    "concentration (same-scale axes): 261024 vs 260517",
+        params={"outliers": base.OUTLIER_LOG, "datasets": list(SHOW), "summary": summ},
+        description="261024 mother cycles: birth vs division-1, birth vs increment, birth vs change to next "
+                    "birth for mass, volume and concentration (same-scale axes)",
         data=arrays, caption=caption,
         related=[{"note": "replaces the cycle-n vs n+1 return maps of fig_density_returnmap as the user meant them"}],
     )
@@ -128,7 +131,7 @@ def main():
 .grid{{display:grid;grid-template-columns:repeat(3,minmax(380px,1fr));gap:12px}}
 @media (max-width:1200px){{.grid{{grid-template-columns:1fr}}}}
 .p{{height:440px}} p{{font-size:13px;max-width:1200px}}</style></head><body>
-<h2>261024 vs 260517: birth → division−1, increment, birth → next birth (same scale)</h2>
+<h2>261024: birth → division−1, increment, birth → next-birth change (same scale)</h2>
 <p>{caption}</p><p>Drag to zoom, double-click to reset, click a legend entry to hide it.</p>
 <div class="grid">{''.join(f'<div class="p" id="{p["id"]}"></div>' for p in html_panels)}</div>
 <script>
