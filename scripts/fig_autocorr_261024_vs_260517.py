@@ -111,16 +111,18 @@ def main():
         for ax, (key, title) in zip(axes[:n_gen], gen_specs):
             c, lo, hi, n = acf_with_ci(*per_mother_sums(generation_series(cyc, key), MAX_GEN))
             k = np.arange(MAX_GEN + 1)
-            ax.fill_between(k, lo, hi, color=base.COLORS[ds], alpha=0.2, lw=0)
-            ax.plot(k, c, "o-", ms=1.2, lw=0.7, color=base.COLORS[ds], label=ds)
+            ax.errorbar(k, c, yerr=[c - lo, hi - c], fmt="o-", ms=1.2, lw=0.7, elinewidth=0.4,
+                        capsize=0, color=base.COLORS[ds], label=ds)
             arrays.update({f"{ds}_{key}_acf": c, f"{ds}_{key}_lo": lo, f"{ds}_{key}_hi": hi,
                            f"{ds}_{key}_npairs": n})
             summary[f"{ds}_{key}_C1"] = round(float(c[1]), 3)
             ax.set_title(title, fontsize=7)
         c, lo, hi, n = acf_with_ci(*per_mother_sums(time_series(m, ds), max_lag_fr))
         tau = np.arange(max_lag_fr + 1) * DT_H
-        t_ax.fill_between(tau, lo, hi, color=base.COLORS[ds], alpha=0.2, lw=0)
+        every = slice(None, None, 12)                 # one error bar per hour
         t_ax.plot(tau, c, lw=0.8, color=base.COLORS[ds], label=ds)
+        t_ax.errorbar(tau[every], c[every], yerr=[(c - lo)[every], (hi - c)[every]], fmt="none",
+                      elinewidth=0.4, capsize=0, color=base.COLORS[ds])
         arrays.update({f"{ds}_conc_time_acf": c, f"{ds}_conc_time_lo": lo, f"{ds}_conc_time_hi": hi,
                        f"{ds}_conc_time_npairs": n, "tau_h": tau})
         summary[f"{ds}_n_mothers"] = int(m.groupby(["pos", "ch"]).ngroups)
@@ -153,8 +155,8 @@ def main():
         "(yellow-contour efd), f mass production rate (slope of a linear fit of dry mass vs time over the valid "
         "frames of the cycle, pg/h), g interdivision time. h, time autocorrelation of the mother dry-mass "
         "concentration (valid frames, 5-min grid). C = pooled covariance of deviations from the dataset mean at "
-        f"lag k (or tau) divided by the pooled variance; lags with < {MIN_PAIRS} pairs are not drawn (261024 has "
-        "~17 generations, 260517 ~50); shaded = 95% bootstrap CI over mothers "
+        f"lag k (or tau) divided by the pooled variance; error bars = 95% bootstrap CI over mothers; lags with < {MIN_PAIRS} pairs are not drawn (261024 has "
+        "~17 generations, 260517 ~50); bootstrap "
         f"({N_BOOT} resamples). n mothers: 261024 {summary['261024_n_mothers']}, 260517 "
         f"{summary['260517_n_mothers']}. Concentration = efd density x 1000; 261024 n_medium 1.335029 carried over "
         f"from 260517. 260517 master {tag}, img 2-2017, analysis_recommended channels; 261024 img 2-666, mothers "

@@ -9,7 +9,6 @@ from pathlib import Path
 import numpy as np
 
 COLORS = {"261024": "#0072B2", "260517": "#D55E00"}
-FILLS = {"261024": "rgba(0,114,178,0.18)", "260517": "rgba(213,94,0,0.18)"}
 PANELS = [("rho", "a  cycle-mean concentration", "generation lag k"),
           ("rhob", "b  birth concentration", "generation lag k"),
           ("Mb", "c  birth mass", "generation lag k"),
@@ -18,12 +17,6 @@ PANELS = [("rho", "a  cycle-mean concentration", "generation lag k"),
           ("dMdt", "f  mass production rate (pg/h)", "generation lag k"),
           ("T_h", "g  interdivision time", "generation lag k"),
           ("conc_time", "h  mother concentration (time)", "time lag τ [h]")]
-
-
-def band(x, lo, hi, ds):
-    return {"x": list(x) + list(x[::-1]), "y": list(hi) + list(lo[::-1]), "type": "scatter",
-            "fill": "toself", "fillcolor": FILLS[ds], "line": {"width": 0}, "hoverinfo": "skip",
-            "showlegend": False}
 
 
 def main():
@@ -40,12 +33,14 @@ def main():
             x = z["tau_h"] if key == "conc_time" else np.arange(len(c))
             n = z[f"{ds}_{key}_npairs"]
             r3 = lambda v: np.round(np.asarray(v, float), 4).tolist()  # noqa: E731
-            traces.append(band(r3(x), r3(z[f"{ds}_{key}_lo"]), r3(z[f"{ds}_{key}_hi"]), ds))
+            lo, hi = r3(z[f"{ds}_{key}_lo"]), r3(z[f"{ds}_{key}_hi"])
             traces.append({"x": r3(x), "y": r3(c), "type": "scatter",
                            "mode": "lines" if key == "conc_time" else "lines+markers",
                            "line": {"color": COLORS[ds], "width": 2}, "marker": {"size": 5},
-                           "name": ds, "customdata": n.astype(int).tolist(),
-                           "hovertemplate": "lag %{x}<br>C = %{y:.3f}<br>pairs %{customdata}<extra>" + ds + "</extra>"})
+                           "name": ds,
+                           "customdata": [[int(a), b, c_] for a, b, c_ in zip(n, lo, hi)],
+                           "hovertemplate": "lag %{x}<br>C = %{y:.3f}<br>95% CI %{customdata[1]:.3f} – "
+                                            "%{customdata[2]:.3f}<br>pairs %{customdata[0]}<extra>" + ds + "</extra>"})
         panels.append({"id": key, "data": traces,
                        "layout": {"title": title, "xaxis": {"title": xlab},
                                   "yaxis": {"title": "autocorrelation", "range": [-0.3, 1.02], "zeroline": True}}})
@@ -57,7 +52,7 @@ def main():
 .p{{height:400px}} p{{font-size:13px;max-width:1100px}}</style></head><body>
 <h2>261024 vs 260517 (2% EMM): autocorrelation of mother-cell quantities</h2>
 <p>Source: <code>{Path(a.npz).name}</code>. C = pooled covariance of deviations from the dataset mean at
-the lag / pooled variance; band = 95% bootstrap CI over mothers. Hover shows the number of pairs at each lag.
+the lag / pooled variance. Hover shows the 95% bootstrap CI over mothers and the number of pairs at each lag.
 Drag to zoom, double-click to reset.</p>
 <div class="grid">{''.join(f'<div class="p" id="{p["id"]}"></div>' for p in panels)}</div>
 <script>
