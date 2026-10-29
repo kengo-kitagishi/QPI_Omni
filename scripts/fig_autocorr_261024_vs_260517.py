@@ -24,8 +24,8 @@ sys.path.insert(0, str(SCRIPTS))
 import fig_density_returnmap_261024_vs_260517 as base  # noqa: E402  (also sets rcParams)
 from figure_logger import save_figure  # noqa: E402
 
-MAX_GEN = 40          # 260517 has ~50 generations in 7 d; 261024 only ~17 in 55 h
-MAX_LAG_H = 48.0
+MAX_GEN = 18          # 261024 has ~17 generations in 55 h (260517 has ~50 in 7 d)
+MAX_LAG_H = 50.0
 MIN_PAIRS = 200       # lags with fewer pairs are not drawn (at 50, 261024 k=17-18 rested on a few mothers)
 DT_H = 5.0 / 60.0
 N_BOOT = 300
@@ -130,7 +130,7 @@ def main():
         ax.axhline(0, color="0.5", lw=0.5)
         ax.set_xlabel("generation lag k")
         ax.set_ylabel("autocorrelation C(k)")
-        ax.set_xticks(range(0, MAX_GEN + 1, 10))
+        ax.set_xticks(range(0, MAX_GEN + 1, 3))
         ax.set_xlim(-0.5, MAX_GEN + 0.5)
         ax.set_ylim(-0.3, 1.02)
         ax.text(-0.3, 1.04, letter, transform=ax.transAxes, fontweight="bold", fontsize=8)
