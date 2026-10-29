@@ -19,7 +19,9 @@ from backup_d_e_to_f_261028 import copy_tree  # noqa: E402
 SRC = Path(r"F:\from_E\260928")
 DST_E = Path(r"E:\260928")
 DST_D = Path(r"D:\260928_from_F")
+DST_C = Path(r"C:\260928_from_F")   # overflow: E: + D: are ~10-20 GB short of 372 GB (2026-10-29)
 E_RESERVE_GB = 15
+D_RESERVE_GB = 10
 PLAN_PATH = Path(r"C:\Users\QPI\Documents\QPI_Omni\restore_260928_PLAN.json")
 STATUS_PATH = Path(r"C:\Users\QPI\Documents\QPI_Omni\restore_260928_STATUS.txt")
 
@@ -60,6 +62,7 @@ def main():
         plan = json.loads(PLAN_PATH.read_text(encoding="utf-8"))
     else:
         e_budget = shutil.disk_usage("E:\\").free - E_RESERVE_GB * 1e9
+        d_budget = shutil.disk_usage("D:\\").free - D_RESERVE_GB * 1e9
         plan = []
         for u in units():
             n, b = tree_size(u) if u.is_dir() else (1, u.stat().st_size)
@@ -67,18 +70,23 @@ def main():
             already = (DST_E / rel).exists()          # started on E: before a re-plan: finish it there
             if already:
                 b_e = tree_size(DST_E / rel)[1] if (DST_E / rel).is_dir() else (DST_E / rel).stat().st_size
-                to_e = True
+                dst = DST_E
                 e_budget -= max(b - b_e, 0)
+            elif b <= e_budget:
+                dst = DST_E
+                e_budget -= b
+            elif b <= d_budget:
+                dst = DST_D
+                d_budget -= b
             else:
-                to_e = b <= e_budget
-                if to_e:
-                    e_budget -= b
-            plan.append({"src": str(u), "dst": str((DST_E if to_e else DST_D) / rel),
+                dst = DST_C
+            plan.append({"src": str(u), "dst": str(dst / rel),
                          "files": n, "bytes": b, "is_file": u.is_file()})
         PLAN_PATH.write_text(json.dumps(plan, indent=1), encoding="utf-8")
     tot = sum(p["bytes"] for p in plan)
     on_d = sum(p["bytes"] for p in plan if p["dst"].startswith("D:"))
-    print(f"{len(plan)} units, {tot / 1e9:.1f} GB ({on_d / 1e9:.1f} GB to D:)", flush=True)
+    on_c = sum(p["bytes"] for p in plan if p["dst"].startswith("C:"))
+    print(f"{len(plan)} units, {tot / 1e9:.1f} GB ({on_d / 1e9:.1f} GB to D:, {on_c / 1e9:.1f} GB to C:)", flush=True)
 
     lines = []
     log_path = Path(r"F:\_backup_logs_261028\restore_260928.log")
