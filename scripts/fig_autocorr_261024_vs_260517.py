@@ -161,10 +161,12 @@ def main():
         f"{summary['260517_n_mothers']}. Concentration = efd density x 1000; 261024 n_medium 1.335029 carried over "
         f"from 260517. 260517 master {tag}, img 2-2017, analysis_recommended channels; 261024 img 2-666, mothers "
         f"with >= {base.MIN_MOTHER_FRAMES} valid frames, edge traps excluded."
+        f" Obvious outliers removed: valid mother frames with |conc - median| > {base.OUTLIER_Z} x 1.4826 MAD "
+        f"of the dataset ({base.OUTLIER_LOG})."
     )
     out = save_figure(
         fig, fmt="png", dpi=300,
-        params={"max_gen": MAX_GEN, "max_lag_h": MAX_LAG_H, "n_boot": N_BOOT, "seed": 0,
+        params={"outliers": base.OUTLIER_LOG, "max_gen": MAX_GEN, "max_lag_h": MAX_LAG_H, "n_boot": N_BOOT, "seed": 0,
                 "min_mother_frames": base.MIN_MOTHER_FRAMES, "master_260517": tag, "C1": summary},
         description="Generation and time autocorrelation of mother concentration, birth mass and "
                     "interdivision time: 261024 vs 260517, 2% glucose",
@@ -172,6 +174,7 @@ def main():
         related=[{"note": "same data/selection as fig_density_returnmap_261024_vs_260517 (return maps = lag 1)"}],
     )
     print(summary)
+    print(base.OUTLIER_LOG)
     print("saved", out)
 
 

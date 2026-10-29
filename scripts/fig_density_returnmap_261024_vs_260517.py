@@ -35,6 +35,8 @@ D261024 = Path(r"D:\261024_seg\_lineage_consolidated")
 M260517_ROOT = Path(r"G:\共有ドライブ\wakamotolab_meeting\kitagishi\data_master\260517")
 EDGE = {"ch00", "ch11"}
 MIN_MOTHER_FRAMES = 600          # same selection as the 261024 lineage gallery
+OUTLIER_Z = 5.0                  # drop valid frames with |conc - median| > 5 * 1.4826 * MAD (None = keep all)
+OUTLIER_LOG = {}
 FRAME_WINDOWS = {"261024": (2, 666), "260517": (2, 2017)}
 COLORS = {"261024": "#0072B2", "260517": "#D55E00"}   # Okabe-Ito blue / vermillion
 LABELS = {"261024": "261024 (2% EMM, 55 h)", "260517": "260517 (2% EMM, 7 d)"}
@@ -81,6 +83,16 @@ def mothers(f, keep, ds):
         good = set(nvalid[nvalid >= MIN_MOTHER_FRAMES].index)
         m = m[[(p, c) in good for p, c in zip(m["pos"], m["ch"])]]
     m["conc"] = m["dens"] * 1000.0
+    if OUTLIER_Z is not None:
+        # obvious outliers: robust z (1.4826 * MAD) of the concentration over this dataset's valid mother frames
+        c = m.loc[m["valid"], "conc"]
+        med, mad = c.median(), 1.4826 * (c - c.median()).abs().median()
+        out = m["valid"] & ((m["conc"] - med).abs() > OUTLIER_Z * mad)
+        OUTLIER_LOG[ds] = {"median": round(float(med), 1), "scaled_mad": round(float(mad), 1),
+                           "lo": round(float(med - OUTLIER_Z * mad), 1), "hi": round(float(med + OUTLIER_Z * mad), 1),
+                           "n_frames_removed": int(out.sum()), "n_valid_frames": int(m["valid"].sum()),
+                           "n_mothers_hit": int(m.loc[out].groupby(["pos", "ch"]).ngroups)}
+        m.loc[out, "valid"] = False
     return m
 
 
