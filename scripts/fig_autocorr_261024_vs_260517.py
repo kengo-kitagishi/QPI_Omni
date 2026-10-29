@@ -2,9 +2,9 @@
 
 Same data and selection as fig_density_returnmap_261024_vs_260517.py (imported from there).
 
-a-c  generation autocorrelation C(k), k = 0..MAX_GEN, of the cycle-mean concentration rho,
-     birth mass M_b and interdivision time T, over contiguous cycles of the same mother.
-d    time autocorrelation C(tau), tau = 0..MAX_LAG_H, of the mother concentration time series
+a-f  generation autocorrelation C(k), k = 0..MAX_GEN, of rho, M_b, V_b, mean V, dM/dt and T
+     over contiguous cycles of the same mother (definitions in fig_density_returnmap_261024_vs_260517).
+g    time autocorrelation C(tau), tau = 0..MAX_LAG_H, of the mother concentration time series
      (valid frames only, 5-min grid).
 
 Estimator (pooled over mothers, deviations from the dataset mean mu):
@@ -92,13 +92,19 @@ def main():
     m = base.mothers(f, keep, "260517")
     data["260517"] = (m, base.cycles(m, dv, "260517")[0])
 
-    fig, axes = plt.subplots(1, 4, figsize=(183 / 25.4, 48 / 25.4), constrained_layout=True)
+    fig, axes2 = plt.subplots(2, 4, figsize=(183 / 25.4, 92 / 25.4), constrained_layout=True)
+    axes = list(axes2.ravel())
+    axes[7].axis("off")
     arrays, summary = {}, {}
-    gen_specs = [("rho", "cycle-mean concentration"), ("Mb", "birth mass"), ("T_h", "interdivision time")]
+    gen_specs = [("rho", "cycle-mean concentration"), ("Mb", "birth mass"), ("Vb", "birth volume"),
+                 ("Vmean", "cycle-mean volume"), ("dMdt", "mass production rate"),
+                 ("T_h", "interdivision time")]
+    n_gen = len(gen_specs)
+    t_ax = axes[n_gen]
     max_lag_fr = int(round(MAX_LAG_H / DT_H))
     for ds in ("260517", "261024"):
         m, cyc = data[ds]
-        for ax, (key, title) in zip(axes[:3], gen_specs):
+        for ax, (key, title) in zip(axes[:n_gen], gen_specs):
             c, lo, hi, n = acf_with_ci(*per_mother_sums(generation_series(cyc, key), MAX_GEN))
             k = np.arange(MAX_GEN + 1)
             ax.fill_between(k, lo, hi, color=base.COLORS[ds], alpha=0.2, lw=0)
@@ -109,13 +115,14 @@ def main():
             ax.set_title(title, fontsize=7)
         c, lo, hi, n = acf_with_ci(*per_mother_sums(time_series(m, ds), max_lag_fr))
         tau = np.arange(max_lag_fr + 1) * DT_H
-        axes[3].fill_between(tau, lo, hi, color=base.COLORS[ds], alpha=0.2, lw=0)
-        axes[3].plot(tau, c, lw=0.8, color=base.COLORS[ds], label=ds)
+        t_ax.fill_between(tau, lo, hi, color=base.COLORS[ds], alpha=0.2, lw=0)
+        t_ax.plot(tau, c, lw=0.8, color=base.COLORS[ds], label=ds)
         arrays.update({f"{ds}_conc_time_acf": c, f"{ds}_conc_time_lo": lo, f"{ds}_conc_time_hi": hi,
                        f"{ds}_conc_time_npairs": n, "tau_h": tau})
         summary[f"{ds}_n_mothers"] = int(m.groupby(["pos", "ch"]).ngroups)
 
-    for ax, letter in zip(axes[:3], "abc"):
+    letters = "abcdefg"
+    for ax, letter in zip(axes[:n_gen], letters):
         ax.axhline(0, color="0.5", lw=0.5)
         ax.set_xlabel("generation lag k")
         ax.set_ylabel("autocorrelation C(k)")
@@ -123,20 +130,22 @@ def main():
         ax.set_ylim(-0.3, 1.02)
         ax.text(-0.3, 1.04, letter, transform=ax.transAxes, fontweight="bold", fontsize=8)
     axes[0].legend(fontsize=6, loc="upper right")
-    ax = axes[3]
+    ax = t_ax
     ax.axhline(0, color="0.5", lw=0.5)
     ax.set_xlabel("time lag τ [h]")
     ax.set_ylabel("autocorrelation C(τ)")
     ax.set_title("mother concentration (time)", fontsize=7)
     ax.set_xlim(0, MAX_LAG_H)
     ax.set_ylim(-0.3, 1.02)
-    ax.text(-0.3, 1.04, "d", transform=ax.transAxes, fontweight="bold", fontsize=8)
+    ax.text(-0.3, 1.04, letters[n_gen], transform=ax.transAxes, fontweight="bold", fontsize=8)
 
     caption = (
         "Autocorrelation of mother-cell quantities, 261024 (2% EMM, 55 h) vs 260517 (2% EMM, 7 d). "
-        "a-c, generation autocorrelation C(k) over contiguous cycles of the same mother (cycle = between two "
-        "QC-validated mother divisions) of a cycle-mean dry-mass concentration, b birth mass (median of the first "
-        "3 valid frames after division), c interdivision time. d, time autocorrelation of the mother dry-mass "
+        "a-f, generation autocorrelation C(k) over contiguous cycles of the same mother (cycle = between two "
+        "QC-validated mother divisions) of a cycle-mean dry-mass concentration, b birth mass and c birth volume "
+        "(median of the first 3 valid frames after division), d cycle-mean volume (yellow-contour efd), e mass "
+        "production rate (slope of a linear fit of dry mass vs time over the valid frames of the cycle, pg/h), "
+        "f interdivision time. g, time autocorrelation of the mother dry-mass "
         "concentration (valid frames, 5-min grid). C = pooled covariance of deviations from the dataset mean at "
         "lag k (or tau) divided by the pooled variance; shaded = 95% bootstrap CI over mothers "
         f"({N_BOOT} resamples). n mothers: 261024 {summary['261024_n_mothers']}, 260517 "

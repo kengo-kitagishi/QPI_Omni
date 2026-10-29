@@ -10,6 +10,8 @@ Cycle n = mother between two consecutive QC-validated mother divisions (division
   T_n    = interdivision time [h]
   rho_n  = mean concentration over the valid frames of the cycle [mg/mL]
   Mb_n   = birth mass: median mass_pg of the first 3 valid frames after the division [pg]
+  Vb_n, Vmean_n = birth volume (same 3 frames) / cycle-mean volume [um3, efd]
+  dMdt_n = mass production rate: slope of a linear fit of mass_pg vs time over the cycle [pg/h]
 Return map = (x_n, x_n+1) over consecutive cycles of the same mother.
 
 Channels: 261024 non-edge channels whose mother has >= MIN_MOTHER_FRAMES valid frames;
@@ -46,9 +48,9 @@ plt.rcParams.update({
 
 def load_261024():
     f = pd.read_csv(D261024 / "all_cells_lineage_data3D.csv.gz",
-                    usecols=["pos", "ch", "cell_id", "frame", "time_h", "mass_pg",
+                    usecols=["pos", "ch", "cell_id", "frame", "time_h", "mass_pg", "volume_um3_efd",
                              "density_pg_um3", "is_outlier", "touches_border"])
-    f = f.rename(columns={"density_pg_um3": "dens"})
+    f = f.rename(columns={"density_pg_um3": "dens", "volume_um3_efd": "vol"})
     dv = pd.read_csv(D261024 / "all_cells_divisions_qc.csv.gz")
     return f, dv, None
 
@@ -57,9 +59,9 @@ def load_260517():
     tag = (M260517_ROOT / "LATEST.txt").read_text(encoding="utf-8").strip()
     pkg = M260517_ROOT / tag / "derived" / "phase1_img0002-2017"
     f = pd.read_csv(pkg / "cells_frames.csv.gz",
-                    usecols=["pos", "ch", "cell_id", "frame", "time_h", "mass_pg_efd",
+                    usecols=["pos", "ch", "cell_id", "frame", "time_h", "mass_pg_efd", "volume_um3_efd",
                              "density_pg_um3_efd", "is_outlier", "touches_border"])
-    f = f.rename(columns={"density_pg_um3_efd": "dens", "mass_pg_efd": "mass_pg"})
+    f = f.rename(columns={"density_pg_um3_efd": "dens", "mass_pg_efd": "mass_pg", "volume_um3_efd": "vol"})
     dv = pd.read_csv(pkg / "divisions.csv.gz")
     ch = pd.read_csv(pkg / "channels.csv")
     keep = set(map(tuple, ch.loc[ch["analysis_recommended"].astype(bool), ["pos", "ch"]].values))
@@ -93,9 +95,12 @@ def cycles(m, dv, ds):
             seg = g[(g["frame"] >= a) & (g["frame"] < b)]
             if len(seg) < 5:
                 continue
+            slope = np.polyfit(seg["time_h"].values, seg["mass_pg"].values, 1)[0]
             rows.append({"pos": pos, "ch": ch, "k": i, "start": a, "end": b,
                          "T_h": (b - a) * 5.0 / 60.0, "rho": seg["conc"].mean(),
-                         "Mb": seg["mass_pg"].iloc[:3].median()})
+                         "Mb": seg["mass_pg"].iloc[:3].median(),
+                         "Vb": seg["vol"].iloc[:3].median(), "Vmean": seg["vol"].mean(),
+                         "dMdt": slope})          # mass production rate: linear fit over the cycle [pg/h]
     c = pd.DataFrame(rows)
     pairs = []
     for (pos, ch), g in c.groupby(["pos", "ch"]):
