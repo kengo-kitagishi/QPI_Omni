@@ -27,6 +27,7 @@ STATUS_PATH = Path(r"C:\Users\QPI\Documents\QPI_Omni\backup_d_e_to_f_261028_STAT
 # hour on a disk that tops out at ~12-23 files/s). 261024 is kept, so it goes last on E:.
 SOURCES = [
     r"E:\260928",
+    r"D:\260928_from_F",          # part of E:\260928 parked on D: while F: was reformatted (2026-10-29)
     r"E:\261004",
     r"E:\260917",
     r"E:\260908_whitelist_realign",
@@ -59,7 +60,12 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 
+DEST_OVERRIDE = {r"D:\260928_from_F": Path("F:/") / "from_E" / "260928"}   # back to its original place
+
+
 def dest_for(src):
+    if src in DEST_OVERRIDE:
+        return DEST_OVERRIDE[src]
     p = Path(src)
     return DEST_ROOT / f"from_{p.drive[0]}" / p.relative_to(p.anchor)
 
