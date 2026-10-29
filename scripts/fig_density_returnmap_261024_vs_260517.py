@@ -39,7 +39,7 @@ OUTLIER_Z = 5.0                  # drop valid frames with |conc - median| > 5 * 
 OUTLIER_LOG = {}
 FRAME_WINDOWS = {"261024": (2, 666), "260517": (2, 2017)}
 COLORS = {"261024": "#0072B2", "260517": "#D55E00"}   # Okabe-Ito blue / vermillion
-LABELS = {"261024": "261024 (2% EMM, 55 h)", "260517": "260517 (2% EMM, 7 d)"}
+LABELS = {"261024": "261024 (2% glucose EMM, 55 h)", "260517": "260517 (2% glucose, 7 d)"}
 
 plt.rcParams.update({
     "font.family": "Arial", "font.size": 7, "axes.spines.top": False, "axes.spines.right": False,
@@ -135,8 +135,9 @@ def main():
     m = mothers(f, keep, "260517")
     data["260517"] = (m, *cycles(m, dv, "260517"))
 
-    fig, axes = plt.subplots(1, 4, figsize=(183 / 25.4, 50 / 25.4), constrained_layout=True)
-    bins = np.arange(150, 451, 5)
+    fig, axes2 = plt.subplots(2, 4, figsize=(183 / 25.4, 96 / 25.4), constrained_layout=True)
+    axes = list(axes2.ravel())
+    bins = np.arange(150, 401, 5)
     ax = axes[0]
     for ds, (m, c, p) in data.items():
         v = m.loc[m["valid"], "conc"].values
@@ -148,11 +149,15 @@ def main():
     ax.legend(fontsize=5.5, loc="upper left", borderaxespad=0.1)
     ax.text(-0.3, 1.02, "a", transform=ax.transAxes, fontweight="bold", fontsize=8)
 
-    specs = [("rho", "cycle-mean concentration $\\rho_n$ [mg/mL]", (200, 380)),
-             ("Mb", "birth mass $M_{b,n}$ [pg]", (0, 45)),
-             ("T_h", "interdivision time $T_n$ [h]", (0, 8))]
+    specs = [("rho", "cycle-mean conc.", "[mg/mL]", (180, 360)),
+             ("rhob", "birth conc.", "[mg/mL]", (180, 360)),
+             ("Mb", "birth mass", "[pg]", (0, 40)),
+             ("Vb", "birth volume", "[µm³]", (0, 160)),
+             ("Vmean", "cycle-mean volume", "[µm³]", (40, 200)),
+             ("dMdt", "mass production rate", "[pg/h]", (0, 10)),
+             ("T_h", "interdivision time", "[h]", (0, 8))]
     rstats = {}
-    for ax, (key, lab, lim), letter in zip(axes[1:], specs, "bcd"):
+    for ax, (key, name, unit, lim), letter in zip(axes[1:], specs, "bcdefgh"):
         for ds in ("260517", "261024"):              # 261024 drawn last so it is not hidden
             m, c, p = data[ds]
             x, y = p[key].astype(float).values, p[key + "_next"].astype(float).values
@@ -163,23 +168,27 @@ def main():
                        label=f"{ds}: r={r:.2f}, n={ok.sum()}")
         ax.plot(lim, lim, color="0.5", lw=0.5, ls="--")
         ax.set_xlim(lim); ax.set_ylim(lim); ax.set_aspect("equal")
-        ax.set_xlabel(lab.replace("_n", "_n").replace("_{b,n}", "_{b,n}"))
-        ax.set_ylabel(lab.replace("$\\rho_n$", "$\\rho_{n+1}$").replace("$M_{b,n}$", "$M_{b,n+1}$")
-                      .replace("$T_n$", "$T_{n+1}$"))
-        leg = ax.legend(fontsize=5.5, loc="upper left", markerscale=4, handletextpad=0.2,
+        ax.set_xlabel(f"cycle n {unit}")
+        ax.set_ylabel(f"cycle n+1 {unit}")
+        ax.set_title(name, fontsize=7)
+        leg = ax.legend(fontsize=5, loc="upper left", markerscale=4, handletextpad=0.2,
                         borderaxespad=0.1)
         for h in leg.legend_handles:
             h.set_alpha(1)
         ax.text(-0.36, 1.02, letter, transform=ax.transAxes, fontweight="bold", fontsize=8)
 
     caption = (
-        "Mother-cell dry-mass concentration and generation return maps, 261024 vs 260517 (both 2% glucose EMM). "
+        "Mother-cell dry-mass concentration and generation return maps, 261024 (2% glucose EMM, 55 h) vs 260517 "
+        "(2% glucose, 7 d; base medium not recorded in datasets/260517.yaml). "
         "a, distribution of concentration over all valid mother frames (concentration = dry mass / volume, "
         "dry mass = (mean RI - n_MilliQ) / alpha * V with alpha = 0.00018 mL/mg, V = yellow-contour efd volume; "
-        "valid = not tracker outlier, not touching the crop border). "
-        "b-d, return maps over consecutive cycles of the same mother (cycle = between two QC-validated mother "
-        "divisions): b cycle-mean concentration, c birth mass (median of the first 3 valid frames after division), "
-        "d interdivision time. r = Pearson correlation of (x_n, x_n+1); n = number of cycle pairs; dashed line y = x. "
+        "valid = not tracker outlier, not touching the crop border, and within median +- "
+        f"{OUTLIER_Z} x 1.4826 MAD of the dataset ({OUTLIER_LOG}). "
+        "b-h, return maps over consecutive cycles of the same mother (cycle = between two QC-validated mother "
+        "divisions): b cycle-mean concentration, c birth concentration, d birth mass, e birth volume (c-e: median "
+        "of the first 3 valid frames after division), f cycle-mean volume, g mass production rate (slope of a "
+        "linear fit of dry mass vs time over the valid frames of the cycle), h interdivision time. "
+        "r = Pearson correlation of (x_n, x_n+1); n = number of cycle pairs; dashed line y = x. "
         f"261024: img 2-666, n_medium 1.335029 carried over from 260517 (not measured on this chip), mothers with "
         f">= {MIN_MOTHER_FRAMES} valid frames, edge traps excluded. 260517: master {tag}, phase-1 window img 2-2017, "
         "channels.csv analysis_recommended. No statistical test; descriptive only."
@@ -187,15 +196,16 @@ def main():
     arrays = {}
     for ds, (m, c, p) in data.items():
         arrays[f"{ds}_conc_valid"] = m.loc[m["valid"], "conc"].values
-        for key in ("rho", "Mb", "T_h"):
+        for key, *_ in specs:
             arrays[f"{ds}_{key}_n"] = p[key].astype(float).values
             arrays[f"{ds}_{key}_n1"] = p[key + "_next"].astype(float).values
     out = save_figure(
         fig, fmt="png", dpi=300,
-        params={"min_mother_frames": MIN_MOTHER_FRAMES, "frame_windows": FRAME_WINDOWS,
-                "master_260517": tag, "bins_mg_ml": [150, 450, 5], "return_map_r": rstats},
-        description="Mother dry-mass concentration histogram and generation return maps (rho, birth mass, "
-                    "interdivision time): 261024 vs 260517, 2% glucose",
+        params={"min_mother_frames": MIN_MOTHER_FRAMES, "frame_windows": FRAME_WINDOWS, "outliers": OUTLIER_LOG,
+                "master_260517": tag, "bins_mg_ml": [150, 400, 5], "return_map_r": rstats},
+        description="Mother dry-mass concentration histogram and generation return maps (concentration, birth "
+                    "concentration, birth mass, birth volume, mean volume, mass production rate, interdivision "
+                    "time): 261024 vs 260517, 2% glucose, obvious outliers removed",
         data=arrays, caption=caption,
     )
     for ds, (m, c, p) in data.items():

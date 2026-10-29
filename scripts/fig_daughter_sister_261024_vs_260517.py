@@ -41,6 +41,10 @@ def valid_frames(f, ds, chans):
     v = v[[(p, c) in chans for p, c in zip(v["pos"], v["ch"])]]
     v = v[(~v["is_outlier"].astype(bool)) & (~v["touches_border"].astype(bool)) & np.isfinite(v["dens"])]
     v["conc"] = v["dens"] * 1000.0
+    if base.OUTLIER_Z is not None:
+        # same obvious-outlier bounds as the mothers of this dataset (set by base.mothers)
+        b = base.OUTLIER_LOG[ds]
+        v = v[v["conc"].between(b["lo"], b["hi"])]
     return v
 
 
@@ -166,11 +170,12 @@ def main():
         "Completed daughter cycles are a selected subset (daughters that stayed in the channel until they divided). "
         "Concentration = efd density x 1000; 261024 n_medium 1.335029 carried over from 260517. "
         f"260517 master {tag}, img 2-2017, analysis_recommended channels; 261024 img 2-666, channels whose mother has "
-        f">= {base.MIN_MOTHER_FRAMES} valid frames, edge traps excluded. Descriptive only."
+        f">= {base.MIN_MOTHER_FRAMES} valid frames, edge traps excluded. Obvious outliers removed: frames outside "
+        f"the mother median +- {base.OUTLIER_Z} x 1.4826 MAD of each dataset ({base.OUTLIER_LOG}). Descriptive only."
     )
     path = save_figure(
         fig, fmt="png", dpi=300,
-        params={"min_cycle_valid": MIN_CYCLE_VALID, "master_260517": tag, "stats": stats},
+        params={"outliers": base.OUTLIER_LOG, "min_cycle_valid": MIN_CYCLE_VALID, "master_260517": tag, "stats": stats},
         description="Daughter cells over their whole generation vs mother (sister and mother-daughter "
                     "correlations of concentration, birth mass, interdivision time): 261024 vs 260517",
         data=arrays, caption=caption,

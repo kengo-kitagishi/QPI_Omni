@@ -12,9 +12,13 @@ from pathlib import Path
 import numpy as np
 
 COLORS = {"261024": "#0072B2", "260517": "#D55E00"}
-PANELS = [("rho", "cycle-mean concentration ρ [mg/mL]", [200, 380]),
-          ("Mb", "birth mass M_b [pg]", [0, 45]),
-          ("T_h", "interdivision time T [h]", [0, 8])]
+PANELS = [("rho", "cycle-mean concentration [mg/mL]", [180, 360]),
+          ("rhob", "birth concentration [mg/mL]", [180, 360]),
+          ("Mb", "birth mass [pg]", [0, 40]),
+          ("Vb", "birth volume [µm³]", [0, 160]),
+          ("Vmean", "cycle-mean volume [µm³]", [40, 200]),
+          ("dMdt", "mass production rate [pg/h]", [0, 10]),
+          ("T_h", "interdivision time [h]", [0, 8])]
 
 
 def main():
@@ -43,7 +47,7 @@ def main():
                "layout": {"title": "a  mother dry-mass concentration",
                           "xaxis": {"title": "dry-mass concentration [mg/mL]"},
                           "yaxis": {"title": "probability density [1/(mg/mL)]"}}}]
-    for (key, lab, lim), letter in zip(PANELS, "bcd"):
+    for (key, lab, lim), letter in zip(PANELS, "bcdefgh"):
         diag = {"x": lim, "y": lim, "type": "scatter", "mode": "lines", "showlegend": False,
                 "line": {"color": "#888", "dash": "dash", "width": 1}, "hoverinfo": "skip"}
         panels.append({"id": key, "data": [*maps[key], diag],
@@ -59,7 +63,7 @@ def main():
 .p{{height:440px}} p{{font-size:13px;max-width:1100px}}</style></head><body>
 <h2>261024 vs 260517 (2% EMM): mother dry-mass concentration and return maps</h2>
 <p>Source: <code>{Path(a.npz).name}</code>. Mother = cell 0; cycle = between two QC-validated mother divisions;
-concentration = efd density x 1000; birth mass = median of the first 3 valid frames after division.
+concentration = efd density x 1000; birth values = median of the first 3 valid frames after division; obvious outliers (median +- 5 x 1.4826 MAD) removed.
 261024 n_medium 1.335029 is carried over from 260517. Drag to zoom, double-click to reset, click a legend entry to hide it.</p>
 <div class="grid">{''.join(f'<div class="p" id="{p["id"]}"></div>' for p in panels)}</div>
 <script>
