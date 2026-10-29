@@ -63,10 +63,16 @@ def main():
         plan = []
         for u in units():
             n, b = tree_size(u) if u.is_dir() else (1, u.stat().st_size)
-            to_e = b <= e_budget
-            if to_e:
-                e_budget -= b
             rel = u.relative_to(SRC)
+            already = (DST_E / rel).exists()          # started on E: before a re-plan: finish it there
+            if already:
+                b_e = tree_size(DST_E / rel)[1] if (DST_E / rel).is_dir() else (DST_E / rel).stat().st_size
+                to_e = True
+                e_budget -= max(b - b_e, 0)
+            else:
+                to_e = b <= e_budget
+                if to_e:
+                    e_budget -= b
             plan.append({"src": str(u), "dst": str((DST_E if to_e else DST_D) / rel),
                          "files": n, "bytes": b, "is_file": u.is_file()})
         PLAN_PATH.write_text(json.dumps(plan, indent=1), encoding="utf-8")
