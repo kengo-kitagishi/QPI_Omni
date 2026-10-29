@@ -114,6 +114,9 @@ def cycles(m, dv, ds):
                          "rhob": seg["conc"].iloc[:3].median(),
                          "Mb": seg["mass_pg"].iloc[:3].median(),
                          "Vb": seg["vol"].iloc[:3].median(), "Vmean": seg["vol"].mean(),
+                         # just before division: median of the last 3 valid frames up to division-1
+                         "Md": seg["mass_pg"].iloc[-3:].median(), "Vd": seg["vol"].iloc[-3:].median(),
+                         "rhod": seg["conc"].iloc[-3:].median(),
                          "dMdt": slope})          # mass production rate: linear fit over the cycle [pg/h]
     c = pd.DataFrame(rows)
     pairs = []
