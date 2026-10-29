@@ -11,7 +11,7 @@ paths:
   phase_glob: "img_*_ph_000.tif"
   consolidated_dir: null
   master_root: "D:/QPI_master/261024"
-  mirror_root: null
+  mirror_root: "G:/共有ドライブ/wakamotolab_meeting/kitagishi/data_master/261024"   # analysis PC reads from here
 
 positions: {start: 1, end: 119}                                  # Pos0 is the cell-free reference
 
@@ -40,6 +40,7 @@ edge_channels: ["ch00", "ch11"]  # POS_SPLIT 60; a few Pos have != 12 traps (Pos
 inputs_extra:
   - "C:/Users/QPI/Documents/QPI_Omni/drift_session_261024/channel_whitelist.json"
   - "C:/Users/QPI/Documents/QPI_Omni/drift_session_261024/drift_config_zstack.json"
+  - "datasets/ri_calibration_2perEMM_from_260517.json"
 qc_extra: []
 derived: null
 notes:
