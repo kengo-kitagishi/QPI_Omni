@@ -80,9 +80,13 @@ def write_status(done):
 
 
 def main():
+    # --only SRC [SRC ...] : touch only these source folders (others stay as they are)
+    only = set(sys.argv[sys.argv.index("--only") + 1:]) if "--only" in sys.argv else None
     done = {}
     while True:
         rows = read_copy_status()
+        if only is not None:
+            rows = [r for r in rows if r[1] in only]
         for state, src, dst, failed in rows:
             if src in done:
                 continue
