@@ -36,6 +36,8 @@ spec.loader.exec_module(impl)
 impl.SESSION_DIR = SESSION
 impl.WATCH_DIR = WATCH
 impl.OUTPUT_DIR = SESSION / "recon_YE_grid"
+if "--out" in sys.argv:       # keep off D: while D: is being acquired; needs Pos0's BG copied there first
+    impl.OUTPUT_DIR = Path(sys.argv[sys.argv.index("--out") + 1])
 impl.BATCHES[0]["grid_dir"] = impl.WATCH_DIR
 impl.BATCHES[0]["output_dir"] = impl.OUTPUT_DIR
 impl.BATCHES[0]["delete_raw"] = True          # user: raw goes once recon + calib are verified
