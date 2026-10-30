@@ -2,7 +2,7 @@
 
     python run_ye_grid_round_261030.py <round>      (rounds as in split_grid_pos_261030_ye.py)
 
-Raw: D:\\AquisitionData\\Kitagishi\\261029\\grid_YE_r<round>; output (shared by all rounds):
+Raw: D:\\AquisitionData\\Kitagishi\\261029\\grid_YE_<round>; output (shared by all rounds):
 D:\\AquisitionData\\Kitagishi\\261029\\recon_YE_grid. Rounds 2-4 have no Pos0 raw; reconstruction takes
 the BG from round 1's output (watch_grid_then_recon_260922_sz.bg_already_reconstructed).
 While the acquisition runs only the top folder is listed, so the watcher does not compete with it.
@@ -21,7 +21,7 @@ from split_grid_pos_261030_ye import ROUNDS  # noqa: E402
 ROUND = int(sys.argv[1])
 FIRST, LAST = ROUNDS[ROUND]
 SESSION = Path(r"D:\AquisitionData\Kitagishi\261029")
-WATCH = SESSION / f"grid_YE_r{ROUND}"
+WATCH = SESSION / f"grid_YE_{ROUND}"       # the name MM gave round 1
 N_EXPECTED = (LAST - FIRST + 1) * 121
 IDLE_MIN = 10
 

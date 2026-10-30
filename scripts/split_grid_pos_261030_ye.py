@@ -1,6 +1,6 @@
 """Split the 261029 grid.pos into rounds for the YE grid: D: holds ~40 Pos of raw at a time.
 
-Each round is acquired to D:\\AquisitionData\\Kitagishi\\261029\\grid_YE_r<N>, reconstructed into the shared
+Each round is acquired to D:\\AquisitionData\\Kitagishi\\261029\\grid_YE_<N>, reconstructed into the shared
 recon_YE_grid (run_ye_grid_round_261030.py <N>), and its raw deleted before the next round.
 Sizes: raw 2.15 GB/Pos + recon 0.32 GB/Pos must fit in what D: has left after the earlier outputs.
 """
