@@ -180,13 +180,17 @@ def main():
     carried = previous_done()
     rows = [carried.get(s) or {"src": s, "dst": str(dest_for(s)), "state": "pending"}
             for s in SOURCES]
+    # --skip-drive D : leave that drive's sources pending (e.g. it is the timelapse target right now)
+    skip = {a.upper() for a in sys.argv[sys.argv.index("--skip-drive") + 1:]} if "--skip-drive" in sys.argv else set()
     for r in rows:
-        if r["state"] == "pending" and not Path(r["src"]).exists():
+        if r["state"] == "pending" and r["src"][0].upper() in skip:
+            r["state"] = "deferred"
+        elif r["state"] == "pending" and not Path(r["src"]).exists():
             r["state"] = "missing"
     write_status(rows)
 
     for r in rows:
-        if r["state"] in ("missing", "done"):
+        if r["state"] in ("missing", "done", "deferred"):
             continue
         log_path = LOG_DIR / (r["src"].replace(":", "").replace("\\", "_") + ".log")
         r["state"], r["start"] = "running", f"{datetime.now():%m-%d %H:%M}"
