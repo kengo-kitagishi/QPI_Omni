@@ -22,6 +22,8 @@ ROUND = int(sys.argv[1])
 FIRST, LAST = ROUNDS[ROUND]
 SESSION = Path(r"D:\AquisitionData\Kitagishi\261029")
 WATCH = SESSION / f"grid_YE_{ROUND}"       # the name MM gave round 1
+if len(sys.argv) > 2:
+    WATCH = Path(sys.argv[2])                # round 2 went to C:\261029_YE_grid\grid_YE_1
 N_EXPECTED = (LAST - FIRST + 1) * 121
 IDLE_MIN = 10
 
