@@ -1,0 +1,44 @@
+dataset: "261030"
+description: "YE, 5 min/frame, single z; whitelist empty channels excluded; contamination censoring after frame 430"
+paths:
+  raw_root: "C:/QPI_analysis/261030/phase_f0000-0430"
+  raw_root_overrides: []
+  mask_root: "C:/QPI_analysis/261030/seg"
+  channel_rel: "output_phase/channels/crop_sub_rawraw/z000"
+  phase_glob: "img_*_ph_000.tif"
+  consolidated_dir: null
+  master_root: "C:/QPI_analysis/261030/master"
+  mirror_root: null
+positions: {start: 1, end: 118}
+segmentation:
+  model: "models/omni_model_d20_2026_09_07_12_41_31.782047"
+  eval: {diameter: 20, normalize: true, tile: false, omni: true, flow_threshold: 0.11, mask_threshold: 0, min_size: 10, net_avg: false}
+  gate: {phase_hi: 0.7, min_px: 40}
+  workers: 6
+tracking:
+  pixel_size_um: 0.34567514677103717
+  time_interval_min: 5.0
+  wavelength_nm: 658.0
+  alpha_ri: 0.00018
+  frame_min: 2
+  frame_max: 430
+  media_schedule: ""
+  ri_calibration: null
+  calibration_id: null
+  bad_frames: "C:/QPI_analysis/261030/inputs/bad_frames.json"
+  production_marker: "volume_um3_efd"
+  workers: 2
+edge_channels: ["ch00", "ch11"]
+inputs_extra:
+  - "C:/QPI_analysis/261030/inventory.json"
+  - "C:/QPI_analysis/261030/inputs/channel_whitelist.json"
+  - "C:/QPI_analysis/261030/inputs/drift_config_zstack.json"
+  - "C:/QPI_analysis/261030/inputs/selected_channels.txt"
+  - "C:/QPI_analysis/261030/inputs/drift_log_source.json"
+qc_extra: []
+derived: null
+notes:
+  - "Source D:/AquisitionData/Kitagishi/261030/online_crop_sub_YE_5min_31d; SHA256-verified frozen copy, frame 0-430 only."
+  - "578 selected channels, 820 whitelisted empty channels excluded. Missing frames retain original numbers."
+  - "Frame 431 onward excluded by user due to contamination; frame 430 is administrative censoring, not evidence of death. Tracker death_frame means track endpoint, not a biological death classification."
+  - "YE RI calibration pending investigation of 2% EMM-reference timelapse. Until supplied, n_medium=1.333 is a computational placeholder only; absolute RI is not calibrated."
