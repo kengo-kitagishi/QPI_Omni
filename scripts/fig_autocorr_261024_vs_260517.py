@@ -9,7 +9,7 @@ h    time autocorrelation C(tau), tau = 0..MAX_LAG_H, of the mother concentratio
 
 Estimator (pooled over mothers, deviations from the dataset mean mu):
     C(k) = [sum_pairs (x_i - mu)(x_{i+k} - mu) / N_k] / [sum_i (x_i - mu)^2 / N_0]
-95% CI: bootstrap over mothers (N_BOOT resamples of the mother list).
+No error bars (user, 2026-11-02).
 """
 import sys
 from pathlib import Path
@@ -28,8 +28,6 @@ MAX_GEN = 18          # 261024 has ~17 generations in 55 h (260517 has ~50 in 7 
 MAX_LAG_H = 50.0
 MIN_PAIRS = 200       # lags with fewer pairs are not drawn (at 50, 261024 k=17-18 rested on a few mothers)
 DT_H = 5.0 / 60.0
-N_BOOT = 300
-RNG = np.random.default_rng(0)
 
 
 def per_mother_sums(series_list, max_lag):
@@ -51,20 +49,12 @@ def per_mother_sums(series_list, max_lag):
     return sxy, nxy
 
 
-def acf_with_ci(sxy, nxy):
-    def est(idx):
-        s, n = sxy[idx].sum(0), nxy[idx].sum(0)
-        with np.errstate(invalid="ignore", divide="ignore"):
-            c = (s / n) / (s[0] / n[0])
-        return c
-    allidx = np.arange(len(sxy))
-    c = est(allidx)
-    boots = np.array([est(RNG.integers(0, len(sxy), len(sxy))) for _ in range(N_BOOT)])
-    lo, hi = np.nanpercentile(boots, [2.5, 97.5], axis=0)
-    n = nxy.sum(0)
-    few = n < MIN_PAIRS
-    c, lo, hi = (np.where(few, np.nan, v) for v in (c, lo, hi))
-    return c, lo, hi, n
+def acf(sxy, nxy):
+    """Pooled C at each lag; no error bars (user, 2026-11-02: no bootstrap CI over mothers)."""
+    s, n = sxy.sum(0), nxy.sum(0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        c = (s / n) / (s[0] / n[0])
+    return np.where(n < MIN_PAIRS, np.nan, c), n
 
 
 def generation_series(cyc, key):
@@ -109,22 +99,16 @@ def main():
     for ds in ("260517", "261024"):
         m, cyc = data[ds]
         for ax, (key, title) in zip(axes[:n_gen], gen_specs):
-            c, lo, hi, n = acf_with_ci(*per_mother_sums(generation_series(cyc, key), MAX_GEN))
+            c, n = acf(*per_mother_sums(generation_series(cyc, key), MAX_GEN))
             k = np.arange(MAX_GEN + 1)
-            ax.errorbar(k, c, yerr=[c - lo, hi - c], fmt="o-", ms=1.2, lw=0.7, elinewidth=0.4,
-                        capsize=0, color=base.COLORS[ds], label=ds)
-            arrays.update({f"{ds}_{key}_acf": c, f"{ds}_{key}_lo": lo, f"{ds}_{key}_hi": hi,
-                           f"{ds}_{key}_npairs": n})
+            ax.plot(k, c, "o-", ms=1.2, lw=0.7, color=base.COLORS[ds], label=ds)
+            arrays.update({f"{ds}_{key}_acf": c, f"{ds}_{key}_npairs": n})
             summary[f"{ds}_{key}_C1"] = round(float(c[1]), 3)
             ax.set_title(title, fontsize=7)
-        c, lo, hi, n = acf_with_ci(*per_mother_sums(time_series(m, ds), max_lag_fr))
+        c, n = acf(*per_mother_sums(time_series(m, ds), max_lag_fr))
         tau = np.arange(max_lag_fr + 1) * DT_H
-        every = slice(None, None, 12)                 # one error bar per hour
         t_ax.plot(tau, c, lw=0.8, color=base.COLORS[ds], label=ds)
-        t_ax.errorbar(tau[every], c[every], yerr=[(c - lo)[every], (hi - c)[every]], fmt="none",
-                      elinewidth=0.4, capsize=0, color=base.COLORS[ds])
-        arrays.update({f"{ds}_conc_time_acf": c, f"{ds}_conc_time_lo": lo, f"{ds}_conc_time_hi": hi,
-                       f"{ds}_conc_time_npairs": n, "tau_h": tau})
+        arrays.update({f"{ds}_conc_time_acf": c, f"{ds}_conc_time_npairs": n, "tau_h": tau})
         summary[f"{ds}_n_mothers"] = int(m.groupby(["pos", "ch"]).ngroups)
 
     letters = "abcdefgh"
@@ -155,9 +139,9 @@ def main():
         "(yellow-contour efd), f mass production rate (slope of a linear fit of dry mass vs time over the valid "
         "frames of the cycle, pg/h), g interdivision time. h, time autocorrelation of the mother dry-mass "
         "concentration (valid frames, 5-min grid). C = pooled covariance of deviations from the dataset mean at "
-        f"lag k (or tau) divided by the pooled variance; error bars = 95% bootstrap CI over mothers; lags with < {MIN_PAIRS} pairs are not drawn (261024 has "
-        "~17 generations, 260517 ~50); bootstrap "
-        f"({N_BOOT} resamples). n mothers: 261024 {summary['261024_n_mothers']}, 260517 "
+        f"lag k (or tau) divided by the pooled variance; no error bars; lags with < {MIN_PAIRS} pairs are not drawn "
+        "(261024 has ~17 generations, 260517 ~50). "
+        f"n mothers: 261024 {summary['261024_n_mothers']}, 260517 "
         f"{summary['260517_n_mothers']}. Concentration = efd density x 1000; 261024 n_medium 1.335029 carried over "
         f"from 260517. 260517 master {tag}, img 2-2017, analysis_recommended channels; 261024 img 2-666, mothers "
         f"with >= {base.MIN_MOTHER_FRAMES} valid frames, edge traps excluded."
@@ -166,7 +150,7 @@ def main():
     )
     out = save_figure(
         fig, fmt="png", dpi=300,
-        params={"outliers": base.OUTLIER_LOG, "max_gen": MAX_GEN, "max_lag_h": MAX_LAG_H, "n_boot": N_BOOT, "seed": 0,
+        params={"outliers": base.OUTLIER_LOG, "max_gen": MAX_GEN, "max_lag_h": MAX_LAG_H, "error_bars": None,
                 "min_mother_frames": base.MIN_MOTHER_FRAMES, "master_260517": tag, "C1": summary},
         description="Generation and time autocorrelation of mother concentration, birth mass and "
                     "interdivision time: 261024 vs 260517, 2% glucose",
