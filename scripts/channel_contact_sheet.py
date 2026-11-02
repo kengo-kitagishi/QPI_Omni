@@ -198,6 +198,9 @@ def main() -> int:
                     help="hand the page out at http://localhost:<port>/ and let its button write "
                          "the selection to <out>.selected.txt / .csv instead of saving the HTML")
     ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--only-channels", default=None,
+                    help="show only the channels listed in this file, one 'PosN chNN' per line "
+                         "(e.g. a whitelist <out>.selected.txt)")
     a = ap.parse_args()
     serve = a.serve
 
@@ -206,13 +209,18 @@ def main() -> int:
     lut = bytes(bytearray(
         int(round(255 * c)) for i in range(256) for c in colormaps["inferno"](i / 255.0)[:3]))
 
+    only = None
+    if a.only_channels:
+        only = {tuple(line.split()) for line in Path(a.only_channels).read_text(encoding="utf-8").splitlines()
+                if len(line.split()) == 2}
     jobs = []
     for pos in range(a.pos_start, a.pos_end + 1):
         base = raw_root / f"Pos{pos}" / rel
         if not base.is_dir():
             continue
         for ch in sorted((d for d in base.glob("ch*") if d.is_dir()), key=lambda p: int(p.name[2:])):
-            jobs.append((pos, ch.name, ch))
+            if only is None or (f"Pos{pos}", ch.name) in only:
+                jobs.append((pos, ch.name, ch))
     if not jobs:
         print(f"no channels under {raw_root}/Pos*/{rel}")
         return 1
