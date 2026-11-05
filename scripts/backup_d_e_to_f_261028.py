@@ -50,6 +50,13 @@ SOURCES = [
     r"D:\AquisitionData\Kitagishi\260908",
     r"D:\AquisitionData\Kitagishi\260729",
     r"D:\AquisitionData\Kitagishi\basler_image_seq",
+    # added 2026-11-05 (user: copy everything)
+    r"D:\AquisitionData\Kitagishi\261029",
+    r"D:\AquisitionData\Kitagishi\261030",
+    r"E:\261029",
+    r"E:\261030",
+    r"D:\261024_seg",
+    r"D:\QPI_master",
 ]
 
 # robocopy reached ~5 MB/s on this USB exFAT HDD (2026-10-28, any /MT, any /COPY); a plain
