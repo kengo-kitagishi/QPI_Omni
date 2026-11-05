@@ -81,6 +81,11 @@ def write_status(done):
 
 def main():
     # --only SRC [SRC ...] : touch only these source folders (others stay as they are)
+    # --no-keep : the KEEP folders may be deleted too (user, 2026-11-05: verify everything, delete what matches)
+    global KEEP
+    if "--no-keep" in sys.argv:
+        sys.argv.remove("--no-keep")
+        KEEP = set()
     only = set(sys.argv[sys.argv.index("--only") + 1:]) if "--only" in sys.argv else None
     done = {}
     while True:
