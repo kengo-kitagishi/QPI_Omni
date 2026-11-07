@@ -50,7 +50,8 @@ def wait_light():
 
 
 if __name__ == "__main__":
-    impl.log(f"waiting for {impl.WATCH_DIR} (top-folder count only, idle {IDLE_MIN} min ends the wait)")
-    wait_light()
+    if "--now" not in sys.argv:          # --now: acquisition known to be finished
+        impl.log(f"waiting for {impl.WATCH_DIR} (top-folder count only, idle {IDLE_MIN} min ends the wait)")
+        wait_light()
     sys.argv = [sys.argv[0], "--skip-wait"]
     impl.main()
