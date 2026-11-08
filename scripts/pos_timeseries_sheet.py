@@ -33,7 +33,7 @@ def main() -> int:
     ap.add_argument("--raw-root", required=True)
     ap.add_argument("--channel-rel", required=True)
     ap.add_argument("--phase-glob", default="img_*_ph_000.tif")
-    ap.add_argument("--pos", type=int, required=True)
+    ap.add_argument("--pos", required=True, help="one Pos or a comma list, e.g. 20,40,60 (stacked in one page)")
     ap.add_argument("--frames", default=None, help="start:end:step (img numbers); default every frame present")
     ap.add_argument("--vmin", type=float, default=-0.2)
     ap.add_argument("--vmax", type=float, default=0.2)
@@ -42,41 +42,48 @@ def main() -> int:
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
 
-    base = Path(a.raw_root) / f"Pos{a.pos}" / a.channel_rel
-    chs = sorted((d for d in base.glob("ch*") if d.is_dir()), key=lambda p: int(p.name[2:]))
-    if not chs:
-        print(f"no channels under {base}")
-        return 1
-    files = {ch.name: {_frame_no(f): f for f in ch.glob(a.phase_glob)} for ch in chs}
-    frames = sorted(set().union(*(set(v) for v in files.values())))
-    if a.frames:
-        lo, hi, step = (int(x) if x else None for x in (a.frames.split(":") + ["", ""])[:3])
-        frames = [f for f in frames if (lo is None or f >= lo) and (hi is None or f <= hi)]
-        frames = frames[::step or 1]
     lut = bytes(bytearray(int(round(255 * c)) for i in range(256) for c in colormaps["inferno"](i / 255.0)[:3]))
-
-    head = "".join(f"<th>{f}<br>{f * a.interval_min / 60:.1f} h</th>" for f in frames)
-    rows = []
-    for ch in chs:
-        cells = []
-        for f in frames:
-            p = files[ch.name].get(f)
-            if p is None:
-                cells.append("<td></td>")
-                continue
-            img = tifffile.imread(str(p)).astype(np.float32)
-            h, w = img.shape
-            src = tile_png(img, a.vmin, a.vmax, lut, rotate=True)
-            cells.append(f'<td><img src="data:image/png;base64,{src}" width="{h * a.zoom:.0f}" '
-                         f'height="{w * a.zoom:.0f}"></td>')
-        rows.append(f'<tr><td class="ch">{ch.name}</td>{"".join(cells)}</tr>')
+    positions = [int(p) for p in str(a.pos).split(",") if p.strip()]
+    sections, n_frames = [], 0
+    for pos in positions:
+        base = Path(a.raw_root) / f"Pos{pos}" / a.channel_rel
+        chs = sorted((d for d in base.glob("ch*") if d.is_dir()), key=lambda p: int(p.name[2:]))
+        if not chs:
+            print(f"no channels under {base}")
+            continue
+        files = {ch.name: {_frame_no(f): f for f in ch.glob(a.phase_glob)} for ch in chs}
+        frames = sorted(set().union(*(set(v) for v in files.values())))
+        if a.frames:
+            lo, hi, step = (int(x) if x else None for x in (a.frames.split(":") + ["", ""])[:3])
+            frames = [f for f in frames if (lo is None or f >= lo) and (hi is None or f <= hi)]
+            frames = frames[::step or 1]
+        n_frames = max(n_frames, len(frames))
+        head = "".join(f"<th>{f}<br>{f * a.interval_min / 60:.1f} h</th>" for f in frames)
+        rows = []
+        for ch in chs:
+            cells = []
+            for f in frames:
+                p = files[ch.name].get(f)
+                if p is None:
+                    cells.append("<td></td>")
+                    continue
+                img = tifffile.imread(str(p)).astype(np.float32)
+                h, w = img.shape
+                src = tile_png(img, a.vmin, a.vmax, lut, rotate=True)
+                cells.append(f'<td><img src="data:image/png;base64,{src}" width="{h * a.zoom:.0f}" '
+                             f'height="{w * a.zoom:.0f}"></td>')
+            rows.append(f'<tr><td class="ch">{ch.name}</td>{"".join(cells)}</tr>')
+        sections.append(f'<h2 style="margin:14px 12px 0;color:#9cf;font-size:15px">Pos{pos}</h2>'
+                        f'<table><tr><th></th>{head}</tr>{"".join(rows)}</table>')
+    if not sections:
+        return 1
     title = f"Pos{a.pos} over time - {Path(a.raw_root).name}"
     html = (f"<!doctype html><html><head><meta charset='utf-8'><title>{title}</title><style>{CSS}</style></head>"
-            f"<body><header>{title} &middot; inferno {a.vmin}-{a.vmax} rad &middot; {len(frames)} frames "
-            f"(img number / time)</header><table><tr><th></th>{head}</tr>{''.join(rows)}</table></body></html>")
+            f"<body><header>{title} &middot; inferno {a.vmin}-{a.vmax} rad &middot; up to {n_frames} frames "
+            f"(img number / time)</header>{''.join(sections)}</body></html>")
     out = Path(a.out)
     out.write_text(html, encoding="utf-8")
-    print(f"{out}  ({out.stat().st_size / 1e6:.1f} MB, {len(chs)} traps x {len(frames)} frames)")
+    print(f"{out}  ({out.stat().st_size / 1e6:.1f} MB, {len(sections)} Pos x up to {n_frames} frames)")
     return 0
 
 
