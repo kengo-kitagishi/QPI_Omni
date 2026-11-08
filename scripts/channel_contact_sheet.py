@@ -79,8 +79,11 @@ CSS = """
 """
 
 JS = """
-const KEY = "contact_sheet_sel_" + location.pathname;
-let sel = new Set(JSON.parse(localStorage.getItem(KEY) || "[]"));
+// SHEET_ID / PRESELECT are defined just before this script. The key used to be location.pathname, which is "/"
+// for every --serve page, so a selection from one dataset leaked into the next (2026-11-08).
+const KEY = "contact_sheet_sel_" + SHEET_ID;
+const stored = localStorage.getItem(KEY);
+let sel = new Set(stored ? JSON.parse(stored) : PRESELECT);
 function paint(){
   document.querySelectorAll(".t[data-k]").forEach(e => e.classList.toggle("sel", sel.has(e.dataset.k)));
   document.getElementById("count").textContent = sel.size;
@@ -198,6 +201,9 @@ def main() -> int:
                     help="hand the page out at http://localhost:<port>/ and let its button write "
                          "the selection to <out>.selected.txt / .csv instead of saving the HTML")
     ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--preselect", default=None,
+                    help="tiles listed in this file ('PosN chNN' per line) start selected (e.g. an automatic guess); "
+                         "a selection already saved in this browser for the same data and frame wins")
     ap.add_argument("--only-channels", default=None,
                     help="show only the channels listed in this file, one 'PosN chNN' per line "
                          "(e.g. a whitelist <out>.selected.txt)")
@@ -274,7 +280,13 @@ def main() -> int:
                 f'<img src="data:image/png;base64,{b64}" style="zoom:{a.zoom}">'
                 f'<div class="lab">{html.escape(chname)} <span class="nm">{n}</span> {note}</div></div>')
         parts.append("</div></div>")
-    parts.append(f"<script>{JS}</script>")
+    preselect = []
+    if a.preselect:
+        preselect = [" ".join(line.split()) for line in Path(a.preselect).read_text(encoding="utf-8").splitlines()
+                     if len(line.split()) == 2]
+    sheet_id = f"{raw_root.as_posix()}|{a.channel_rel}|frame{a.frame}"
+    parts.append(f"<script>const SHEET_ID = {json.dumps(sheet_id)}; const PRESELECT = {json.dumps(preselect)};"
+                 f"</script><script>{JS}</script>")
 
     page = "".join(parts)
     out = Path(a.out)
