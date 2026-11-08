@@ -20,7 +20,7 @@ REST = Path(r"E:\261108\grid_YE_3")
 ASIDE = Path(r"E:\261108\grid_YE_2_Pos58_partial")
 FIRST_REDONE, LAST = 58, 118
 N_REST = (LAST - FIRST_REDONE + 1) * 121
-IDLE_MIN = 5
+IDLE_MIN = 1               # user: no long waits; one quiet minute so the last point is fully written
 POINT_RE = re.compile(r"^Pos(\d+)_x[+-]\d+_y[+-]\d+$")
 
 
