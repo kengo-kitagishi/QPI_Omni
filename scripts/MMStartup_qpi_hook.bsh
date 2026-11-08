@@ -1,0 +1,54 @@
+// MMStartup.bsh - QPI remote-run hook (2026-11-08)
+// To install: copy this file to C:\Program Files\Micro-Manager-1.4\MMStartup.bsh and restart Micro-Manager.
+// Watches C:/Users/QPI/Documents/QPI_Omni/mm_inbox. Every .bsh file put there is moved to mm_inbox/done
+// and then run inside this Micro-Manager (same interpreter as the Script Panel, so mmc and gui exist).
+// Disable: create mm_inbox/DISABLED (the watcher stops), or delete MMStartup.bsh and restart Micro-Manager.
+import java.io.File;
+import java.io.FileWriter;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+qpiInbox = new File("C:/Users/QPI/Documents/QPI_Omni/mm_inbox");
+qpiDone = new File(qpiInbox, "done");
+qpiInbox.mkdirs();
+qpiDone.mkdirs();
+qpiInterp = this.interpreter;
+
+qpiLog(String msg) {
+    FileWriter w = new FileWriter(new File(qpiInbox, "hook_log.txt"), true);
+    w.write(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()) + "  " + msg + "\r\n");
+    w.close();
+}
+
+qpiRunner = new Runnable() {
+    public void run() {
+        qpiLog("watcher started");
+        while (true) {
+            if (new File(qpiInbox, "DISABLED").exists()) {
+                qpiLog("DISABLED found, watcher stopped");
+                return;
+            }
+            File[] fs = qpiInbox.listFiles();
+            if (fs != null) {
+                for (int i = 0; i < fs.length; i++) {
+                    File f = fs[i];
+                    if (!f.isFile() || !f.getName().endsWith(".bsh")) continue;
+                    String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+                    File dest = new File(qpiDone, stamp + "_" + f.getName());
+                    if (!f.renameTo(dest)) { qpiLog("could not move " + f.getName()); continue; }
+                    qpiLog("run " + dest.getName());
+                    try {
+                        qpiInterp.source(dest.getAbsolutePath());
+                        qpiLog("done " + dest.getName());
+                    } catch (Throwable e) {
+                        qpiLog("ERROR " + dest.getName() + ": " + e);
+                    }
+                }
+            }
+            try { Thread.sleep(2000); } catch (InterruptedException e) { return; }
+        }
+    }
+};
+qpiThread = new Thread(qpiRunner, "qpi-mm-inbox");
+qpiThread.setDaemon(true);
+qpiThread.start();

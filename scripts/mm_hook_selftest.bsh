@@ -1,0 +1,8 @@
+// Self-test for the MMStartup.bsh inbox hook: reads core information only, moves no hardware.
+import java.io.FileWriter;
+w = new FileWriter("C:/Users/QPI/Documents/QPI_Omni/mm_inbox/selftest_result.txt");
+w.write("core version: " + mmc.getVersionInfo() + "\r\n");
+w.write("xy stage: " + mmc.getXYStageDevice() + " at " + mmc.getXPosition(mmc.getXYStageDevice()) + ", "
+        + mmc.getYPosition(mmc.getXYStageDevice()) + "\r\n");
+w.write("acquisition running: " + gui.isAcquisitionRunning() + "\r\n");
+w.close();
