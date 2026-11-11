@@ -1,0 +1,44 @@
+dataset: "261108"
+description: "YE, 5 min/frame, single z, run 3 (cells; grid_YE_2); 21 traps chosen by the user in the mixed Pos"
+paths:
+  raw_root: "D:/AquisitionData/Kitagishi/261108/online_crop_sub_YE_5min_31d_3"
+  raw_root_overrides: []
+  mask_root: "C:/QPI_analysis/261108/seg"
+  channel_rel: "output_phase/channels/crop_sub_rawraw/z000"
+  phase_glob: "img_*_ph_000.tif"
+  consolidated_dir: null
+  master_root: "C:/QPI_analysis/261108/master"
+  mirror_root: null
+positions: {start: 1, end: 118}
+segmentation:
+  model: "models/omni_model_d20_2026_09_07_12_41_31.782047"
+  eval: {diameter: 20, normalize: true, tile: false, omni: true, flow_threshold: 0.11, mask_threshold: 0, min_size: 10, net_avg: false}
+  gate: {phase_hi: 0.7, min_px: 40}
+  workers: 6
+tracking:
+  pixel_size_um: 0.34567514677103717
+  time_interval_min: 5.0
+  wavelength_nm: 658.0
+  alpha_ri: 0.00018
+  frame_min: 2
+  frame_max: 769
+  media_schedule: ""
+  ri_calibration: null
+  calibration_id: null
+  bad_frames: "C:/QPI_analysis/261108/inputs/bad_frames.json"
+  production_marker: "volume_um3_efd"
+  workers: 6
+edge_channels: []
+inputs_extra:
+  - "C:/QPI_analysis/261108/inputs/seg_channels.txt"
+  - "C:/QPI_analysis/261108/inputs/pos_categories.csv"
+  - "C:/QPI_analysis/261108/inputs/channel_whitelist.json"
+  - "C:/QPI_analysis/261108/inputs/drift_config_zstack.json"
+qc_extra: []
+derived: null
+notes:
+  - "Run 3 of 261108 (drift_session_261108_3): cells loaded, YE flowing, frames 0-769; grid E:/261108/recon_YE_grid_2 (re-taken; the first 261108 grid stalled when Micro-Manager ran out of memory)."
+  - "Only the 21 traps in inputs/seg_channels.txt were segmented (user choice, 2026-11-11), all in Pos classified 'mixed' (inputs/pos_categories.csv). Pos where every trap or no trap holds cells are not analysed."
+  - "edge_channels is empty on purpose: the user chose 5 end-of-array traps (Pos38 ch00, Pos40 ch00, Pos41 ch10, Pos50 ch10, Pos57 ch10); earlier datasets excluded end traps, decide before cohort analysis."
+  - "This chip has 11 traps per Pos (ch00-ch10). Pos >= 60: the last trap sits at the field edge (quadrant subtraction unreliable)."
+  - "Medium RI: n_YE = 1.33446 from the PDMS-wall/trap step (261029 chip, scripts/ri_ye_from_pdms_step_261029.py). Not applied here (ri_calibration null, n_medium 1.333 placeholder); concentration and dry mass do not depend on it, mean_ri does (+0.00146)."
