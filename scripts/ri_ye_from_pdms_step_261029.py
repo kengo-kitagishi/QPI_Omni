@@ -93,17 +93,16 @@ def main():
     ratio = sy / s2
     med = float(np.median(ratio))
     q1, q3 = np.percentile(ratio, [25, 75])
-    rng = np.random.default_rng(0)
-    boot = np.median(rng.choice(ratio, (2000, ratio.size)), axis=1)
-    ci = np.percentile(boot, [2.5, 97.5])
+    mean, sem = float(np.mean(ratio)), float(np.std(ratio, ddof=1) / np.sqrt(ratio.size))   # no bootstrap (user)
 
     def n_ye(r, n_p=N_PDMS):
         return n_p - (n_p - N_2PER) * r
     res = {
         "n_traps": int(ratio.size), "n_pos": int(np.unique(pos).size),
-        "ratio_median": med, "ratio_iqr": [float(q1), float(q3)], "ratio_ci95": [float(ci[0]), float(ci[1])],
+        "ratio_median": med, "ratio_iqr": [float(q1), float(q3)], "ratio_mean": mean, "ratio_sem": sem,
         "S_2per_median_rad_px": float(np.median(s2)), "S_YE_median_rad_px": float(np.median(sy)),
-        "n_YE": n_ye(med), "n_YE_ci95": [n_ye(ci[1]), n_ye(ci[0])],
+        "n_YE": n_ye(med), "n_YE_from_mean": n_ye(mean),
+        "n_YE_sem": float((N_PDMS - N_2PER) * sem),
         "n_YE_for_n_PDMS_range": [n_ye(med, N_PDMS_RANGE[0]), n_ye(med, N_PDMS_RANGE[1])],
         "n_YE_minus_n_2per": n_ye(med) - N_2PER, "n_2per": N_2PER, "n_PDMS": N_PDMS,
     }
@@ -133,7 +132,8 @@ def main():
                  "output_phase_raw) vs the YE timelapse (frames 0-27, median). Right: ratio S_YE/S_2per; "
                  "n_YE = n_PDMS - (n_PDMS - n_2per) x median ratio with n_PDMS = 1.412 (literature) and "
                  "n_2per = 1.335029 (260517 calibration). Traps: 261030 whitelist (empty), edge traps excluded; "
-                 "CI: bootstrap over traps. No statistical test."),
+                 "Spread: interquartile range of the ratio over traps, and mean +- SEM over traps (n = traps). "
+                 "No statistical test."),
     )
 
 

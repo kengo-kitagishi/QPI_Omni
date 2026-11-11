@@ -31,16 +31,18 @@ def main():
         for ds in ("260517", "261024"):
             c = z[f"{ds}_{key}_acf"]
             x = z["tau_h"] if key == "conc_time" else np.arange(len(c))
-            n = z[f"{ds}_{key}_npairs"]
+            # mean +- SEM over mothers (user, 2026-11-11: no bootstrap)
+            n = z[f"{ds}_{key}_n_mothers"]
             r3 = lambda v: np.round(np.asarray(v, float), 4).tolist()  # noqa: E731
-            lo, hi = r3(z[f"{ds}_{key}_lo"]), r3(z[f"{ds}_{key}_hi"])
+            sem = r3(z[f"{ds}_{key}_sem"])
             traces.append({"x": r3(x), "y": r3(c), "type": "scatter",
                            "mode": "lines" if key == "conc_time" else "lines+markers",
                            "line": {"color": COLORS[ds], "width": 2}, "marker": {"size": 5},
+                           "error_y": {"type": "data", "array": sem, "visible": True, "thickness": 1},
                            "name": ds,
-                           "customdata": [[int(a), b, c_] for a, b, c_ in zip(n, lo, hi)],
-                           "hovertemplate": "lag %{x}<br>C = %{y:.3f}<br>95% CI %{customdata[1]:.3f} – "
-                                            "%{customdata[2]:.3f}<br>pairs %{customdata[0]}<extra>" + ds + "</extra>"})
+                           "customdata": [[int(a), b] for a, b in zip(n, sem)],
+                           "hovertemplate": "lag %{x}<br>C = %{y:.3f} ± %{customdata[1]:.3f} (SEM)"
+                                            "<br>mothers %{customdata[0]}<extra>" + ds + "</extra>"})
         panels.append({"id": key, "data": traces,
                        "layout": {"title": title, "xaxis": {"title": xlab},
                                   "yaxis": {"title": "autocorrelation", "range": [-0.3, 1.02], "zeroline": True}}})
@@ -51,9 +53,9 @@ def main():
 .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:12px}}
 .p{{height:400px}} p{{font-size:13px;max-width:1100px}}</style></head><body>
 <h2>261024 vs 260517 (2% EMM): autocorrelation of mother-cell quantities</h2>
-<p>Source: <code>{Path(a.npz).name}</code>. C = pooled covariance of deviations from the dataset mean at
-the lag / pooled variance. Hover shows the 95% bootstrap CI over mothers and the number of pairs at each lag.
-Drag to zoom, double-click to reset.</p>
+<p>Source: <code>{Path(a.npz).name}</code>. For each mother, C_i(k) = mean product of deviations from the
+dataset mean at the lag / that mother's mean squared deviation; points = mean over mothers, error bars = SEM over
+mothers. Hover shows the number of mothers at each lag. Drag to zoom, double-click to reset.</p>
 <div class="grid">{''.join(f'<div class="p" id="{p["id"]}"></div>' for p in panels)}</div>
 <script>
 const P = {json.dumps(panels)};
