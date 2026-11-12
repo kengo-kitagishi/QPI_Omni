@@ -28,19 +28,31 @@ DILATE = 4
 
 
 def trap_residual(pos, ch):
+    """Residual inside the trap only. The walls are where outside_quad was fitted, so they are ~0 by construction;
+    pooling them (the first version) pulled the median to 0. Trap interior = union of all cell masks over time."""
     d_raw = RAW / pos / REL / ch
     d_mask = MASK / pos / REL / ch / "inference_out"
-    vals = []
-    for f in sorted(d_raw.glob("img_*_ph_000.tif"))[2::STEP]:
-        img = tifffile.imread(str(f)).astype(np.float64)
+    files = sorted(d_raw.glob("img_*_ph_000.tif"))[2:]
+    masks = {}
+    for f in files:
         mp = d_mask / (f.stem + "_masks.tif")
-        cell = tifffile.imread(str(mp)) > 0 if mp.exists() else np.zeros(img.shape, bool)
-        if cell.shape != img.shape:
+        if mp.exists():
+            masks[f.name] = tifffile.imread(str(mp)) > 0
+    if not masks:
+        return np.nan, np.nan, 0
+    interior = np.logical_or.reduce(list(masks.values()))
+    vals = []
+    for f in files[::STEP]:
+        if f.name not in masks:     # no mask = not segmented that frame; its cells would count as background
             continue
-        bg = ~binary_dilation(cell, iterations=DILATE)
-        if bg.sum() > 200:
-            vals.append(float(np.median(img[bg])))
-    return (np.mean(vals), np.std(vals)) if vals else (np.nan, np.nan)
+        img = tifffile.imread(str(f)).astype(np.float64)
+        cell = masks[f.name]
+        if cell.shape != img.shape or interior.shape != img.shape:
+            continue
+        free = interior & ~binary_dilation(cell, iterations=DILATE)
+        if free.sum() > 50:
+            vals.append(float(np.median(img[free])))
+    return (np.mean(vals), np.std(vals), int(interior.sum())) if vals else (np.nan, np.nan, int(interior.sum()))
 
 
 def main():
@@ -52,7 +64,7 @@ def main():
     cy = cyc.groupby(["pos", "ch"])[["rhob", "Vb", "Mb"]].mean()
     tab = cy.join(lin)
     res = np.array([trap_residual(p, c) for p, c in tab.index])
-    tab["bg_mean"], tab["bg_sd"] = res[:, 0], res[:, 1]
+    tab["bg_mean"], tab["bg_sd"], tab["interior_px"] = res[:, 0], res[:, 1], res[:, 2]
     print(tab.round(3).to_string())
     fig, axes = plt.subplots(1, 4, figsize=(183 / 25.4, 50 / 25.4), constrained_layout=True)
     out = {}
@@ -76,9 +88,10 @@ def main():
         data={"bg_mean": tab["bg_mean"].to_numpy(), "bg_sd": tab["bg_sd"].to_numpy(),
               **{c: tab[c].to_numpy() for c in ("conc", "rhob", "Mb", "Vb")}},
         extra_meta={"r": out},
-        caption=("Each point is one trap / mother lineage (261108 YE run 3, n = traps). x: background residual of the "
-                 "crop_sub after the outside_quad background fit = median phase of the pixels at least "
-                 f"{DILATE} px from any segmented cell, every {STEP}th frame, averaged over time. y: lineage means over "
+        caption=("Each point is one trap / mother lineage (261108 YE run 3, n = traps). x: background residual inside "
+                 "the trap after the outside_quad background fit = median phase of the trap-interior pixels (union of "
+                 f"all cell masks over time) at least {DILATE} px from the cells of that frame, every {STEP}th frame, "
+                 "averaged over time (walls, where the fit was made, excluded). y: lineage means over "
                  "QC-validated cycles (birth values = median of the first 3 valid frames after division) or over valid "
                  "mother frames (concentration). r: Pearson correlation. No statistical test beyond r."),
     )
