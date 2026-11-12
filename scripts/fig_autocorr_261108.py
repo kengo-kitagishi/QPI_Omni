@@ -45,6 +45,16 @@ def load():
     return f, dv
 
 
+EXCLUDED = Path(r"C:\QPI_analysis\261108\inputs\excluded_traps.csv")
+
+
+def drop_excluded(m):
+    """Leave out the traps in EXCLUDED (band region with a large background error; user, 2026-11-12)."""
+    ex = set(map(tuple, pd.read_csv(EXCLUDED)[["pos", "ch"]].values))
+    keep = [(p, c) not in ex for p, c in zip(m["pos"], m["ch"])]
+    return m[keep], sorted(ex)
+
+
 def living_only(m, dv):
     """Mark frames after death (after the last validated division, unless censored) as not valid."""
     lo, hi = base.FRAME_WINDOWS[DS]
@@ -61,6 +71,7 @@ def main():
     base.MIN_MOTHER_FRAMES = MIN_MOTHER_FRAMES_261030
     f, dv = load()
     m = base.mothers(f, None, DS)
+    m, excluded = drop_excluded(m)
     cyc = base.cycles(m, dv, DS)[0]
     m_alive, n_dead = living_only(m, dv)
 
@@ -114,7 +125,7 @@ def main():
         description="Generation and time autocorrelation of mother-cell quantities, 261108 YE run 3 (frames 2-769, 21 traps).",
         data=arrays,
         caption=(
-            "Autocorrelation of mother-cell quantities, 261108 YE run 3, frames 2-769, 21 traps chosen by the user in the mixed Pos (end traps included). "
+            "Autocorrelation of mother-cell quantities, 261108 YE run 3, frames 2-769, 21 traps chosen by the user in the mixed Pos (end traps included); excluded: " + ", ".join(f"{p} {c}" for p, c in excluded) + " (band region with a large background error, inputs/excluded_traps.csv). "
             "a-g, generation autocorrelation over contiguous cycles of the same mother (cycle = between two "
             "QC-validated mother divisions): a cycle-mean dry-mass concentration, b birth concentration, c birth mass, "
             "d birth volume (b-d: median of the first 3 valid frames after division), e cycle-mean volume (efd), "

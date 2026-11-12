@@ -32,6 +32,7 @@ edge_channels: []
 inputs_extra:
   - "C:/QPI_analysis/261108/inputs/seg_channels.txt"
   - "C:/QPI_analysis/261108/inputs/pos_categories.csv"
+  - "C:/QPI_analysis/261108/inputs/excluded_traps.csv"
   - "C:/QPI_analysis/261108/inputs/channel_whitelist.json"
   - "C:/QPI_analysis/261108/inputs/drift_config_zstack.json"
 qc_extra: []
@@ -42,3 +43,4 @@ notes:
   - "edge_channels is empty on purpose: the user chose 5 end-of-array traps (Pos38 ch00, Pos40 ch00, Pos41 ch10, Pos50 ch10, Pos57 ch10); earlier datasets excluded end traps, decide before cohort analysis."
   - "This chip has 11 traps per Pos (ch00-ch10). Pos >= 60: the last trap sits at the field edge (quadrant subtraction unreliable)."
   - "Medium RI: n_YE = 1.33446 from the PDMS-wall/trap step (261029 chip, scripts/ri_ye_from_pdms_step_261029.py). Not applied here (ri_calibration null, n_medium 1.333 placeholder); concentration and dry mass do not depend on it, mean_ri does (+0.00146)."
+  - "Excluded from analysis (user, 2026-11-12): Pos38 ch00, Pos40 ch00, Pos51 ch03, Pos52 ch02 - band region Pos35-59 ch0-3 where the outside_quad background inside the trap is off by up to hundreds of mrad (scripts/bg_extrapolation_empty_traps_261108.py). List: inputs/excluded_traps.csv."

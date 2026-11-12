@@ -43,6 +43,7 @@ def main():
     base.MIN_MOTHER_FRAMES = s.MIN_MOTHER_FRAMES_261030
     f, dv = s.load()
     m = base.mothers(f, None, s.DS)
+    m, excluded = s.drop_excluded(m)
     cyc = base.cycles(m, dv, s.DS)[0]
     m_alive, _ = s.living_only(m, dv)
     specs = [("rho", "cycle-mean concentration"), ("rhob", "birth concentration"), ("Mb", "birth mass"),
@@ -94,7 +95,7 @@ def main():
         description="261108 YE run 3 autocorrelation: dataset mean vs each lineage's own mean subtracted.",
         data=arrays,
         caption=("Autocorrelation of mother-cell quantities, 261108 YE run 3 (21 traps, frames 2-769), selection and "
-                 "panels as fig_autocorr_261108. Vermillion: deviations from the dataset mean (between-mother differences "
+                 "panels as fig_autocorr_261108; excluded traps: " + ", ".join(f"{p} {c}" for p, c in excluded) + ". Vermillion: deviations from the dataset mean (between-mother differences "
                  "count as correlation). Blue: deviations from each mother's own mean (only memory within a lineage). "
                  "Per mother C_i(k) = mean product of deviations at lag k / that mother's mean squared deviation; points = "
                  f"mean over mothers, error bars (h: band) = SEM over mothers; lags with < {ac.MIN_MOTHERS} mothers not "
