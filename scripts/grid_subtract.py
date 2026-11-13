@@ -11,6 +11,7 @@ then crop both at (m,n)-shifted crop positions -> bgcorr -> subtract.
 Output: channels_dir/grid_subtracted/channel_{ch:02d}_grid_sub.tif (T,H,W)
         channels_dir/grid_subtract_log.json
 """
+import os
 import numpy as np
 import tifffile
 import json
@@ -167,18 +168,19 @@ def scan_grid_positions(grid_dir, base_label):
     and return a dict of (xi, yi) -> folder_path.
     """
     grid_dir = Path(grid_dir)
-    pattern = re.compile(
-        rf"^{re.escape(base_label)}_x([+-]?\d+)_y([+-]?\d+)$"
-    )
+    pattern = re.compile(rf"^{re.escape(base_label)}_x([+-]?\d+)_y([+-]?\d+)$")
+    prefix = f"{base_label}_x"
     pos_map = {}
-    for d in grid_dir.iterdir():
-        if not d.is_dir():
-            continue
-        m = pattern.match(d.name)
-        if m:
-            xi = int(m.group(1))
-            yi = int(m.group(2))
-            pos_map[(xi, yi)] = d
+    # os.scandir: one directory read, no stat() per entry. With 45125 point folders
+    # (19x19 grid, 125 Pos) the Path.iterdir()/is_dir() version took 2 s per call and
+    # was called once per Pos per timepoint in both phases (2026-11-13, run 2).
+    with os.scandir(grid_dir) as it:
+        for e in it:
+            if not e.name.startswith(prefix):
+                continue
+            m = pattern.match(e.name)
+            if m and e.is_dir():
+                pos_map[(int(m.group(1)), int(m.group(2)))] = Path(e.path)
     return pos_map
 
 
