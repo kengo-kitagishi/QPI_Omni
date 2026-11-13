@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from scipy.ndimage import binary_dilation, binary_erosion
+from scipy.ndimage import binary_dilation, binary_erosion, shift as _ndimage_shift
 
 # Number of threads for the per-frame main loop (cv2/tifffile release the GIL).
 N_PARALLEL_FRAMES = 8
@@ -216,8 +216,21 @@ def load_timelapse_frames(tl_dir, z_index):
     return frames
 
 
+# Interpolation of the residual sub-pixel warp. 5 = 5th-order B-spline (scipy.ndimage.shift);
+# None = the cv2 bilinear warp used up to 261112 run 1 (2026-11-13). Measured on 261112
+# frame 7 (_qc_warp_interp_test_261112.py): order 5 leaves 5 % less wall residue (median,
+# up to 29 % per channel) and 3 % more pixel-level noise than bilinear, which smooths.
+WARP_SPLINE_ORDER = 5
+
+
 def apply_inverse_shift_warp(img, shift_x, shift_y):
     """Apply inverse transform of (shift_x, shift_y) to shift by (-shift_x, -shift_y)."""
+    if WARP_SPLINE_ORDER is not None:
+        # Same convention as the cv2 path: content moves by (-shift_x, -shift_y),
+        # out-of-frame pixels are 0 (the validity mask warped alongside catches them).
+        return _ndimage_shift(img.astype(np.float64), (-shift_y, -shift_x),
+                              order=WARP_SPLINE_ORDER, mode="constant", cval=0.0,
+                              prefilter=True)
     import cv2
     h, w = img.shape
     warp_matrix = np.array([

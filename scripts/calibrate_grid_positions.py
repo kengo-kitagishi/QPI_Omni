@@ -65,7 +65,7 @@ X_STEP             = 0.05      # Grid step [um]
 Y_STEP             = 0.05
 SHIFT_SIGN_X       = -1
 SHIFT_SIGN_Y       = -1
-POS_SPLIT          = 53    # Pos < POS_SPLIT: left 1/3 fit, Pos >= POS_SPLIT: right 1/3 fit
+POS_SPLIT          = 48    # 260924: Pos < 48 crop_before, Pos >= 48 crop_after
 
 # Save the error / correlation heatmaps. Off for many-Pos batch runs: the
 # figures go to the shared Google Drive inbox and cost ~45 s per Pos, which
@@ -82,12 +82,27 @@ N_GRID_THREADS = None
 
 
 from ecc_utils import (
-    tilt_fit_crop, extract_rect_roi, ecc_align,
-    remove_outliers_mad, ECC_MIN_CORR,
+    tilt_fit_crop, extract_rect_roi, get_aligner,
+    remove_outliers_mad,
     # Float ECC input (clipped float32, no 8-bit quantisation) aliased to the
     # to_uint8 name; get_crops_u8 now builds float32 crops for ECC.
     to_ecc_input as to_uint8,
 )
+
+# Shift estimator for the grid calibration. Must be the one the online drift
+# correction uses (prepare_drift_session.py ESTIMATOR), so that the calibrated
+# offsets and the frame shifts are measured the same way. Switched from
+# "ecc_float" to "gaussian2d" on 2026-11-13: on 261112 the two agree to
+# 0.02 px (x) / 0.005 px (y) over 8 Pos x 121 points (_qc_calib_gauss_261112.py).
+ESTIMATOR = "gaussian2d"
+_align_fn, ECC_MIN_CORR = get_aligner(ESTIMATOR)   # threshold belongs to the estimator
+
+
+def ecc_align(ref, cur):
+    """Estimator call with the None guard ecc_align had via cv2.error (out-of-bounds crop)."""
+    if ref is None or cur is None:
+        return None
+    return _align_fn(ref, cur)
 
 
 def scan_grid_positions(grid_dir, base_label):
