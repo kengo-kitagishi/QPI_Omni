@@ -14,11 +14,11 @@ import copy
 
 # ---- Parameters ----
 INPUT_POS  = r"D:\AquisitionData\Kitagishi\261112\timelapse.pos"
-OUTPUT_POS = r"D:\AquisitionData\Kitagishi\261112\grid.pos"
-X_STEP = 0.05   # um
-Y_STEP = 0.05   # um
-X_HALF = 5    # Half-range -> total 11 points (stage X -> image Y, +-0.25 um coverage)
-Y_HALF = 5    # Half-range -> total 11 points (stage Y -> image X, +-0.25 um coverage)
+OUTPUT_POS = r"D:/AquisitionData/Kitagishi/261112/grid_0p03um_21x21.pos"  # 21x21 @ 0.03 um test grid (grid.pos = the 11x11 @ 0.05 um used on 2026-11-13)
+X_STEP = 0.03  # um
+Y_STEP = 0.03  # um
+X_HALF = 10  # Half-range -> total 21 points (stage X -> image Y, +-0.30 um coverage)
+Y_HALF = 10  # Half-range -> total 21 points (stage Y -> image X, +-0.30 um coverage)
 # --------------------
 
 with open(INPUT_POS, "r") as f:
