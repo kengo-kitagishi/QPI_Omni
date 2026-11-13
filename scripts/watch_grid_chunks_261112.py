@@ -14,7 +14,7 @@ Called by that BeanShell after each chunk (blocking):
      chunks are skipped, Pos0's BG is reconstructed once (chunk 1) and reused.
   3. verify: every point has its phase tif, every Pos its grid_calibration json
   4. delete the chunk's raw folder (E: NVMe) so the next chunk fits
-  5. --final: prepare_drift_session.py (drift_session_261112_2), then beep
+  5. --final: prepare_drift_session.py (drift_session_261112_3), then beep
 
 Exit code 0 only when everything above succeeded; the BeanShell stops on anything else.
 """
@@ -29,15 +29,15 @@ from pathlib import Path
 
 # ============================================================
 SESSION_DIR = Path(r"E:\261112")
-OUTPUT_DIR = Path(r"D:\AquisitionData\Kitagishi\261112\recon_0p03um_19x19")
-GRID_HALF = 9          # 19 x 19 = 361 points per Pos
+OUTPUT_DIR = Path(r"D:\AquisitionData\Kitagishi\261112\recon_0p03um_25x25")
+GRID_HALF = 12         # 25 x 25 = 625 points per Pos (2D stride order)
 N_Z = 1
 Z_INDEX = 0
 POS_SPLIT = 60         # Pos < 60 crop_before, Pos >= 60 crop_after (261112 timelapse.pos rows)
 MIN_FREE_GB_OUT = 60   # D: recon output ~0.9 GB/Pos
 BEEP_ENABLED = True
-LOG_PATH = SESSION_DIR / "grid_chunks_0p03um_19x19.log"
-ALERT_PATH = SESSION_DIR / "grid_chunks_0p03um_19x19.ALERT.txt"
+LOG_PATH = SESSION_DIR / "grid_chunks_0p03um_25x25.log"
+ALERT_PATH = SESSION_DIR / "grid_chunks_0p03um_25x25.ALERT.txt"
 # ============================================================
 
 for _stream in (sys.stdout, sys.stderr):
@@ -241,14 +241,14 @@ def main():
         log(f"deleted {chunk_dir} in {time.time() - t1:.0f}s: {chunk_dir.anchor} free {before:.0f} -> {free_gb(chunk_dir.anchor):.0f} GB")
 
     if args.final:
-        log("Running prepare_drift_session.py (drift_session_261112_2)")
+        log("Running prepare_drift_session.py (drift_session_261112_3)")
         rc = subprocess.run([PYTHON, str(SCRIPT_DIR / "prepare_drift_session.py")],
                             cwd=str(SCRIPT_DIR)).returncode
         if rc != 0:
             alert(f"prepare_drift_session.py FAILED (exit {rc}); run it by hand")
             sys.exit(6)
         alert("grid done, calibrated, raw deleted, drift session ready: open "
-              "drift_session_261112_2/realtime_drift_mda_zstack_261112_2.bsh in the MM Script Panel and press Run")
+              "drift_session_261112_3/realtime_drift_mda_zstack_261112_2.bsh in the MM Script Panel and press Run")
     else:
         log(f"chunk {chunk_dir.name} done")
     sys.exit(0)

@@ -37,7 +37,7 @@ from ecc_utils import get_aligner  # single source for the estimator score thres
 POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\261112\timelapse.pos"
 
 # Grid acquisition directory (small grid is fine)
-GRID_DIR         = r"D:\AquisitionData\Kitagishi\261112\recon_0p03um_19x19"
+GRID_DIR         = r"D:\AquisitionData\Kitagishi\261112\recon_0p03um_25x25"
 GRID_Z_INDEX     = 0   # single-z grid: the point folder holds one plane, at the working focus
 
 # channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
@@ -47,10 +47,10 @@ GRID_Z_INDEX     = 0   # single-z grid: the point folder holds one plane, at the
 # 261112 run 2: 19x19 @ 0.03 um unidirectional grid (raw E: chunks -> recon on D:), 125 Pos, POS_SPLIT 60,
 # calibration with the gaussian2d estimator, residual warp 5th-order spline.
 # Run 1 (11x11 @ 0.05 um snake grid, drift_session_261112) stopped at 2026-11-13 15:40.
-SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session_261112_2"
+SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session_261112_3"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"D:\AquisitionData\Kitagishi\261112\ph_2per_5min_31d_2"
+SAVE_DIR         = r"D:\AquisitionData\Kitagishi\261112\ph_2per_5min_31d_3"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
@@ -155,7 +155,7 @@ RAW_TL_Z_INDEX        = 0   # only one plane is captured, so it is index 0 (= gr
 CROP_SUB_X_STEP_UM    = 0.05
 CROP_SUB_Y_STEP_UM    = 0.05
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"D:\AquisitionData\Kitagishi\261112\online_crop_sub_2per_5min_31d_2"
+CROP_SUB_ROOT         = r"D:\AquisitionData\Kitagishi\261112\online_crop_sub_2per_5min_31d_3"
 CROP_SUB_MAX_SECONDS  = 150.0
 # Per-channel background removal (grid_subtract.process_single_frame).
 #   "tilt"         linear fit on the aperture-end third, extrapolated across the window
