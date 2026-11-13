@@ -1048,14 +1048,29 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
         cell_bias_applied_nm = sign * cell_bias_nm
         tx_avg += cell_bias_applied_nm / (pixel_scale_um * 1000.0)
 
+    # ---- Setpoint ----
+    # The controller drives the frame to grid00 by default. With "grid_centroid" it
+    # drives it to the centre of the measured grid point cloud instead: the (0,0)
+    # point carries its own positioning error (0.2-0.6 px on 261112), so the cloud
+    # is not centred on it and frames parked at grid00 fall outside the cloud more
+    # often (Pos82 stride cloud: 95.9 % inside at grid00, 97.7 % at the centroid).
+    # tx_avg / ty_avg stay the true shift against grid00 (Phase B selects the grid
+    # point with them); only the error fed to the filter changes.
+    setpoint_tx = setpoint_ty = 0.0
+    if cfg.get("setpoint", "grid00") == "grid_centroid" and grid_cal:
+        _cal_xy = np.array(list(grid_cal.values()), dtype=np.float64)
+        setpoint_tx, setpoint_ty = float(_cal_xy[:, 0].mean()), float(_cal_xy[:, 1].mean())
+    err_tx = tx_avg - setpoint_tx
+    err_ty = ty_avg - setpoint_ty
+
     # ---- EMA filter ----
     prev_ema_tx = prev_state["ema_tx_px"]
     prev_ema_ty = prev_state["ema_ty_px"]
     if prev_ema_tx is None:
-        tx_filt, ty_filt = tx_avg, ty_avg
+        tx_filt, ty_filt = err_tx, err_ty
     else:
-        tx_filt = ema_alpha * tx_avg + (1.0 - ema_alpha) * prev_ema_tx
-        ty_filt = ema_alpha * ty_avg + (1.0 - ema_alpha) * prev_ema_ty
+        tx_filt = ema_alpha * err_tx + (1.0 - ema_alpha) * prev_ema_tx
+        ty_filt = ema_alpha * err_ty + (1.0 - ema_alpha) * prev_ema_ty
 
     # ---- Sign/scale conversion (pixel -> um, image -> stage) ----
     correction_stage_x_um = sx_sign * ty_filt * pixel_scale_um
@@ -1070,8 +1085,8 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
         kf_R_tx = cfg.get("kf_R_tx_nm2", cfg.get("kf_R_nm2", 454.0))
         px_scale_nm = pixel_scale_um * 1000.0
 
-        z_ty_nm = tx_avg * px_scale_nm * sy_sign
-        z_tx_nm = ty_avg * px_scale_nm * sx_sign
+        z_ty_nm = err_tx * px_scale_nm * sy_sign
+        z_tx_nm = err_ty * px_scale_nm * sx_sign
         ol_pos_ty_nm = prev_state["cumulative_dy_um"] * 1000.0 + z_ty_nm
         ol_pos_tx_nm = prev_state["cumulative_dx_um"] * 1000.0 + z_tx_nm
 
@@ -1133,6 +1148,8 @@ def _process_one_position(pos_idx, pos_label, raw_path, bg_phase,
         "whitelist_n_ch": (-1 if wl_mask is None else int(wl_mask.sum())),
         "whitelist_anchored": bool(wl_anchored),
         "cell_bias_applied_nm": cell_bias_applied_nm,
+        "setpoint_tx_px": setpoint_tx,
+        "setpoint_ty_px": setpoint_ty,
         "estimator": estimator,
         "n_channels_raw": n_ch_raw,
         "tx_avg_px": tx_avg,

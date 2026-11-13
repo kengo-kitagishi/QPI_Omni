@@ -99,6 +99,12 @@ ESTIMATOR    = "gaussian2d"
 # the frame). Magnitude measured over 303 cell-bearing channels; the sign is
 # mirrored at POS_SPLIT by compute_drift_online. 0 disables the correction.
 CELL_BIAS_NM = 181.0
+# Where the controller parks each frame: "grid00" (the reference image) or
+# "grid_centroid" (centre of the measured grid point cloud, read from
+# grid_calibration_PosN.json by compute_drift_online). The (0,0) point carries its
+# own positioning error, so the cloud is not centred on it; on 261112 the centroid
+# setpoint kept 97.7 % of the 261108 frame cloud inside a stride-order grid vs 95.9 %.
+SETPOINT     = "grid_centroid"
 
 # Optical parameters
 SENSOR_PIXEL_SIZE    = 3.45e-6
@@ -317,6 +323,7 @@ def main():
         "ecc_min_corr":       MIN_SCORE,
         "estimator":          ESTIMATOR,
         "cell_bias_nm":       CELL_BIAS_NM,
+        "setpoint":           SETPOINT,
 
         # Reconstruction
         "pos_split":          POS_SPLIT,
