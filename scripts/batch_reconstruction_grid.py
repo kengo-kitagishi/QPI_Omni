@@ -55,7 +55,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 # Configuration parameters
 # ============================================================
 # Must match GRID_DIR in pipeline_full.py
-GRID_DIR = r"E:\261004\0%_grid_hologram_1"
+GRID_DIR = r"E:\261112\grid_2per_1"
 
 # Base label used as BG (pipeline_full: GRID_BG_BASE_LABEL)
 BG_BASE_LABEL = "Pos0"
@@ -79,7 +79,7 @@ from optical_config import OFFAXIS_CENTER, WAVELENGTH, NA, PIXELSIZE
 # pos_number < POS_SPLIT -> right side (400:2448)  sensor width 2448
 # pos_number >= POS_SPLIT -> left side (0:2048)
 # Note: BG (Pos0) uses the crop determined by the target's pos_number (not always right)
-POS_SPLIT    = 56
+POS_SPLIT    = 60
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 

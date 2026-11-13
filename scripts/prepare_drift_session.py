@@ -34,20 +34,22 @@ from ecc_utils import get_aligner  # single source for the estimator score thres
 # ============================================================
 
 # .pos file consumed by Micro-Manager (the actual time-lapse position list)
-POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\261004\timelapse.pos"
+POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\261112\timelapse.pos"
 
 # Grid acquisition directory (small grid is fine)
-GRID_DIR         = r"D:\AquisitionData\Kitagishi\261004\2%_grid_hologram_1"
+GRID_DIR         = r"E:\261112\recon_2per_grid_1"
 GRID_Z_INDEX     = 0   # single-z grid: the point folder holds one plane, at the working focus
 
 # channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
 # No single path needed — compute_drift_online.py reads per-pos from grid_dir.
 
 # Session working directory (config + state files land here)
-SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session_261004_cells"
+# 261112: single-z 2% grid (E:\261112\recon_2per_grid_1), 125 Pos, POS_SPLIT 60,
+# same layout as 261108 (MM save on E:, online crop_sub on D:).
+SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session_261112"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"E:\261004\ph_1"
+SAVE_DIR         = r"E:\261112\ph_2per_5min_31d_1"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
@@ -104,7 +106,7 @@ ORIGINAL_DIM         = 2048
 RECONSTRUCTED_DIM    = 511
 
 # Position-dependent crop (matches pipeline_full.py)
-POS_SPLIT    = 56
+POS_SPLIT    = 60
 CROP_BEFORE  = (0, 2048, 400, 2448)
 CROP_AFTER   = (0, 2048,   0, 2048)
 
@@ -146,7 +148,7 @@ RAW_TL_Z_INDEX        = 0   # only one plane is captured, so it is index 0 (= gr
 CROP_SUB_X_STEP_UM    = 0.05
 CROP_SUB_Y_STEP_UM    = 0.05
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"E:\261004\online_crop_sub_1"
+CROP_SUB_ROOT         = r"D:\AquisitionData\Kitagishi\261112\online_crop_sub_2per_5min_31d_1"
 CROP_SUB_MAX_SECONDS  = 150.0
 # Per-channel background removal (grid_subtract.process_single_frame).
 #   "tilt"         linear fit on the aperture-end third, extrapolated across the window
