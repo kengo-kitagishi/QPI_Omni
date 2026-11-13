@@ -95,9 +95,11 @@ def main():
             raise SystemExit(f"pipeline failed (exit {rc}) or no calibration written")
         print(f"pipeline done in {(time.perf_counter()-t0)/60:.1f} min")
 
-    seq = load_points(SEQ_OUT / f"grid_calibration_Pos{POS}.json")
+    # Pos82's sequential calibration was removed by the aborted --replace run; Pos81 is the
+    # neighbouring Pos of the same chunk, acquired the same way.
+    seq = load_points(SEQ_OUT / "grid_calibration_Pos81.json")
     tst = load_points(cal_test)
-    nn_s, dm_s = describe("sequential (unidirectional rows, 30 nm steps)", *seq)
+    nn_s, dm_s = describe("sequential Pos81 (unidirectional rows, 30 nm steps)", *seq)
     nn_t, dm_t = describe("2D stride (every move >= 0.15 um per axis)", *tst)
 
     fig, axes = plt.subplots(1, 2, figsize=(183 / 25.4, 80 / 25.4))
