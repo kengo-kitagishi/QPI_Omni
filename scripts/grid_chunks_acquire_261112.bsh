@@ -44,6 +44,8 @@ String SAVE_PREFIX  = "grid_2per_c";     // -> E:/261112/grid_2per_c1 ... c5
 int    START_CHUNK  = 1;                 // 1-based; set 2..5 to resume after a stop
 boolean SKIP_EXISTING_POINTS = true;     // resume inside a chunk: skip points already on disk
 boolean RUN_WATCHER = true;              // false = acquire only (then run the watcher by hand)
+boolean REPLACE_OUTPUTS = false;         // true = re-shoot: the watcher deletes the old recon/calibration of these Pos first
+boolean FINAL_PREPARE = true;            // true = after the last chunk the watcher runs prepare_drift_session.py
 
 double EXPOSURE_MS  = 60.0;
 long   SETTLE_MS    = 150;               // stage settle after the XY move [ms] (as the timelapse)
@@ -212,8 +214,6 @@ for (int c = START_CHUNK; c <= CHUNK_POS.length; c++) {
 
     long t0 = System.currentTimeMillis();
     int nDone = 0, nSkipped = 0;
-    boolean zSet = false;
-    double lastZ = 0.0;
     for (int i = 0; i < n; i++) {
         Object[] rec = (Object[])pts.get(i);
         String label = (String)rec[0];
@@ -226,11 +226,10 @@ for (int c = START_CHUNK; c <= CHUNK_POS.length; c++) {
 
         mmc.setXYPosition(XY_STAGE, x, y);
         mmc.waitForDevice(XY_STAGE);
-        if (!zSet || z != lastZ) {
-            mmc.setPosition(Z_DEVICE, z);
-            mmc.waitForDevice(Z_DEVICE);
-            lastZ = z; zSet = true;
-        }
+        // Re-assert the PFS offset at EVERY point, as the MDA and the timelapse BeanShell do.
+        // Setting it once per chunk left Pos82-100 of 261112 run 2 out of focus (2026-11-13).
+        mmc.setPosition(Z_DEVICE, z);
+        mmc.waitForDevice(Z_DEVICE);
         Thread.sleep(SETTLE_MS);
         new File(pointDir).mkdirs();
         snapAndSave(savePath);
@@ -252,7 +251,8 @@ for (int c = START_CHUNK; c <= CHUNK_POS.length; c++) {
     cmdList.add(PYTHON_EXE); cmdList.add(WATCHER);
     cmdList.add("--chunk-dir"); cmdList.add(saveDir);
     cmdList.add("--pos"); cmdList.add(range);
-    if (c == CHUNK_POS.length) cmdList.add("--final");
+    if (REPLACE_OUTPUTS) cmdList.add("--replace");
+    if (FINAL_PREPARE && c == CHUNK_POS.length) cmdList.add("--final");
     String[] cmd = (String[])cmdList.toArray(new String[0]);
     print("recon + calibration of chunk " + c + " ...   [" + nowStr() + "]");
     int rc = callPython(cmd, WATCHER_TIMEOUT_MS);

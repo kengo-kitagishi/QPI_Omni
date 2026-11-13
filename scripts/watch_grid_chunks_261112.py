@@ -172,6 +172,9 @@ def main():
     ap.add_argument("--pos", required=True, help="Pos of this chunk, e.g. 1-25 (Pos0 is always added)")
     ap.add_argument("--final", action="store_true", help="after this chunk run prepare_drift_session.py")
     ap.add_argument("--keep-raw", action="store_true")
+    ap.add_argument("--replace", action="store_true",
+                    help="re-shoot: delete the existing recon output, channel_rois and grid_calibration "
+                         "of this chunk's Pos (never Pos0) before the pipeline, so SKIP_IF_EXISTS does not keep them")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     chunk_dir = Path(args.chunk_dir)
@@ -197,6 +200,21 @@ def main():
         sys.exit(3)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    if args.replace and not args.dry_run:
+        n_dirs = 0
+        for pos in pos_list:
+            if pos == 0:
+                continue
+            for name in point_names([pos]):
+                d = OUTPUT_DIR / name
+                if d.is_dir():
+                    shutil.rmtree(d)
+                    n_dirs += 1
+            cal = OUTPUT_DIR / f"grid_calibration_Pos{pos}.json"
+            if cal.exists():
+                cal.unlink()
+        log(f"--replace: removed {n_dirs} old point outputs and the calibration json of Pos "
+            f"{[p for p in pos_list if p != 0][0]}..{pos_list[-1]} (Pos0 kept)")
     patch_all(chunk_dir, OUTPUT_DIR)
     if args.dry_run:
         log("--dry-run: stopping before reconstruction")
