@@ -1,0 +1,274 @@
+// ============================================================
+// grid_chunks_acquire_261112.bsh
+// Micro-Manager 1.4 BeanShell: acquire the 261112 run-2 grid
+// (19 x 19 points per Pos at 0.03 um, rows all in the same
+// direction) chunk by chunk on E:, and after every chunk call
+// watch_grid_chunks_261112.py, which reconstructs to D:,
+// calibrates (gaussian2d), verifies and deletes the chunk's raw.
+// After the last chunk the Python side also runs
+// prepare_drift_session.py, so the only thing left is to Run
+// realtime_drift_mda_zstack_261112_2.bsh.
+//
+// Why chunks: 45125 points x 25 MB = 1.1 TB does not fit E:
+// (405 GB free), and the MDA to D: ran at 1.5 s/point instead
+// of 0.30 s/point (2026-11-13).
+//
+// Usage:
+//   1. Open in MM Script Panel, check the CONFIG block
+//   2. Run. Stop aborts; set START_CHUNK to resume later
+// ============================================================
+
+import java.io.*;
+import java.util.*;
+import java.text.*;
+import ij.*;
+import ij.process.*;
+import ij.io.*;
+import org.json.*;
+
+// ======================= CONFIG =============================
+String PYTHON_EXE   = "C:/Users/QPI/AppData/Local/Programs/Python/Python311/python.exe";
+String SCRIPT_DIR   = "C:/Users/QPI/Documents/QPI_Omni/scripts";
+String WATCHER      = SCRIPT_DIR + "/watch_grid_chunks_261112.py";
+String POS_DIR      = "D:/AquisitionData/Kitagishi/261112";
+String[] CHUNK_POS  = {
+    POS_DIR + "/grid_0p03um_19x19_uni_chunk1_Pos1-25.pos",
+    POS_DIR + "/grid_0p03um_19x19_uni_chunk2_Pos26-50.pos",
+    POS_DIR + "/grid_0p03um_19x19_uni_chunk3_Pos51-75.pos",
+    POS_DIR + "/grid_0p03um_19x19_uni_chunk4_Pos76-100.pos",
+    POS_DIR + "/grid_0p03um_19x19_uni_chunk5_Pos101-124.pos"
+};
+String[] CHUNK_RANGE = { "1-25", "26-50", "51-75", "76-100", "101-124" };
+String SAVE_ROOT    = "E:/261112";
+String SAVE_PREFIX  = "grid_2per_c";     // -> E:/261112/grid_2per_c1 ... c5
+int    START_CHUNK  = 1;                 // 1-based; set 2..5 to resume after a stop
+boolean SKIP_EXISTING_POINTS = true;     // resume inside a chunk: skip points already on disk
+boolean RUN_WATCHER = true;              // false = acquire only (then run the watcher by hand)
+
+double EXPOSURE_MS  = 60.0;
+long   SETTLE_MS    = 150;               // stage settle after the XY move [ms] (as the timelapse)
+String XY_STAGE     = "XYStage";
+String Z_DEVICE     = "TIPFSOffset";
+String CHANNEL_GROUP = "TiChannel";
+String CHANNEL_NAME  = "ph";
+long   WATCHER_TIMEOUT_MS = 4L * 3600L * 1000L;   // recon+calib of one chunk took ~10 min on 261112 run 1
+// ============================================================
+
+
+// ---- Helpers (same as realtime_drift_mda_zstack.bsh) ----
+String padLeft(int n, int width) {
+    String s = "" + n;
+    while (s.length() < width) s = "0" + s;
+    return s;
+}
+
+String fmtD(double v, int decimals) {
+    double factor = Math.pow(10, decimals);
+    long rounded = Math.round(v * factor);
+    String s = "" + Math.abs(rounded);
+    while (s.length() <= decimals) s = "0" + s;
+    String intPart  = s.substring(0, s.length() - decimals);
+    String fracPart = s.substring(s.length() - decimals);
+    String sign = (v < 0) ? "-" : "";
+    return sign + intPart + "." + fracPart;
+}
+
+String nowStr() {
+    return new SimpleDateFormat("HH:mm:ss").format(new Date());
+}
+
+void beep(int n) {
+    for (int i = 0; i < n; i++) {
+        java.awt.Toolkit.getDefaultToolkit().beep();
+        Thread.sleep(400);
+    }
+}
+
+void setChannelPh() {
+    mmc.setConfig(CHANNEL_GROUP, CHANNEL_NAME);
+    mmc.waitForConfig(CHANNEL_GROUP, CHANNEL_NAME);
+}
+
+void snapAndSave(String savePath) {
+    mmc.snapImage();
+    Object rawImg = mmc.getImage();
+    int width  = (int)mmc.getImageWidth();
+    int height = (int)mmc.getImageHeight();
+    ImageProcessor ip;
+    if (rawImg instanceof byte[]) {
+        ip = new ByteProcessor(width, height, (byte[])rawImg, null);
+    } else if (rawImg instanceof short[]) {
+        ip = new ShortProcessor(width, height, (short[])rawImg, null);
+    } else {
+        throw new RuntimeException("Unsupported camera pixel type: " + rawImg.getClass());
+    }
+    ImagePlus imp = new ImagePlus("", ip);
+    new FileSaver(imp).saveAsTiff(savePath);
+}
+
+// ---- Read a Micro-Manager .pos file: list of {label, x, y, z} ----
+ArrayList loadPosFile(String path) {
+    BufferedReader r = new BufferedReader(new FileReader(path));
+    StringBuilder sb = new StringBuilder();
+    String ln;
+    while ((ln = r.readLine()) != null) sb.append(ln);
+    r.close();
+    JSONObject root = new JSONObject(sb.toString());
+    JSONArray arr = root.getJSONArray("POSITIONS");
+    ArrayList out = new ArrayList();
+    for (int i = 0; i < arr.length(); i++) {
+        JSONObject p = arr.getJSONObject(i);
+        String label = p.getString("LABEL");
+        double x = 0.0, y = 0.0, z = 0.0;
+        boolean haveXY = false, haveZ = false;
+        JSONArray devs = p.getJSONArray("DEVICES");
+        for (int k = 0; k < devs.length(); k++) {
+            JSONObject d = devs.getJSONObject(k);
+            String dev = d.getString("DEVICE");
+            if (dev.equals(XY_STAGE)) {
+                x = d.getDouble("X"); y = d.getDouble("Y"); haveXY = true;
+            } else if (dev.equals(Z_DEVICE)) {
+                z = d.getDouble("X"); haveZ = true;
+            }
+        }
+        if (!haveXY || !haveZ) throw new RuntimeException("position " + label + " lacks " + XY_STAGE + " or " + Z_DEVICE);
+        Object[] rec = new Object[4];
+        rec[0] = label; rec[1] = new Double(x); rec[2] = new Double(y); rec[3] = new Double(z);
+        out.add(rec);
+    }
+    return out;
+}
+
+// ---- Call Python subprocess with timeout (as realtime_drift_mda_zstack.bsh) ----
+int callPython(String[] cmd, long timeoutMs) {
+    Process p = Runtime.getRuntime().exec(cmd);
+    final StringBuilder outBuf = new StringBuilder();
+    final StringBuilder errBuf = new StringBuilder();
+    Thread tOut = new Thread(new Runnable() {
+        public void run() {
+            try {
+                BufferedReader rr = new BufferedReader(new InputStreamReader(p.getInputStream()));
+                String l;
+                while ((l = rr.readLine()) != null) outBuf.append(l).append("\n");
+            } catch (Exception e) {}
+        }
+    });
+    Thread tErr = new Thread(new Runnable() {
+        public void run() {
+            try {
+                BufferedReader rr = new BufferedReader(new InputStreamReader(p.getErrorStream()));
+                String l;
+                while ((l = rr.readLine()) != null) errBuf.append(l).append("\n");
+            } catch (Exception e) {}
+        }
+    });
+    tOut.start();
+    tErr.start();
+    long start = System.currentTimeMillis();
+    boolean done = false;
+    int exitCode = -1;
+    while (!done && System.currentTimeMillis() - start < timeoutMs) {
+        Thread.sleep(1000);
+        try {
+            exitCode = p.exitValue();
+            done = true;
+        } catch (IllegalThreadStateException e) {
+            // still running
+        }
+    }
+    if (!done) {
+        p.destroy();
+        print("[WARN] Python timeout (" + (timeoutMs/1000) + "s)");
+        exitCode = -2;
+    }
+    tOut.join(2000);
+    tErr.join(2000);
+    if (outBuf.length() > 0) print("[Python stdout]\n" + outBuf.toString());
+    if (errBuf.length() > 0) print("[Python stderr]\n" + errBuf.toString());
+    return exitCode;
+}
+
+
+// ============================================================
+// Main
+// ============================================================
+mmc.setTimeoutMs(20000);
+mmc.setExposure(EXPOSURE_MS);
+setChannelPh();
+print("grid_chunks_acquire_261112: " + CHUNK_POS.length + " chunks, start at chunk " + START_CHUNK
+      + ", save root " + SAVE_ROOT + ", exposure " + EXPOSURE_MS + " ms");
+
+boolean allOk = true;
+for (int c = START_CHUNK; c <= CHUNK_POS.length; c++) {
+    String posFile = CHUNK_POS[c - 1];
+    String range   = CHUNK_RANGE[c - 1];
+    String saveDir = SAVE_ROOT + "/" + SAVE_PREFIX + c;
+    new File(saveDir).mkdirs();
+
+    ArrayList pts = loadPosFile(posFile);
+    int n = pts.size();
+    print("\n==== chunk " + c + "/" + CHUNK_POS.length + ": " + n + " points (Pos0 + Pos" + range + ") -> " + saveDir
+          + "   [" + nowStr() + "]");
+
+    long t0 = System.currentTimeMillis();
+    int nDone = 0, nSkipped = 0;
+    boolean zSet = false;
+    double lastZ = 0.0;
+    for (int i = 0; i < n; i++) {
+        Object[] rec = (Object[])pts.get(i);
+        String label = (String)rec[0];
+        double x = ((Double)rec[1]).doubleValue();
+        double y = ((Double)rec[2]).doubleValue();
+        double z = ((Double)rec[3]).doubleValue();
+        String pointDir = saveDir + "/" + label;
+        String savePath = pointDir + "/img_000000000_ph_000.tif";
+        if (SKIP_EXISTING_POINTS && new File(savePath).exists()) { nSkipped++; continue; }
+
+        mmc.setXYPosition(XY_STAGE, x, y);
+        mmc.waitForDevice(XY_STAGE);
+        if (!zSet || z != lastZ) {
+            mmc.setPosition(Z_DEVICE, z);
+            mmc.waitForDevice(Z_DEVICE);
+            lastZ = z; zSet = true;
+        }
+        Thread.sleep(SETTLE_MS);
+        new File(pointDir).mkdirs();
+        snapAndSave(savePath);
+        nDone++;
+
+        if (nDone % 361 == 0 || i == n - 1) {
+            double el = (System.currentTimeMillis() - t0) / 1000.0;
+            double perPt = el / nDone;
+            double eta = perPt * (n - i - 1) / 60.0;
+            print("  " + label + "  " + (i + 1) + "/" + n + "  " + fmtD(perPt, 2) + " s/point  ETA " + fmtD(eta, 0) + " min  [" + nowStr() + "]");
+        }
+    }
+    double elMin = (System.currentTimeMillis() - t0) / 60000.0;
+    print("chunk " + c + " acquired: " + nDone + " points (" + nSkipped + " skipped) in " + fmtD(elMin, 1) + " min   [" + nowStr() + "]");
+
+    if (!RUN_WATCHER) continue;
+
+    ArrayList cmdList = new ArrayList();
+    cmdList.add(PYTHON_EXE); cmdList.add(WATCHER);
+    cmdList.add("--chunk-dir"); cmdList.add(saveDir);
+    cmdList.add("--pos"); cmdList.add(range);
+    if (c == CHUNK_POS.length) cmdList.add("--final");
+    String[] cmd = (String[])cmdList.toArray(new String[0]);
+    print("recon + calibration of chunk " + c + " ...   [" + nowStr() + "]");
+    int rc = callPython(cmd, WATCHER_TIMEOUT_MS);
+    if (rc != 0) {
+        print("[ERROR] watcher exit " + rc + " on chunk " + c + ". Stopping here; raw kept in " + saveDir
+              + ". Fix, then set START_CHUNK = " + (c + 1) + " (or rerun the watcher by hand) and Run again.");
+        beep(10);
+        allOk = false;
+        break;
+    }
+    print("chunk " + c + " reconstructed, calibrated, raw deleted   [" + nowStr() + "]");
+}
+
+if (allOk) {
+    print("\nALL CHUNKS DONE [" + nowStr() + "]. Next: open "
+          + "C:/Users/QPI/Documents/QPI_Omni/drift_session_261112_2/realtime_drift_mda_zstack_261112_2.bsh"
+          + " in the Script Panel and Run.");
+    beep(6);
+}
