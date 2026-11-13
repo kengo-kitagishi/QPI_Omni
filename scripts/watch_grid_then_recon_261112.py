@@ -4,12 +4,14 @@ watch_grid_then_recon_261112.py
 The 261112 SINGLE-Z 2% grid (grid_2per_1, one z per point at the working plane).
 
   raw     E:\261112\grid_2per_1           Pos0..Pos124, 121 points each, 1 z
-  output  E:\261112\recon_2per_grid_1     (same layout as 261108: raw and recon both on E:)
+  output  D:\AquisitionData\Kitagishi\261112\recon_2per_grid_1
+          (E: raw -> D: output, like 260917/260922: the raw filled E: to 11 GB free)
 
 One z per point, so Z_INDEX and RECON_Z_INDICES are 0 -- the point folder holds a single
 img_000000000_ph_000.tif and that plane IS the ECC reference the timelapse will use.
-Measured 2026-11-13 while it ran: 0.30 s/point = 0.6 min/Pos, 18.2 MB/point = 2.2 GB/Pos
-(275 GB for 125 Pos; E: had 392 GB free when the acquisition started).
+Measured 2026-11-13 while it ran: 0.30 s/point = 0.6 min/Pos (15125 points in 75 min);
+25 MB/point on disk = 3.0 GB/Pos (18.2 MB tif + metadata.txt), 381 GB for 125 Pos --
+E: went from 392 GB free to 11 GB, so the output cannot live on E:.
 
 Waits until every point of Pos0..LAST_POS is on disk and nothing new has been written for
 IDLE_MINUTES, then reconstructs, detects channels, calibrates and verifies. The raw is kept:
@@ -35,7 +37,7 @@ SESSION_DIR = Path(r"E:\261112")
 
 # The acquisition this script waits for before doing anything.
 WATCH_DIR = Path(r"E:\261112\grid_2per_1")
-OUTPUT_DIR = Path(r"E:\261112\recon_2per_grid_1")
+OUTPUT_DIR = Path(r"D:\AquisitionData\Kitagishi\261112\recon_2per_grid_1")
 
 # Pos list is discovered from disk at run time (see discover_complete_pos).
 BATCHES = [

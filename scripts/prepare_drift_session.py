@@ -37,19 +37,19 @@ from ecc_utils import get_aligner  # single source for the estimator score thres
 POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\261112\timelapse.pos"
 
 # Grid acquisition directory (small grid is fine)
-GRID_DIR         = r"E:\261112\recon_2per_grid_1"
+GRID_DIR         = r"D:\AquisitionData\Kitagishi\261112\recon_2per_grid_1"
 GRID_Z_INDEX     = 0   # single-z grid: the point folder holds one plane, at the working focus
 
 # channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
 # No single path needed — compute_drift_online.py reads per-pos from grid_dir.
 
 # Session working directory (config + state files land here)
-# 261112: single-z 2% grid (E:\261112\recon_2per_grid_1), 125 Pos, POS_SPLIT 60,
-# same layout as 261108 (MM save on E:, online crop_sub on D:).
+# 261112: single-z 2% grid, 125 Pos, POS_SPLIT 60. The grid raw filled E: (11 GB
+# free), so recon output, MM save and online crop_sub are all on D:.
 SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session_261112"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"E:\261112\ph_2per_5min_31d_1"
+SAVE_DIR         = r"D:\AquisitionData\Kitagishi\261112\ph_2per_5min_31d_1"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
