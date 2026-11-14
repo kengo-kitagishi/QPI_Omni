@@ -30,6 +30,7 @@ CROP = Path(r"D:\AquisitionData\Kitagishi\261112\online_crop_sub_2per_5min_31d_3
 GRID = Path(r"D:\AquisitionData\Kitagishi\261112\recon_0p03um_25x25")
 POS = list(range(3, 125, 8))
 PERIODS = {"2%": [14, 20], "0%": [94, 100]}
+REGION = sys.argv[1] if len(sys.argv) > 1 else "band"   # "band" = wall band, "outside" = background outside the channel
 D = np.round(np.arange(-0.3, 0.3001, 0.1), 3)
 
 
@@ -64,7 +65,10 @@ def main():
                 bands = []
                 for roi in rois:
                     m = gs.extract_rect_roi(mask_img, int(round(roi["cy"] + cdy)), int(round(roi["cx"] + cdx)), roi["crop_w"], out_h) < gs.CH_MASK_THRESH
-                    bands.append(ndimage.binary_dilation(m, iterations=3) & ~ndimage.binary_erosion(m, iterations=3))
+                    if REGION == "outside":
+                        bands.append(~ndimage.binary_dilation(m, iterations=6))
+                    else:
+                        bands.append(ndimage.binary_dilation(m, iterations=3) & ~ndimage.binary_erosion(m, iterations=3))
                 E = np.zeros((len(D), len(D)))
                 for i, dy in enumerate(D):
                     for j, dx in enumerate(D):
