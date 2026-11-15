@@ -43,6 +43,8 @@ def main():
     ap.add_argument("--half", type=int, default=9)
     ap.add_argument("--out", required=True)
     ap.add_argument("--chunk", type=int, default=25, help="sample Pos per chunk (Pos0 is added to every chunk)")
+    ap.add_argument("--exclude-inner", type=int, default=None,
+                    help="leave out the points with |xi| and |yi| <= this (to add an outer ring to a grid already taken)")
     args = ap.parse_args()
 
     state = {}
@@ -67,6 +69,9 @@ def main():
     ns["X_STEP"] = ns["Y_STEP"] = args.step
     ns["SNAKE"] = False
     order = ns["grid_order"](args.half, args.half)
+    if args.exclude_inner is not None:
+        order = [(xi, yi) for xi, yi in order if max(abs(xi), abs(yi)) > args.exclude_inner]
+        print(f"outer ring only: {len(order)} points per Pos (|xi| or |yi| > {args.exclude_inner})")
 
     out_positions = []
     for i, orig in enumerate(positions):
