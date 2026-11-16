@@ -19,7 +19,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-SESSION = Path(r"C:\Users\QPI\Documents\QPI_Omni\drift_session_261112_3")
+SESSION_ROOT = Path(r"C:\Users\QPI\Documents\QPI_Omni")
+SESSION = SESSION_ROOT / "drift_session_261112_cells1"   # timelapse 1 with cells (default); --session to override
 GRIDS = {
     "2per": r"D:\AquisitionData\Kitagishi\261112\recon_0p03um_25x25",
     "0per": r"D:\AquisitionData\Kitagishi\261112\recon_0per_0p03um_25x25",
@@ -40,7 +41,11 @@ def main():
     ap.add_argument("medium", nargs="?", choices=sorted(GRIDS))
     ap.add_argument("--note", default="")
     ap.add_argument("--show", action="store_true")
+    ap.add_argument("--session", default=None, help="session folder name (default drift_session_261112_cells1)")
     args = ap.parse_args()
+    global SESSION
+    if args.session:
+        SESSION = SESSION_ROOT / args.session
     cfg_path = SESSION / "drift_config_zstack.json"
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
     cur = next((k for k, v in GRIDS.items() if Path(v) == Path(cfg["grid_dir"])), "?")
