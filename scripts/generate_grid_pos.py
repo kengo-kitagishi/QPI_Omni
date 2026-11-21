@@ -13,8 +13,8 @@ import json
 import copy
 
 # ---- Parameters ----
-INPUT_POS  = r"D:\AquisitionData\Kitagishi\261112\timelapse.pos"
-OUTPUT_POS = r"D:/AquisitionData/Kitagishi/261112/grid_0p03um_25x25_stride.pos"  # 25x25 @ 0.03 um, 2D stride order (half-range +-0.36 um = +-1.04 px)
+INPUT_POS  = r"D:\AquisitionData\Kitagishi\261121\timelapse.pos"
+OUTPUT_POS = r"D:/AquisitionData/Kitagishi/261121/grid_0p03um_25x25_stride.pos"  # 25x25 @ 0.03 um, 2D stride order (half-range +-0.36 um = +-1.04 px)
 X_STEP = 0.03  # um
 Y_STEP = 0.03  # um
 X_HALF = 12  # Half-range -> total 25 points (stage X -> image Y, +-0.36 um coverage)
