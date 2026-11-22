@@ -34,22 +34,23 @@ from ecc_utils import get_aligner  # single source for the estimator score thres
 # ============================================================
 
 # .pos file consumed by Micro-Manager (the actual time-lapse position list)
-POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\261121\timelapse.pos"
+POSITIONS_FILE   = r"D:\AquisitionData\Kitagishi\261121\timelapse_2_from_session1_T32.pos"
 
 # Grid acquisition directory (small grid is fine)
-GRID_DIR         = r"D:\AquisitionData\Kitagishi\261121\recon_0p03um_25x25"
+GRID_DIR         = r"D:\AquisitionData\Kitagishi\261121\recon_mixed_11x11_Pos1-90_25x25_Pos91-123"
 GRID_Z_INDEX     = 0   # single-z grid: the point folder holds one plane, at the working focus
 
 # channel_rois.json: per-pos, auto-validated from GRID_DIR/{label}_x+0_y+0/
 # No single path needed — compute_drift_online.py reads per-pos from grid_dir.
 
 # Session working directory (config + state files land here)
-# 261121 timelapse 1 (2026-11-22): 25x25 @0.03 um stride grid taken 11/21-22, single z,
-# positions = 261121 timelapse.pos (the grid is centred on them), POS_SPLIT 61.
-SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session_261121"
+# 261121 timelapse 2 (2026-11-22): mixed grid (11x11 @0.03 um re-shoot for Pos1-90, 25x25 for Pos91-123),
+# positions = timelapse.pos minus the corrections of session 1 at T=32 (where both grids are centred),
+# single z, POS_SPLIT 61.
+SESSION_DIR      = r"C:\Users\QPI\Documents\QPI_Omni\drift_session_261121_2"
 
 # Time-lapse image save directory (Micro-Manager output)
-SAVE_DIR         = r"D:\AquisitionData\Kitagishi\261121\ph_5min_31d_1"
+SAVE_DIR         = r"D:\AquisitionData\Kitagishi\261121\ph_5min_31d_2"
 
 # Index of the BG position inside the .pos file (0-based; cell-free Pos)
 BG_POS_INDEX     = 0
@@ -154,7 +155,7 @@ RAW_TL_Z_INDEX        = 0   # only one plane is captured, so it is index 0 (= gr
 CROP_SUB_X_STEP_UM    = 0.05
 CROP_SUB_Y_STEP_UM    = 0.05
 ENABLE_CROP_SUB_SAVE  = True
-CROP_SUB_ROOT         = r"D:\AquisitionData\Kitagishi\261121\online_crop_sub_5min_31d_1"
+CROP_SUB_ROOT         = r"D:\AquisitionData\Kitagishi\261121\online_crop_sub_5min_31d_2"
 CROP_SUB_MAX_SECONDS  = 150.0
 # Per-channel background removal (grid_subtract.process_single_frame).
 #   "tilt"         linear fit on the aperture-end third, extrapolated across the window
