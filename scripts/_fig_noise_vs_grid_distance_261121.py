@@ -155,69 +155,60 @@ def main():
 
     vlim = 0.1
     fig = plt.figure(figsize=(183 / 25.4, 80 / 25.4))
-    left = fig.add_gridspec(len(EXAMPLE_D), 2, left=0.075, right=0.56, top=0.90, bottom=0.17, wspace=0.05, hspace=0.18)
+    left = fig.add_gridspec(len(EXAMPLE_D), 1, left=0.085, right=0.50, top=0.90, bottom=0.17, hspace=0.18)
     for r, t in enumerate(EXAMPLE_D):
-        dist, d0, d5 = imgs[t]
-        for col, im in enumerate((d0, d5)):
-            ax = fig.add_subplot(left[r, col])
-            h = ax.imshow(im, cmap="RdBu_r", vmin=-vlim, vmax=vlim, interpolation="nearest", aspect="auto", rasterized=True)
-            ax.set_xticks([]); ax.set_yticks([])
-            for sp in ax.spines.values():
-                sp.set_visible(False)
-            if col == 0:
-                ax.set_ylabel(f"{dist:.2f} px", rotation=0, ha="right", va="center")
-            if r == 0:
-                ax.set_title("subtracted as is" if col == 0 else "after sub-pixel shift (spline 5)", pad=3)
-            if r == len(EXAMPLE_D) - 1 and col == 0:
-                ax.plot([150, 150 + 10 / PX_UM], [35, 35], color="k", lw=1.5, solid_capstyle="butt")
-                ax.text(150 + 5 / PX_UM, 31, "10 µm", ha="center", va="bottom", fontsize=6)
-    fig.text(0.066, 0.925, "distance", ha="right", va="center", fontsize=7)
-    cax = fig.add_axes([0.20, 0.085, 0.24, 0.022])
+        dist, _, d5 = imgs[t]
+        ax = fig.add_subplot(left[r, 0])
+        h = ax.imshow(d5, cmap="RdBu_r", vmin=-vlim, vmax=vlim, interpolation="nearest", aspect="auto", rasterized=True)
+        ax.set_xticks([]); ax.set_yticks([])
+        for sp in ax.spines.values():
+            sp.set_visible(False)
+        ax.set_ylabel(f"{dist:.2f} px", rotation=0, ha="right", va="center")
+        if r == len(EXAMPLE_D) - 1:
+            ax.plot([150, 150 + 10 / PX_UM], [35, 35], color="k", lw=1.5, solid_capstyle="butt")
+            ax.text(150 + 5 / PX_UM, 31, "10 µm", ha="center", va="bottom", fontsize=6)
+    fig.text(0.076, 0.925, "distance to the reference", ha="left", va="center", fontsize=7)
+    cax = fig.add_axes([0.17, 0.085, 0.24, 0.022])
     cb = fig.colorbar(h, cax=cax, orientation="horizontal", ticks=[-vlim, 0, vlim])
     cb.set_label("phase difference [rad]", labelpad=1)
     cb.outline.set_linewidth(0.5)
     fig.text(0.012, 0.95, "a", fontweight="bold", fontsize=9)
-    fig.text(0.605, 0.95, "b", fontweight="bold", fontsize=9)
+    fig.text(0.555, 0.95, "b", fontweight="bold", fontsize=9)
 
-    ax = fig.add_axes([0.675, 0.17, 0.255, 0.66])
+    ax = fig.add_axes([0.635, 0.17, 0.285, 0.66])
     ax.axhspan(0.95, 1.05, color="k", alpha=0.12, lw=0)
     ax.axhline(1, color="k", lw=0.6)
-    for k, col, ls, lab in (("trap_none", C_RAW, "-", "trap, as is"), ("trap_spline5", C_SPL, "-", "trap, sub-pixel shift"),
-                            ("flat_none", C_FLAT, "--", "structure-free, as is"), ("flat_spline5", C_FLAT, ":", "structure-free, sub-pixel shift")):
+    for k, col, ls, lab in (("trap_spline5", C_SPL, "-", "trap"), ("flat_spline5", C_FLAT, "--", "structure-free region")):
         ax.fill_between(centre, stats[k][:, 0], stats[k][:, 2], color=col, alpha=0.18, lw=0)
         ax.plot(centre, stats[k][:, 1], ls, color=col, marker="o", ms=2.2, lw=1, label=lab)
-    ax.set_yscale("log")
-    ax.set_ylim(0.85, 40)
-    ax.set_yticks([1, 2, 5, 10, 20]); ax.set_yticklabels(["1", "2", "5", "10", "20"])
-    ax.minorticks_off()
+    ax.set_ylim(0.5, 6)
+    ax.set_yticks([1, 2, 3, 4, 5])
     ax.set_xlim(0, 0.5)
     ax.set_xlabel("distance to the reference image [px]")
     ax.set_ylabel("residue / shot-noise floor")
-    ax.text(0.30, 1.09, "shot-noise floor", ha="left", va="bottom", fontsize=6)
+    ax.text(0.49, 0.9, "shot-noise floor", ha="right", va="top", fontsize=6)
     ax.legend(frameon=False, loc="upper left", handlelength=2.2, borderaxespad=0.2)
     sec = ax.secondary_xaxis("top", functions=(lambda x: x * PX_UM * 1e3, lambda x: x / (PX_UM * 1e3)))
     sec.set_xlabel("[nm]", labelpad=2)
     rax = ax.secondary_yaxis("right", functions=(lambda y: y * fmed * 1e3, lambda y: y / (fmed * 1e3)))
-    rax.set_yscale("log")
-    rax.set_yticks([10, 20, 50, 100, 200]); rax.set_yticklabels(["10", "20", "50", "100", "200"])
-    rax.minorticks_off()
     rax.set_ylabel("residue [mrad]")
 
     caption = (
-        "Residue of the reference subtraction grows with the distance between the frame and its reference image, and "
-        "a sub-pixel shift of the reference removes part of it. "
+        "Residue of the reference subtraction grows with the distance between the frame and its reference image. "
         "(a) Difference of two phase images of the same empty trap taken at stage positions the stated distance apart "
-        f"(Pos{EXAMPLE_POS}, channel {EXAMPLE_CH}; 40 x 240 px crop; colour scale +-{vlim} rad, zero = median of the crop). Left: second "
-        "image subtracted as it is. Right: second image shifted onto the first by the calibrated offset with a 5th-order "
-        "spline before subtraction. For display only, a Gaussian blur (sigma 8 px) of each difference is subtracted. Pairs displaced along the image diagonal; representative single pairs. "
-        "(b) Residue against distance. Residue = standard deviation, over the region, of the difference image minus its "
-        "Gaussian blur (sigma 2 px); divided by the noise floor of the position = median residue in the structure-free "
-        "region of the pairs closer than 0.04 px. Trap = pixels more than 1 rad below the bonded side, eroded by 4 px; "
-        "structure-free = bonded PDMS beyond the closed end of the trap, at least 8 px from it. Distance = separation of "
-        "the two images from the gaussian2d grid calibration (0.3457 um/px). Lines: median over channel crops; bands: "
-        "25th-75th percentile. Orange: trap, subtracted as is; blue: trap, after the spline-5 shift; grey dashed / dotted: structure-free "
-        f"region as is / after the shift. Grey band at 1: +-5%. Right axis: the same in mrad (floor {fmed*1e3:.1f} mrad). n = {len(R)} channel crops ({len(floor)} positions x up to {PAIRS_PER_BIN} pairs per "
-        f"distance bin x 8 channels; per bin {min(nbin)}-{max(nbin)}). No statistical test. "
+        f"(Pos{EXAMPLE_POS}, channel {EXAMPLE_CH}; 40 x 240 px crop; colour scale +-{vlim} rad). The second image is shifted onto the "
+        "first by the calibrated offset with a 5th-order spline before subtraction, as in the pipeline. For display only, a "
+        "Gaussian blur (sigma 8 px) of each difference is subtracted. Pairs displaced along the image diagonal; "
+        "representative single pairs. "
+        "(b) Residue against distance. Residue = standard deviation, over the region, of the difference image (after the "
+        "spline-5 shift) minus its Gaussian blur (sigma 2 px); divided by the noise floor of the position = median residue "
+        "in the structure-free region of the pairs closer than 0.04 px, subtracted without a shift. Trap = pixels more than "
+        "1 rad below the bonded side, eroded by 4 px; structure-free = bonded PDMS beyond the closed end of the trap, at "
+        "least 8 px from it. Distance = separation of the two images from the gaussian2d grid calibration (0.3457 um/px). "
+        "Lines: median over channel crops; bands: 25th-75th percentile. Blue: trap; grey dashed: structure-free region. "
+        f"Grey band at 1: +-5%. Right axis: the same in mrad (floor {fmed*1e3:.1f} mrad). "
+        f"n = {len(R)} channel crops ({len(floor)} positions x up to {PAIRS_PER_BIN} pairs per distance bin x 8 channels; "
+        f"per bin {min(nbin)}-{max(nbin)}). No statistical test. "
         "Sample: PDMS trap device without cells, EMM 2% glucose, 1 mL/h, off-axis QPI at 658 nm, 40x NA 0.95, single z; "
         "reference grid 25 x 25 points at 0.03 um per position, acquired 2026-11-22 00:00-07:06 (positions 62-123). "
         "The noise floor equals the shot-noise limit within 5% on background pairs (see _qc_shotnoise_source_261121.py)."
