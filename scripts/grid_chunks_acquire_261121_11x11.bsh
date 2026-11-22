@@ -1,11 +1,11 @@
 // ============================================================
 // grid_chunks_acquire_261121_11x11.bsh
 // Micro-Manager 1.4 BeanShell: re-shoot the 261121 grid of
-// Pos1-90 as 11 x 11 points per Pos at 0.05 um (2D stride order,
+// Pos1-90 as 11 x 11 points per Pos at 0.03 um (2D stride order,
 // PFS offset set at every point), centred on where timelapse 1
 // parks each Pos.  Two chunks on E:; after each chunk
 // watch_grid_chunks_261121_11x11.py reconstructs to
-// D:/.../261121/recon_0p05um_11x11, calibrates (gaussian2d),
+// D:/.../261121/recon_0p03um_11x11, calibrates (gaussian2d),
 // verifies and deletes the chunk's raw.  The 25x25 grid
 // (recon_0p03um_25x25) is not touched.
 //
@@ -27,12 +27,12 @@ String SCRIPT_DIR   = "C:/Users/QPI/Documents/QPI_Omni/scripts";
 String WATCHER      = SCRIPT_DIR + "/watch_grid_chunks_261121_11x11.py";
 String POS_DIR      = "D:/AquisitionData/Kitagishi/261121";
 String[] CHUNK_POS  = {
-    POS_DIR + "/grid_0p05um_11x11_stride_recentred_chunk1_Pos1-45.pos",
-    POS_DIR + "/grid_0p05um_11x11_stride_recentred_chunk2_Pos46-90.pos"
+    POS_DIR + "/grid_0p03um_11x11_stride_recentred_chunk1_Pos1-45.pos",
+    POS_DIR + "/grid_0p03um_11x11_stride_recentred_chunk2_Pos46-90.pos"
 };
 String[] CHUNK_RANGE = { "1-45", "46-90" };
 String SAVE_ROOT    = "E:/261121";
-String SAVE_PREFIX  = "grid11_s";        // -> E:/261121/grid11_s1, s2 (11x11 @ 0.05 um, 2D stride order)
+String SAVE_PREFIX  = "grid11_s";        // -> E:/261121/grid11_s1, s2 (11x11 @ 0.03 um, 2D stride order)
 int    START_CHUNK  = 1;                 // 1-based; set 2 to resume after a stop
 boolean SKIP_EXISTING_POINTS = true;     // resume inside a chunk: skip points already on disk
 boolean RUN_WATCHER = true;              // false = acquire only (then run the watcher by hand)
@@ -259,6 +259,6 @@ for (int c = START_CHUNK; c <= CHUNK_POS.length; c++) {
 }
 
 if (allOk) {
-    print("\nALL CHUNKS DONE [" + nowStr() + "]. 11x11 grid of Pos1-90: D:/AquisitionData/Kitagishi/261121/recon_0p05um_11x11");
+    print("\nALL CHUNKS DONE [" + nowStr() + "]. 11x11 grid of Pos1-90: D:/AquisitionData/Kitagishi/261121/recon_0p03um_11x11");
     beep(6);
 }

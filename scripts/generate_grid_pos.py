@@ -52,7 +52,37 @@ def _stride_coeffs(n, step_um, min_move_um):
                     wrap = (min(wrap[0], n - wrap[0]), min(wrap[1], n - wrap[1]))
                     if min(p, n - p) >= kmin and min(r, n - r) >= kmin and wrap[0] >= kmin and wrap[1] >= kmin:
                         return p, q, r, s_
-    raise RuntimeError(f"no stride coefficients for N={n}, step {step_um} um, min move {min_move_um} um")
+    return None
+
+
+def _jump_path(n, kmin):
+    """Visit every point of the n x n lattice once with |dx| >= kmin and |dy| >= kmin at every move.
+
+    Used when no linear stride map exists (e.g. N=11 at 0.03 um with 0.15 um moves: every move has to
+    be 5 or 6 steps on both axes and the four candidate maps are all singular mod 11).
+    Deterministic depth-first search, fewest-onward-moves first (Warnsdorff)."""
+    import sys
+    pts = [(x, y) for x in range(n) for y in range(n)]
+    nb = {a: [b for b in pts if abs(a[0] - b[0]) >= kmin and abs(a[1] - b[1]) >= kmin] for a in pts}
+    if any(not v for v in nb.values()):
+        raise RuntimeError(f"N={n}: some points have no partner {kmin} steps away on both axes")
+    seen, path = set(), []
+    sys.setrecursionlimit(max(sys.getrecursionlimit(), 10 * n * n))
+
+    def go(a):
+        seen.add(a); path.append(a)
+        if len(path) == n * n:
+            return True
+        for b in sorted((b for b in nb[a] if b not in seen),
+                        key=lambda b: (sum(c not in seen for c in nb[b]), b)):
+            if go(b):
+                return True
+        seen.discard(a); path.pop()
+        return False
+
+    if not go((0, 0)):
+        raise RuntimeError(f"no path for N={n} with moves >= {kmin} steps on both axes")
+    return path
 
 
 def grid_order(x_half, y_half):
@@ -68,7 +98,14 @@ def grid_order(x_half, y_half):
     if ORDER == "stride2d":
         assert x_half == y_half, "stride2d needs a square grid"
         n = 2 * x_half + 1
-        p, q, r, s_ = _stride_coeffs(n, min(X_STEP, Y_STEP), MIN_MOVE_UM)
+        coeffs = _stride_coeffs(n, min(X_STEP, Y_STEP), MIN_MOVE_UM)
+        if coeffs is None:
+            kmin = int(-(-MIN_MOVE_UM // min(X_STEP, Y_STEP)))
+            path = _jump_path(n, kmin)
+            print(f"stride2d order: N={n}, no linear stride map; searched path, "
+                  f"per-point move >= {MIN_MOVE_UM} um on both axes")
+            return [(xi - x_half, yi - y_half) for xi, yi in path]
+        p, q, r, s_ = coeffs
         out, seen = [], set()
         for k in range(n * n):
             a, b = k % n, k // n

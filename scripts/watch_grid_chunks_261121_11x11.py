@@ -1,7 +1,7 @@
 """
 watch_grid_chunks_261121_11x11.py
 
-One chunk of the 261121 re-shot grid for Pos1-90: 11 x 11 points per Pos at 0.05 um, 2D stride order,
+One chunk of the 261121 re-shot grid for Pos1-90: 11 x 11 points per Pos at 0.03 um, 2D stride order,
 one z, centred on where timelapse 1 parks each Pos (make_grid_pos_from_state.py), acquired by
 grid_chunks_acquire_261121_11x11.bsh into E:\\261121\\grid11_sN.  The first grid of this session
 (25x25 @ 0.03 um, recon_0p03um_25x25) was taken while the chip was still settling, so its early Pos
@@ -11,7 +11,7 @@ leave a static residue; that grid is KEPT, this one goes to its own folder.
     python watch_grid_chunks_261121_11x11.py --chunk-dir E:\\261121\\grid11_s2 --pos 46-90 --final
 
   1. every point of Pos0 + the chunk's Pos must be on disk (else exit 2, nothing touched)
-  2. scheduled_recon_and_calibrate.py: recon (raw E: -> D:\\...\\261121\\recon_0p05um_11x11),
+  2. scheduled_recon_and_calibrate.py: recon (raw E: -> D:\\...\\261121\\recon_0p03um_11x11),
      channel detect, calibration (calibrate_grid_positions.ESTIMATOR = gaussian2d). Outputs of
      earlier chunks are skipped, Pos0's BG is reconstructed once (chunk 1) and reused.
   3. verify: every point has its phase tif, every Pos its grid_calibration json
@@ -31,15 +31,15 @@ from pathlib import Path
 
 # ============================================================
 SESSION_DIR = Path(r"E:\261121")
-OUTPUT_DIR = Path(r"D:\AquisitionData\Kitagishi\261121\recon_0p05um_11x11")
+OUTPUT_DIR = Path(r"D:\AquisitionData\Kitagishi\261121\recon_0p03um_11x11")
 GRID_HALF = 5          # 11 x 11 = 121 points per Pos (2D stride order)
 N_Z = 1
 Z_INDEX = 0
 POS_SPLIT = 61         # Pos < 61 crop_before, Pos >= 61 crop_after (261121 timelapse.pos: Pos1-60 row 1, Pos61-123 row 2)
 MIN_FREE_GB_OUT = 60   # D: recon output ~0.9 GB/Pos
 BEEP_ENABLED = True
-LOG_PATH = SESSION_DIR / "grid_chunks_0p05um_11x11.log"
-ALERT_PATH = SESSION_DIR / "grid_chunks_0p05um_11x11.ALERT.txt"
+LOG_PATH = SESSION_DIR / "grid_chunks_0p03um_11x11.log"
+ALERT_PATH = SESSION_DIR / "grid_chunks_0p03um_11x11.ALERT.txt"
 # ============================================================
 
 for _stream in (sys.stdout, sys.stderr):
